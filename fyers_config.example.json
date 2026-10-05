@@ -1,0 +1,5 @@
+{
+  "app_id": "YOUR_APP_ID",
+  "secret_key": "YOUR_SECRET_KEY",
+  "redirect_uri": "http://127.0.0.1:8080/callback"
+}

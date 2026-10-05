@@ -1,0 +1,452 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Midpoint Backtest Performance</title>
+  <style>
+    :root {
+      --bg: #f7f7f2;
+      --card: #ffffff;
+      --text: #1d1d1b;
+      --muted: #5f5f56;
+      --line: #d8d8cc;
+      --accent: #1f6f5f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #ecefdf 0%, var(--bg) 45%);
+    }
+    .wrap {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+    }
+    .sub {
+      color: var(--muted);
+      margin-bottom: 18px;
+    }
+    .actions {
+      margin-bottom: 16px;
+    }
+    button {
+      border: 1px solid var(--accent);
+      background: var(--accent);
+      color: #fff;
+      padding: 8px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+    }
+    .k {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .v {
+      font-size: 22px;
+      font-weight: 600;
+    }
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 12px;
+      overflow: auto;
+    }
+    .monthly-chart {
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fcfcf8;
+    }
+    .monthly-row {
+      display: grid;
+      grid-template-columns: 110px 1fr 90px;
+      align-items: center;
+      gap: 8px;
+      margin: 7px 0;
+      font-size: 12px;
+    }
+    .monthly-label {
+      color: var(--muted);
+      font-weight: 600;
+    }
+    .monthly-track {
+      position: relative;
+      height: 16px;
+      background: #efefe5;
+      border-radius: 999px;
+      overflow: hidden;
+      border: 1px solid #e0e0d4;
+    }
+    .monthly-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      border-radius: 999px;
+    }
+    .monthly-bar.pos {
+      background: linear-gradient(90deg, #4caf7a, #2f8f61);
+    }
+    .monthly-bar.neg {
+      background: linear-gradient(90deg, #e07a7a, #bf4f4f);
+    }
+    .monthly-value {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      font-weight: 600;
+    }
+    .monthly-value.pos {
+      color: #1f6f5f;
+    }
+    .monthly-value.neg {
+      color: #b33f3f;
+    }
+    .months {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+      gap: 12px;
+    }
+    .month {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fff;
+    }
+    .month h4 {
+      margin: 0 0 8px;
+      font-size: 15px;
+    }
+    .weekdays {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+      margin-bottom: 4px;
+      color: var(--muted);
+      font-size: 11px;
+      text-align: center;
+    }
+    .days {
+      display: grid;
+      grid-template-columns: repeat(7, 1fr);
+      gap: 4px;
+    }
+    .day {
+      border: 1px solid #e5e5da;
+      border-radius: 6px;
+      min-height: 54px;
+      padding: 4px;
+      font-size: 11px;
+      background: #fafaf5;
+      text-decoration: none;
+      color: inherit;
+      display: block;
+    }
+    .day .d {
+      font-weight: 600;
+      margin-bottom: 2px;
+      color: #444;
+    }
+    .day .p {
+      font-size: 10px;
+    }
+    .day.empty {
+      background: #fff;
+      border-color: transparent;
+    }
+    .day.clickable:hover {
+      outline: 2px solid #9bb6ea;
+      cursor: pointer;
+    }
+    .day.pos {
+      background: #e8f6ec;
+      border-color: #b7e2c4;
+    }
+    .day.neg {
+      background: #fdebec;
+      border-color: #f3b9bd;
+    }
+    .day.zero {
+      background: #f4f6f8;
+      border-color: #d9dee4;
+    }
+    .legend {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .dot {
+      width: 10px;
+      height: 10px;
+      display: inline-block;
+      border-radius: 3px;
+    }
+    .note {
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Midpoint Backtest Performance</h1>
+    <div class="sub">Latest snapshot with calendar-based daily performance (green/red).</div>
+    <div class="actions">
+      <button id="reloadBtn" type="button">Reload</button>
+    </div>
+
+    <div id="cards" class="grid"></div>
+
+    <div class="panel">
+      <h3 style="margin-top:0;">Month-wise Overall PnL</h3>
+      <div id="monthlyChart" class="monthly-chart"></div>
+
+      <h3 style="margin-top:0;">Calendar Breakdown (Daily PnL)</h3>
+      <div class="legend">
+        <span><span class="dot" style="background:#e8f6ec;border:1px solid #b7e2c4;"></span> Green = Profit day</span>
+        <span><span class="dot" style="background:#fdebec;border:1px solid #f3b9bd;"></span> Red = Loss day</span>
+        <span><span class="dot" style="background:#f4f6f8;border:1px solid #d9dee4;"></span> Gray = No-trade day</span>
+      </div>
+      <div id="months" class="months"></div>
+      <div class="note">If data does not load, open this folder using a local server (for example, <code>python3 -m http.server</code>) and open this HTML from that server URL.</div>
+    </div>
+  </div>
+
+  <script>
+    const latestJson = "./midpoint_backtest_performance.json";
+    const tradesCsv = "../captured_data/fyers/midpoint_backtest_trades.csv";
+    const dayReviewCsv = "./midpoint_backtest_day_review.csv";
+
+    function card(label, value) {
+      const el = document.createElement("div");
+      el.className = "card";
+      el.innerHTML = `<div class="k">${label}</div><div class="v">${value}</div>`;
+      return el;
+    }
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (!lines.length) return { headers: [], rows: [] };
+      const headers = lines[0].split(",");
+      const rows = lines.slice(1).map((line) => line.split(","));
+      return { headers, rows };
+    }
+
+
+    async function loadLatest() {
+      const cards = document.getElementById("cards");
+      cards.innerHTML = "";
+      const res = await fetch(latestJson, { cache: "no-store" });
+      const p = await res.json();
+
+      cards.appendChild(card("Run Time (UTC)", p.run_ts_utc ?? "-"));
+      cards.appendChild(card("Total Trades", p.total_trades ?? "-"));
+      cards.appendChild(card("Wins", p.wins ?? "-"));
+      cards.appendChild(card("Losses", p.losses ?? "-"));
+      cards.appendChild(card("Win Rate %", p.win_rate_pct ?? "-"));
+      cards.appendChild(card("Total PnL", p.total_pnl_points ?? "-"));
+      cards.appendChild(card("Avg PnL", p.avg_pnl_points ?? "-"));
+      cards.appendChild(card("Total R", p.total_r ?? "-"));
+      cards.appendChild(card("Max Trades/Day", p.max_trades_per_day ?? "-"));
+    }
+
+    function monthName(yyyymm) {
+      const [y, m] = yyyymm.split("-").map(Number);
+      const d = new Date(y, m - 1, 1);
+      return d.toLocaleString("en-US", { month: "long", year: "numeric" });
+    }
+
+    function renderMonthlyChart(monthlyMap) {
+      const chart = document.getElementById("monthlyChart");
+      chart.innerHTML = "";
+
+      const keys = Object.keys(monthlyMap).sort();
+      if (!keys.length) {
+        chart.textContent = "No trade data available.";
+        return;
+      }
+
+      const maxAbs = Math.max(...keys.map((k) => Math.abs(monthlyMap[k])));
+      keys.forEach((k) => {
+        const val = monthlyMap[k];
+        const widthPct = maxAbs > 0 ? (Math.abs(val) / maxAbs) * 100 : 0;
+
+        const row = document.createElement("div");
+        row.className = "monthly-row";
+
+        const label = document.createElement("div");
+        label.className = "monthly-label";
+        label.textContent = monthName(k);
+
+        const track = document.createElement("div");
+        track.className = "monthly-track";
+        const bar = document.createElement("div");
+        bar.className = `monthly-bar ${val >= 0 ? "pos" : "neg"}`;
+        bar.style.width = `${widthPct.toFixed(2)}%`;
+        track.appendChild(bar);
+
+        const value = document.createElement("div");
+        value.className = `monthly-value ${val >= 0 ? "pos" : "neg"}`;
+        value.textContent = val.toFixed(2);
+
+        row.appendChild(label);
+        row.appendChild(track);
+        row.appendChild(value);
+        chart.appendChild(row);
+      });
+    }
+
+    function renderCalendar(dailyMap) {
+      const monthsEl = document.getElementById("months");
+      monthsEl.innerHTML = "";
+
+      const monthKeys = [...new Set(Object.keys(dailyMap).map((d) => d.slice(0, 7)))].sort();
+      monthKeys.forEach((mkey) => {
+        const [yy, mm] = mkey.split("-").map(Number);
+        const first = new Date(yy, mm - 1, 1);
+        const daysInMonth = new Date(yy, mm, 0).getDate();
+        const startWeekday = (first.getDay() + 6) % 7; // Monday=0
+
+        const box = document.createElement("div");
+        box.className = "month";
+        box.innerHTML = `<h4>${monthName(mkey)}</h4>`;
+
+        const weekdays = document.createElement("div");
+        weekdays.className = "weekdays";
+        ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].forEach((w) => {
+          const el = document.createElement("div");
+          el.textContent = w;
+          weekdays.appendChild(el);
+        });
+        box.appendChild(weekdays);
+
+        const days = document.createElement("div");
+        days.className = "days";
+
+        for (let i = 0; i < startWeekday; i++) {
+          const e = document.createElement("div");
+          e.className = "day empty";
+          days.appendChild(e);
+        }
+
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateKey = `${mkey}-${String(d).padStart(2, "0")}`;
+          const pnl = dailyMap[dateKey] ?? null;
+          const day = document.createElement("a");
+          day.className = "day";
+          day.href = pnl === null ? "javascript:void(0)" : `./trade_daywise_viewer.html?date=${dateKey}`;
+          if (pnl !== null) {
+            day.classList.add("clickable");
+            if (pnl > 0) {
+              day.classList.add("pos");
+            } else if (pnl < 0) {
+              day.classList.add("neg");
+            } else {
+              day.classList.add("zero");
+            }
+          }
+          day.innerHTML = `<div class="d">${d}</div><div class="p">${pnl === null ? "-" : pnl.toFixed(2)}</div>`;
+          days.appendChild(day);
+        }
+
+        box.appendChild(days);
+        monthsEl.appendChild(box);
+      });
+    }
+
+    async function loadCalendar() {
+      // Preferred: day-level review (contains trade and non-trade days).
+      const reviewRes = await fetch(dayReviewCsv, { cache: "no-store" });
+      if (reviewRes.ok) {
+        const reviewTxt = await reviewRes.text();
+        const review = parseCsv(reviewTxt);
+        const dateIdx = review.headers.indexOf("date");
+        const dayPnlIdx = review.headers.indexOf("day_pnl_points");
+        if (dateIdx >= 0 && dayPnlIdx >= 0) {
+          const daily = {};
+          const monthly = {};
+          review.rows.forEach((r) => {
+            const dt = r[dateIdx];
+            if (!dt) return;
+            const pnl = Number(r[dayPnlIdx] || 0);
+            daily[dt] = pnl;
+
+            const m = dt.slice(0, 7);
+            if (!monthly[m]) monthly[m] = 0;
+            monthly[m] += pnl;
+          });
+
+          renderMonthlyChart(monthly);
+          renderCalendar(daily);
+          return;
+        }
+      }
+
+      // Fallback: derive only from trades if review file is unavailable.
+      const res = await fetch(tradesCsv, { cache: "no-store" });
+      const txt = await res.text();
+      const { headers, rows } = parseCsv(txt);
+      const dateIdx = headers.indexOf("date");
+      const pnlIdx = headers.indexOf("profit_loss");
+      if (dateIdx < 0 || pnlIdx < 0) {
+        renderCalendar({});
+        return;
+      }
+
+      const daily = {};
+      const monthly = {};
+      rows.forEach((r) => {
+        const dt = r[dateIdx];
+        const pnl = Number(r[pnlIdx] || 0);
+        if (!daily[dt]) daily[dt] = 0;
+        daily[dt] += pnl;
+
+        const m = dt.slice(0, 7);
+        if (!monthly[m]) monthly[m] = 0;
+        monthly[m] += pnl;
+      });
+
+      renderMonthlyChart(monthly);
+      renderCalendar(daily);
+    }
+
+    async function loadAll() {
+      try {
+        await loadLatest();
+        await loadCalendar();
+      } catch (e) {
+        console.error(e);
+        alert("Could not load performance files. Run a local server in this folder and reload.");
+      }
+    }
+
+    document.getElementById("reloadBtn").addEventListener("click", loadAll);
+    loadAll();
+  </script>
+</body>
+</html>

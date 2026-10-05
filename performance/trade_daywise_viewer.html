@@ -1,0 +1,760 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Trade Day-wise Viewer</title>
+  <style>
+    :root {
+      --bg: #f8f8f3;
+      --card: #ffffff;
+      --line: #d8d8cc;
+      --text: #1d1d1b;
+      --muted: #5f5f56;
+      --up: #1f8f5f;
+      --down: #d14b4b;
+      --accent: #2a6fdb;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Helvetica Neue", Helvetica, Arial, sans-serif;
+      color: var(--text);
+      background: radial-gradient(circle at top right, #ecefdf 0%, var(--bg) 45%);
+    }
+    .wrap {
+      max-width: 1300px;
+      margin: 0 auto;
+      padding: 16px;
+    }
+    h1 { margin: 0 0 8px; }
+    .sub { color: var(--muted); margin-bottom: 12px; }
+    .row {
+      display: grid;
+      grid-template-columns: 240px 1fr;
+      gap: 12px;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px;
+    }
+    .actions {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 10px;
+    }
+    button {
+      border: 1px solid #b9c8e7;
+      background: #e9f0ff;
+      color: #19407f;
+      padding: 6px 10px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    .day-list {
+      max-height: 650px;
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .day-btn {
+      width: 100%;
+      text-align: left;
+      border: 0;
+      border-bottom: 1px solid #ececdf;
+      background: #fff;
+      color: var(--text);
+      padding: 8px;
+      border-radius: 0;
+      font-size: 13px;
+    }
+    .day-btn.active {
+      background: #edf4ff;
+      color: #103a77;
+      font-weight: 600;
+    }
+    #chart {
+      width: 100%;
+      height: 560px;
+      display: block;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fcfcf8;
+      cursor: crosshair;
+    }
+    .chart-wrap {
+      position: relative;
+    }
+    .hover-tip {
+      position: absolute;
+      display: none;
+      pointer-events: none;
+      z-index: 10;
+      background: rgba(18, 18, 17, 0.92);
+      color: #f3f3ec;
+      border: 1px solid #3f3f37;
+      border-radius: 6px;
+      padding: 6px 8px;
+      font-size: 12px;
+      line-height: 1.35;
+      white-space: nowrap;
+      box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+      font-size: 13px;
+    }
+    th, td {
+      border-bottom: 1px solid var(--line);
+      padding: 6px;
+      text-align: left;
+      white-space: nowrap;
+    }
+    th { background: #f4f5ec; }
+    .note {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Day-wise Trade Candles</h1>
+    <div class="sub">Click a date to see scoped candles with simple BUY/TARGET markers and a clearly highlighted midpoint.</div>
+
+    <div class="actions">
+      <button id="reloadBtn" type="button">Reload Data</button>
+      <a href="./midpoint_backtest_report.html"><button type="button">Back To Performance</button></a>
+    </div>
+
+    <div class="row">
+      <div class="card">
+        <h3 style="margin:4px 0 8px;">Trade Dates</h3>
+        <div id="dayList" class="day-list"></div>
+      </div>
+
+      <div class="card">
+        <div id="dayTitle" style="font-weight:600; margin:4px 0 8px;">Select a day</div>
+        <div id="chartWrap" class="chart-wrap">
+          <canvas id="chart" width="980" height="560"></canvas>
+          <div id="hoverTip" class="hover-tip"></div>
+        </div>
+
+        <table id="tradeTable">
+          <thead>
+            <tr>
+              <th>option_type</th>
+              <th>entry</th>
+              <th>entry_spot</th>
+              <th>sl_spot</th>
+              <th>target_spot</th>
+              <th>exit</th>
+              <th>exit_spot</th>
+              <th>mid_point</th>
+              <th>profit_loss</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <div id="scopeNote" class="note">Scope view: first 30 minutes from first candle of selected day.</div>
+        <div id="debugInfo" class="note"></div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const OHLC_PATH = "../captured_data/fyers/fyers_spot_1min_extended.csv";
+    const TRADES_PATH = "../captured_data/fyers/midpoint_backtest_trades.csv";
+    const MIDPOINT_BUFFER_POINTS = 5;
+    const NEAR_MIDPOINT_POINTS = 5;
+    const MIN_DIRECTIONAL_DISTANCE_POINTS = 2;
+    const SWITCHED_SIDE_BUFFER_POINTS = 5;
+
+    const state = {
+      candles: [],
+      trades: [],
+      tradesByDate: new Map(),
+      allDates: [],
+      selectedDate: null,
+      scopedCandles: [],
+    };
+
+    function getRequestedDateFromQuery() {
+      const params = new URLSearchParams(window.location.search);
+      return params.get("date");
+    }
+
+    function parseCsv(text) {
+      const lines = text.trim().split(/\r?\n/);
+      if (lines.length === 0) return { headers: [], rows: [] };
+      const headers = lines[0].split(",");
+      const rows = lines.slice(1).filter(Boolean).map((line) => line.split(","));
+      return { headers, rows };
+    }
+
+    function toIstDateTimeParts(utcTimestamp) {
+      const d = new Date(utcTimestamp + "Z");
+      const fmt = new Intl.DateTimeFormat("en-CA", {
+        timeZone: "Asia/Kolkata",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      });
+      const parts = fmt.formatToParts(d);
+      const map = {};
+      parts.forEach((p) => { map[p.type] = p.value; });
+      return {
+        date: `${map.year}-${map.month}-${map.day}`,
+        time: `${map.hour}:${map.minute}`,
+      };
+    }
+
+    function hhmmToMin(hhmm) {
+      const [h, m] = hhmm.split(":").map(Number);
+      return h * 60 + m;
+    }
+
+    async function loadData() {
+      const [ohlcRes, tradeRes] = await Promise.all([
+        fetch(OHLC_PATH, { cache: "no-store" }),
+        fetch(TRADES_PATH, { cache: "no-store" }),
+      ]);
+
+      const ohlcTxt = await ohlcRes.text();
+      const tradeTxt = await tradeRes.text();
+
+      const ohlc = parseCsv(ohlcTxt);
+      const trades = parseCsv(tradeTxt);
+
+      const tsIdx = ohlc.headers.indexOf("timestamp");
+      const oIdx = ohlc.headers.indexOf("open");
+      const hIdx = ohlc.headers.indexOf("high");
+      const lIdx = ohlc.headers.indexOf("low");
+      const cIdx = ohlc.headers.indexOf("close");
+
+      state.candles = ohlc.rows.map((r) => {
+        const p = toIstDateTimeParts(r[tsIdx]);
+        return {
+          date: p.date,
+          time: p.time,
+          minute: hhmmToMin(p.time),
+          open: Number(r[oIdx]),
+          high: Number(r[hIdx]),
+          low: Number(r[lIdx]),
+          close: Number(r[cIdx]),
+        };
+      });
+
+      state.trades = trades.rows.map((r) => {
+        const obj = {};
+        trades.headers.forEach((h, i) => { obj[h] = r[i]; });
+        obj.entry_spot = Number(obj.entry_spot);
+        obj.sl_spot = Number(obj.sl_spot);
+        obj.target_spot = Number(obj.target_spot);
+        obj.exit_spot = Number(obj.exit_spot);
+        obj.mid_point = Number(obj.mid_point);
+        obj.profit_loss = Number(obj.profit_loss);
+        obj.entry_min = hhmmToMin(obj.entry);
+        obj.exit_min = hhmmToMin(obj.exit);
+        return obj;
+      });
+
+      const map = new Map();
+      state.trades.forEach((t) => {
+        if (!map.has(t.date)) map.set(t.date, []);
+        map.get(t.date).push(t);
+      });
+      state.tradesByDate = map;
+
+      state.allDates = [...new Set(state.candles.map((c) => c.date))].sort();
+    }
+
+    function renderDayList() {
+      const el = document.getElementById("dayList");
+      el.innerHTML = "";
+      const dates = state.allDates;
+
+      dates.forEach((d) => {
+        const count = (state.tradesByDate.get(d) || []).length;
+        const b = document.createElement("button");
+        b.className = "day-btn" + (state.selectedDate === d ? " active" : "");
+        b.type = "button";
+        b.textContent = `${d} (${count} trade${count > 1 ? "s" : ""})`;
+        b.onclick = () => {
+          state.selectedDate = d;
+          renderDayList();
+          renderSelectedDay();
+        };
+        el.appendChild(b);
+      });
+
+      if (!state.selectedDate && dates.length) {
+        const requested = getRequestedDateFromQuery();
+        state.selectedDate = requested && dates.includes(requested)
+          ? requested
+          : dates[dates.length - 1];
+        renderDayList();
+        renderSelectedDay();
+      }
+    }
+
+    function renderTradeTable(dayTrades) {
+      const tbody = document.querySelector("#tradeTable tbody");
+      tbody.innerHTML = "";
+      dayTrades.forEach((t) => {
+        const tr = document.createElement("tr");
+        ["option_type", "entry", "entry_spot", "sl_spot", "target_spot", "exit", "exit_spot", "mid_point", "profit_loss"].forEach((k) => {
+          const td = document.createElement("td");
+          td.textContent = String(t[k]);
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function renderCandles(candles, dayTrades, day, debug) {
+      const title = document.getElementById("dayTitle");
+      title.textContent = `${day} | Candles in scope: ${candles.length}`;
+
+      const canvas = document.getElementById("chart");
+      const ctx = canvas.getContext("2d");
+      const W = canvas.width;
+      const H = canvas.height;
+      const pad = { l: 56, r: 18, t: 14, b: 28 };
+      const pw = W - pad.l - pad.r;
+      const ph = H - pad.t - pad.b;
+      ctx.clearRect(0, 0, W, H);
+
+      if (!candles.length) {
+        ctx.fillStyle = "#5f5f56";
+        ctx.font = "14px Segoe UI";
+        ctx.fillText("No candles for selected day", 20, 30);
+        return;
+      }
+
+      let minP = Math.min(...candles.map((c) => c.low));
+      let maxP = Math.max(...candles.map((c) => c.high));
+      dayTrades.forEach((t) => {
+        minP = Math.min(minP, t.entry_spot, t.exit_spot, t.mid_point, t.sl_spot, t.target_spot);
+        maxP = Math.max(maxP, t.entry_spot, t.exit_spot, t.mid_point, t.sl_spot, t.target_spot);
+      });
+      const padP = (maxP - minP) * 0.07 || 1;
+      minP -= padP;
+      maxP += padP;
+
+      const xOf = (i) => pad.l + (i / Math.max(candles.length - 1, 1)) * pw;
+      const yOf = (p) => pad.t + ((maxP - p) / (maxP - minP)) * ph;
+
+      // Grid
+      ctx.strokeStyle = "#e2e2d8";
+      ctx.lineWidth = 1;
+      for (let g = 0; g <= 5; g++) {
+        const y = pad.t + (g / 5) * ph;
+        ctx.beginPath();
+        ctx.moveTo(pad.l, y);
+        ctx.lineTo(W - pad.r, y);
+        ctx.stroke();
+      }
+
+      // Axis
+      ctx.strokeStyle = "#9b9b8f";
+      ctx.beginPath();
+      ctx.moveTo(pad.l, pad.t);
+      ctx.lineTo(pad.l, H - pad.b);
+      ctx.lineTo(W - pad.r, H - pad.b);
+      ctx.stroke();
+
+      // Candles
+      const bodyW = Math.max(3, Math.min(10, pw / Math.max(candles.length, 1) * 0.7));
+      candles.forEach((c, i) => {
+        const x = xOf(i);
+        const yo = yOf(c.open);
+        const yc = yOf(c.close);
+        const yh = yOf(c.high);
+        const yl = yOf(c.low);
+        const up = c.close >= c.open;
+
+        ctx.strokeStyle = up ? "#1f8f5f" : "#d14b4b";
+        ctx.beginPath();
+        ctx.moveTo(x, yh);
+        ctx.lineTo(x, yl);
+        ctx.stroke();
+
+        ctx.fillStyle = up ? "#1f8f5f" : "#d14b4b";
+        const top = Math.min(yo, yc);
+        const h = Math.max(1, Math.abs(yo - yc));
+        ctx.fillRect(x - bodyW / 2, top, bodyW, h);
+      });
+
+      // Highlight midpoint buffer zone and midpoint line for selected day.
+      const dayMid = dayTrades.length ? dayTrades[0].mid_point : (debug && debug.midpoint);
+      if (dayMid !== null && dayMid !== undefined && Number.isFinite(dayMid)) {
+        const yBufTop = yOf(dayMid + MIDPOINT_BUFFER_POINTS);
+        const yBufBottom = yOf(dayMid - MIDPOINT_BUFFER_POINTS);
+
+        // Buffer band fill (MID +/- 5)
+        ctx.fillStyle = "rgba(255, 152, 0, 0.14)";
+        ctx.fillRect(pad.l, Math.min(yBufTop, yBufBottom), W - pad.l - pad.r, Math.abs(yBufBottom - yBufTop));
+
+        // Buffer boundaries
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "#f4a340";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(pad.l, yBufTop);
+        ctx.lineTo(W - pad.r, yBufTop);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(pad.l, yBufBottom);
+        ctx.lineTo(W - pad.r, yBufBottom);
+        ctx.stroke();
+
+        const yMid = yOf(dayMid);
+        ctx.setLineDash([8, 5]);
+        ctx.strokeStyle = "#ff9800";
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(pad.l, yMid);
+        ctx.lineTo(W - pad.r, yMid);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#9a5a00";
+        ctx.font = "bold 12px Segoe UI";
+        ctx.fillText(`MIDPOINT ${dayMid}`, pad.l + 8, yMid - 6);
+        ctx.fillStyle = "#a56a15";
+        ctx.font = "11px Segoe UI";
+        ctx.fillText(`BUFFER +${MIDPOINT_BUFFER_POINTS}`, pad.l + 8, yBufTop - 4);
+        ctx.fillText(`BUFFER -${MIDPOINT_BUFFER_POINTS}`, pad.l + 8, yBufBottom + 14);
+      }
+
+      // Trade annotations with compact markers.
+      dayTrades.forEach((t, idx) => {
+        const col = t.option_type === "CALL" ? "#2a6fdb" : "#7f3ccf";
+        const tgCol = "#1f8f5f";
+        const entryIdx = candles.findIndex((c) => c.time === t.entry);
+        const exitIdx = candles.findIndex((c) => c.time === t.exit);
+        if (entryIdx < 0 || exitIdx < 0) return;
+
+        const x1 = xOf(entryIdx);
+        const y1 = yOf(t.entry_spot);
+        const x2 = xOf(exitIdx);
+        const y2 = yOf(t.exit_spot);
+
+        const yTG = yOf(t.target_spot);
+
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(x1, y1, 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x2, y2, 4, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Small right-side tick for TARGET only.
+        const tickX1 = W - pad.r - 36;
+        const tickX2 = W - pad.r - 8;
+
+        ctx.strokeStyle = tgCol;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(tickX1, yTG);
+        ctx.lineTo(tickX2, yTG);
+        ctx.stroke();
+
+        ctx.fillStyle = "#333";
+        ctx.font = "12px Segoe UI";
+        ctx.fillText(`BUY ${t.option_type} #${idx + 1}`, x1 + 6, y1 - 6);
+        ctx.fillStyle = "#111";
+        ctx.fillText(`EXIT ${t.exit_spot}`, x2 + 6, y2 - 6);
+
+        ctx.fillStyle = tgCol;
+        ctx.fillText(`TARGET ${t.target_spot}`, W - pad.r - 205, yTG - 3);
+      });
+
+      // Y labels
+      ctx.fillStyle = "#5f5f56";
+      ctx.font = "12px Segoe UI";
+      ctx.fillText(maxP.toFixed(2), 6, yOf(maxP) + 4);
+      ctx.fillText(minP.toFixed(2), 6, yOf(minP) + 4);
+
+      // X-axis minute ticks and labels (every candle minute).
+      const tickIdx = candles.map((_, i) => i);
+      tickIdx.forEach((i) => {
+        const x = xOf(i);
+        const t = candles[i].time.split(":")[1];
+
+        // Tick mark
+        ctx.strokeStyle = "#9b9b8f";
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(x, H - pad.b);
+        ctx.lineTo(x, H - pad.b + 5);
+        ctx.stroke();
+
+        ctx.fillStyle = "#5f5f56";
+        ctx.save();
+        ctx.translate(x, H - 8);
+        ctx.rotate(-Math.PI / 3);
+        ctx.fillText(t, -14, 0);
+        ctx.restore();
+      });
+    }
+
+    function formatNum(v) {
+      return Number.isFinite(v) ? v.toFixed(2) : "-";
+    }
+
+    function findIndexByMinute(candles, minute) {
+      for (let i = 0; i < candles.length; i++) {
+        if (candles[i].minute === minute) return i;
+      }
+      return null;
+    }
+
+    function computeDayDebug(dayCandles) {
+      if (!dayCandles || dayCandles.length < 5) {
+        return { note: "Not enough candles to compute setup." };
+      }
+
+      const ref = dayCandles[0];
+      const openingRange = ref.high - ref.low;
+      const aggressiveBuffer = openingRange >= 50 ? 6 : 0;
+      const dayStartMinute = ref.minute;
+      const cutoffMinute = dayStartMinute + 30;
+      let cutoffIdx = -1;
+      for (let i = 0; i < dayCandles.length; i++) {
+        if (dayCandles[i].minute <= cutoffMinute) cutoffIdx = i;
+      }
+      if (cutoffIdx < 0) {
+        return {
+          note: "No candles inside first 30-minute window.",
+          firstCandle: ref,
+          openingRange,
+          aggressiveBuffer,
+        };
+      }
+
+      let breakIdx = null;
+      let initialDir = null;
+      for (let j = 1; j < dayCandles.length; j++) {
+        const c = dayCandles[j];
+        const brokeHigh = c.high > ref.high;
+        const brokeLow = c.low < ref.low;
+        if (brokeHigh && !brokeLow) {
+          breakIdx = j;
+          initialDir = "LONG";
+          break;
+        }
+        if (brokeLow && !brokeHigh) {
+          breakIdx = j;
+          initialDir = "SHORT";
+          break;
+        }
+      }
+
+      const out = {
+        firstCandle: ref,
+        openingRange,
+        aggressiveBuffer,
+        dayStartMinute,
+        cutoffMinute,
+        cutoffIdx,
+        breakIdx,
+        initialDir,
+        retraceIdx: null,
+        continuationIdx: null,
+        touchDeadlineIdx: null,
+        midpoint: null,
+        midpointActivationLow: null,
+        midpointActivationHigh: null,
+        switchedLongWickLow: null,
+        switchedLongWickHigh: null,
+        switchedShortWickLow: null,
+        switchedShortWickHigh: null,
+      };
+
+      if (breakIdx === null) {
+        out.note = "No valid one-sided break after first candle.";
+        return out;
+      }
+
+      const touchDeadlineIdx = Math.min(dayCandles.length - 1, breakIdx + 10, cutoffIdx);
+      out.touchDeadlineIdx = touchDeadlineIdx;
+
+      let prevIdx = breakIdx;
+      let retraceIdx = null;
+      for (let j = breakIdx + 1; j <= touchDeadlineIdx; j++) {
+        const prev = dayCandles[prevIdx];
+        const curr = dayCandles[j];
+        if (initialDir === "LONG") {
+          if (curr.high > prev.high) {
+            prevIdx = j;
+            continue;
+          }
+          retraceIdx = j;
+          break;
+        }
+        if (curr.low < prev.low) {
+          prevIdx = j;
+          continue;
+        }
+        retraceIdx = j;
+        break;
+      }
+
+      out.continuationIdx = prevIdx;
+      out.retraceIdx = retraceIdx;
+
+      if (retraceIdx === null) {
+        out.note = "No momentum pause before touch deadline.";
+        return out;
+      }
+
+      const contExtreme = initialDir === "LONG" ? dayCandles[prevIdx].high : dayCandles[prevIdx].low;
+      const mid = initialDir === "LONG" ? (ref.low + contExtreme) / 2 : (ref.high + contExtreme) / 2;
+      out.midpoint = mid;
+      out.midpointActivationLow = mid - NEAR_MIDPOINT_POINTS;
+      out.midpointActivationHigh = mid + NEAR_MIDPOINT_POINTS;
+      out.switchedLongWickLow = mid - SWITCHED_SIDE_BUFFER_POINTS;
+      out.switchedLongWickHigh = mid;
+      out.switchedShortWickLow = mid;
+      out.switchedShortWickHigh = mid + SWITCHED_SIDE_BUFFER_POINTS;
+      out.note = "Computed from current strategy debug rules.";
+      return out;
+    }
+
+    function renderDebugInfo(dayCandles, debug) {
+      const el = document.getElementById("debugInfo");
+      if (!debug) {
+        el.textContent = "";
+        return;
+      }
+
+      const first = debug.firstCandle || null;
+      const breakCandle = debug.breakIdx !== null ? dayCandles[debug.breakIdx] : null;
+      const contCandle = debug.continuationIdx !== null ? dayCandles[debug.continuationIdx] : null;
+      const retraceCandle = debug.retraceIdx !== null ? dayCandles[debug.retraceIdx] : null;
+      const deadlineCandle = debug.touchDeadlineIdx !== null ? dayCandles[debug.touchDeadlineIdx] : null;
+
+      const lines = [];
+      if (first) {
+        lines.push(`First candle ${first.time} | H ${formatNum(first.high)} | L ${formatNum(first.low)} | opening range ${formatNum(debug.openingRange)} | touch buffer +/- ${formatNum(debug.aggressiveBuffer)}`);
+      }
+      if (breakCandle) {
+        lines.push(`Break ${breakCandle.time} | direction ${debug.initialDir}`);
+      } else {
+        lines.push(`Break - | direction -`);
+      }
+      if (contCandle) {
+        lines.push(`Continuation extreme candle ${contCandle.time}`);
+      }
+      if (retraceCandle) {
+        lines.push(`Retrace start ${retraceCandle.time}`);
+      }
+      if (deadlineCandle) {
+        lines.push(`Touch deadline ${deadlineCandle.time} (first 30-min window & break+10)`);
+      }
+      if (debug.midpoint !== null) {
+        lines.push(`Midpoint ${formatNum(debug.midpoint)} | Activation zone ${formatNum(debug.midpointActivationLow)} to ${formatNum(debug.midpointActivationHigh)}`);
+        lines.push(`Min directional close distance from midpoint: ${formatNum(MIN_DIRECTIONAL_DISTANCE_POINTS)}`);
+        lines.push(`Switched LONG wick zone ${formatNum(debug.switchedLongWickLow)} to ${formatNum(debug.switchedLongWickHigh)} | Switched SHORT wick zone ${formatNum(debug.switchedShortWickLow)} to ${formatNum(debug.switchedShortWickHigh)}`);
+      }
+      if (debug.note) {
+        lines.push(`Note: ${debug.note}`);
+      }
+
+      el.innerHTML = lines.map((x) => `<div>${x}</div>`).join("");
+    }
+
+    function renderSelectedDay() {
+      if (!state.selectedDate) return;
+      const dayTrades = (state.tradesByDate.get(state.selectedDate) || []).slice().sort((a, b) => a.entry_min - b.entry_min);
+      renderTradeTable(dayTrades);
+
+      const dayCandlesAll = state.candles.filter((c) => c.date === state.selectedDate);
+      if (!dayCandlesAll.length) {
+        renderCandles([], dayTrades, state.selectedDate, null);
+        renderDebugInfo([], null);
+        return;
+      }
+
+      const scopeNote = document.getElementById("scopeNote");
+      const debug = computeDayDebug(dayCandlesAll);
+
+      const dayStart = Math.min(...dayCandlesAll.map((c) => c.minute));
+      const scopeStart = Math.max(0, dayStart);
+      const scopeEnd = Math.min(24 * 60 - 1, dayStart + 30);
+      const scoped = dayCandlesAll.filter((c) => c.minute >= scopeStart && c.minute <= scopeEnd);
+      state.scopedCandles = scoped;
+      scopeNote.textContent = "Scope view: first 30 minutes from first candle of selected day.";
+
+      renderCandles(scoped, dayTrades, state.selectedDate, debug);
+      renderDebugInfo(dayCandlesAll, debug);
+    }
+
+    function setupChartHover() {
+      const canvas = document.getElementById("chart");
+      const wrap = document.getElementById("chartWrap");
+      const tip = document.getElementById("hoverTip");
+
+      function hideTip() {
+        tip.style.display = "none";
+      }
+
+      canvas.addEventListener("mouseleave", hideTip);
+
+      canvas.addEventListener("mousemove", (ev) => {
+        const candles = state.scopedCandles || [];
+        if (!candles.length) {
+          hideTip();
+          return;
+        }
+
+        const rect = canvas.getBoundingClientRect();
+        const x = ((ev.clientX - rect.left) / rect.width) * canvas.width;
+        const idx = Math.round((x - 56) / ((canvas.width - 56 - 18) / Math.max(candles.length - 1, 1)));
+        if (idx < 0 || idx >= candles.length) {
+          hideTip();
+          return;
+        }
+
+        const c = candles[idx];
+        tip.textContent = c.time.split(":")[1];
+
+        const localX = ev.clientX - rect.left;
+        const localY = ev.clientY - rect.top;
+        const wrapRect = wrap.getBoundingClientRect();
+        const maxX = wrapRect.width - 180;
+        const left = Math.max(8, Math.min(localX + 14, maxX));
+        const top = Math.max(8, localY - 56);
+        tip.style.left = `${left}px`;
+        tip.style.top = `${top}px`;
+        tip.style.display = "block";
+      });
+    }
+
+    async function boot() {
+      try {
+        await loadData();
+        renderDayList();
+      } catch (err) {
+        console.error(err);
+        alert("Could not load data files for chart. Ensure server is running from project root.");
+      }
+    }
+
+    document.getElementById("reloadBtn").addEventListener("click", boot);
+    setupChartHover();
+    boot();
+  </script>
+</body>
+</html>
