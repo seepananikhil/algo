@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>NIFTY Midpoint - Live</title>
+  <style>
+    :root { --bg:#f6f6f2; --card:#fff; --line:#ddd; --text:#1d1d1b; --muted:#666; --green:#1f8f5f; --red:#c62828; --amber:#ef6c00; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family:-apple-system,"Segoe UI",Helvetica,Arial,sans-serif; background:var(--bg); color:var(--text); }
+    header { display:flex; align-items:center; gap:16px; padding:12px 20px; background:#fff; border-bottom:1px solid var(--line); }
+    header h1 { font-size:18px; margin:0; flex:1; }
+    .wrap { padding:16px 20px; display:grid; gap:14px; grid-template-columns: 2fr 1fr; }
+    .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+    .card h2 { font-size:14px; margin:0 0 10px; color:var(--muted); text-transform:uppercase; letter-spacing:.04em; }
+    .full { grid-column: 1 / -1; }
+    .stats { display:grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap:10px; }
+    .stat { border:1px solid var(--line); border-radius:8px; padding:8px 10px; }
+    .stat .k { font-size:11px; color:var(--muted); }
+    .stat .v { font-size:16px; font-weight:600; margin-top:2px; }
+    .ok { color:var(--green); } .bad { color:var(--red); } .warn { color:var(--amber); }
+    table { width:100%; border-collapse:collapse; font-size:13px; }
+    th, td { text-align:left; padding:6px 8px; border-bottom:1px solid #eee; white-space:nowrap; }
+    th { color:var(--muted); font-weight:600; }
+    #log { background:#111; color:#ddd; font:12px/1.45 Menlo,monospace; height:280px; overflow:auto; padding:10px; border-radius:8px; white-space:pre-wrap; }
+    canvas { width:100%; height:auto; display:block; cursor:crosshair; }
+    @media (max-width: 1100px) { .wrap { grid-template-columns: 1fr; } }
+    button { border:0; border-radius:6px; padding:8px 14px; font-weight:600; cursor:pointer; }
+    #killBtn.on { background:var(--red); color:#fff; } #killBtn.off { background:#eee; color:var(--text); }
+    .muted { color:var(--muted); font-size:12px; }
+    .armed { padding:8px 10px; border-radius:8px; background:#fff3e0; border:1px solid #ffcc80; margin-top:10px; font-weight:600; }
+  </style>
+</head>
+<body>
+<header>
+  <h1>NIFTY Midpoint Strategy</h1>
+  <input type="date" id="date">
+  <span class="muted" id="updated"></span>
+  <button id="killBtn" class="off">STOP TRADING</button>
+</header>
+
+<div class="wrap">
+  <div class="card full"><h2>Status</h2><div class="stats" id="stats"></div></div>
+
+  <div class="card">
+    <h2>Today's chart</h2>
+    <canvas id="chart" width="1100" height="380"></canvas>
+    <div id="setup" class="muted"></div>
+  </div>
+
+  <div class="card">
+    <h2>P&amp;L</h2>
+    <div class="stats" id="pnlStats"></div>
+    <h2 style="margin-top:14px">Trades (current rules)</h2>
+    <table id="ruleTrades"></table>
+    <h2 style="margin-top:14px">Signals recorded live that day</h2>
+    <div style="max-height:220px;overflow:auto"><table id="signals"></table></div>
+  </div>
+
+  <div class="card full"><h2>Trades: option value &amp; P&amp;L in Rs (1 lot)</h2><div style="max-height:320px;overflow:auto"><table id="trades"></table></div></div>
+  <div class="card full"><h2>Live log</h2><div id="log"></div></div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const todayIST = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+$("date").value = new URLSearchParams(location.search).get("date") || todayIST();
+
+async function get(path) {
+  const r = await fetch(path, { cache: "no-store" });
+  return r.json();
+}
+
+function esc(v) {
+  return String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+function stat(k, v, cls = "") {
+  return `<div class="stat"><div class="k">${esc(k)}</div><div class="v ${cls}">${esc(v)}</div></div>`;
+}
+
+function table(el, rows, cols) {
+  if (!rows.length) { el.innerHTML = `<tr><td class="muted">nothing yet</td></tr>`; return; }
+  cols = cols || Object.keys(rows[0]);
+  el.innerHTML = `<tr>${cols.map((c) => `<th>${esc(c)}</th>`).join("")}</tr>` +
+    rows.map((r) => `<tr>${cols.map((c) => {
+      const v = r[c]; const n = Number(v);
+      const cls = /pnl|points|rupees/.test(c) && v !== "" && !isNaN(n) ? (n > 0 ? "ok" : n < 0 ? "bad" : "") : "";
+      const shown = /_rs$/.test(c) && v !== "" && !isNaN(n) ? `Rs ${n.toLocaleString("en-IN", { maximumFractionDigits: 2 })}` : v;
+      return `<td class="${cls}">${esc(shown)}</td>`;
+    }).join("")}</tr>`).join("");
+}
+
+let chartState = null;
+
+function drawChart(day, hoverIdx = null) {
+  const cv = $("chart"), ctx = cv.getContext("2d"), W = cv.width, H = cv.height;
+  ctx.clearRect(0, 0, W, H);
+  const s = day.setup || {};
+  const c = day.candles.slice(0, 40).map((k) => ({ ...k, live: false }));
+  if (day.forming && day.forming.time && c.length < 40) c.push({ ...day.forming, live: true });
+  chartState = null;
+  if (!c.length) { ctx.fillStyle = "#666"; ctx.font = "14px sans-serif"; ctx.fillText("Waiting for the first candle (09:15)...", 20, 30); return; }
+  const pad = { l: 60, r: 130, t: 10, b: 40 };
+  const slots = Math.max(31, c.length);
+  let lo = Math.min(...c.map((x) => x.low)), hi = Math.max(...c.map((x) => x.high));
+  if (s.range_high) { hi = Math.max(hi, s.range_high); lo = Math.min(lo, s.range_low); }
+  const p = (hi - lo) * 0.08 || 1; lo -= p; hi += p;
+  const step = (W - pad.l - pad.r) / slots;
+  const x = (i) => pad.l + (i + 0.5) * step;
+  const y = (v) => pad.t + (hi - v) / (hi - lo) * (H - pad.t - pad.b);
+  const hline = (v, color, dash, label) => {
+    ctx.setLineDash(dash); ctx.strokeStyle = color; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(pad.l, y(v)); ctx.lineTo(W - pad.r, y(v)); ctx.stroke();
+    ctx.setLineDash([]); ctx.fillStyle = color; ctx.font = "11px sans-serif"; ctx.fillText(`${label} ${v.toFixed(2)}`, W - pad.r + 4, y(v) + 4);
+  };
+
+  ctx.strokeStyle = "#eee";
+  for (let g = 0; g <= 4; g++) { const yy = pad.t + g * (H - pad.t - pad.b) / 4; ctx.beginPath(); ctx.moveTo(pad.l, yy); ctx.lineTo(W - pad.r, yy); ctx.stroke(); }
+
+  if (s.mid) {
+    ctx.fillStyle = "rgba(255,152,0,.13)"; ctx.fillRect(pad.l, y(s.mid + 5), W - pad.l - pad.r, y(s.mid - 5) - y(s.mid + 5));
+    hline(s.range_high, "#555", [2, 3], "HIGH"); hline(s.range_low, "#555", [2, 3], "LOW"); hline(s.mid, "#ef6c00", [6, 4], "MID");
+  } else if (s.so_far_high) {
+    hline(s.so_far_high, "#999", [2, 4], "high so far"); hline(s.so_far_low, "#999", [2, 4], "low so far");
+  }
+  if (s.armed) hline(s.armed.level, "#1d4ed8", [3, 2], `ARMED ${s.armed.side}`);
+
+  const bw = Math.max(3, step * 0.6);
+  c.forEach((k, i) => {
+    const up = k.close >= k.open, col = up ? "#1f8f5f" : "#c62828";
+    ctx.strokeStyle = col; ctx.fillStyle = col; ctx.globalAlpha = k.live ? 0.45 : 1;
+    ctx.beginPath(); ctx.moveTo(x(i), y(k.high)); ctx.lineTo(x(i), y(k.low)); ctx.stroke();
+    ctx.fillRect(x(i) - bw / 2, Math.min(y(k.open), y(k.close)), bw, Math.max(1, Math.abs(y(k.open) - y(k.close))));
+    ctx.globalAlpha = 1;
+    ctx.save(); ctx.translate(x(i) + 3, H - 4); ctx.rotate(-Math.PI / 3);
+    ctx.fillStyle = k.live ? "#1d4ed8" : "#666"; ctx.font = "10px sans-serif"; ctx.fillText(k.time.slice(3), 0, 0); ctx.restore();
+  });
+  ctx.fillStyle = "#666"; ctx.font = "11px sans-serif"; ctx.fillText(hi.toFixed(0), 6, pad.t + 10); ctx.fillText(lo.toFixed(0), 6, H - pad.b);
+
+  if (hoverIdx !== null && c[hoverIdx]) {
+    const k = c[hoverIdx], lines = [`${k.time}${k.live ? " (forming)" : ""}`, `O ${k.open}`, `H ${k.high}`, `L ${k.low}`, `C ${k.close}`];
+    if (s.mid) lines.push(`vs mid ${(k.close - s.mid >= 0 ? "+" : "")}${(k.close - s.mid).toFixed(1)}`);
+    const bx = Math.min(x(hoverIdx) + 10, W - pad.r - 120), by = pad.t + 6;
+    ctx.fillStyle = "rgba(255,255,255,.95)"; ctx.strokeStyle = "#999"; ctx.fillRect(bx, by, 115, lines.length * 15 + 8); ctx.strokeRect(bx, by, 115, lines.length * 15 + 8);
+    ctx.fillStyle = "#111"; lines.forEach((t, j) => ctx.fillText(t, bx + 6, by + 16 + j * 15));
+    ctx.strokeStyle = "rgba(0,0,0,.2)"; ctx.beginPath(); ctx.moveTo(x(hoverIdx), pad.t); ctx.lineTo(x(hoverIdx), H - pad.b); ctx.stroke();
+  }
+  chartState = { day, count: c.length, x0: pad.l, step };
+}
+
+$("chart").addEventListener("mousemove", (e) => {
+  if (!chartState) return;
+  const r = e.target.getBoundingClientRect(), px = (e.clientX - r.left) * (e.target.width / r.width);
+  const i = Math.floor((px - chartState.x0) / chartState.step);
+  drawChart(chartState.day, i >= 0 && i < chartState.count ? i : null);
+});
+$("chart").addEventListener("mouseleave", () => chartState && drawChart(chartState.day));
+
+async function refresh() {
+  const date = $("date").value;
+  try {
+    const [st, day, sig, trades, log] = await Promise.all([
+      get("/api/status"), get(`/api/day?date=${date}`), get(`/api/signals?date=${date}`),
+      get("/api/trades"), get("/api/log?lines=300"),
+    ]);
+    $("stats").innerHTML = [
+      stat("Time (IST)", st.now.slice(11)),
+      stat("NIFTY", st.last_tick ? `${st.last_tick.ltp} @ ${st.last_tick.time}` : "-"),
+      stat("Fyers token", st.token.valid ? "valid" : "EXPIRED", st.token.valid ? "ok" : "bad"),
+      stat("Capture", st.capture_running ? "running" : "stopped", st.capture_running ? "ok" : "warn"),
+      stat("Mode", st.mode, st.mode === "LIVE" ? "bad" : "ok"),
+      stat("Lots / loss limit", `${st.lots} / Rs ${st.daily_loss_limit}`),
+      stat("Kill switch", st.kill_switch ? "ON (no new trades)" : "off", st.kill_switch ? "bad" : "ok"),
+    ].join("");
+    const kb = $("killBtn");
+    kb.className = st.kill_switch ? "on" : "off";
+    kb.textContent = st.kill_switch ? "RESUME TRADING" : "STOP TRADING";
+    kb.dataset.on = st.kill_switch ? "1" : "0";
+
+    drawChart(day);
+    const s = day.setup || {};
+    $("setup").innerHTML = s.mid
+      ? `Range ${s.range_low.toFixed(2)} - ${s.range_high.toFixed(2)} (fixed ${esc(s.range_fixed_at)}) | Midpoint ${s.mid.toFixed(2)} | Buffer ${(s.mid - 5).toFixed(2)} - ${(s.mid + 5).toFixed(2)}` +
+        (s.armed ? `<div class="armed">ARMED ${esc(s.armed.side)} for ${esc(s.armed.candle)} candle: enter if price reaches ${s.armed.level.toFixed(2)} | SL ${s.armed.stop.toFixed(2)}</div>` : "")
+      : s.so_far_high
+        ? `Opening range still forming: high so far ${s.so_far_high.toFixed(2)}, low so far ${s.so_far_low.toFixed(2)}. It fixes at the first candle from 09:20 that makes no new high or low.`
+        : "Waiting for the market to open (09:15).";
+
+    table($("ruleTrades"), day.trades || [], ["side", "entry", "entry_price", "exit", "exit_price", "reason", "pnl_points"]);
+    table($("signals"), sig, ["detected_at", "event", "side", "candle_time", "price", "reason", "pnl_points"]);
+    table($("trades"), trades.slice().reverse(), ["date", "side", "option", "entry", "nifty_in", "buy_price", "buy_value_rs",
+      "exit", "nifty_out", "sell_price", "sell_value_rs", "pnl_rs", "nifty_points", "exit_reason", "mode"]);
+    const sum = (rows, k) => rows.reduce((a, r) => a + Number(r[k]), 0);
+    const dayRows = trades.filter((r) => r.date === date);
+    const dayRs = sum(dayRows, "pnl_rs"), allRs = sum(trades, "pnl_rs");
+    const wins = trades.filter((r) => r.pnl_rs > 0).length;
+    const cls = (v) => (v > 0 ? "ok" : v < 0 ? "bad" : "");
+    $("pnlStats").innerHTML = [
+      stat("Selected day P&L", `Rs ${dayRs.toFixed(0)} (${dayRows.length} trades)`, cls(dayRs)),
+      stat("All days P&L", `Rs ${allRs.toFixed(0)}`, cls(allRs)),
+      stat("Wins / trades", trades.length ? `${wins} / ${trades.length}` : "-"),
+      stat("Capital per trade", dayRows.length ? `Rs ${Math.max(...dayRows.map((r) => r.buy_value_rs)).toFixed(0)}` : "-"),
+    ].join("");
+
+    const el = $("log"), atBottom = el.scrollTop + el.clientHeight >= el.scrollHeight - 20;
+    el.textContent = log.join("\n");
+    if (atBottom) el.scrollTop = el.scrollHeight;
+    $("updated").textContent = `updated ${new Date().toLocaleTimeString()}`;
+  } catch (e) {
+    $("updated").textContent = `server not reachable (${e.message})`;
+  }
+}
+
+$("killBtn").onclick = async () => {
+  const on = $("killBtn").dataset.on === "1";
+  if (!confirm(on ? "Allow new trades again?" : "Stop all NEW trades for today?")) return;
+  await fetch(`/api/kill-switch/${on ? "off" : "on"}`, { method: "POST", headers: { "X-Dashboard": "1" } });
+  refresh();
+};
+$("date").onchange = refresh;
+refresh();
+setInterval(refresh, 3000);
+</script>
+</body>
+</html>

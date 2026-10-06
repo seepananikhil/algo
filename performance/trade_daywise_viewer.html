@@ -172,9 +172,10 @@
     const OHLC_PATH = "../captured_data/fyers/fyers_spot_1min_extended.csv";
     const TRADES_PATH = "../captured_data/fyers/midpoint_backtest_trades.csv";
     const MIDPOINT_BUFFER_POINTS = 5;
-    const NEAR_MIDPOINT_POINTS = 5;
-    const MIN_DIRECTIONAL_DISTANCE_POINTS = 2;
-    const SWITCHED_SIDE_BUFFER_POINTS = 5;
+    // Keep in sync with midpoint_strategy.py.
+    const MIN_SETUP_MINUTES = 5;
+    const MIN_FIRST_CANDLE_BODY_RATIO = 0.12;
+    const ACTIVATION_CLOSES = 3;
 
     const state = {
       candles: [],
@@ -429,11 +430,28 @@
         ctx.setLineDash([]);
         ctx.fillStyle = "#9a5a00";
         ctx.font = "bold 12px Segoe UI";
-        ctx.fillText(`MIDPOINT ${dayMid}`, pad.l + 8, yMid - 6);
+        ctx.fillText(`MIDPOINT ${dayMid.toFixed(2)}`, pad.l + 8, yMid - 6);
         ctx.fillStyle = "#a56a15";
         ctx.font = "11px Segoe UI";
         ctx.fillText(`BUFFER +${MIDPOINT_BUFFER_POINTS}`, pad.l + 8, yBufTop - 4);
         ctx.fillText(`BUFFER -${MIDPOINT_BUFFER_POINTS}`, pad.l + 8, yBufBottom + 14);
+      }
+
+      if (debug && Number.isFinite(debug.rangeHigh) && Number.isFinite(debug.rangeLow)) {
+        ctx.setLineDash([2, 3]);
+        ctx.strokeStyle = "#555";
+        ctx.lineWidth = 1;
+        ctx.fillStyle = "#333";
+        ctx.font = "bold 11px Segoe UI";
+        [["RANGE HIGH", debug.rangeHigh, -4], ["RANGE LOW", debug.rangeLow, 13]].forEach(([label, price, dy]) => {
+          const y = yOf(price);
+          ctx.beginPath();
+          ctx.moveTo(pad.l, y);
+          ctx.lineTo(W - pad.r, y);
+          ctx.stroke();
+          ctx.fillText(`${label} ${price.toFixed(2)}`, W - pad.r - 150, y + dy);
+        });
+        ctx.setLineDash([]);
       }
 
       // Trade annotations with compact markers.
@@ -520,115 +538,58 @@
       return null;
     }
 
-    function computeDayDebug(dayCandles) {
-      if (!dayCandles || dayCandles.length < 5) {
+    function computeDayDebug(c) {
+      if (!c || c.length < 5) {
         return { note: "Not enough candles to compute setup." };
       }
-
-      const ref = dayCandles[0];
-      const openingRange = ref.high - ref.low;
-      const aggressiveBuffer = openingRange >= 50 ? 6 : 0;
-      const dayStartMinute = ref.minute;
-      const cutoffMinute = dayStartMinute + 30;
-      let cutoffIdx = -1;
-      for (let i = 0; i < dayCandles.length; i++) {
-        if (dayCandles[i].minute <= cutoffMinute) cutoffIdx = i;
-      }
-      if (cutoffIdx < 0) {
-        return {
-          note: "No candles inside first 30-minute window.",
-          firstCandle: ref,
-          openingRange,
-          aggressiveBuffer,
-        };
-      }
-
-      let breakIdx = null;
-      let initialDir = null;
-      for (let j = 1; j < dayCandles.length; j++) {
-        const c = dayCandles[j];
-        const brokeHigh = c.high > ref.high;
-        const brokeLow = c.low < ref.low;
-        if (brokeHigh && !brokeLow) {
-          breakIdx = j;
-          initialDir = "LONG";
-          break;
-        }
-        if (brokeLow && !brokeHigh) {
-          breakIdx = j;
-          initialDir = "SHORT";
-          break;
-        }
-      }
-
-      const out = {
-        firstCandle: ref,
-        openingRange,
-        aggressiveBuffer,
-        dayStartMinute,
-        cutoffMinute,
-        cutoffIdx,
-        breakIdx,
-        initialDir,
-        retraceIdx: null,
-        continuationIdx: null,
-        touchDeadlineIdx: null,
-        midpoint: null,
-        midpointActivationLow: null,
-        midpointActivationHigh: null,
-        switchedLongWickLow: null,
-        switchedLongWickHigh: null,
-        switchedShortWickLow: null,
-        switchedShortWickHigh: null,
-      };
-
-      if (breakIdx === null) {
-        out.note = "No valid one-sided break after first candle.";
+      const ref = c[0];
+      const cutoffMinute = ref.minute + 30;
+      const firstRange = ref.high - ref.low;
+      const bodyRatio = firstRange > 0 ? Math.abs(ref.close - ref.open) / firstRange : 0;
+      const out = { firstCandle: ref, bodyRatio, midpoint: null };
+      if (bodyRatio < MIN_FIRST_CANDLE_BODY_RATIO) {
+        out.note = `Day skipped: first candle body is ${(bodyRatio * 100).toFixed(0)}% of its range (min ${MIN_FIRST_CANDLE_BODY_RATIO * 100}%).`;
         return out;
       }
 
-      const touchDeadlineIdx = Math.min(dayCandles.length - 1, breakIdx + 10, cutoffIdx);
-      out.touchDeadlineIdx = touchDeadlineIdx;
-
-      let prevIdx = breakIdx;
-      let retraceIdx = null;
-      for (let j = breakIdx + 1; j <= touchDeadlineIdx; j++) {
-        const prev = dayCandles[prevIdx];
-        const curr = dayCandles[j];
-        if (initialDir === "LONG") {
-          if (curr.high > prev.high) {
-            prevIdx = j;
-            continue;
-          }
-          retraceIdx = j;
+      let hi = ref.high;
+      let lo = ref.low;
+      let fixedIdx = null;
+      for (let j = 1; j < c.length && c[j].minute <= cutoffMinute; j++) {
+        const newExtreme = c[j].high > hi || c[j].low < lo;
+        if (!newExtreme && j >= MIN_SETUP_MINUTES) {
+          fixedIdx = j;
           break;
         }
-        if (curr.low < prev.low) {
-          prevIdx = j;
-          continue;
-        }
-        retraceIdx = j;
+        hi = Math.max(hi, c[j].high);
+        lo = Math.min(lo, c[j].low);
+      }
+      if (fixedIdx === null) {
+        out.note = "No trade: range never settled within the first 30 minutes.";
+        return out;
+      }
+
+      const mid = (hi + lo) / 2;
+      Object.assign(out, { rangeHigh: hi, rangeLow: lo, fixedIdx, midpoint: mid, closes: [] });
+      for (let m = fixedIdx; m < c.length && c[m].minute <= cutoffMinute; m++) {
+        out.closes.push({ time: c[m].time, diff: c[m].close - mid });
+        const armIdx = m + 1;
+        if (armIdx - ACTIVATION_CLOSES < fixedIdx || armIdx >= c.length || c[armIdx].minute > cutoffMinute) continue;
+        const last = c.slice(armIdx - ACTIVATION_CLOSES, armIdx).map((x) => x.close);
+        const side = last.every((v) => v > mid) ? "CALL" : last.every((v) => v < mid) ? "PUT" : null;
+        if (!side) continue;
+        const level = side === "CALL" ? mid + MIDPOINT_BUFFER_POINTS : mid - MIDPOINT_BUFFER_POINTS;
+        const touched = side === "CALL" ? c[armIdx].low <= level : c[armIdx].high >= level;
+        Object.assign(out, { side, level, armedIdx: armIdx, touched });
         break;
       }
-
-      out.continuationIdx = prevIdx;
-      out.retraceIdx = retraceIdx;
-
-      if (retraceIdx === null) {
-        out.note = "No momentum pause before touch deadline.";
-        return out;
+      if (!out.side) {
+        out.note = "No trade: never 3 closes in a row on one side of the midpoint before the cutoff.";
+      } else if (!out.touched) {
+        out.note = `No trade: ${c[out.armedIdx].time} candle did not reach ${formatNum(out.level)}, setup cancelled for the day.`;
+      } else {
+        out.note = `Entry: ${out.side} on the ${c[out.armedIdx].time} candle at the buffer edge ${formatNum(out.level)}.`;
       }
-
-      const contExtreme = initialDir === "LONG" ? dayCandles[prevIdx].high : dayCandles[prevIdx].low;
-      const mid = initialDir === "LONG" ? (ref.low + contExtreme) / 2 : (ref.high + contExtreme) / 2;
-      out.midpoint = mid;
-      out.midpointActivationLow = mid - NEAR_MIDPOINT_POINTS;
-      out.midpointActivationHigh = mid + NEAR_MIDPOINT_POINTS;
-      out.switchedLongWickLow = mid - SWITCHED_SIDE_BUFFER_POINTS;
-      out.switchedLongWickHigh = mid;
-      out.switchedShortWickLow = mid;
-      out.switchedShortWickHigh = mid + SWITCHED_SIDE_BUFFER_POINTS;
-      out.note = "Computed from current strategy debug rules.";
       return out;
     }
 
@@ -638,40 +599,23 @@
         el.textContent = "";
         return;
       }
-
-      const first = debug.firstCandle || null;
-      const breakCandle = debug.breakIdx !== null ? dayCandles[debug.breakIdx] : null;
-      const contCandle = debug.continuationIdx !== null ? dayCandles[debug.continuationIdx] : null;
-      const retraceCandle = debug.retraceIdx !== null ? dayCandles[debug.retraceIdx] : null;
-      const deadlineCandle = debug.touchDeadlineIdx !== null ? dayCandles[debug.touchDeadlineIdx] : null;
-
       const lines = [];
+      const first = debug.firstCandle;
       if (first) {
-        lines.push(`First candle ${first.time} | H ${formatNum(first.high)} | L ${formatNum(first.low)} | opening range ${formatNum(debug.openingRange)} | touch buffer +/- ${formatNum(debug.aggressiveBuffer)}`);
-      }
-      if (breakCandle) {
-        lines.push(`Break ${breakCandle.time} | direction ${debug.initialDir}`);
-      } else {
-        lines.push(`Break - | direction -`);
-      }
-      if (contCandle) {
-        lines.push(`Continuation extreme candle ${contCandle.time}`);
-      }
-      if (retraceCandle) {
-        lines.push(`Retrace start ${retraceCandle.time}`);
-      }
-      if (deadlineCandle) {
-        lines.push(`Touch deadline ${deadlineCandle.time} (first 30-min window & break+10)`);
+        lines.push(`First candle ${first.time} | H ${formatNum(first.high)} | L ${formatNum(first.low)} | body ${(debug.bodyRatio * 100).toFixed(0)}% of range`);
       }
       if (debug.midpoint !== null) {
-        lines.push(`Midpoint ${formatNum(debug.midpoint)} | Activation zone ${formatNum(debug.midpointActivationLow)} to ${formatNum(debug.midpointActivationHigh)}`);
-        lines.push(`Min directional close distance from midpoint: ${formatNum(MIN_DIRECTIONAL_DISTANCE_POINTS)}`);
-        lines.push(`Switched LONG wick zone ${formatNum(debug.switchedLongWickLow)} to ${formatNum(debug.switchedLongWickHigh)} | Switched SHORT wick zone ${formatNum(debug.switchedShortWickLow)} to ${formatNum(debug.switchedShortWickHigh)}`);
+        lines.push(`Range fixed at ${dayCandles[debug.fixedIdx].time} | H ${formatNum(debug.rangeHigh)} | L ${formatNum(debug.rangeLow)}`);
+        lines.push(`Midpoint ${formatNum(debug.midpoint)} | Buffer ${formatNum(debug.midpoint - MIDPOINT_BUFFER_POINTS)} to ${formatNum(debug.midpoint + MIDPOINT_BUFFER_POINTS)}`);
+        const closes = debug.closes.map((x) => `${x.time} ${x.diff >= 0 ? "+" : ""}${x.diff.toFixed(1)}`).join(", ");
+        lines.push(`Closes vs midpoint from range fix: ${closes}`);
+        if (debug.side) {
+          lines.push(`Armed ${debug.side} for the ${dayCandles[debug.armedIdx].time} candle (3 closes ${debug.side === "CALL" ? "above" : "below"}) | entry level ${formatNum(debug.level)}`);
+        }
       }
       if (debug.note) {
-        lines.push(`Note: ${debug.note}`);
+        lines.push(debug.note);
       }
-
       el.innerHTML = lines.map((x) => `<div>${x}</div>`).join("");
     }
 

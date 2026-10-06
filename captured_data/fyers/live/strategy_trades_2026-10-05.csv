@@ -1,0 +1,2 @@
+date,mid_point,option_type,entry,entry_spot,sl_spot,target_spot,exit,exit_spot,profit_loss,exit_reason
+2026-10-05,22535.48,CALL,09:26,22540.48,22506.35,22580.48,09:30,22580.48,40.0,target
