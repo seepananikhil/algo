@@ -72,7 +72,7 @@ export function DayPage() {
       <Card>
         <CardHeader>
           <CardTitle>{date ?? "—"}</CardTitle>
-          <CardDescription>Blue = range, amber = midpoint, dotted = buffer. Colored arrow = entry, gray arrow = exit.</CardDescription>
+          <CardDescription>Blue = range, amber = midpoint, yellow band = buffer zone. Colored arrow = entry, gray arrow = exit.</CardDescription>
         </CardHeader>
         <CardContent>
           {day.loading && !day.data ? (

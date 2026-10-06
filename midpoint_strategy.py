@@ -68,19 +68,17 @@ def resolve_exit(
             if (long and low_j <= level) or (not long and high_j >= level):
                 return j, (min(open_j, level) if long else max(open_j, level)), "trail_stop"
 
+        # The stop works intrabar, so it fires before a candle can close beyond the midpoint.
+        if (long and low_j <= stop) or (not long and high_j >= stop):
+            return j, (min(open_j, stop) if long else max(open_j, stop)), "stop"
+
         if (long and close_j < midpoint - midpoint_buffer_points) or (not long and close_j > midpoint + midpoint_buffer_points):
             return j, close_j, "midpoint_close_exit"
 
-        hit_stop = low_j <= stop if long else high_j >= stop
-        hit_target = high_j >= target if long else low_j <= target
-        if hit_stop and hit_target:
-            return j, stop, "both_hit_stop_first_assumed"
-        if hit_stop:
-            return j, stop, "stop"
-        if hit_target:
+        if (long and high_j >= target) or (not long and low_j <= target):
             return j, target, "target"
 
-        if best is not None:
+        if best is not None and TRAIL_ACTIVATE_POINTS is not None:
             best = max(best, high_j) if long else min(best, low_j)
             trailing = trailing or ((best - entry) if long else (entry - best)) >= TRAIL_ACTIVATE_POINTS
 
@@ -89,8 +87,10 @@ def resolve_exit(
 
 MIDPOINT_BUFFER_POINTS = 5.0
 TARGET_POINTS = 50.0
-TRAIL_ACTIVATE_POINTS = 40.0
+TRAIL_ACTIVATE_POINTS: Optional[float] = None  # set (e.g. 40.0) to enable a trailing stop; None = fixed target only
 TRAIL_POINTS = 10.0
+HARD_STOP_POINTS: Optional[float] = None  # set (e.g. 10.0) for a fixed stop from entry; None = range edge
+MAX_ENTRY_DISTANCE: Optional[float] = None  # set (e.g. 25.0) to skip entries filling further than this from the midpoint
 MIN_SETUP_MINUTES = 5
 MIN_FIRST_CANDLE_BODY_RATIO = 0.12
 TRADE_WINDOW_MINUTES = 35  # exits by 09:50
@@ -172,20 +172,41 @@ def scan_entry(
     return {"status": "none", "earliest": earliest_idx, "side_filter": side_filter}
 
 
+def entry_stop(setup: dict, side: str, entry: float) -> float:
+    """Range edge, tightened to HARD_STOP_POINTS from entry when that is set and closer."""
+    edge = setup["ref_low"] if side == "LONG" else setup["ref_high"]
+    if HARD_STOP_POINTS is None:
+        return edge
+    if side == "LONG":
+        return max(edge, entry - HARD_STOP_POINTS)
+    return min(edge, entry + HARD_STOP_POINTS)
+
+
+def entry_too_far(setup: dict, side: str, entry: float) -> bool:
+    if MAX_ENTRY_DISTANCE is None:
+        return False
+    return (entry - setup["mid"] if side == "LONG" else setup["mid"] - entry) > MAX_ENTRY_DISTANCE
+
+
 def simulate_trade(
     work: pd.DataFrame, setup: dict, entry_idx: int, side: str, entry: float, max_hold_bars: int, reason_prefix: str = ""
 ) -> Optional[Trade]:
     mid = setup["mid"]
     buf = MIDPOINT_BUFFER_POINTS
-    stop = setup["ref_low"] if side == "LONG" else setup["ref_high"]
+    if entry_too_far(setup, side, entry):
+        return None
+    stop = entry_stop(setup, side, entry)
     risk = entry - stop if side == "LONG" else stop - entry
     if risk <= 0:
         return None
     target = entry + TARGET_POINTS if side == "LONG" else entry - TARGET_POINTS
 
-    # Entry is intra-candle, so that candle's own close can already breach the midpoint exit.
+    # Entry is at the candle's open, so its own low/high can already hit the stop, and its close the midpoint exit.
+    entry_low, entry_high = float(work.loc[entry_idx, "low"]), float(work.loc[entry_idx, "high"])
     entry_close = float(work.loc[entry_idx, "close"])
-    if (side == "LONG" and entry_close < mid - buf) or (side == "SHORT" and entry_close > mid + buf):
+    if (side == "LONG" and entry_low <= stop) or (side == "SHORT" and entry_high >= stop):
+        exit_idx, exit_price, reason = entry_idx, stop, "stop"
+    elif (side == "LONG" and entry_close < mid - buf) or (side == "SHORT" and entry_close > mid + buf):
         exit_idx, exit_price, reason = entry_idx, entry_close, "midpoint_close_exit"
     else:
         exit_idx, exit_price, reason = resolve_exit(

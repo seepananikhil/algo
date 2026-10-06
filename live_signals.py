@@ -11,7 +11,7 @@ from typing import Optional, Set
 import pandas as pd
 
 from backtest_midpoint_strategy import load_data
-from midpoint_strategy import TARGET_POINTS, backtest_midpoint_strategy, pending_entry
+from midpoint_strategy import TARGET_POINTS, backtest_midpoint_strategy, entry_stop, entry_too_far, pending_entry
 
 IST = timezone(timedelta(hours=5, minutes=30))
 HEADER = ["detected_at", "event", "side", "entry_time", "candle_time", "price", "mid_point", "sl", "target", "reason", "pnl_points"]
@@ -72,17 +72,23 @@ class LiveSignalEngine:
         key = f"ENTRY|{side}|{w['candle_time']:%H:%M}"
         if key in self.seen:
             return
+        # Watch carries the range-edge stop for its side; same rules as the backtest.
+        levels = {"mid": w["mid"], "ref_low": w["stop"], "ref_high": w["stop"]}
+        if entry_too_far(levels, w["side"], ltp):
+            print(f"[{now:%H:%M:%S}] SKIP {side}: entry {ltp:.2f} is more than the max distance from mid {w['mid']:.2f}")
+            return
+        stop = entry_stop(levels, w["side"], ltp)
         target = ltp + TARGET_POINTS if w["side"] == "LONG" else ltp - TARGET_POINTS
         self.fills[f"{side}|{w['candle_time']:%H:%M}"] = ltp
         self._emit(
             key,
             [now.strftime("%H:%M:%S"), "ENTRY", side, f"{w['candle_time']:%H:%M}", now.strftime("%H:%M:%S"), round(ltp, 2),
-             round(w["mid"], 2), round(w["stop"], 2), round(target, 2), "wick_rejection_1s" if w.get("market") else "buffer_touch_1s", ""],
+             round(w["mid"], 2), round(stop, 2), round(target, 2), "wick_rejection_1s" if w.get("market") else "buffer_touch_1s", ""],
             f"ENTRY {side}",
-            f"{now:%H:%M:%S} @ {ltp:.2f} | SL {w['stop']:.2f} TGT {target:.2f} mid {w['mid']:.2f}",
+            f"{now:%H:%M:%S} @ {ltp:.2f} | SL {stop:.2f} TGT {target:.2f} mid {w['mid']:.2f}",
         )
         if self.trader:
-            self.trader.enter(side, ltp, target, w["stop"], key=f"{side}|{w['candle_time']:%H:%M}")
+            self.trader.enter(side, ltp, target, stop, key=f"{side}|{w['candle_time']:%H:%M}")
 
     def evaluate(self) -> None:
         if not self.candles_file.exists():

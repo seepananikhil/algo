@@ -15,6 +15,7 @@ import {
   type UTCTimestamp,
 } from "lightweight-charts"
 import type { Candle, RuleTrade, Setup } from "@/lib/api"
+import { PriceBandPrimitive } from "@/components/price-band"
 
 // Treat IST wall-clock as UTC so the axis shows market time (09:15 etc.).
 const toTime = (date: string, hhmm: string) => (Date.parse(`${date}T${hhmm}:00Z`) / 1000) as UTCTimestamp
@@ -25,15 +26,16 @@ type Props = {
   forming?: Partial<Candle>
   setup?: Setup
   trades?: RuleTrade[]
-  height?: number
+  className?: string
 }
 
-export function CandleChart({ date, candles, forming, setup, trades = [], height = 420 }: Props) {
+export function CandleChart({ date, candles, forming, setup, trades = [], className = "h-[clamp(420px,62vh,680px)]" }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
   const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const lines = useRef<IPriceLine[]>([])
+  const band = useRef<PriceBandPrimitive | null>(null)
   const dataKey = useRef<string>("")
   const { resolvedTheme } = useTheme()
 
@@ -46,9 +48,9 @@ export function CandleChart({ date, candles, forming, setup, trades = [], height
         textColor: "#a1a1aa",
         fontFamily: "Geist Variable, sans-serif",
       },
-      grid: { vertLines: { color: "rgba(255,255,255,0.04)" }, horzLines: { color: "rgba(255,255,255,0.04)" } },
-      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)" },
-      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true },
+      grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.04)" } },
+      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)", scaleMargins: { top: 0.06, bottom: 0.06 } },
+      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true, rightOffset: 0 },
       crosshair: { mode: 0 },
       handleScroll: false,
       handleScale: false,
@@ -65,6 +67,8 @@ export function CandleChart({ date, candles, forming, setup, trades = [], height
     chart.current = c
     series.current = s
     markers.current = createSeriesMarkers(s, [])
+    band.current = new PriceBandPrimitive()
+    s.attachPrimitive(band.current)
     // Keep the whole session in view when the card resizes.
     const ro = new ResizeObserver(() => c.timeScale().fitContent())
     ro.observe(el.current)
@@ -74,6 +78,7 @@ export function CandleChart({ date, candles, forming, setup, trades = [], height
       chart.current = null
       series.current = null
       markers.current = null
+      band.current = null
       lines.current = []
       dataKey.current = ""
     }
@@ -85,7 +90,7 @@ export function CandleChart({ date, candles, forming, setup, trades = [], height
     const border = light ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.1)"
     chart.current?.applyOptions({
       layout: { textColor: light ? "#52525b" : "#a1a1aa" },
-      grid: { vertLines: { color: line }, horzLines: { color: line } },
+      grid: { horzLines: { color: line } },
       rightPriceScale: { borderColor: border },
       timeScale: { borderColor: border },
     })
@@ -119,10 +124,9 @@ export function CandleChart({ date, candles, forming, setup, trades = [], height
     add(setup?.range_high, "#38bdf8")
     add(setup?.range_low, "#38bdf8")
     add(setup?.mid, "#f59e0b", LineStyle.Solid)
-    if (setup?.mid != null && setup.buffer) {
-      add(setup.mid + setup.buffer, "#10b98199", LineStyle.Dotted, false)
-      add(setup.mid - setup.buffer, "#ef444499", LineStyle.Dotted, false)
-    }
+    band.current?.setBand(
+      setup?.mid != null && setup.buffer ? { top: setup.mid + setup.buffer, bottom: setup.mid - setup.buffer } : null,
+    )
     if (setup?.armed) add(setup.armed.level, "#a855f7", LineStyle.Dotted)
 
     const m: SeriesMarker<Time>[] = []
@@ -148,5 +152,5 @@ export function CandleChart({ date, candles, forming, setup, trades = [], height
     chart.current?.timeScale().fitContent()
   }, [date, candles, forming, setup, trades])
 
-  return <div ref={el} style={{ height }} className="w-full" />
+  return <div ref={el} className={`w-full ${className}`} />
 }

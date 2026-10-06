@@ -201,7 +201,7 @@ class OptionTrader:
             return
         pos["index_best"] = max(pos["index_best"], index_ltp) if long else min(pos["index_best"], index_ltp)
         gain = (pos["index_best"] - pos["index_entry"]) if long else (pos["index_entry"] - pos["index_best"])
-        if not pos["trailing"] and gain >= TRAIL_ACTIVATE_POINTS:
+        if TRAIL_ACTIVATE_POINTS is not None and not pos["trailing"] and gain >= TRAIL_ACTIVATE_POINTS:
             pos["trailing"] = True
             self.notify("Trailing stop ON", f"{pos['symbol']} up {gain:.1f} pts; trailing {TRAIL_POINTS:.0f} behind best")
         if pos["trailing"]:
