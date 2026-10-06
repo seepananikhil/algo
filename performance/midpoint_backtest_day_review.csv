@@ -1,16 +1,16 @@
 date,trade_count,day_pnl_points,status,comment
-2026-04-06,0,0.0,NO_TRADE,No trade under current rules
+2026-04-06,1,50.0,TRADED,Trade(s) generated
 2026-04-07,0,0.0,NO_TRADE,No trade under current rules
 2026-04-08,0,0.0,NO_TRADE,No trade under current rules
 2026-04-09,0,0.0,NO_TRADE,No trade under current rules
-2026-04-10,1,-12.62,TRADED,Trade(s) generated
+2026-04-10,0,0.0,NO_TRADE,No trade under current rules
 2026-04-13,0,0.0,NO_TRADE,No trade under current rules
 2026-04-15,0,0.0,NO_TRADE,No trade under current rules
 2026-04-16,0,0.0,NO_TRADE,No trade under current rules
 2026-04-17,0,0.0,NO_TRADE,No trade under current rules
 2026-04-20,0,0.0,NO_TRADE,No trade under current rules
 2026-04-21,0,0.0,NO_TRADE,No trade under current rules
-2026-04-22,0,0.0,NO_TRADE,No trade under current rules
+2026-04-22,1,-18.15,TRADED,Trade(s) generated
 2026-04-23,0,0.0,NO_TRADE,No trade under current rules
 2026-04-24,0,0.0,NO_TRADE,No trade under current rules
 2026-04-27,0,0.0,NO_TRADE,No trade under current rules
@@ -22,9 +22,9 @@ date,trade_count,day_pnl_points,status,comment
 2026-05-06,0,0.0,NO_TRADE,No trade under current rules
 2026-05-07,0,0.0,NO_TRADE,No trade under current rules
 2026-05-08,1,50.0,TRADED,Trade(s) generated
-2026-05-11,1,-26.6,TRADED,Trade(s) generated
+2026-05-11,1,-27.05,TRADED,Trade(s) generated
 2026-05-12,1,50.0,TRADED,Trade(s) generated
-2026-05-13,1,50.0,TRADED,Trade(s) generated
+2026-05-13,0,0.0,NO_TRADE,No trade under current rules
 2026-05-14,0,0.0,NO_TRADE,No trade under current rules
 2026-05-15,0,0.0,NO_TRADE,No trade under current rules
 2026-05-18,0,0.0,NO_TRADE,No trade under current rules
@@ -32,7 +32,7 @@ date,trade_count,day_pnl_points,status,comment
 2026-05-20,0,0.0,NO_TRADE,No trade under current rules
 2026-05-21,0,0.0,NO_TRADE,No trade under current rules
 2026-05-22,0,0.0,NO_TRADE,No trade under current rules
-2026-05-25,1,14.9,TRADED,Trade(s) generated
+2026-05-25,0,0.0,NO_TRADE,No trade under current rules
 2026-05-26,0,0.0,NO_TRADE,No trade under current rules
 2026-05-27,0,0.0,NO_TRADE,No trade under current rules
 2026-05-29,1,50.0,TRADED,Trade(s) generated
@@ -41,53 +41,53 @@ date,trade_count,day_pnl_points,status,comment
 2026-06-03,0,0.0,NO_TRADE,No trade under current rules
 2026-06-04,0,0.0,NO_TRADE,No trade under current rules
 2026-06-05,0,0.0,NO_TRADE,No trade under current rules
-2026-06-08,0,0.0,NO_TRADE,No trade under current rules
-2026-06-09,1,-10.55,TRADED,Trade(s) generated
+2026-06-08,1,50.0,TRADED,Trade(s) generated
+2026-06-09,0,0.0,NO_TRADE,No trade under current rules
 2026-06-10,0,0.0,NO_TRADE,No trade under current rules
 2026-06-11,0,0.0,NO_TRADE,No trade under current rules
-2026-06-12,0,0.0,NO_TRADE,No trade under current rules
+2026-06-12,1,50.0,TRADED,Trade(s) generated
 2026-06-15,0,0.0,NO_TRADE,No trade under current rules
 2026-06-16,0,0.0,NO_TRADE,No trade under current rules
-2026-06-17,0,0.0,NO_TRADE,No trade under current rules
+2026-06-17,1,-16.45,TRADED,Trade(s) generated
 2026-06-18,0,0.0,NO_TRADE,No trade under current rules
-2026-06-19,1,-8.65,TRADED,Trade(s) generated
+2026-06-19,1,-13.3,TRADED,Trade(s) generated
 2026-06-22,0,0.0,NO_TRADE,No trade under current rules
 2026-06-23,0,0.0,NO_TRADE,No trade under current rules
 2026-06-24,0,0.0,NO_TRADE,No trade under current rules
 2026-06-25,0,0.0,NO_TRADE,No trade under current rules
 2026-06-29,1,50.0,TRADED,Trade(s) generated
 2026-06-30,0,0.0,NO_TRADE,No trade under current rules
-2026-07-01,1,17.05,TRADED,Trade(s) generated
+2026-07-01,1,18.6,TRADED,Trade(s) generated
 2026-07-02,0,0.0,NO_TRADE,No trade under current rules
-2026-07-03,1,-15.95,TRADED,Trade(s) generated
+2026-07-03,1,-15.5,TRADED,Trade(s) generated
 2026-07-06,0,0.0,NO_TRADE,No trade under current rules
 2026-07-07,0,0.0,NO_TRADE,No trade under current rules
-2026-07-08,0,0.0,NO_TRADE,No trade under current rules
+2026-07-08,1,16.65,TRADED,Trade(s) generated
 2026-07-09,0,0.0,NO_TRADE,No trade under current rules
-2026-07-10,1,38.88,TRADED,Trade(s) generated
-2026-07-13,1,39.77,TRADED,Trade(s) generated
+2026-07-10,1,32.6,TRADED,Trade(s) generated
+2026-07-13,1,45.0,TRADED,Trade(s) generated
 2026-07-14,0,0.0,NO_TRADE,No trade under current rules
 2026-07-15,0,0.0,NO_TRADE,No trade under current rules
-2026-07-16,1,36.15,TRADED,Trade(s) generated
+2026-07-16,1,3.35,TRADED,Trade(s) generated
 2026-07-17,0,0.0,NO_TRADE,No trade under current rules
 2026-07-20,0,0.0,NO_TRADE,No trade under current rules
 2026-07-21,0,0.0,NO_TRADE,No trade under current rules
 2026-07-22,0,0.0,NO_TRADE,No trade under current rules
-2026-07-23,1,-4.95,TRADED,Trade(s) generated
-2026-07-24,1,-7.25,TRADED,Trade(s) generated
-2026-07-27,2,2.1,TRADED,Trade(s) generated
-2026-07-28,0,0.0,NO_TRADE,No trade under current rules
+2026-07-23,0,0.0,NO_TRADE,No trade under current rules
+2026-07-24,1,50.0,TRADED,Trade(s) generated
+2026-07-27,1,-22.0,TRADED,Trade(s) generated
+2026-07-28,1,-7.3,TRADED,Trade(s) generated
 2026-07-29,0,0.0,NO_TRADE,No trade under current rules
 2026-07-30,0,0.0,NO_TRADE,No trade under current rules
 2026-07-31,0,0.0,NO_TRADE,No trade under current rules
-2026-08-03,1,-0.55,TRADED,Trade(s) generated
+2026-08-03,0,0.0,NO_TRADE,No trade under current rules
 2026-08-04,0,0.0,NO_TRADE,No trade under current rules
 2026-08-05,0,0.0,NO_TRADE,No trade under current rules
-2026-08-06,0,0.0,NO_TRADE,No trade under current rules
+2026-08-06,1,25.35,TRADED,Trade(s) generated
 2026-08-07,0,0.0,NO_TRADE,No trade under current rules
-2026-08-10,1,-23.1,TRADED,Trade(s) generated
+2026-08-10,1,50.0,TRADED,Trade(s) generated
 2026-08-11,0,0.0,NO_TRADE,No trade under current rules
-2026-08-12,0,0.0,NO_TRADE,No trade under current rules
+2026-08-12,1,30.5,TRADED,Trade(s) generated
 2026-08-13,0,0.0,NO_TRADE,No trade under current rules
 2026-08-14,0,0.0,NO_TRADE,No trade under current rules
 2026-08-17,0,0.0,NO_TRADE,No trade under current rules
@@ -95,33 +95,33 @@ date,trade_count,day_pnl_points,status,comment
 2026-08-19,0,0.0,NO_TRADE,No trade under current rules
 2026-08-20,0,0.0,NO_TRADE,No trade under current rules
 2026-08-21,0,0.0,NO_TRADE,No trade under current rules
-2026-08-24,1,9.0,TRADED,Trade(s) generated
+2026-08-24,0,0.0,NO_TRADE,No trade under current rules
 2026-08-25,0,0.0,NO_TRADE,No trade under current rules
-2026-08-26,0,0.0,NO_TRADE,No trade under current rules
+2026-08-26,1,24.55,TRADED,Trade(s) generated
 2026-08-27,0,0.0,NO_TRADE,No trade under current rules
 2026-08-28,0,0.0,NO_TRADE,No trade under current rules
-2026-08-31,0,0.0,NO_TRADE,No trade under current rules
-2026-09-01,1,-12.3,TRADED,Trade(s) generated
+2026-08-31,1,31.25,TRADED,Trade(s) generated
+2026-09-01,0,0.0,NO_TRADE,No trade under current rules
 2026-09-02,0,0.0,NO_TRADE,No trade under current rules
-2026-09-03,1,16.1,TRADED,Trade(s) generated
+2026-09-03,1,12.5,TRADED,Trade(s) generated
 2026-09-04,0,0.0,NO_TRADE,No trade under current rules
 2026-09-07,0,0.0,NO_TRADE,No trade under current rules
 2026-09-08,0,0.0,NO_TRADE,No trade under current rules
-2026-09-09,1,-1.18,TRADED,Trade(s) generated
-2026-09-10,0,0.0,NO_TRADE,No trade under current rules
-2026-09-11,1,-17.3,TRADED,Trade(s) generated
+2026-09-09,1,-6.85,TRADED,Trade(s) generated
+2026-09-10,1,32.95,TRADED,Trade(s) generated
+2026-09-11,1,-20.4,TRADED,Trade(s) generated
 2026-09-15,0,0.0,NO_TRADE,No trade under current rules
-2026-09-16,0,0.0,NO_TRADE,No trade under current rules
-2026-09-17,1,50.0,TRADED,Trade(s) generated
+2026-09-16,1,37.5,TRADED,Trade(s) generated
+2026-09-17,0,0.0,NO_TRADE,No trade under current rules
 2026-09-18,0,0.0,NO_TRADE,No trade under current rules
 2026-09-21,0,0.0,NO_TRADE,No trade under current rules
 2026-09-22,0,0.0,NO_TRADE,No trade under current rules
 2026-09-23,0,0.0,NO_TRADE,No trade under current rules
 2026-09-24,0,0.0,NO_TRADE,No trade under current rules
-2026-09-25,0,0.0,NO_TRADE,No trade under current rules
+2026-09-25,1,31.0,TRADED,Trade(s) generated
 2026-09-28,0,0.0,NO_TRADE,No trade under current rules
 2026-09-29,0,0.0,NO_TRADE,No trade under current rules
 2026-09-30,0,0.0,NO_TRADE,No trade under current rules
-2026-10-01,0,0.0,NO_TRADE,No trade under current rules
-2026-10-05,1,50.0,TRADED,Trade(s) generated
-2026-10-06,2,29.45,TRADED,Trade(s) generated
+2026-10-01,1,-21.0,TRADED,Trade(s) generated
+2026-10-05,1,37.85,TRADED,Trade(s) generated
+2026-10-06,1,35.6,TRADED,Trade(s) generated
