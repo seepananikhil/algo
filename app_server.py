@@ -34,6 +34,7 @@ STOP_FILE = ROOT / "STOP_TRADING"
 UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
 MASTER_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_extended.csv"
+ARCHIVE_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_3y_archive.csv"
 HOST, PORT = "127.0.0.1", 8090
 IST = timezone(timedelta(hours=5, minutes=30))
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -148,17 +149,24 @@ def auto_start_loop() -> None:
         time.sleep(30)
 
 
+def history_mtime() -> tuple:
+    return tuple(p.stat().st_mtime if p.exists() else None for p in (ARCHIVE_CSV, MASTER_CSV))
+
+
 def master() -> pd.DataFrame:
-    """Master 1-min history (stored in UTC), converted to naive IST like the live files."""
-    if not MASTER_CSV.exists():
+    """3-year archive plus the daily-updated master 1-min history (stored in UTC), as naive IST like the live files."""
+    paths = [p for p in (ARCHIVE_CSV, MASTER_CSV) if p.exists()]
+    if not paths:
         return pd.DataFrame()
-    mtime = MASTER_CSV.stat().st_mtime
+    mtime = history_mtime()
     with _cache_lock:
         if _master_cache["mtime"] != mtime:
-            df = pd.read_csv(MASTER_CSV)
+            df = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
             ts = pd.to_datetime(df["timestamp"], errors="coerce")
             df["timestamp"] = ts.dt.tz_localize("UTC").dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
-            df = df.dropna(subset=["timestamp", "open", "high", "low", "close"]).sort_values("timestamp").reset_index(drop=True)
+            df = df.dropna(subset=["timestamp", "open", "high", "low", "close"])
+            # Master is listed last, so its rows win where the two files overlap.
+            df = df.drop_duplicates("timestamp", keep="last").sort_values("timestamp").reset_index(drop=True)
             _master_cache.update(mtime=mtime, df=df)
         return _master_cache["df"]
 
@@ -188,7 +196,7 @@ def backtest_report() -> dict:
     m = master()
     if m.empty:
         return {"summary": {}, "trades": [], "monthly": [], "exit_reasons": []}
-    mtime = MASTER_CSV.stat().st_mtime
+    mtime = history_mtime()
     with _cache_lock:
         if _backtest_cache["mtime"] == mtime:
             return _backtest_cache["value"]

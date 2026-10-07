@@ -10,6 +10,45 @@ import { PnlCalendar } from "@/components/pnl-calendar"
 import { cn } from "@/lib/utils"
 import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, type Backtest } from "@/lib/api"
 
+/** Backtest restricted to one year ("all" = everything), with equity/drawdown restarting at 0. */
+function forYear(data: Backtest, year: string): Backtest {
+  if (year === "all") return data
+  let equity = 0
+  let peak = 0
+  const trades = data.trades.filter((t) => t.date.startsWith(year)).map((t) => {
+    equity += t.pnl_points
+    peak = Math.max(peak, equity)
+    return { ...t, equity, drawdown: equity - peak }
+  })
+  const daily = data.daily.filter((d) => d.date.startsWith(year))
+  const reasons = new Map<string, number>()
+  trades.forEach((t) => reasons.set(t.reason, (reasons.get(t.reason) ?? 0) + 1))
+  const pts = trades.map((t) => t.pnl_points)
+  const wins = pts.filter((p) => p > 0).length
+  const total = pts.reduce((a, p) => a + p, 0)
+  return {
+    summary: {
+      ...data.summary,
+      from: daily[0]?.date ?? "",
+      to: daily[daily.length - 1]?.date ?? "",
+      days: daily.length,
+      trades: trades.length,
+      wins,
+      losses: pts.filter((p) => p < 0).length,
+      win_rate_pct: trades.length ? Math.round((10000 * wins) / trades.length) / 100 : 0,
+      total_points: total,
+      avg_points: trades.length ? total / trades.length : 0,
+      max_drawdown: Math.min(0, ...trades.map((t) => t.drawdown)),
+      best: pts.length ? Math.max(...pts) : 0,
+      worst: pts.length ? Math.min(...pts) : 0,
+    },
+    trades,
+    daily,
+    monthly: data.monthly.filter((m) => m.month.startsWith(year)),
+    exit_reasons: [...reasons].map(([reason, count]) => ({ reason, count })).sort((a, b) => b.count - a.count),
+  }
+}
+
 const axis = { stroke: "var(--muted-foreground)", fontSize: 11, tickLine: false, axisLine: false }
 const tooltip = {
   contentStyle: { background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 },
@@ -17,9 +56,14 @@ const tooltip = {
 }
 
 export function BacktestPage() {
-  const { data, loading, error } = usePoll<Backtest>("/api/backtest")
+  const { data: raw, loading, error } = usePoll<Backtest>("/api/backtest")
   const [filter, setFilter] = useState("all")
+  const [yearPick, setYear] = useState<string | null>(null)
   const [picked, setPicked] = useState<string | null>(null)
+
+  const years = useMemo(() => [...new Set((raw?.daily ?? []).map((d) => d.date.slice(0, 4)))].sort(), [raw])
+  const year = yearPick ?? years[years.length - 1] ?? "all"
+  const data = useMemo(() => (raw ? forYear(raw, year) : null), [raw, year])
 
   const trades = useMemo(() => {
     const t = data?.trades ?? []
@@ -36,11 +80,19 @@ export function BacktestPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold">Midpoint Backtest Performance</h1>
-        <p className="text-sm text-muted-foreground">
-          Current rules on {s.days} days ({s.from} → {s.to}). Points are NIFTY index points; ₹ ≈ points × {s.lot_size} (1 lot, before option premium effects).
-        </p>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <div>
+          <h1 className="text-xl font-semibold">Midpoint Backtest Performance</h1>
+          <p className="text-sm text-muted-foreground">
+            Current rules on {s.days} days ({s.from} → {s.to}). Points are NIFTY index points; ₹ ≈ points × {s.lot_size} (1 lot, before option premium effects).
+          </p>
+        </div>
+        <Tabs value={year} onValueChange={(v) => { setYear(v as string); setPicked(null) }}>
+          <TabsList>
+            <TabsTrigger value="all">All</TabsTrigger>
+            {years.map((y) => <TabsTrigger key={y} value={y}>{y}</TabsTrigger>)}
+          </TabsList>
+        </Tabs>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">

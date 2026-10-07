@@ -166,19 +166,12 @@ def scan_entry(
     last_idx: int,
     side_filter: Optional[str] = None,
 ) -> dict:
-    """First midpoint wick rejection from earliest_idx on. During the next candle a limit sits at mid +/- buffer
-    (filled there, or at the open if that is better); if price never reaches it, enter at market at that candle's close."""
+    """First midpoint wick rejection from earliest_idx on; enters at market on the next candle's open."""
     limit = min(setup["last_entry_idx"], last_idx)
     for k in range(max(earliest_idx, setup["day_start"] + 1), limit):
         side = wick_rejection_side(work, k, setup["mid"])
         if side and (side_filter is None or side == side_filter):
-            c = work.loc[k + 1]
-            level = buffer_entry_level(side, setup["mid"])
-            if side == "LONG":
-                price = min(float(c["open"]), level) if float(c["low"]) <= level else float(c["close"])
-            else:
-                price = max(float(c["open"]), level) if float(c["high"]) >= level else float(c["close"])
-            return {"status": "entry", "idx": k + 1, "side": side, "price": price}
+            return {"status": "entry", "idx": k + 1, "side": side, "price": float(work.loc[k + 1, "open"])}
     return {"status": "none", "earliest": earliest_idx, "side_filter": side_filter}
 
 
@@ -211,7 +204,7 @@ def simulate_trade(
         return None
     target = entry + TARGET_POINTS if side == "LONG" else entry - TARGET_POINTS
 
-    # A buffer fill happens inside the entry candle, so its later low/high can hit the stop and its close the midpoint exit.
+    # Entry is at the candle's open, so its own low/high can already hit the stop, and its close the midpoint exit.
     entry_low, entry_high = float(work.loc[entry_idx, "low"]), float(work.loc[entry_idx, "high"])
     entry_close = float(work.loc[entry_idx, "close"])
     if (side == "LONG" and entry_low <= stop) or (side == "SHORT" and entry_high >= stop):
@@ -289,8 +282,7 @@ def plan_day(
 
 
 def _armed_for_next(work: pd.DataFrame, setup: dict, r: dict, day_indices: List[int]) -> Optional[dict]:
-    """If the last closed candle is a wick rejection, arm a buffer-level entry for the next candle
-    (live falls back to market at that candle's close via the candle evaluation)."""
+    """If the last closed candle is a wick rejection, enter at market on the next candle's first tick."""
     last_idx = day_indices[-1]
     last_entry_ts = work.loc[day_indices[0], "timestamp"] + pd.Timedelta(
         minutes=TRADE_WINDOW_MINUTES - MIN_MINUTES_LEFT_FOR_ENTRY
