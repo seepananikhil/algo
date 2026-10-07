@@ -4,6 +4,7 @@ export type Status = {
   now: string
   token: { valid: boolean; generated_at_utc: string | null }
   capture_running: boolean
+  auto_start_capture?: boolean
   mode: "PAPER" | "LIVE"
   lots: number
   daily_loss_limit: number | null
@@ -96,6 +97,26 @@ export type OptionTrade = {
 
 export type BacktestTrade = RuleTrade & { date: string; equity: number; drawdown: number }
 
+export type PaperReport = {
+  summary: {
+    trades: number
+    days: number
+    wins: number
+    losses: number
+    win_rate_pct: number
+    gross_rs: number
+    charges_rs: number
+    net_rs: number
+    points: number
+    avg_win_rs: number
+    avg_loss_rs: number
+    max_drawdown_rs: number
+    winning_days: number
+  }
+  trades: (OptionTrade & { charges_rs: number; net_rs: number; equity: number; drawdown: number })[]
+  daily: { date: string; trades: number; gross_rs: number; net_rs: number; points: number }[]
+}
+
 export type Backtest = {
   summary: {
     from: string
@@ -122,7 +143,8 @@ export type Settings = {
   lots: number
   daily_loss_limit: number
   strike_offset: number
-  skip_expiry_day: boolean
+  option_target_pct: number
+  auto_start_capture: boolean
   live_trading: boolean
   capture_running: boolean
   restart_required?: boolean
@@ -192,6 +214,7 @@ export const pnlClass = (v: number) => (v > 0 ? "text-emerald-500" : v < 0 ? "te
 export const prettyReason = (r: string) =>
   r
     .replace(/^reverse_after_sl_/, "2nd trade (after loss) · ")
+    .replace(/^third_after_2sl_/, "3rd trade (after 2 losses) · ")
     .replace(/^reverse_after_void_/, "2nd trade (after void) · ")
     .replace(/_/g, " ")
 

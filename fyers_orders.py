@@ -38,7 +38,7 @@ def load_settings() -> dict:
         "lots": int(cfg.get("lots", 1)),
         "daily_loss_limit": float(cfg.get("daily_loss_limit", 1000)),
         "strike_offset": int(cfg.get("strike_offset", 100)),
-        "skip_expiry_day": bool(cfg.get("skip_expiry_day", True)),
+        "option_target_pct": float(cfg.get("option_target_pct", 10)),
     }
 
 
@@ -74,9 +74,8 @@ class OptionTrader:
         offset = self.settings["strike_offset"]
         strike, opt_type = (atm + offset, "CE") if signal_side == "CALL" else (atm - offset, "PE")
         today = now_ist().date()
+        # Nearest expiry, including a contract that expires today.
         expiries = sorted(e for e in self.options["expiry"].unique() if e >= today)
-        if self.settings["skip_expiry_day"] and expiries and expiries[0] == today:
-            expiries = expiries[1:]
         rows = self.options[
             (self.options["expiry"] == expiries[0]) & (self.options["strike"] == strike) & (self.options["opt_type"] == opt_type)
         ]
@@ -213,6 +212,11 @@ class OptionTrader:
             self.last_mtm_check = time.time()
             ltp = self.option_ltp(pos["symbol"])
             if ltp is not None and pos["entry_fill"]:
+                gain_pct = 100 * (ltp - pos["entry_fill"]) / pos["entry_fill"]
+                target_pct = self.settings["option_target_pct"]
+                if target_pct > 0 and gain_pct >= target_pct:
+                    self._exit("option_target", index_ltp)
+                    return
                 open_pnl = (ltp - pos["entry_fill"]) * pos["qty"]
                 if self.day_pnl + open_pnl <= -self.settings["daily_loss_limit"]:
                     self._exit("daily_loss_limit", index_ltp)

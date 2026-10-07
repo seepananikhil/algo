@@ -86,6 +86,8 @@ def resolve_exit(
 
 
 MIDPOINT_BUFFER_POINTS = 5.0
+WICK_TOUCH_TOLERANCE = 2.0  # a wick within this many points of the midpoint counts as touching it
+OPEN_TOLERANCE = 2.0  # the rejection candle may open up to this many points on the wrong side of the midpoint
 TARGET_POINTS = 50.0
 TRAIL_ACTIVATE_POINTS: Optional[float] = None  # set (e.g. 40.0) to enable a trailing stop; None = fixed target only
 TRAIL_POINTS = 10.0
@@ -146,12 +148,13 @@ def buffer_entry_level(side: str, mid: float) -> float:
 
 
 def wick_rejection_side(work: pd.DataFrame, k: int, mid: float) -> Optional[str]:
-    """Candle k wicked into the midpoint and closed back beyond the buffer on the side it came from."""
+    """Candle k wicked into (or within WICK_TOUCH_TOLERANCE of) the midpoint and closed back beyond the buffer."""
     o, h, l, c = (float(work.loc[k, x]) for x in ("open", "high", "low", "close"))
     prev_close = float(work.loc[k - 1, "close"])
-    if prev_close > mid and o > mid and l <= mid and c >= mid + MIDPOINT_BUFFER_POINTS:
+    tol = WICK_TOUCH_TOLERANCE
+    if prev_close > mid and o > mid - OPEN_TOLERANCE and l <= mid + tol and c >= mid + MIDPOINT_BUFFER_POINTS:
         return "LONG"
-    if prev_close < mid and o < mid and h >= mid and c <= mid - MIDPOINT_BUFFER_POINTS:
+    if prev_close < mid and o < mid + OPEN_TOLERANCE and h >= mid - tol and c <= mid - MIDPOINT_BUFFER_POINTS:
         return "SHORT"
     return None
 
@@ -163,12 +166,19 @@ def scan_entry(
     last_idx: int,
     side_filter: Optional[str] = None,
 ) -> dict:
-    """First midpoint wick rejection from earliest_idx on; the trade enters at the next candle's open."""
+    """First midpoint wick rejection from earliest_idx on. During the next candle a limit sits at mid +/- buffer
+    (filled there, or at the open if that is better); if price never reaches it, enter at market at that candle's close."""
     limit = min(setup["last_entry_idx"], last_idx)
     for k in range(max(earliest_idx, setup["day_start"] + 1), limit):
         side = wick_rejection_side(work, k, setup["mid"])
         if side and (side_filter is None or side == side_filter):
-            return {"status": "entry", "idx": k + 1, "side": side, "price": float(work.loc[k + 1, "open"])}
+            c = work.loc[k + 1]
+            level = buffer_entry_level(side, setup["mid"])
+            if side == "LONG":
+                price = min(float(c["open"]), level) if float(c["low"]) <= level else float(c["close"])
+            else:
+                price = max(float(c["open"]), level) if float(c["high"]) >= level else float(c["close"])
+            return {"status": "entry", "idx": k + 1, "side": side, "price": price}
     return {"status": "none", "earliest": earliest_idx, "side_filter": side_filter}
 
 
@@ -201,7 +211,7 @@ def simulate_trade(
         return None
     target = entry + TARGET_POINTS if side == "LONG" else entry - TARGET_POINTS
 
-    # Entry is at the candle's open, so its own low/high can already hit the stop, and its close the midpoint exit.
+    # A buffer fill happens inside the entry candle, so its later low/high can hit the stop and its close the midpoint exit.
     entry_low, entry_high = float(work.loc[entry_idx, "low"]), float(work.loc[entry_idx, "high"])
     entry_close = float(work.loc[entry_idx, "close"])
     if (side == "LONG" and entry_low <= stop) or (side == "SHORT" and entry_high >= stop):
@@ -248,7 +258,8 @@ def plan_day(
 ) -> Tuple[Optional[dict], List[Trade], Optional[dict]]:
     """Trades for one day plus the entry armed for the next candle (live use).
 
-    First midpoint wick rejection on either side; after a losing trade, one more on the opposite side.
+    First midpoint wick rejection on either side; after a losing trade, one more on the opposite side;
+    if that also loses, a last one on either side.
     """
     setup = day_setup(work, day_indices)
     if setup is None:
@@ -257,7 +268,7 @@ def plan_day(
     trades: List[Trade] = []
     earliest, side_filter, prefix = setup["range_fixed_idx"], None, ""
 
-    for phase in ("first", "opposite"):
+    for phase in ("first", "opposite", "third"):
         r = scan_entry(work, setup, earliest, last_idx, side_filter)
         if r["status"] != "entry":
             return setup, trades, _armed_for_next(work, setup, r, day_indices)
@@ -268,14 +279,18 @@ def plan_day(
         trades.append(trade)
         exit_idx = work.index[work["timestamp"] == pd.Timestamp(trade.exit_time)][0]
         still_open = trade.reason.endswith("open")
-        if phase == "opposite" or trade.pnl_points >= 0 or still_open:
+        if phase == "third" or trade.pnl_points >= 0 or still_open:
             break
-        earliest, side_filter, prefix = exit_idx, opposite, "reverse_after_sl_"
+        if phase == "first":
+            earliest, side_filter, prefix = exit_idx, opposite, "reverse_after_sl_"
+        else:
+            earliest, side_filter, prefix = exit_idx, None, "third_after_2sl_"
     return setup, trades, None
 
 
 def _armed_for_next(work: pd.DataFrame, setup: dict, r: dict, day_indices: List[int]) -> Optional[dict]:
-    """If the last closed candle is a wick rejection, enter at market on the next candle's first tick."""
+    """If the last closed candle is a wick rejection, arm a buffer-level entry for the next candle
+    (live falls back to market at that candle's close via the candle evaluation)."""
     last_idx = day_indices[-1]
     last_entry_ts = work.loc[day_indices[0], "timestamp"] + pd.Timedelta(
         minutes=TRADE_WINDOW_MINUTES - MIN_MINUTES_LEFT_FOR_ENTRY
@@ -291,7 +306,6 @@ def _armed_for_next(work: pd.DataFrame, setup: dict, r: dict, day_indices: List[
         "level": buffer_entry_level(side, setup["mid"]),
         "mid": setup["mid"],
         "stop": setup["ref_low"] if side == "LONG" else setup["ref_high"],
-        "market": True,
     }
 
 

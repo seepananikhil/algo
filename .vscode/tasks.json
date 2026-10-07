@@ -1,0 +1,15 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Restart app server",
+      "type": "shell",
+      // [a] keeps pkill from matching this task's own shell command line
+      "command": "pkill -f '[a]pp_server.py'; sleep 1; python3 -u app_server.py",
+      "options": { "cwd": "${workspaceFolder}" },
+      "isBackground": true,
+      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "problemMatcher": []
+    }
+  ]
+}

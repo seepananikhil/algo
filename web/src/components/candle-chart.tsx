@@ -20,6 +20,14 @@ import { PriceBandPrimitive } from "@/components/price-band"
 // Treat IST wall-clock as UTC so the axis shows market time (09:15 etc.).
 const toTime = (date: string, hhmm: string) => (Date.parse(`${date}T${hhmm}:00Z`) / 1000) as UTCTimestamp
 
+// 09:15–09:50 inclusive; reserve this width so a few early candles don't fill the chart.
+const SESSION_BARS = 36
+
+function fitSession(c: IChartApi, bars: number) {
+  if (bars >= SESSION_BARS) c.timeScale().fitContent()
+  else c.timeScale().setVisibleLogicalRange({ from: -0.5, to: SESSION_BARS - 0.5 })
+}
+
 type Props = {
   date: string
   candles: Candle[]
@@ -37,6 +45,7 @@ export function CandleChart({ date, candles, forming, setup, trades = [], classN
   const lines = useRef<IPriceLine[]>([])
   const band = useRef<PriceBandPrimitive | null>(null)
   const dataKey = useRef<string>("")
+  const bars = useRef(0)
   const { resolvedTheme } = useTheme()
 
   useEffect(() => {
@@ -50,7 +59,7 @@ export function CandleChart({ date, candles, forming, setup, trades = [], classN
       },
       grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.04)" } },
       rightPriceScale: { borderColor: "rgba(255,255,255,0.1)", scaleMargins: { top: 0.06, bottom: 0.06 } },
-      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true, secondsVisible: false, fixLeftEdge: true, fixRightEdge: true, rightOffset: 0 },
+      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true, secondsVisible: false, rightOffset: 0 },
       crosshair: { mode: 0 },
       handleScroll: false,
       handleScale: false,
@@ -70,7 +79,7 @@ export function CandleChart({ date, candles, forming, setup, trades = [], classN
     band.current = new PriceBandPrimitive()
     s.attachPrimitive(band.current)
     // Keep the whole session in view when the card resizes.
-    const ro = new ResizeObserver(() => c.timeScale().fitContent())
+    const ro = new ResizeObserver(() => fitSession(c, bars.current))
     ro.observe(el.current)
     return () => {
       ro.disconnect()
@@ -149,7 +158,8 @@ export function CandleChart({ date, candles, forming, setup, trades = [], classN
     }
     m.sort((a, b) => (a.time as number) - (b.time as number))
     markers.current?.setMarkers(m)
-    chart.current?.timeScale().fitContent()
+    bars.current = data.length
+    if (chart.current) fitSession(chart.current, data.length)
   }, [date, candles, forming, setup, trades])
 
   return <div ref={el} className={`w-full ${className}`} />

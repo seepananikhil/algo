@@ -1,11 +1,12 @@
 import { useMemo, useState } from "react"
-import { useNavigate } from "react-router-dom"
+import { DayPanel } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { SideBadge, StatCard } from "@/components/common"
+import { PnlCalendar } from "@/components/pnl-calendar"
 import { cn } from "@/lib/utils"
 import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, type Backtest } from "@/lib/api"
 
@@ -15,64 +16,10 @@ const tooltip = {
   labelStyle: { color: "var(--muted-foreground)" },
 }
 
-const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
-
-function PnlCalendar({ daily, onPick }: { daily: Backtest["daily"]; onPick: (date: string) => void }) {
-  const byDate = new Map(daily.map((d) => [d.date, d]))
-  const months = [...new Set(daily.map((d) => d.date.slice(0, 7)))]
-  return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-      {months.map((mk) => {
-        const [y, m] = mk.split("-").map(Number)
-        const offset = (new Date(y, m - 1, 1).getDay() + 6) % 7
-        const count = new Date(y, m, 0).getDate()
-        const total = daily.filter((d) => d.date.startsWith(mk)).reduce((a, d) => a + d.points, 0)
-        return (
-          <div key={mk} className="rounded-lg border p-3">
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className="text-sm font-medium">{new Date(y, m - 1, 1).toLocaleString("en-US", { month: "long", year: "numeric" })}</span>
-              <span className={cn("text-sm font-semibold tabular-nums", pnlClass(total))}>{fmtPts(total)}</span>
-            </div>
-            <div className="grid grid-cols-7 gap-1 text-center text-[10px] text-muted-foreground">
-              {WEEKDAYS.map((w) => <div key={w}>{w}</div>)}
-            </div>
-            <div className="mt-1 grid grid-cols-7 gap-1">
-              {Array.from({ length: offset }, (_, i) => <div key={`e${i}`} />)}
-              {Array.from({ length: count }, (_, i) => {
-                const date = `${mk}-${String(i + 1).padStart(2, "0")}`
-                const d = byDate.get(date)
-                return (
-                  <button
-                    key={date}
-                    type="button"
-                    disabled={!d}
-                    onClick={() => onPick(date)}
-                    title={d ? `${date}: ${d.trades} trade(s), ${fmtPts(d.points)} pts` : undefined}
-                    className={cn(
-                      "flex h-11 flex-col items-start rounded-md border p-1 text-left text-[11px] transition-colors",
-                      !d && "border-transparent text-muted-foreground/40",
-                      d && d.trades === 0 && "bg-muted/50 hover:bg-muted",
-                      d && d.points > 0 && "border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25",
-                      d && d.points < 0 && "border-red-500/40 bg-red-500/15 hover:bg-red-500/25",
-                    )}
-                  >
-                    <span className="font-medium">{i + 1}</span>
-                    {d && d.trades > 0 && <span className={cn("text-[10px] tabular-nums", pnlClass(d.points))}>{fmtPts(d.points)}</span>}
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
 export function BacktestPage() {
   const { data, loading, error } = usePoll<Backtest>("/api/backtest")
   const [filter, setFilter] = useState("all")
-  const navigate = useNavigate()
+  const [picked, setPicked] = useState<string | null>(null)
 
   const trades = useMemo(() => {
     const t = data?.trades ?? []
@@ -185,9 +132,11 @@ export function BacktestPage() {
           <CardDescription>Green = profit day, red = loss day, gray = no trade. Click a day to open it.</CardDescription>
         </CardHeader>
         <CardContent>
-          <PnlCalendar daily={data.daily} onPick={(d) => navigate(`/day?date=${d}`)} />
+          <PnlCalendar daily={data.daily.map((d) => ({ ...d, value: d.points }))} format={fmtPts} onPick={setPicked} />
         </CardContent>
       </Card>
+
+      <DayPanel date={picked} mode="backtest" days={data.daily.map((d) => d.date)} onPick={setPicked} onClose={() => setPicked(null)} />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -220,7 +169,7 @@ export function BacktestPage() {
             </TableHeader>
             <TableBody>
               {trades.slice().reverse().map((t, i) => (
-                <TableRow key={i} className="cursor-pointer" onClick={() => navigate(`/day?date=${t.date}`)}>
+                <TableRow key={i} className="cursor-pointer" onClick={() => setPicked(t.date)}>
                   <TableCell className="tabular-nums">{t.date}</TableCell>
                   <TableCell><SideBadge side={t.side} /></TableCell>
                   <TableCell className="tabular-nums">{t.entry}</TableCell>

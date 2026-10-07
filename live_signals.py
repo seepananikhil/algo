@@ -64,7 +64,7 @@ class LiveSignalEngine:
         w = self.watch
         if not w or now.strftime("%H:%M") != w["candle_time"].strftime("%H:%M"):
             return
-        hit = w.get("market") or (ltp <= w["level"] if w["side"] == "LONG" else ltp >= w["level"])
+        hit = ltp <= w["level"] if w["side"] == "LONG" else ltp >= w["level"]
         if not hit:
             return
         self.watch = None
@@ -83,7 +83,7 @@ class LiveSignalEngine:
         self._emit(
             key,
             [now.strftime("%H:%M:%S"), "ENTRY", side, f"{w['candle_time']:%H:%M}", now.strftime("%H:%M:%S"), round(ltp, 2),
-             round(w["mid"], 2), round(stop, 2), round(target, 2), "wick_rejection_1s" if w.get("market") else "buffer_touch_1s", ""],
+             round(w["mid"], 2), round(stop, 2), round(target, 2), "buffer_touch_1s", ""],
             f"ENTRY {side}",
             f"{now:%H:%M:%S} @ {ltp:.2f} | SL {stop:.2f} TGT {target:.2f} mid {w['mid']:.2f}",
         )
@@ -101,8 +101,8 @@ class LiveSignalEngine:
         if self.watch:
             w = self.watch
             side = "CALL" if w["side"] == "LONG" else "PUT"
-            how = "at market (midpoint wick rejection)" if w.get("market") else f"if price reaches {w['level']:.2f}"
-            print(f"[{datetime.now(IST):%H:%M:%S}] ARMED {side}: {w['candle_time']:%H:%M} candle, enter {how} (mid {w['mid']:.2f})")
+            print(f"[{datetime.now(IST):%H:%M:%S}] ARMED {side}: {w['candle_time']:%H:%M} candle, enter if price reaches {w['level']:.2f}, "
+                  f"else at market on its close (mid {w['mid']:.2f})")
         if trades.empty:
             return
 

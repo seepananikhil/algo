@@ -11,7 +11,7 @@ import { Switch } from "@/components/ui/switch"
 import { postJSON, usePoll, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
 
-type Form = { lots: string; daily_loss_limit: string; strike_offset: string; skip_expiry_day: boolean }
+type Form = { lots: string; daily_loss_limit: string; strike_offset: string; option_target_pct: string }
 
 export function SettingsPage() {
   const { data, reload } = usePoll<Settings>("/api/settings")
@@ -27,7 +27,7 @@ export function SettingsPage() {
         lots: String(data.lots),
         daily_loss_limit: String(data.daily_loss_limit),
         strike_offset: String(data.strike_offset),
-        skip_expiry_day: data.skip_expiry_day,
+        option_target_pct: String(data.option_target_pct ?? 10),
       })
   }, [data, form])
 
@@ -51,7 +51,7 @@ export function SettingsPage() {
         lots: Number(form.lots),
         daily_loss_limit: Number(form.daily_loss_limit),
         strike_offset: Number(form.strike_offset),
-        skip_expiry_day: form.skip_expiry_day,
+        option_target_pct: Number(form.option_target_pct),
       },
       "Settings saved",
     )
@@ -115,9 +115,20 @@ export function SettingsPage() {
             <Label htmlFor="so">Strike offset (points from ATM)</Label>
             <Input id="so" type="number" min={0} max={500} step={50} value={form.strike_offset} onChange={(e) => setForm({ ...form, strike_offset: e.target.value })} />
           </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-            <Label htmlFor="exp">Skip expiry day</Label>
-            <Switch id="exp" checked={form.skip_expiry_day} onCheckedChange={(v) => setForm({ ...form, skip_expiry_day: v })} />
+          <div className="grid gap-1.5">
+            <Label htmlFor="otp">Option profit target (% of premium, 0 = off)</Label>
+            <Input id="otp" type="number" min={0} max={200} step={5} value={form.option_target_pct} onChange={(e) => setForm({ ...form, option_target_pct: e.target.value })} />
+          </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg border p-3 sm:col-span-2">
+            <div>
+              <Label htmlFor="auto">Auto-start capture</Label>
+              <p className="text-xs text-muted-foreground">Weekdays 09:00–09:55 while this dashboard is running. Stopping it from the Live page pauses auto-start for that day.</p>
+            </div>
+            <Switch
+              id="auto"
+              checked={data.auto_start_capture}
+              onCheckedChange={(v) => save({ auto_start_capture: v }, v ? "Auto-start ON" : "Auto-start OFF")}
+            />
           </div>
         </CardContent>
         <CardFooter className="justify-end">

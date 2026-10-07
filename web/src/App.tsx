@@ -7,6 +7,7 @@ import { StatusProvider } from "@/lib/status"
 import { LivePage } from "@/pages/live"
 import { DayPage } from "@/pages/day"
 import { BacktestPage } from "@/pages/backtest"
+import { PaperPage } from "@/pages/paper"
 import { LoginPage } from "@/pages/login"
 import { SettingsPage } from "@/pages/settings"
 
@@ -20,6 +21,7 @@ export default function App() {
             <Route element={<Layout />}>
               <Route index element={<LivePage />} />
               <Route path="day" element={<DayPage />} />
+              <Route path="paper" element={<PaperPage />} />
               <Route path="backtest" element={<BacktestPage />} />
               <Route path="login" element={<LoginPage />} />
               <Route path="settings" element={<SettingsPage />} />

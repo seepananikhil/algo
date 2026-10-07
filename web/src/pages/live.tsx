@@ -1,15 +1,16 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { OctagonX, Play } from "lucide-react"
+import { OctagonX, Play, Radio, Square } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { CandleChart } from "@/components/candle-chart"
-import { RuleTradesTable, SideBadge, StatCard } from "@/components/common"
+import { SideBadge, StatCard } from "@/components/common"
+import { FillsTable } from "@/components/day-detail"
 import { cn } from "@/lib/utils"
-import { fmtNum, fmtPts, fmtRs, pnlClass, postJSON, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type Signal } from "@/lib/api"
+import { fmtNum, fmtRs, pnlClass, postJSON, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type Signal } from "@/lib/api"
 import { useStatus } from "@/lib/status"
 
 export function LivePage() {
@@ -24,7 +25,7 @@ export function LivePage() {
   const todays = (trades.data ?? []).filter((t) => t.date === today)
   const dayPnl = todays.reduce((a, t) => a + t.pnl_rs, 0)
   const setup = day.data?.setup
-  const actual = tradesFromSignals(signals.data ?? [])
+  const tradeLog = tradesFromSignals(signals.data ?? [])
 
   async function toggleKill() {
     if (!status) return
@@ -40,17 +41,40 @@ export function LivePage() {
     }
   }
 
+  async function toggleCapture() {
+    if (!status) return
+    setBusy(true)
+    try {
+      await postJSON(`/api/capture/${status.capture_running ? "stop" : "start"}`)
+      toast.success(status.capture_running ? "Stopping capture (closes any open position first)" : "Capture started")
+      setTimeout(reload, 2000)
+    } catch (e) {
+      toast.error(String(e))
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return (
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">Live</h1>
-          <p className="text-sm text-muted-foreground">Session 09:15–09:50 · entries until 09:40 · {today}</p>
+          <p className="text-sm text-muted-foreground">
+            Session 09:15–09:50 · entries until 09:40 · {today}
+            {status && !status.capture_running && status.auto_start_capture && " · auto-starts weekdays 09:00–09:55"}
+          </p>
         </div>
-        <Button variant={status?.kill_switch ? "default" : "destructive"} disabled={!status || busy} onClick={toggleKill}>
-          {status?.kill_switch ? <Play /> : <OctagonX />}
-          {status?.kill_switch ? "Resume trading" : "Kill switch"}
-        </Button>
+        <div className="flex gap-2">
+          <Button variant={status?.capture_running ? "outline" : "default"} disabled={!status || busy} onClick={toggleCapture}>
+            {status?.capture_running ? <Square /> : <Radio />}
+            {status?.capture_running ? "Stop capture" : "Start capture"}
+          </Button>
+          <Button variant={status?.kill_switch ? "default" : "destructive"} disabled={!status || busy} onClick={toggleKill}>
+            {status?.kill_switch ? <Play /> : <OctagonX />}
+            {status?.kill_switch ? "Resume trading" : "Kill switch"}
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
@@ -75,67 +99,22 @@ export function LivePage() {
         </CardHeader>
         <CardContent>
           {day.data?.candles.length ? (
-            <CandleChart date={day.data.date} candles={day.data.candles} forming={day.data.forming} setup={setup} trades={actual} />
+            <CandleChart date={day.data.date} candles={day.data.candles} forming={day.data.forming} setup={setup} trades={tradeLog} />
           ) : (
             <p className="py-24 text-center text-sm text-muted-foreground">No candles yet today. Capture starts 09:10 on weekdays.</p>
           )}
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Trades today</CardTitle>
-            <CardDescription>{status?.mode ?? "…"} signals in NIFTY index points</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <RuleTradesTable trades={actual} empty="No trades yet today." />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Option trades today</CardTitle>
-            <CardDescription>Actual option fills ({status?.mode ?? "…"})</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {todays.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Option</TableHead>
-                    <TableHead>In</TableHead>
-                    <TableHead className="text-right">Buy</TableHead>
-                    <TableHead>Out</TableHead>
-                    <TableHead className="text-right">Sell</TableHead>
-                    <TableHead className="text-right">P&L</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {todays.map((t, i) => (
-                    <TableRow key={i}>
-                      <TableCell>
-                        <div className="flex items-center gap-2"><SideBadge side={t.side} /> {t.option}</div>
-                        <div className="text-xs text-muted-foreground">{t.qty} qty · {prettyReason(t.exit_reason)} · {t.mode}</div>
-                      </TableCell>
-                      <TableCell className="tabular-nums">{t.entry}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtNum(t.buy_price)}<div className="text-xs text-muted-foreground">{fmtRs(t.buy_value_rs)}</div></TableCell>
-                      <TableCell className="tabular-nums">{t.exit}</TableCell>
-                      <TableCell className="text-right tabular-nums">{fmtNum(t.sell_price)}<div className="text-xs text-muted-foreground">{fmtRs(t.sell_value_rs)}</div></TableCell>
-                      <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(t.pnl_rs))}>
-                        {fmtRs(t.pnl_rs)}
-                        <div className="text-xs">{fmtPts(t.nifty_points)} pts</div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="py-6 text-center text-sm text-muted-foreground">No option trades today.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Trades today</CardTitle>
+          <CardDescription>Option fills ({status?.mode ?? "…"})</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <FillsTable fills={todays} empty="No trades yet today." />
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 xl:grid-cols-2">
         <Card>

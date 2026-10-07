@@ -11,6 +11,7 @@ import json
 import mimetypes
 import os
 import re
+import signal
 import socket
 import subprocess
 import sys
@@ -41,13 +42,16 @@ _master_cache = {"mtime": None, "df": None}
 _backtest_cache = {"mtime": None, "value": None}
 _cache_lock = threading.Lock()
 _login_proc = {"proc": None}
+_capture = {"auto_started": None, "stopped_by_user": None}
+AUTO_START_WINDOW = ("09:00", "09:55")
 
 # Only these config keys are exposed/editable from the UI (never app_id/secret_key).
 EDITABLE_SETTINGS = {
     "lots": (int, 1, 20),
     "daily_loss_limit": (int, 100, 100000),
     "strike_offset": (int, 0, 500),
-    "skip_expiry_day": (bool, None, None),
+    "option_target_pct": (int, 0, 200),
+    "auto_start_capture": (bool, None, None),
 }
 
 
@@ -84,6 +88,64 @@ def token_status() -> dict:
 
 def capture_running() -> bool:
     return subprocess.run(["pgrep", "-f", "fyers_nifty_capture"], capture_output=True).returncode == 0
+
+
+def start_capture() -> dict:
+    if capture_running():
+        return {"capture_running": True, "started": False}
+    LIVE_DIR.mkdir(parents=True, exist_ok=True)
+    log_path = LIVE_DIR / "capture.log"
+    if log_path.exists() and datetime.fromtimestamp(log_path.stat().st_mtime, IST).strftime("%Y-%m-%d") != today():
+        log_path.replace(LIVE_DIR / "capture.prev.log")
+    log = log_path.open("a", encoding="utf-8")
+    subprocess.Popen(
+        [sys.executable, "-u", str(ROOT / "fyers_nifty_capture.py")],
+        cwd=ROOT,
+        stdout=log,
+        stderr=subprocess.STDOUT,
+        start_new_session=True,  # keeps running if the dashboard restarts
+        # Restore Ctrl+C so stop_capture can shut it down cleanly (the server may have inherited SIG_IGN).
+        preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
+    )
+    _capture["stopped_by_user"] = None
+    return {"capture_running": True, "started": True}
+
+
+def stop_capture() -> dict:
+    out = subprocess.run(["pgrep", "-f", "fyers_nifty_capture"], capture_output=True, text=True).stdout.split()
+    pids = [int(p) for p in out if p.isdigit()]
+    for pid in pids:
+        os.kill(pid, signal.SIGINT)  # graceful: exits open position, writes the day's summary
+
+    def force_later() -> None:
+        time.sleep(15)
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except ProcessLookupError:
+                pass
+
+    threading.Thread(target=force_later, daemon=True).start()
+    _capture["stopped_by_user"] = today()
+    return {"stopping": len(pids)}
+
+
+def auto_start_loop() -> None:
+    """Start the capture on weekdays inside AUTO_START_WINDOW unless disabled or stopped by the user today."""
+    while True:
+        try:
+            now = datetime.now(IST)
+            day = now.strftime("%Y-%m-%d")
+            in_window = now.weekday() < 5 and AUTO_START_WINDOW[0] <= now.strftime("%H:%M") <= AUTO_START_WINDOW[1]
+            enabled = read_config().get("auto_start_capture", True)
+            if in_window and enabled and _capture["stopped_by_user"] != day and _capture["auto_started"] != day:
+                if not capture_running():
+                    start_capture()
+                    print(f"[{now:%H:%M:%S}] auto-started capture")
+                _capture["auto_started"] = day
+        except Exception as exc:
+            print(f"auto-start error: {exc}")
+        time.sleep(30)
 
 
 def master() -> pd.DataFrame:
@@ -193,6 +255,7 @@ def read_config() -> dict:
 def public_settings() -> dict:
     cfg = read_config()
     out = {k: cfg.get(k) for k in EDITABLE_SETTINGS}
+    out["auto_start_capture"] = bool(cfg.get("auto_start_capture", True))
     out["live_trading"] = bool(cfg.get("live_trading"))
     out["capture_running"] = capture_running()
     return out
@@ -328,6 +391,7 @@ def status() -> dict:
         "now": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         "token": token_status(),
         "capture_running": capture_running(),
+        "auto_start_capture": bool(cfg.get("auto_start_capture", True)),
         "mode": "LIVE" if cfg.get("live_trading") else "PAPER",
         "lots": cfg.get("lots", 1),
         "daily_loss_limit": cfg.get("daily_loss_limit"),
@@ -374,10 +438,80 @@ def option_trades() -> list:
     return out
 
 
+def est_charges(buy_value: float, sell_value: float) -> float:
+    """Approximate Fyers/NSE option-buy round-trip costs (rates may change; treat as an estimate)."""
+    brokerage = 40.0  # Rs 20 per executed order
+    stt = 0.001 * sell_value
+    txn = 0.0003503 * (buy_value + sell_value)
+    sebi = 0.000001 * (buy_value + sell_value)
+    stamp = 0.00003 * buy_value
+    gst = 0.18 * (brokerage + txn + sebi)
+    return round(brokerage + stt + txn + sebi + stamp + gst, 2)
+
+
+def paper_report() -> dict:
+    """Paper/live option trades with estimated charges, net equity curve and drawdown."""
+    trades, equity, peak = [], 0.0, 0.0
+    for t in option_trades():
+        charges = est_charges(t["buy_value_rs"], t["sell_value_rs"])
+        net = round(t["pnl_rs"] - charges, 2)
+        equity += net
+        peak = max(peak, equity)
+        trades.append({**t, "charges_rs": charges, "net_rs": net, "equity": round(equity, 2), "drawdown": round(equity - peak, 2)})
+    daily: dict = {}
+    for x in trades:
+        d = daily.setdefault(x["date"], {"date": x["date"], "trades": 0, "gross_rs": 0.0, "net_rs": 0.0, "points": 0.0})
+        d["trades"] += 1
+        d["gross_rs"] = round(d["gross_rs"] + x["pnl_rs"], 2)
+        d["net_rs"] = round(d["net_rs"] + x["net_rs"], 2)
+        d["points"] = round(d["points"] + x["nifty_points"], 2)
+    n = len(trades)
+    wins = [x["net_rs"] for x in trades if x["net_rs"] > 0]
+    losses = [x["net_rs"] for x in trades if x["net_rs"] <= 0]
+    return {
+        "summary": {
+            "trades": n,
+            "days": len(daily),
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate_pct": round(100.0 * len(wins) / n, 2) if n else 0.0,
+            "gross_rs": round(sum(x["pnl_rs"] for x in trades), 2),
+            "charges_rs": round(sum(x["charges_rs"] for x in trades), 2),
+            "net_rs": round(equity, 2),
+            "points": round(sum(x["nifty_points"] for x in trades), 2),
+            "avg_win_rs": round(sum(wins) / len(wins), 2) if wins else 0.0,
+            "avg_loss_rs": round(sum(losses) / len(losses), 2) if losses else 0.0,
+            "max_drawdown_rs": min((x["drawdown"] for x in trades), default=0.0),
+            "winning_days": sum(1 for d in daily.values() if d["net_rs"] > 0),
+        },
+        "trades": trades,
+        "daily": sorted(daily.values(), key=lambda d: d["date"]),
+    }
+
+
 def tail(path: Path, lines: int) -> list:
     if not path.exists():
         return []
     return path.read_text(encoding="utf-8", errors="replace").splitlines()[-lines:]
+
+
+def today_log(path: Path, lines: int) -> list:
+    """Capture log lines from today's run(s) only; each run starts with 'Waiting for market open'."""
+    if not path.exists():
+        return []
+    day = today()
+    runs: list = [[]]
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        if line.startswith("Waiting for market open"):
+            runs.append([])
+        runs[-1].append(line)
+    date_re = re.compile(r"\b(20\d\d-\d\d-\d\d)\b")
+    keep = []
+    for run in runs:
+        dates = {d for line in run for d in date_re.findall(line)}
+        if day in dates or (not dates and run is runs[-1]):
+            keep.extend(run)
+    return keep[-lines:]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -428,11 +562,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
             self._json(option_trades())
+        elif url.path == "/api/paper-report":
+            self._json(paper_report())
         elif url.path == "/api/paper-trades":
             self._json(read_csv_rows(LIVE_DIR / "paper_trades.csv"))
         elif url.path == "/api/log":
             n = min(int(q.get("lines", ["200"])[0]), 2000)
-            self._json(tail(LIVE_DIR / "capture.log", n))
+            self._json(today_log(LIVE_DIR / "capture.log", n))
         elif url.path == "/api/days":
             self._json(available_days())
         elif url.path == "/api/backtest":
@@ -479,6 +615,10 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/kill-switch/off":
             STOP_FILE.unlink(missing_ok=True)
             self._json({"kill_switch": False})
+        elif url.path == "/api/capture/start":
+            self._json(start_capture())
+        elif url.path == "/api/capture/stop":
+            self._json(stop_capture())
         elif url.path == "/api/settings":
             data, code = update_settings(self._body())
             self._json(data, code)
@@ -495,6 +635,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    threading.Thread(target=auto_start_loop, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Dashboard: http://{HOST}:{PORT}/  (Ctrl+C to stop)")
     try:

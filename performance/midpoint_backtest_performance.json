@@ -1,17 +1,17 @@
 {
-  "run_ts_utc": "2026-10-06 19:40:27",
+  "run_ts_utc": "2026-10-07 16:27:38",
   "input_csv": "captured_data/fyers/fyers_spot_1min_extended.csv",
   "rr": 1.0,
   "max_hold_bars": 20,
-  "total_trades": 61,
-  "wins": 35,
-  "losses": 26,
-  "win_rate_pct": 57.38,
-  "total_pnl_points": 880.35,
-  "avg_pnl_points": 14.43,
-  "total_r": 17.97,
-  "avg_r": 0.29,
+  "total_trades": 70,
+  "wins": 30,
+  "losses": 40,
+  "win_rate_pct": 42.86,
+  "total_pnl_points": 542.97,
+  "avg_pnl_points": 7.76,
+  "total_r": 13.28,
+  "avg_r": 0.19,
   "best_trade_points": 50.0,
-  "worst_trade_points": -29.7,
-  "max_trades_per_day": 2
+  "worst_trade_points": -25.45,
+  "max_trades_per_day": 3
 }

@@ -50,7 +50,9 @@ export function RuleTradesTable({ trades, empty = "No trades." }: { trades: Rule
             <TableCell className="text-right tabular-nums">{fmtNum(t.target)}</TableCell>
             <TableCell className="tabular-nums">{t.exit || "—"}</TableCell>
             <TableCell className="text-right tabular-nums">{fmtNum(t.exit_price)}</TableCell>
-            <TableCell className="text-xs text-muted-foreground">{t.reason === "open" ? <Badge variant="outline">OPEN</Badge> : prettyReason(t.reason)}</TableCell>
+            <TableCell className="text-xs text-muted-foreground">
+              {t.reason === "open" ? <Badge variant="outline">OPEN</Badge> : prettyReason(t.reason)}
+            </TableCell>
             <TableCell className={cn("text-right tabular-nums font-medium", pnlClass(t.pnl_points))}>{fmtPts(t.pnl_points)}</TableCell>
           </TableRow>
         ))}
