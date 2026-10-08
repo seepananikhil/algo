@@ -45,6 +45,9 @@ _cache_lock = threading.Lock()
 _login_proc = {"proc": None}
 _capture = {"auto_started": None, "stopped_by_user": None}
 AUTO_START_WINDOW = ("09:00", "09:55")
+SENSEX_COLLECTOR_START = (16, 5)
+SENSEX_COLLECTOR_END_HOUR = 20
+SENSEX_COLLECTOR_RETRY_SECONDS = 15 * 60
 
 # Only these config keys are exposed/editable from the UI (never app_id/secret_key).
 EDITABLE_SETTINGS = {
@@ -146,6 +149,47 @@ def auto_start_loop() -> None:
                 _capture["auto_started"] = day
         except Exception as exc:
             print(f"auto-start error: {exc}")
+        time.sleep(30)
+
+
+def sensex_expiry_collector_loop() -> None:
+    """Fetch SENSEX expiry options on Thursdays after close while the app server is running."""
+    last_attempt_date = None
+    last_attempt_at = 0.0
+    script = ROOT / "fyers_fetch_sensex_expiry.py"
+    output_dir = ROOT / "captured_data" / "fyers" / "sensex_expiry"
+    log_path = output_dir / "collector.log"
+    while True:
+        now = datetime.now(IST)
+        try:
+            session = now.date()
+            due = (
+                now.weekday() == 3
+                and (now.hour, now.minute) >= SENSEX_COLLECTOR_START
+                and now.hour < SENSEX_COLLECTOR_END_HOUR
+            )
+            csv_path = output_dir / f"sensex_expiry_{session.isoformat()}.csv"
+            json_path = output_dir / f"sensex_expiry_{session.isoformat()}.json"
+            retry_due = last_attempt_date != session or time.time() - last_attempt_at >= SENSEX_COLLECTOR_RETRY_SECONDS
+            if due and retry_due and not (csv_path.exists() and json_path.exists()):
+                output_dir.mkdir(parents=True, exist_ok=True)
+                last_attempt_date, last_attempt_at = session, time.time()
+                with log_path.open("a", encoding="utf-8") as log:
+                    log.write(f"\n[{now:%Y-%m-%d %H:%M:%S} IST] Starting SENSEX expiry fetch.\n")
+                    result = subprocess.run(
+                        [sys.executable, "-u", str(script), "--date", session.isoformat(), "--count", "15", "--force"],
+                        cwd=ROOT,
+                        stdout=log,
+                        stderr=subprocess.STDOUT,
+                        timeout=15 * 60,
+                        check=False,
+                    )
+                    log.write(f"[{datetime.now(IST):%Y-%m-%d %H:%M:%S} IST] Collector exit code: {result.returncode}.\n")
+        except Exception as exc:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(f"[{datetime.now(IST):%Y-%m-%d %H:%M:%S} IST] Scheduler failed: {exc}\n")
+            print(f"SENSEX expiry scheduler failed: {exc}")
         time.sleep(30)
 
 
@@ -643,6 +687,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    threading.Thread(target=sensex_expiry_collector_loop, daemon=True, name="sensex-expiry-collector").start()
     threading.Thread(target=auto_start_loop, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Dashboard: http://{HOST}:{PORT}/  (Ctrl+C to stop)")

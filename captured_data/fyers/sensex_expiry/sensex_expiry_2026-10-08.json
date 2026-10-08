@@ -1,0 +1,60 @@
+{
+  "session_date": "2026-10-08",
+  "timezone": "Asia/Kolkata",
+  "source": "Fyers 1-minute history",
+  "duplicate_policy": "Keep last returned row per minute; conflicting source rows are retained in duplicate_raw_rows.",
+  "index_symbol": "BSE:SENSEX-INDEX",
+  "strike_selection": "3 nearest strictly ITM strikes per side from the 09:15 SENSEX open",
+  "sensex_open": 72668.0,
+  "contracts": [
+    {
+      "symbol": "BSE:SENSEX26O0872600CE",
+      "strike": 72600.0,
+      "option_type": "CE"
+    },
+    {
+      "symbol": "BSE:SENSEX26O0872500CE",
+      "strike": 72500.0,
+      "option_type": "CE"
+    },
+    {
+      "symbol": "BSE:SENSEX26O0872400CE",
+      "strike": 72400.0,
+      "option_type": "CE"
+    },
+    {
+      "symbol": "BSE:SENSEX26O0872700PE",
+      "strike": 72700.0,
+      "option_type": "PE"
+    },
+    {
+      "symbol": "BSE:SENSEX26O0872800PE",
+      "strike": 72800.0,
+      "option_type": "PE"
+    },
+    {
+      "symbol": "BSE:SENSEX26O0872900PE",
+      "strike": 72900.0,
+      "option_type": "PE"
+    }
+  ],
+  "candles": {
+    "index": 375,
+    "BSE:SENSEX26O0872600CE": 385,
+    "BSE:SENSEX26O0872500CE": 385,
+    "BSE:SENSEX26O0872400CE": 385,
+    "BSE:SENSEX26O0872700PE": 385,
+    "BSE:SENSEX26O0872800PE": 385,
+    "BSE:SENSEX26O0872900PE": 385
+  },
+  "conflicting_duplicate_minutes": {
+    "index": 0,
+    "BSE:SENSEX26O0872600CE": 0,
+    "BSE:SENSEX26O0872500CE": 0,
+    "BSE:SENSEX26O0872400CE": 1,
+    "BSE:SENSEX26O0872700PE": 23,
+    "BSE:SENSEX26O0872800PE": 56,
+    "BSE:SENSEX26O0872900PE": 82
+  },
+  "csv": "sensex_expiry_2026-10-08.csv"
+}
