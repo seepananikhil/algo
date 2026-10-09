@@ -162,7 +162,6 @@ class OptionTrader:
             "index_entry": index_price, "index_best": index_price, "trailing": False,
         }
         self._log("BUY", opt["symbol"], qty, order_id, fill, index_price, f"{signal_side} signal")
-        self.notify(f"{self.mode} BUY {opt['symbol']}", f"qty {qty} @ {fill}")
         print(f"[orders] {self.mode} BUY {opt['symbol']} qty {qty} @ {fill}")
 
     def _exit(self, reason: str, index_price: Optional[float] = None) -> None:
@@ -178,7 +177,6 @@ class OptionTrader:
         pnl = ((fill or 0) - (pos["entry_fill"] or 0)) * pos["qty"]
         self.day_pnl += pnl
         self._log("SELL", pos["symbol"], pos["qty"], order_id, fill, index_price, reason, round(pnl, 2))
-        self.notify(f"{self.mode} SELL {pos['symbol']}", f"{reason} | trade Rs {pnl:+,.0f} | day Rs {self.day_pnl:+,.0f}")
         print(f"[orders] {self.mode} SELL {pos['symbol']} @ {fill} [{reason}] trade Rs {pnl:+,.0f} day Rs {self.day_pnl:+,.0f}")
         if self.day_pnl <= -self.settings["daily_loss_limit"]:
             self._halt(f"daily loss limit hit (Rs {self.day_pnl:,.0f})")

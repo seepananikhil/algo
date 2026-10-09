@@ -79,7 +79,7 @@ def expiry_contracts(session: date) -> list[dict]:
         match = re.fullmatch(r"SENSEX \d{2} \w{3} \d{2} ([\d.]+) (CE|PE)", str(row[1]))
         if not match:
             continue
-        contracts.append({"symbol": str(row[9]), "strike": float(row[15]), "option_type": str(row[16])})
+        contracts.append({"symbol": str(row[9]), "lot_size": int(float(row[3])), "strike": float(row[15]), "option_type": str(row[16])})
     return contracts
 
 

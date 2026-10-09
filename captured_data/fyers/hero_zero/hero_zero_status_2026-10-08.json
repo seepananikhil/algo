@@ -1,0 +1,22 @@
+{
+  "date": "2026-10-08",
+  "status": "historical_1m_replay",
+  "expiry_underlyings": {
+    "NIFTY": [],
+    "SENSEX": [
+      "2026-10-08"
+    ]
+  },
+  "selected_options": 2,
+  "entry_proxy": "15:20 one-minute candle open",
+  "exit_proxy": "15:29 one-minute candle close, timestamped 15:30 IST",
+  "lot_size": 20,
+  "stop": "none",
+  "candidates_csv": "hero_zero_candidates_2026-10-08.csv",
+  "paper_trades_csv": "hero_zero_trades_2026-10-08.csv",
+  "replay_bars_csv": "hero_zero_replay_1m_2026-10-08.csv",
+  "warning": "Historical 1-minute replay, not live tick fills. Oct 8 spot reference was stale at 15:20, so \u00b1100 spot filter cannot be reliably applied.",
+  "spot_reference": 71461.62,
+  "spot_reference_time": "15:15 IST (15:20 minute had zero volume and repeated this value)",
+  "spot_filter_applied": false
+}

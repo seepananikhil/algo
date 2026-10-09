@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CandleChart } from "@/components/candle-chart"
 import { RuleTradesTable, SideBadge, StatCard } from "@/components/common"
 import { cn } from "@/lib/utils"
-import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type PaperTrade, type Signal } from "@/lib/api"
+import { chartTradesFromOptionFills, fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type PaperTrade, type Signal } from "@/lib/api"
 
 /** "auto": paper/live trades, or the backtest for days before paper trading started. */
 export type DayMode = "auto" | "backtest" | "paper"
@@ -25,6 +25,7 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
   const preLive = mode === "auto" && !actual.length && paper.data != null && date != null && (!firstLive || date < firstLive)
   const useBacktest = mode === "backtest" || preLive
   const trades = useBacktest ? (day.data?.trades ?? []) : actual
+  const chartTrades = useBacktest || !fills.length ? trades : chartTradesFromOptionFills(fills)
   const source = useBacktest ? "BACKTEST" : actual.length ? "PAPER / LIVE" : null
 
   const total = trades.reduce((a, t) => a + t.pnl_points, 0)
@@ -48,7 +49,7 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
         {day.loading && !day.data ? (
           <Skeleton className="h-[420px] w-full" />
         ) : day.data?.candles.length ? (
-          <CandleChart date={day.data.date} candles={day.data.candles} setup={s} trades={trades} />
+          <CandleChart date={day.data.date} candles={day.data.candles} setup={s} trades={chartTrades} />
         ) : (
           <p className="py-16 text-center text-sm text-muted-foreground">No candles for this day.</p>
         )}
@@ -69,13 +70,13 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
       <Card>
         <CardHeader>
           <CardTitle>{date ?? "—"}</CardTitle>
-          <CardDescription>Blue = range, amber = midpoint, yellow band = buffer zone. Colored arrow = entry, gray arrow = exit.</CardDescription>
+            <CardDescription>Blue = range, amber = midpoint, yellow band = buffer. Paper arrows use actual option fill times; backtest arrows use rule exits.</CardDescription>
         </CardHeader>
         <CardContent>
           {day.loading && !day.data ? (
             <Skeleton className="h-[420px] w-full" />
           ) : day.data?.candles.length ? (
-            <CandleChart date={day.data.date} candles={day.data.candles} setup={s} trades={trades} />
+            <CandleChart date={day.data.date} candles={day.data.candles} setup={s} trades={chartTrades} />
           ) : (
             <p className="py-24 text-center text-sm text-muted-foreground">No candles for this day.</p>
           )}
@@ -115,7 +116,7 @@ export function FillsTable({ fills, empty = "No option trades." }: { fills: Opti
       </TableHeader>
       <TableBody>
         {fills.map((f, i) => (
-          <TableRow key={i}>
+          <TableRow key={i} className={f.pnl_rs > 0 ? "bg-emerald-500/10" : f.pnl_rs < 0 ? "bg-red-500/10" : undefined}>
             <TableCell>
               <div className="flex items-center gap-2"><SideBadge side={f.side} /> {f.option}</div>
               <div className="text-xs text-muted-foreground">{f.qty} qty · {f.mode}</div>

@@ -93,6 +93,23 @@ export type OptionTrade = {
   nifty_points: number
   exit_reason: string
   mode: string
+  spot_at_entry?: number | null
+  distance_from_spot?: number | null
+}
+
+/** Plot actual option fill times at their associated NIFTY index prices. */
+export function chartTradesFromOptionFills(fills: OptionTrade[]): RuleTrade[] {
+  return fills.map((fill) => ({
+    side: fill.side,
+    entry: fill.entry,
+    entry_price: fill.nifty_in,
+    sl: Number.NaN,
+    target: Number.NaN,
+    exit: fill.exit,
+    exit_price: fill.nifty_out,
+    reason: fill.exit_reason,
+    pnl_points: fill.nifty_points,
+  }))
 }
 
 export type BacktestTrade = RuleTrade & { date: string; equity: number; drawdown: number }

@@ -35,6 +35,7 @@ UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
 MASTER_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_extended.csv"
 ARCHIVE_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_3y_archive.csv"
+HERO_ZERO_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
 HOST, PORT = "127.0.0.1", 8090
 IST = timezone(timedelta(hours=5, minutes=30))
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -48,6 +49,8 @@ AUTO_START_WINDOW = ("09:00", "09:55")
 SENSEX_COLLECTOR_START = (16, 5)
 SENSEX_COLLECTOR_END_HOUR = 20
 SENSEX_COLLECTOR_RETRY_SECONDS = 15 * 60
+HERO_ZERO_START = (15, 5)
+HERO_ZERO_END = (15, 31)
 
 # Only these config keys are exposed/editable from the UI (never app_id/secret_key).
 EDITABLE_SETTINGS = {
@@ -190,6 +193,46 @@ def sensex_expiry_collector_loop() -> None:
             with log_path.open("a", encoding="utf-8") as log:
                 log.write(f"[{datetime.now(IST):%Y-%m-%d %H:%M:%S} IST] Scheduler failed: {exc}\n")
             print(f"SENSEX expiry scheduler failed: {exc}")
+        time.sleep(30)
+
+
+def hero_zero_capture_loop() -> None:
+    """Launch the paper-only expiry option capture before the 15:20 premium snapshot."""
+    script = ROOT / "fyers_hero_zero_capture.py"
+    output_dir = ROOT / "captured_data" / "fyers" / "hero_zero"
+    log_path = output_dir / "collector.log"
+    last_attempt_date = None
+    last_attempt_at = 0.0
+    while True:
+        now = datetime.now(IST)
+        session = now.date().isoformat()
+        due = now.weekday() < 5 and (now.hour, now.minute) >= HERO_ZERO_START and (now.hour, now.minute) < HERO_ZERO_END
+        status_path = output_dir / f"hero_zero_status_{session}.json"
+        try:
+            process = subprocess.run(
+                ["pgrep", "-f", "[f]yers_hero_zero_capture.py"], capture_output=True, text=True
+            ).stdout.strip()
+            retry_due = last_attempt_date != session or time.time() - last_attempt_at >= 120
+            if due and not status_path.exists() and not process and retry_due:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                last_attempt_date, last_attempt_at = session, time.time()
+                log = log_path.open("a", encoding="utf-8")
+                log.write(f"\n[{now:%Y-%m-%d %H:%M:%S} IST] Starting HeroZero expiry capture.\n")
+                log.flush()
+                subprocess.Popen(
+                    [sys.executable, "-u", str(script)],
+                    cwd=ROOT,
+                    stdout=log,
+                    stderr=subprocess.STDOUT,
+                    start_new_session=True,
+                )
+                log.close()
+                print(f"[{now:%H:%M:%S}] started HeroZero expiry capture")
+        except Exception as exc:
+            output_dir.mkdir(parents=True, exist_ok=True)
+            with log_path.open("a", encoding="utf-8") as log:
+                log.write(f"[{now:%Y-%m-%d %H:%M:%S} IST] Scheduler failed: {exc}\n")
+            print(f"HeroZero scheduler failed: {exc}")
         time.sleep(30)
 
 
@@ -503,8 +546,55 @@ def est_charges(buy_value: float, sell_value: float) -> float:
 
 def paper_report() -> dict:
     """Paper/live option trades with estimated charges, net equity curve and drawdown."""
+    return build_paper_report(option_trades())
+
+
+def hero_zero_option_trades() -> list:
+    """Closed HeroZero simulated entries, one lot per in-band option, exited at 15:30."""
+    out = []
+    for path in sorted(HERO_ZERO_DIR.glob("hero_zero_trades_*.csv")):
+        for row in read_csv_rows(path):
+            if row.get("status") != "closed":
+                continue
+            entry_price, exit_price = float(row["entry_price"]), float(row["exit_price"])
+            qty = int(row["lot_size"])
+            spot_at_entry = float(row["spot_ltp"]) if row.get("spot_ltp") else None
+            distance = float(row["distance_from_spot"]) if row.get("distance_from_spot") else None
+            side = "CALL" if row["option_type"] == "CE" else "PUT"
+            out.append({
+                "date": row["date"],
+                "side": side,
+                "option": f"{row['underlying']} {float(row['strike']):g} {row['option_type']}",
+                "qty": qty,
+                "spot_at_entry": spot_at_entry,
+                "distance_from_spot": distance,
+                "entry": row["entry_time"][11:16],
+                "nifty_in": 0.0,
+                "buy_price": entry_price,
+                "buy_value_rs": round(entry_price * qty, 2),
+                "exit": row["exit_time"][11:16],
+                "nifty_out": 0.0,
+                "sell_price": exit_price,
+                "sell_value_rs": round(exit_price * qty, 2),
+                "pnl_rs": round((exit_price - entry_price) * qty, 2),
+                "nifty_points": 0.0,
+                "exit_reason": row["exit_reason"],
+                "mode": (
+                    "HEROZERO REPLAY · SPOT UNVERIFIED" if "spot_stale" in row.get("source", "")
+                    else "HEROZERO 1M REPLAY" if "historical_1m_replay" in row.get("source", "")
+                    else "HEROZERO PAPER"
+                ),
+            })
+    return out
+
+
+def hero_zero_report() -> dict:
+    return build_paper_report(hero_zero_option_trades())
+
+
+def build_paper_report(source_trades: list) -> dict:
     trades, equity, peak = [], 0.0, 0.0
-    for t in option_trades():
+    for t in source_trades:
         charges = est_charges(t["buy_value_rs"], t["sell_value_rs"])
         net = round(t["pnl_rs"] - charges, 2)
         equity += net
@@ -615,7 +705,7 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/trades":
             self._json(option_trades())
         elif url.path == "/api/paper-report":
-            self._json(paper_report())
+            self._json(hero_zero_report() if q.get("strategy", [""])[0] == "hero_zero" else paper_report())
         elif url.path == "/api/paper-trades":
             self._json(read_csv_rows(LIVE_DIR / "paper_trades.csv"))
         elif url.path == "/api/log":
@@ -687,6 +777,7 @@ class Handler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    threading.Thread(target=hero_zero_capture_loop, daemon=True, name="hero-zero-capture").start()
     threading.Thread(target=sensex_expiry_collector_loop, daemon=True, name="sensex-expiry-collector").start()
     threading.Thread(target=auto_start_loop, daemon=True).start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)

@@ -1,0 +1,2 @@
+date,mid_point,option_type,entry,entry_spot,sl_spot,target_spot,exit,exit_spot,profit_loss,exit_reason
+2026-10-09,22341.35,PUT,09:22,22325.35,22383.45,22275.35,09:27,22349.9,-24.55,midpoint_close_exit

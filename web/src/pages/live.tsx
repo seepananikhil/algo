@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
 import { OctagonX, Play, Radio, Square } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,7 +10,7 @@ import { CandleChart } from "@/components/candle-chart"
 import { SideBadge, StatCard } from "@/components/common"
 import { FillsTable } from "@/components/day-detail"
 import { cn } from "@/lib/utils"
-import { fmtNum, fmtRs, pnlClass, postJSON, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type Signal } from "@/lib/api"
+import { chartTradesFromOptionFills, fmtNum, fmtRs, pnlClass, postJSON, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type Signal } from "@/lib/api"
 import { useStatus } from "@/lib/status"
 
 export function LivePage() {
@@ -21,11 +21,44 @@ export function LivePage() {
   const trades = usePoll<OptionTrade[]>("/api/trades", 5000)
   const log = usePoll<string[]>("/api/log?lines=150", 5000)
   const [busy, setBusy] = useState(false)
+  const seenSignals = useRef(new Set<string>())
+  const seededSignalsDate = useRef<string | null>(null)
 
   const todays = (trades.data ?? []).filter((t) => t.date === today)
   const dayPnl = todays.reduce((a, t) => a + t.pnl_rs, 0)
   const setup = day.data?.setup
-  const tradeLog = tradesFromSignals(signals.data ?? [])
+  const signalTrades = tradesFromSignals(signals.data ?? [])
+  const tradeLog = todays.length ? chartTradesFromOptionFills(todays) : signalTrades
+
+  useEffect(() => {
+    if (!today || !signals.data) return
+    const current = signals.data
+    if (seededSignalsDate.current !== today) {
+      seededSignalsDate.current = today
+      seenSignals.current = new Set(current.map((s) => `${s.event}|${s.side}|${s.entry_time}`))
+      return
+    }
+    for (const signal of current) {
+      const key = `${signal.event}|${signal.side}|${signal.entry_time}`
+      if (seenSignals.current.has(key)) continue
+      seenSignals.current.add(key)
+      const side = signal.side === "CALL" ? "CALL" : "PUT"
+      const when = signal.candle_time || signal.detected_at || ""
+      if (signal.event === "ENTRY") {
+        toast.info(`${side} midpoint entry signal`, { description: when })
+      } else if (signal.event === "EXIT") {
+        const result = Number(signal.pnl_points)
+        const description = `${prettyReason(signal.reason ?? "")} · ${when}`
+        if (result < 0 || /stop|sl/i.test(signal.reason ?? "")) {
+          toast.error(`${side} midpoint exit · loss`, { description })
+        } else if (result > 0) {
+          toast.success(`${side} midpoint exit · profit booked`, { description })
+        } else {
+          toast.info(`${side} midpoint exit signal`, { description })
+        }
+      }
+    }
+  }, [signals.data, today])
 
   async function toggleKill() {
     if (!status) return
@@ -135,16 +168,25 @@ export function LivePage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {signals.data.map((s, i) => (
-                    <TableRow key={i}>
+                  {signals.data.map((s, i) => {
+                    const points = Number(s.pnl_points)
+                    const profitable = s.event === "EXIT" && points > 0
+                    const loss = s.event === "EXIT" && (points < 0 || /stop|sl/i.test(s.reason ?? ""))
+                    return (
+                    <TableRow key={i} className={profitable ? "bg-emerald-500/10" : loss ? "bg-red-500/10" : undefined}>
                       <TableCell className="tabular-nums">{s.detected_at}</TableCell>
-                      <TableCell><Badge variant={s.event === "ENTRY" ? "default" : "secondary"}>{s.event}</Badge></TableCell>
+                      <TableCell>
+                        <Badge className={profitable ? "bg-emerald-600 text-white" : loss ? "bg-red-600 text-white" : undefined} variant={s.event === "ENTRY" ? "default" : "secondary"}>
+                          {profitable ? "PROFIT" : loss ? "LOSS" : s.event}
+                        </Badge>
+                      </TableCell>
                       <TableCell>{s.side}</TableCell>
                       <TableCell className="text-right tabular-nums">{s.price}</TableCell>
                       <TableCell className="text-xs text-muted-foreground">{prettyReason(s.reason ?? "")}</TableCell>
                       <TableCell className={cn("text-right tabular-nums", pnlClass(Number(s.pnl_points || 0)))}>{s.pnl_points}</TableCell>
                     </TableRow>
-                  ))}
+                    )
+                  })}
                 </TableBody>
               </Table>
             ) : (

@@ -57,7 +57,6 @@ class LiveSignalEngine:
                 w.writerow(HEADER)
             w.writerow(row)
         print(f"*** {title}: {text}")
-        notify(title, text)
 
     def check_tick(self, ltp: float, now: datetime) -> None:
         """Called every second: fire ENTRY at market on the first tick of the candle after the confirmation candle."""

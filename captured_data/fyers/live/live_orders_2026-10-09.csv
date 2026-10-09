@@ -1,0 +1,3 @@
+time,action,symbol,qty,order_id,fill_price,index_price,reason,trade_pnl_rs,day_pnl_rs,mode
+09:22:04,BUY,NSE:NIFTY26O1322250PE,65,dry-run,82.0,22331.95,PUT signal,,0.0,DRY_RUN
+09:24:52,SELL,NSE:NIFTY26O1322250PE,65,dry-run,94.45,22304.4,option_target,809.25,809.25,DRY_RUN
