@@ -127,8 +127,12 @@ class LiveSignalEngine:
 
             closed = not t.reason.endswith("open")
             exit_key = f"EXIT|{side}|{entry_ts:%H:%M}"
+            position_key = f"{side}|{entry_ts:%H:%M}"
+            if closed and self.trader and self.trader.was_closed(position_key):
+                self.seen.add(exit_key)
+                continue
             if closed and exit_key not in self.seen:
-                fill = self.fills.get(f"{side}|{entry_ts:%H:%M}", t.entry)
+                fill = self.fills.get(position_key, t.entry)
                 points = t.exit_price - fill if t.side == "LONG" else fill - t.exit_price
                 self._emit(
                     exit_key,
@@ -139,7 +143,7 @@ class LiveSignalEngine:
                 )
                 self._record_paper_trade(entry_ts, side, fill, exit_ts, t.exit_price, t.reason, points)
                 pos = self.trader.position if self.trader else None
-                if pos and pos["key"] == f"{side}|{entry_ts:%H:%M}":
+                if pos and pos["key"] == position_key:
                     self.trader.exit(t.reason, t.exit_price)
 
     def _record_paper_trade(self, entry_ts, side, entry_px, exit_ts, exit_px, reason, points) -> None:

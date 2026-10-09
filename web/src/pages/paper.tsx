@@ -124,7 +124,7 @@ export function PaperPage() {
       ) : <>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard label="Net P&L" value={fmtRs(s.net_rs)} className={pnlClass(s.net_rs)} hint={`gross ${fmtRs(s.gross_rs)} · charges ${fmtRs(s.charges_rs)}`} />
+        <StatCard label="Net P&L" value={fmtRs(s.net_rs)} className={pnlClass(s.net_rs)} hint={`gross ${fmtRs(s.gross_rs)} · estimated charges ${fmtRs(s.charges_rs)}`} />
         <StatCard label="Trades" value={s.trades} hint={`${s.wins} W · ${s.losses} L · ${s.winning_days}/${s.days} green days`} />
         <StatCard label="Win rate (net)" value={`${s.win_rate_pct}%`} />
         <StatCard label="Avg win / loss" value={<span className="text-lg">{fmtRs(s.avg_win_rs)} / {fmtRs(s.avg_loss_rs)}</span>} />
@@ -201,7 +201,7 @@ export function PaperPage() {
 
       {strategy === "midpoint" ? (
         <DayPanel date={picked} mode="paper" days={dates} onPick={setPicked} onClose={() => setPicked(null)} />
-      ) : picked ? (
+      ) : strategy === "hero_zero" && picked ? (
         <HeroZeroDayPanel date={picked} days={dates} data={data} onPick={setPicked} onClose={() => setPicked(null)} />
       ) : null}
       </>}

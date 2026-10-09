@@ -705,7 +705,11 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/trades":
             self._json(option_trades())
         elif url.path == "/api/paper-report":
-            self._json(hero_zero_report() if q.get("strategy", [""])[0] == "hero_zero" else paper_report())
+            strategy = q.get("strategy", [""])[0]
+            if strategy not in ("", "midpoint", "hero_zero"):
+                return self._json({"error": "unknown strategy"}, 404)
+            report = hero_zero_report() if strategy == "hero_zero" else paper_report()
+            self._json(report)
         elif url.path == "/api/paper-trades":
             self._json(read_csv_rows(LIVE_DIR / "paper_trades.csv"))
         elif url.path == "/api/log":
@@ -714,6 +718,9 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/days":
             self._json(available_days())
         elif url.path == "/api/backtest":
+            strategy = q.get("strategy", [""])[0]
+            if strategy not in ("", "midpoint"):
+                return self._json({"error": "unknown strategy"}, 404)
             self._json(backtest_report())
         elif url.path == "/api/settings":
             self._json(public_settings())

@@ -59,6 +59,7 @@ class OptionTrader:
         self.mode = "LIVE" if self.settings["live"] else "DRY_RUN"
         self.options = load_nifty_options()
         self.position: Optional[dict] = None
+        self.closed_keys: set[str] = set()
         self.day_pnl = 0.0
         self.halted_reason: Optional[str] = None
         self.last_mtm_check = 0.0
@@ -141,6 +142,10 @@ class OptionTrader:
         with self.lock:
             self._on_tick(index_ltp)
 
+    def was_closed(self, key: str) -> bool:
+        with self.lock:
+            return key in self.closed_keys
+
     def _enter(self, signal_side: str, index_price: float, index_target: float, index_stop: float, key: str = "") -> None:
         if STOP_FILE.exists():
             print(f"[orders] skip {signal_side} entry (kill switch on)")
@@ -173,6 +178,8 @@ class OptionTrader:
         except Exception as exc:
             self._halt(f"EXIT FAILED for {pos['symbol']}: {exc} - close it manually in Fyers")
             return
+        if pos.get("key"):
+            self.closed_keys.add(pos["key"])
         self.position = None
         pnl = ((fill or 0) - (pos["entry_fill"] or 0)) * pos["qty"]
         self.day_pnl += pnl

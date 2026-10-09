@@ -41,7 +41,7 @@ export function DayPage() {
         </div>
       </div>
 
-      <DayDetail date={date} />
+      <DayDetail date={date} mode="auto" />
     </div>
   )
 }

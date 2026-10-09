@@ -1,0 +1,21 @@
+{
+  "date": "2026-10-09",
+  "status": "historical_replay_closed",
+  "level": 22500.0,
+  "entry_rule": "8-point close-through; next 2 5m closes hold; retest within 5",
+  "entry_time": "13:35",
+  "option_symbol": "NSE:NIFTY26O1322500CE",
+  "mark_time": "14:05",
+  "exit_rule": "50 NIFTY-point target or 30-minute maximum hold, whichever first; no stop",
+  "trade_csv": "key_level_trades_2026-10-09.csv",
+  "candles_csv": "key_level_candles_2026-10-09.csv",
+  "warning": "Historical 1-minute paper replay, not a live fill; the +50 NIFTY target was not reached before the 30-minute time exit.",
+  "target_premium": 156.06,
+  "exit_time": "14:05",
+  "exit_reason": "time_exit_30m",
+  "exit_price": 143.75,
+  "gross_pnl_rs": 890.5,
+  "estimated_net_pnl_rs": 316.8,
+  "target_spot": 22557.25,
+  "target_hit": false
+}

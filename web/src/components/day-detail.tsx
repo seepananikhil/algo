@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { CandleChart } from "@/components/candle-chart"
 import { RuleTradesTable, SideBadge, StatCard } from "@/components/common"
 import { cn } from "@/lib/utils"
-import { chartTradesFromOptionFills, fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type PaperTrade, type Signal } from "@/lib/api"
+import { chartTradesFromOptionFills, fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, withoutSupersededExitSignals, type DayData, type OptionTrade, type PaperTrade, type Signal } from "@/lib/api"
 
 /** "auto": paper/live trades, or the backtest for days before paper trading started. */
 export type DayMode = "auto" | "backtest" | "paper"
@@ -17,15 +17,18 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
   const day = usePoll<DayData>(date && `/api/day?date=${date}`)
   const signals = usePoll<Signal[]>(date && mode !== "backtest" ? `/api/signals?date=${date}` : null)
   const paper = usePoll<PaperTrade[]>(mode === "auto" ? "/api/paper-trades" : null)
-  const options = usePoll<OptionTrade[]>(mode !== "backtest" ? "/api/trades" : null)
+  const options = usePoll<OptionTrade[]>(mode === "auto" || mode === "paper" ? "/api/trades" : null)
 
-  const actual = mode === "backtest" ? [] : tradesFromSignals(signals.data ?? [])
-  const fills = mode === "backtest" ? [] : (options.data ?? []).filter((t) => t.date === date)
+  const fills = mode === "auto" || mode === "paper" ? (options.data ?? []).filter((t) => t.date === date) : []
+  const visibleSignals = withoutSupersededExitSignals(signals.data ?? [], fills)
+  const actual = mode === "backtest" ? [] : tradesFromSignals(visibleSignals)
   const firstLive = (paper.data ?? []).map((t) => t.date).sort()[0]
   const preLive = mode === "auto" && !actual.length && paper.data != null && date != null && (!firstLive || date < firstLive)
   const useBacktest = mode === "backtest" || preLive
   const trades = useBacktest ? (day.data?.trades ?? []) : actual
   const chartTrades = useBacktest || !fills.length ? trades : chartTradesFromOptionFills(fills)
+  const chartCandles = day.data?.candles
+  const chartLoading = day.loading
   const source = useBacktest ? "BACKTEST" : actual.length ? "PAPER / LIVE" : null
 
   const total = trades.reduce((a, t) => a + t.pnl_points, 0)
@@ -34,7 +37,7 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
   const pnlValue = useBacktest ? total : fillsPnl
   const tradeTable = useBacktest
     ? <RuleTradesTable trades={trades} empty="No backtest trades this day." />
-    : <FillsTable fills={fills} empty="No paper/live trades this day." />
+    : <FillsTable fills={fills} signals={visibleSignals} empty="No paper/live trades this day." />
   const s = day.data?.setup
   const dayRange = s?.so_far_high != null && s.so_far_low != null ? s.so_far_high - s.so_far_low : undefined
 
@@ -46,10 +49,10 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
           <span>Mid <b className="text-foreground tabular-nums">{fmtNum(s?.mid)}</b></span>
           <span>Range <b className="text-foreground tabular-nums">{s?.range_high != null ? `${fmtNum(s.range_low)} – ${fmtNum(s.range_high)}` : "no setup"}</b></span>
         </div>
-        {day.loading && !day.data ? (
-          <Skeleton className="h-[420px] w-full" />
-        ) : day.data?.candles.length ? (
-          <CandleChart date={day.data.date} candles={day.data.candles} setup={s} trades={chartTrades} />
+        {chartLoading && !chartCandles ? (
+          <Skeleton className="h-105 w-full" />
+        ) : chartCandles?.length ? (
+          <CandleChart date={date ?? day.data?.date ?? ""} candles={chartCandles} setup={s} trades={chartTrades} />
         ) : (
           <p className="py-16 text-center text-sm text-muted-foreground">No candles for this day.</p>
         )}
@@ -70,13 +73,13 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
       <Card>
         <CardHeader>
           <CardTitle>{date ?? "—"}</CardTitle>
-            <CardDescription>Blue = range, amber = midpoint, yellow band = buffer. Paper arrows use actual option fill times; backtest arrows use rule exits.</CardDescription>
+          <CardDescription>Blue = range, amber = midpoint, yellow band = buffer. Paper arrows use actual option fill times; backtest arrows use rule exits.</CardDescription>
         </CardHeader>
         <CardContent>
-          {day.loading && !day.data ? (
-            <Skeleton className="h-[420px] w-full" />
-          ) : day.data?.candles.length ? (
-            <CandleChart date={day.data.date} candles={day.data.candles} setup={s} trades={chartTrades} />
+          {chartLoading && !chartCandles ? (
+            <Skeleton className="h-105 w-full" />
+          ) : chartCandles?.length ? (
+            <CandleChart date={date ?? day.data?.date ?? ""} candles={chartCandles} setup={s} trades={chartTrades} />
           ) : (
             <p className="py-24 text-center text-sm text-muted-foreground">No candles for this day.</p>
           )}
@@ -99,36 +102,45 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
   )
 }
 
-export function FillsTable({ fills, empty = "No option trades." }: { fills: OptionTrade[]; empty?: string }) {
+export function FillsTable({ fills, signals = [], empty = "No option trades." }: { fills: OptionTrade[]; signals?: Signal[]; empty?: string }) {
   if (!fills.length) return <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Option</TableHead>
+          {fills.some((fill) => fill.level != null) && <TableHead className="text-right">Level</TableHead>}
           <TableHead>In</TableHead>
+          <TableHead className="text-right">NIFTY in</TableHead>
           <TableHead className="text-right">Buy</TableHead>
           <TableHead>Out</TableHead>
+          <TableHead className="text-right">NIFTY out</TableHead>
           <TableHead className="text-right">Sell</TableHead>
-          <TableHead>Reason</TableHead>
+          <TableHead>Trigger → exit</TableHead>
           <TableHead className="text-right">P&L</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
-        {fills.map((f, i) => (
+        {fills.map((f, i) => {
+          const entrySignal = signals.find((signal) => signal.event === "ENTRY" && signal.side === f.side && signal.entry_time.slice(0, 5) === f.entry)
+          return (
           <TableRow key={i} className={f.pnl_rs > 0 ? "bg-emerald-500/10" : f.pnl_rs < 0 ? "bg-red-500/10" : undefined}>
             <TableCell>
               <div className="flex items-center gap-2"><SideBadge side={f.side} /> {f.option}</div>
               <div className="text-xs text-muted-foreground">{f.qty} qty · {f.mode}</div>
             </TableCell>
+            {fills.some((fill) => fill.level != null) && <TableCell className="text-right tabular-nums">{fmtNum(f.level)}</TableCell>}
             <TableCell className="tabular-nums">{f.entry}</TableCell>
+            <TableCell className="text-right tabular-nums">{fmtNum(f.nifty_in)}</TableCell>
             <TableCell className="text-right tabular-nums">{fmtNum(f.buy_price)}<div className="text-xs text-muted-foreground">{fmtRs(f.buy_value_rs)}</div></TableCell>
             <TableCell className="tabular-nums">{f.exit}</TableCell>
+            <TableCell className="text-right tabular-nums">{fmtNum(f.nifty_out)}</TableCell>
             <TableCell className="text-right tabular-nums">{fmtNum(f.sell_price)}<div className="text-xs text-muted-foreground">{fmtRs(f.sell_value_rs)}</div></TableCell>
-            <TableCell className="text-xs text-muted-foreground">{prettyReason(f.exit_reason)}</TableCell>
+            <TableCell className="text-xs text-muted-foreground">{f.trigger_label ?? (entrySignal ? prettyReason(entrySignal.reason) : "signal")} → {prettyReason(f.exit_reason)}</TableCell>
             <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(f.pnl_rs))}>{fmtRs(f.pnl_rs)}</TableCell>
           </TableRow>
-        ))}
+          )
+        })}
       </TableBody>
     </Table>
   )

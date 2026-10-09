@@ -95,6 +95,16 @@ export type OptionTrade = {
   mode: string
   spot_at_entry?: number | null
   distance_from_spot?: number | null
+  level?: number | null
+  trigger_label?: string
+}
+
+export function withoutSupersededExitSignals(signals: Signal[], fills: OptionTrade[]): Signal[] {
+  return signals.filter((signal) => {
+    if (signal.event !== "EXIT") return true
+    const actual = fills.find((fill) => fill.side === signal.side && fill.entry === signal.entry_time.slice(0, 5))
+    return !actual?.exit || actual.exit >= (signal.candle_time ?? "").slice(0, 5)
+  })
 }
 
 /** Plot actual option fill times at their associated NIFTY index prices. */
@@ -130,7 +140,12 @@ export type PaperReport = {
     max_drawdown_rs: number
     winning_days: number
   }
-  trades: (OptionTrade & { charges_rs: number; net_rs: number; equity: number; drawdown: number })[]
+  trades: (OptionTrade & {
+    charges_rs: number
+    net_rs: number
+    equity: number
+    drawdown: number
+  })[]
   daily: { date: string; trades: number; gross_rs: number; net_rs: number; points: number }[]
 }
 

@@ -1,16 +1,13 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import { OctagonX, Play, Radio, Square } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { CandleChart } from "@/components/candle-chart"
 import { SideBadge, StatCard } from "@/components/common"
 import { FillsTable } from "@/components/day-detail"
-import { cn } from "@/lib/utils"
-import { chartTradesFromOptionFills, fmtNum, fmtRs, pnlClass, postJSON, prettyReason, tradesFromSignals, usePoll, type DayData, type OptionTrade, type Signal } from "@/lib/api"
+import { chartTradesFromOptionFills, fmtNum, fmtRs, pnlClass, postJSON, prettyReason, tradesFromSignals, usePoll, withoutSupersededExitSignals, type DayData, type OptionTrade, type Signal } from "@/lib/api"
 import { useStatus } from "@/lib/status"
 
 export function LivePage() {
@@ -24,15 +21,16 @@ export function LivePage() {
   const seenSignals = useRef(new Set<string>())
   const seededSignalsDate = useRef<string | null>(null)
 
-  const todays = (trades.data ?? []).filter((t) => t.date === today)
+  const todays = useMemo(() => (trades.data ?? []).filter((t) => t.date === today), [trades.data, today])
+  const visibleSignals = useMemo(() => withoutSupersededExitSignals(signals.data ?? [], todays), [signals.data, todays])
   const dayPnl = todays.reduce((a, t) => a + t.pnl_rs, 0)
   const setup = day.data?.setup
-  const signalTrades = tradesFromSignals(signals.data ?? [])
+  const signalTrades = tradesFromSignals(visibleSignals)
   const tradeLog = todays.length ? chartTradesFromOptionFills(todays) : signalTrades
 
   useEffect(() => {
     if (!today || !signals.data) return
-    const current = signals.data
+    const current = visibleSignals
     if (seededSignalsDate.current !== today) {
       seededSignalsDate.current = today
       seenSignals.current = new Set(current.map((s) => `${s.event}|${s.side}|${s.entry_time}`))
@@ -58,7 +56,7 @@ export function LivePage() {
         }
       }
     }
-  }, [signals.data, today])
+  }, [signals.data, today, visibleSignals])
 
   async function toggleKill() {
     if (!status) return
@@ -145,56 +143,11 @@ export function LivePage() {
           <CardDescription>Option fills ({status?.mode ?? "…"})</CardDescription>
         </CardHeader>
         <CardContent>
-          <FillsTable fills={todays} empty="No trades yet today." />
+          <FillsTable fills={todays} signals={visibleSignals} empty="No trades yet today." />
         </CardContent>
       </Card>
 
-      <div className="grid gap-4 xl:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>Signals</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {signals.data?.length ? (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Time</TableHead>
-                    <TableHead>Event</TableHead>
-                    <TableHead>Side</TableHead>
-                    <TableHead className="text-right">Price</TableHead>
-                    <TableHead>Reason</TableHead>
-                    <TableHead className="text-right">Pts</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {signals.data.map((s, i) => {
-                    const points = Number(s.pnl_points)
-                    const profitable = s.event === "EXIT" && points > 0
-                    const loss = s.event === "EXIT" && (points < 0 || /stop|sl/i.test(s.reason ?? ""))
-                    return (
-                    <TableRow key={i} className={profitable ? "bg-emerald-500/10" : loss ? "bg-red-500/10" : undefined}>
-                      <TableCell className="tabular-nums">{s.detected_at}</TableCell>
-                      <TableCell>
-                        <Badge className={profitable ? "bg-emerald-600 text-white" : loss ? "bg-red-600 text-white" : undefined} variant={s.event === "ENTRY" ? "default" : "secondary"}>
-                          {profitable ? "PROFIT" : loss ? "LOSS" : s.event}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>{s.side}</TableCell>
-                      <TableCell className="text-right tabular-nums">{s.price}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{prettyReason(s.reason ?? "")}</TableCell>
-                      <TableCell className={cn("text-right tabular-nums", pnlClass(Number(s.pnl_points || 0)))}>{s.pnl_points}</TableCell>
-                    </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="py-6 text-center text-sm text-muted-foreground">No signals today.</p>
-            )}
-          </CardContent>
-        </Card>
-
+      <div>
         <Card>
           <CardHeader>
             <CardTitle>Capture log</CardTitle>
