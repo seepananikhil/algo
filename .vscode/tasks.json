@@ -2,13 +2,63 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Restart app server",
+      "label": "Backend: app server",
       "type": "shell",
-      // [a] keeps pkill from matching this task's own shell command line
-      "command": "pkill -f '[a]pp_server.py'; sleep 1; python3 -u app_server.py",
-      "options": { "cwd": "${workspaceFolder}" },
+      "command": "python",
+      "args": [
+        "app_server.py"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
       "isBackground": true,
-      "presentation": { "reveal": "always", "panel": "dedicated", "clear": true },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Frontend: Vite UI",
+      "type": "shell",
+      "command": "npm",
+      "args": [
+        "run",
+        "dev",
+        "--",
+        "--host",
+        "0.0.0.0"
+      ],
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Open app in browser",
+      "type": "shell",
+      "command": "cmd /c start http://localhost:5173",
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "Full stack: start app",
+      "dependsOn": [
+        "Backend: app server",
+        "Frontend: Vite UI"
+      ],
+      "dependsOrder": "parallel",
       "problemMatcher": []
     }
   ]

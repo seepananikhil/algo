@@ -1,0 +1,6 @@
+name: nifty-strategy-dashboard
+services:
+  web:
+    project: .
+    language: python
+    host: appservice
