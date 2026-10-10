@@ -76,8 +76,9 @@ export function LivePage() {
     if (!status) return
     setBusy(true)
     try {
-      await postJSON(`/api/capture/${status.capture_running ? "stop" : "start"}`)
-      toast.success(status.capture_running ? "Stopping capture (closes any open position first)" : "Capture started")
+      const result = await postJSON<{ market_closed?: boolean }>(`/api/capture/${status.capture_running ? "stop" : "start"}`)
+      if (result.market_closed) toast.info("Market is closed; capture does not start on weekends")
+      else toast.success(status.capture_running ? "Stopping capture (closes any open position first)" : "Capture started")
       setTimeout(reload, 2000)
     } catch (e) {
       toast.error(String(e))
@@ -97,9 +98,9 @@ export function LivePage() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant={status?.capture_running ? "outline" : "default"} disabled={!status || busy} onClick={toggleCapture}>
+          <Button variant={status?.capture_running ? "outline" : "default"} disabled={!status || busy || (status.market_open_day === false && !status.capture_running)} onClick={toggleCapture}>
             {status?.capture_running ? <Square /> : <Radio />}
-            {status?.capture_running ? "Stop capture" : "Start capture"}
+            {status?.capture_running ? "Stop capture" : status?.market_open_day === false ? "Market closed" : "Start capture"}
           </Button>
           <Button variant={status?.kill_switch ? "default" : "destructive"} disabled={!status || busy} onClick={toggleKill}>
             {status?.kill_switch ? <Play /> : <OctagonX />}
@@ -126,7 +127,7 @@ export function LivePage() {
       <Card>
         <CardHeader>
           <CardTitle>NIFTY 1-min</CardTitle>
-          <CardDescription>Range, midpoint and armed level with today's {status?.mode ?? ""} trades. Includes the forming candle.</CardDescription>
+          <CardDescription>Range and midpoint with today's {status?.mode ?? ""} trades. Thick cyan KEY line = 500-point level touched or within 10 points of the opening candle. Includes the forming candle.</CardDescription>
         </CardHeader>
         <CardContent>
           {day.data?.candles.length ? (

@@ -1,38 +1,29 @@
+
 {
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Backend: app server",
+      "label": "Frontend: Build static UI",
       "type": "shell",
-      "command": "python",
-      "args": [
-        "app_server.py"
-      ],
+      "command": "npm",
+      "args": ["run", "build"],
       "options": {
-        "cwd": "${workspaceFolder}"
-      },
-      "isBackground": true,
-      "presentation": {
-        "reveal": "always",
-        "panel": "dedicated",
-        "clear": true,
-        "focus": false
+        "cwd": "${workspaceFolder}/web"
       },
       "problemMatcher": []
     },
     {
-      "label": "Frontend: Vite UI",
+      "label": "Backend: app server",
       "type": "shell",
-      "command": "npm",
+      "command": "/c/Users/hp/AppData/Local/Programs/Python/Python312/python.exe",
       "args": [
-        "run",
-        "dev",
-        "--",
-        "--host",
-        "0.0.0.0"
+        "-u",
+        "app_server.py"
       ],
+      "dependsOn": ["Frontend: Build static UI"],
+      "dependsOrder": "sequence",
       "options": {
-        "cwd": "${workspaceFolder}/web"
+        "cwd": "${workspaceFolder}"
       },
       "isBackground": true,
       "presentation": {
@@ -46,7 +37,8 @@
     {
       "label": "Open app in browser",
       "type": "shell",
-      "command": "cmd /c start http://localhost:5173",
+      "command": "cmd.exe",
+      "args": ["/c", "start", "http://127.0.0.1:8090/day"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -54,11 +46,8 @@
     },
     {
       "label": "Full stack: start app",
-      "dependsOn": [
-        "Backend: app server",
-        "Frontend: Vite UI"
-      ],
-      "dependsOrder": "parallel",
+      "dependsOn": ["Backend: app server"],
+      "dependsOrder": "sequence",
       "problemMatcher": []
     }
   ]

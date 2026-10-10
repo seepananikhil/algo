@@ -1,3 +1,9 @@
 {
-    "livePreview.defaultPreviewPath": "/performance/midpoint_backtest_report.html"
+    "livePreview.defaultPreviewPath": "/performance/midpoint_backtest_report.html",
+    "chat.tools.terminal.autoApprove": {
+        "/^cd /d/nikhil/algo && /c/Users/hp/AppData/Local/Programs/Python/Python312/python\\.exe -m py_compile app_server\\.py$/": {
+            "approve": true,
+            "matchCommandLine": true
+        }
+    }
 }

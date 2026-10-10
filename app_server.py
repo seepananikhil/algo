@@ -68,6 +68,10 @@ def today() -> str:
     return datetime.now(IST).strftime("%Y-%m-%d")
 
 
+def is_market_weekday(now: datetime | None = None) -> bool:
+    return (now or datetime.now(IST)).weekday() < 5
+
+
 def read_csv_rows(path: Path) -> list:
     if not path.exists():
         return []
@@ -104,11 +108,12 @@ def _process_pids_by_pattern(pattern: str) -> list[int]:
     """Return PIDs matching a command pattern, cross-platform."""
     if os.name == "nt":
         escaped = pattern.replace("'", "''")
+        python_name = Path(sys.executable).name.replace("'", "''")
         ps = (
             "Get-CimInstance Win32_Process | "
-            "Where-Object { $_.CommandLine -match [regex]::Escape('%s') } | "
+            "Where-Object { $_.Name -eq '%s' -and $_.CommandLine -match [regex]::Escape('%s') } | "
             "Select-Object -ExpandProperty ProcessId"
-        ) % escaped
+        ) % (python_name, escaped)
         result = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, check=False)
         pids = []
         for line in result.stdout.splitlines():
@@ -131,6 +136,8 @@ def capture_running() -> bool:
 
 
 def start_capture() -> dict:
+    if not is_market_weekday():
+        return {"capture_running": capture_running(), "started": False, "market_closed": True}
     if capture_running():
         return {"capture_running": True, "started": False}
     LIVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -173,12 +180,19 @@ def stop_capture() -> dict:
 
 
 def auto_start_loop() -> None:
-    """Start the capture on weekdays inside AUTO_START_WINDOW unless disabled or stopped by the user today."""
+    """Start on weekdays in the configured window and stop any capture carried into weekends."""
     while True:
         try:
             now = datetime.now(IST)
             day = now.strftime("%Y-%m-%d")
-            in_window = now.weekday() < 5 and AUTO_START_WINDOW[0] <= now.strftime("%H:%M") <= AUTO_START_WINDOW[1]
+            if not is_market_weekday(now):
+                if capture_running() and _capture.get("weekend_stop_requested") != day:
+                    stop_capture()
+                    _capture["weekend_stop_requested"] = day
+                    print(f"[{now:%H:%M:%S}] stopped capture for weekend")
+                time.sleep(30)
+                continue
+            in_window = AUTO_START_WINDOW[0] <= now.strftime("%H:%M") <= AUTO_START_WINDOW[1]
             enabled = read_config().get("auto_start_capture", True)
             if in_window and enabled and _capture["stopped_by_user"] != day and _capture["auto_started"] != day:
                 if not capture_running():
@@ -487,6 +501,41 @@ def setup_info(df: pd.DataFrame) -> dict:
         return {}
     s = day_setup(df, list(df.index))
     out = {"so_far_high": float(df["high"].max()), "so_far_low": float(df["low"].min())}
+    session_low = float(df["low"].min())
+    session_high = float(df["high"].max())
+    first_open = float(df["open"].iloc[0])
+    first_high = float(df["high"].iloc[0])
+    first_low = float(df["low"].iloc[0])
+    level_start = int((first_low - 10) // 500) * 500
+    level_end = int((first_high + 10) // 500) * 500
+    level_prices = list(range(level_start, level_end + 500, 500))
+    level_distances = {
+        level: max(first_low - level, 0.0, level - first_high)
+        for level in level_prices
+    }
+    out["key_levels"] = [
+        {"price": level, "distance": round(level_distances[level], 2), "nearby": level_distances[level] <= 10}
+        for level in level_prices
+    ]
+    nearby_levels = [level for level in level_prices if level_distances[level] <= 10]
+    breaks = []
+    for idx in range(min(len(df), 3)):
+        row = df.iloc[idx]
+        previous_close = float(df["close"].iloc[idx - 1]) if idx else first_open
+        close = float(row["close"])
+        for level in nearby_levels:
+            side = "CALL" if previous_close <= level < close else "PUT" if previous_close >= level > close else None
+            if side:
+                next_close = float(df["close"].iloc[idx + 1]) if idx + 1 < len(df) else None
+                confirmed = next_close is not None and (next_close >= level if side == "CALL" else next_close <= level)
+                breaks.append({
+                    "time": row["timestamp"].strftime("%H:%M"),
+                    "price": level,
+                    "side": side,
+                    "confirmed": confirmed,
+                    "distance": round(level_distances[level], 2),
+                })
+    out["key_breaks"] = breaks
     if s:
         out.update({
             "range_high": s["ref_high"],
@@ -517,6 +566,7 @@ def status() -> dict:
             last_tick = {"time": ts[11:], "ltp": float(ltp)}
     return {
         "now": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        "market_open_day": is_market_weekday(),
         "token": token_status(),
         "capture_running": capture_running(),
         "auto_start_capture": bool(cfg.get("auto_start_capture", True)),

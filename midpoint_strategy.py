@@ -143,8 +143,81 @@ def day_setup(work: pd.DataFrame, day_indices: List[int]) -> Optional[dict]:
     return None
 
 
+def key_levels_for_range(setup: dict, step: int = 500) -> List[int]:
+    """Round price levels near the daily midpoint range. Used as directional confirmation filters."""
+    lo = int((setup["ref_low"] - 1000) // step) * step
+    hi = int((setup["ref_high"] + 1000) // step) * step
+    return list(range(lo, hi + step, step))
+
+
+def key_breakout_signal(work: pd.DataFrame, idx: int, side: str, setup: dict, max_follow_candles: int = 3) -> Optional[int]:
+    """Return a qualifying key level for breakout continuation.
+
+    Aggressive rule: if the first bar or the next immediate bars break a round level and hold it,
+    we can take the trade without waiting for a full retrace back into the midpoint.
+    """
+    levels = key_levels_for_range(setup)
+    base = idx
+
+    if side == "LONG":
+        valid_levels = [lvl for lvl in levels if lvl > setup["mid"] and lvl <= setup["ref_high"] + 1000]
+        for lvl in valid_levels:
+            for j in range(base, min(len(work), base + max_follow_candles + 1)):
+                candle = work.iloc[j]
+                if candle["close"] >= lvl and candle["high"] >= lvl:
+                    follow_ok = True
+                    for k in range(j + 1, min(len(work), j + 3)):
+                        next_candle = work.iloc[k]
+                        if next_candle["close"] < lvl:
+                            follow_ok = False
+                            break
+                    if follow_ok and abs(float(work.loc[j, "close"]) - setup["mid"]) <= 80:
+                        return int(lvl)
+        return None
+
+    valid_levels = [lvl for lvl in levels if lvl < setup["mid"] and lvl >= setup["ref_low"] - 1000]
+    for lvl in valid_levels:
+        for j in range(base, min(len(work), base + max_follow_candles + 1)):
+            candle = work.iloc[j]
+            if candle["close"] <= lvl and candle["low"] <= lvl:
+                follow_ok = True
+                for k in range(j + 1, min(len(work), j + 3)):
+                    next_candle = work.iloc[k]
+                    if next_candle["close"] > lvl:
+                        follow_ok = False
+                        break
+                if follow_ok and abs(float(work.loc[j, "close"]) - setup["mid"]) <= 80:
+                    return int(lvl)
+    return None
+
+
 def buffer_entry_level(side: str, mid: float) -> float:
     return mid + MIDPOINT_BUFFER_POINTS if side == "LONG" else mid - MIDPOINT_BUFFER_POINTS
+
+
+def has_breakdown_confirmation(work: pd.DataFrame, k: int, side: str, mid: float, lookback: int = 3) -> bool:
+    """Require recent momentum in the same direction before accepting a midpoint rejection trade.
+
+    This keeps the strategy from entering on isolated wick snaps that are not backed by a
+    fresh directional breakdown. We treat a 3-candle confirmation as the minimum bar count.
+    """
+    if k <= lookback:
+        return True
+
+    recent = work.iloc[max(0, k - lookback):k].copy()
+    if recent.empty:
+        return True
+
+    if side == "SHORT":
+        closes_below_mid = int((recent["close"] < mid).sum())
+        recent_down = int((recent["close"].diff().fillna(0) < 0).sum())
+        last_low = float(recent["low"].iloc[-1])
+        return closes_below_mid >= 2 and recent_down >= 1 and last_low <= mid
+
+    closes_above_mid = int((recent["close"] > mid).sum())
+    recent_up = int((recent["close"].diff().fillna(0) > 0).sum())
+    last_high = float(recent["high"].iloc[-1])
+    return closes_above_mid >= 2 and recent_up >= 1 and last_high >= mid
 
 
 def wick_rejection_side(work: pd.DataFrame, k: int, mid: float) -> Optional[str]:
@@ -153,9 +226,15 @@ def wick_rejection_side(work: pd.DataFrame, k: int, mid: float) -> Optional[str]
     prev_close = float(work.loc[k - 1, "close"])
     tol = WICK_TOUCH_TOLERANCE
     if prev_close > mid and o > mid - OPEN_TOLERANCE and l <= mid + tol and c >= mid + MIDPOINT_BUFFER_POINTS:
-        return "LONG"
+        side = "LONG"
+        if has_breakdown_confirmation(work, k, side, mid):
+            return side
+        return None
     if prev_close < mid and o < mid + OPEN_TOLERANCE and h >= mid - tol and c <= mid - MIDPOINT_BUFFER_POINTS:
-        return "SHORT"
+        side = "SHORT"
+        if has_breakdown_confirmation(work, k, side, mid):
+            return side
+        return None
     return None
 
 
@@ -166,8 +245,26 @@ def scan_entry(
     last_idx: int,
     side_filter: Optional[str] = None,
 ) -> dict:
-    """First midpoint wick rejection from earliest_idx on; enters at market on the next candle's open."""
+    """Try breakout continuation first, then fall back to midpoint wick rejection."""
     limit = min(setup["last_entry_idx"], last_idx)
+
+    for k in range(max(earliest_idx, setup["day_start"] + 1), limit - 1):
+        for side in ("LONG", "SHORT"):
+            if side_filter is not None and side != side_filter:
+                continue
+            level = key_breakout_signal(work, k, side, setup, max_follow_candles=3)
+            if level is not None:
+                entry_idx = k + 1
+                if entry_idx > limit:
+                    entry_idx = limit
+                return {
+                    "status": "entry",
+                    "idx": entry_idx,
+                    "side": side,
+                    "price": float(work.loc[entry_idx, "open"]),
+                    "level": level,
+                }
+
     for k in range(max(earliest_idx, setup["day_start"] + 1), limit):
         side = wick_rejection_side(work, k, setup["mid"])
         if side and (side_filter is None or side == side_filter):
@@ -326,3 +423,17 @@ def backtest_midpoint_strategy(df: pd.DataFrame, rr: float = 1.0, max_hold_bars:
         _, day_trades = run_day(work, day_df.index.tolist(), max_hold_bars)
         trades.extend(day_trades)
     return pd.DataFrame([asdict(t) for t in trades])
+
+
+def triggered_days_report(df: pd.DataFrame, max_hold_bars: int = 20) -> List[str]:
+    """Return a sorted list of dates where the midpoint+key-level strategy would have triggered."""
+    if df.empty:
+        return []
+    work = df.copy()
+    work["trade_day"] = work["timestamp"].dt.date
+    triggered = set()
+    for _, day_df in work.groupby("trade_day", sort=True):
+        setup, trades, _ = plan_day(work, day_df.index.tolist(), max_hold_bars)
+        if trades:
+            triggered.update(str(t.entry_time[:10]) for t in trades)
+    return sorted(triggered)

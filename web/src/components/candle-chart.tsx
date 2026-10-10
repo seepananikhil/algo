@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react"
+import type { ReactNode } from "react"
 import { useTheme } from "next-themes"
 import {
   CandlestickSeries,
@@ -35,9 +36,10 @@ type Props = {
   setup?: Setup
   trades?: RuleTrade[]
   className?: string
+  overlay?: ReactNode
 }
 
-export function CandleChart({ date, candles, forming, setup, trades = [], className = "h-[clamp(420px,62vh,680px)]" }: Props) {
+export function CandleChart({ date, candles, forming, setup, trades = [], className = "h-[clamp(420px,62vh,680px)]", overlay }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
@@ -126,13 +128,23 @@ export function CandleChart({ date, candles, forming, setup, trades = [], classN
 
     lines.current.forEach((l) => s.removePriceLine(l))
     lines.current = []
-    const add = (price: number | undefined, color: string, style = LineStyle.Dashed, axisLabel = true) => {
+    const add = (
+      price: number | undefined,
+      color: string,
+      style = LineStyle.Dashed,
+      axisLabel = true,
+      title = "",
+      lineWidth: 1 | 2 | 3 | 4 = 1,
+    ) => {
       if (price == null) return
-      lines.current.push(s.createPriceLine({ price, color, title: "", lineWidth: 1, lineStyle: style, axisLabelVisible: axisLabel }))
+      lines.current.push(s.createPriceLine({ price, color, title, lineWidth, lineStyle: style, axisLabelVisible: axisLabel }))
     }
     add(setup?.range_high, "#38bdf8")
     add(setup?.range_low, "#38bdf8")
     add(setup?.mid, "#f59e0b", LineStyle.Solid)
+    for (const level of setup?.key_levels ?? []) {
+      if (level.nearby) add(level.price, "#00e5ff", LineStyle.Solid, true, "", 3)
+    }
     band.current?.setBand(
       setup?.mid != null && setup.buffer ? { top: setup.mid + setup.buffer, bottom: setup.mid - setup.buffer } : null,
     )
@@ -162,5 +174,10 @@ export function CandleChart({ date, candles, forming, setup, trades = [], classN
     if (chart.current) fitSession(chart.current, data.length)
   }, [date, candles, forming, setup, trades])
 
-  return <div ref={el} className={`w-full ${className}`} />
+  return (
+    <div className={`relative w-full ${className}`}>
+      <div ref={el} className="absolute inset-0" />
+      {overlay && <div className="pointer-events-none absolute left-2 top-2 z-10 sm:left-3 sm:top-3">{overlay}</div>}
+    </div>
+  )
 }

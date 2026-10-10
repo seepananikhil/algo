@@ -4,6 +4,7 @@ export type Status = {
   now: string
   token: { valid: boolean; generated_at_utc: string | null }
   capture_running: boolean
+  market_open_day?: boolean
   auto_start_capture?: boolean
   mode: "PAPER" | "LIVE"
   lots: number
@@ -34,6 +35,8 @@ export type Setup = {
   mid?: number
   buffer?: number
   range_fixed_at?: string
+  key_levels?: { price: number; distance: number; nearby: boolean }[]
+  key_breaks?: { time: string; price: number; side: "CALL" | "PUT"; confirmed: boolean; distance: number }[]
   armed?: { side: "CALL" | "PUT"; candle: string; level: number; stop: number }
 }
 
@@ -207,30 +210,41 @@ export function usePoll<T>(url: string | null, intervalMs = 0) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const urlRef = useRef(url)
+  const requestId = useRef(0)
   urlRef.current = url
 
   const reload = useCallback(async () => {
     const u = urlRef.current
     if (!u) return
+    const id = ++requestId.current
     try {
       const d = await getJSON<T>(u)
-      if (urlRef.current === u) {
+      if (urlRef.current === u && requestId.current === id) {
         setData(d)
         setError(null)
       }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (urlRef.current === u && requestId.current === id) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
     } finally {
-      setLoading(false)
+      if (urlRef.current === u && requestId.current === id) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    setLoading(true)
+    requestId.current += 1
+    setData(null)
+    setError(null)
+    setLoading(Boolean(url))
+    if (!url) return
     reload()
-    if (!url || !intervalMs) return
+    if (!intervalMs) return () => { requestId.current += 1 }
     const id = setInterval(reload, intervalMs)
-    return () => clearInterval(id)
+    return () => {
+      clearInterval(id)
+      requestId.current += 1
+    }
   }, [url, intervalMs, reload])
 
   return { data, error, loading, reload }

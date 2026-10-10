@@ -228,4 +228,7 @@ class NiftyCapture:
 
 
 if __name__ == "__main__":
+    if now_ist().weekday() >= 5:
+        print("Market closed: capture does not run on weekends.")
+        sys.exit(0)
     NiftyCapture().run()
