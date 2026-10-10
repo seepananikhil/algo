@@ -32,6 +32,7 @@ IST = timezone(timedelta(hours=5, minutes=30))
 MARKET_OPEN = (9, 15)
 MARKET_CLOSE = (10, 0)  # strategy only trades the first 30 minutes; nothing needed after 10:00
 TS_FMT = "%Y-%m-%d %H:%M:%S"
+TMP_DIR = ROOT / "tmp"  # Windows-safe temp directory for Fyers SDK logging
 
 
 def now_ist() -> datetime:
@@ -61,6 +62,7 @@ class NiftyCapture:
         self.stop = threading.Event()
         day = now_ist().strftime("%Y-%m-%d")
         OUT_DIR.mkdir(parents=True, exist_ok=True)
+        TMP_DIR.mkdir(parents=True, exist_ok=True)  # Ensure temp directory exists
         self.sec_file = OUT_DIR / f"nifty_1s_{day}.csv"
         self.min_file = OUT_DIR / f"nifty_1min_{day}.csv"
         self.last_candle_epoch = self._last_written_epoch()
@@ -71,7 +73,7 @@ class NiftyCapture:
         tok = json.loads(TOKEN_FILE.read_text(encoding="utf-8")) if TOKEN_FILE.exists() else {}
         self.app_id = tok.get("app_id", "")
         self.access_token = tok.get("access_token", "")
-        self.rest = fyersModel.FyersModel(client_id=self.app_id, token=self.access_token, is_async=False, log_path="/tmp")
+        self.rest = fyersModel.FyersModel(client_id=self.app_id, token=self.access_token, is_async=False, log_path=str(TMP_DIR))
 
     def wait_for_valid_token(self) -> None:
         while True:

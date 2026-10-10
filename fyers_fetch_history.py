@@ -22,11 +22,12 @@ TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
 MASTER = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_extended.csv"
 SYMBOL = "NSE:NIFTY50-INDEX"
 CHUNK_DAYS = 90  # Fyers allows up to 100 days per 1-minute request
+TMP_DIR = ROOT / "tmp"  # Temporary directory for history fetching
 
 
 def client() -> fyersModel.FyersModel:
     tok = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
-    fy = fyersModel.FyersModel(client_id=tok["app_id"], token=tok["access_token"], is_async=False, log_path="/tmp")
+    fy = fyersModel.FyersModel(client_id=tok["app_id"], token=tok["access_token"], is_async=False, log_path=str(TMP_DIR))
     if fy.get_profile().get("s") != "ok":
         raise SystemExit("Fyers token invalid/expired. Log in first (dashboard -> Fyers, or python3 fyers_daily_login.py auto).")
     return fy

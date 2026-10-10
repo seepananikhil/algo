@@ -27,6 +27,8 @@ import pandas as pd
 from midpoint_strategy import MIDPOINT_BUFFER_POINTS, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
 
 ROOT = Path(__file__).resolve().parent
+TMP_DIR = ROOT / ".tmp"
+TMP_DIR.mkdir(parents=True, exist_ok=True)
 LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
 TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
 CONFIG_FILE = ROOT / "fyers_config.json"
@@ -85,7 +87,12 @@ def token_status() -> dict:
         try:
             from fyers_apiv3 import fyersModel
 
-            r = fyersModel.FyersModel(client_id=tok["app_id"], token=tok["access_token"], is_async=False, log_path="/tmp").get_profile()
+            r = fyersModel.FyersModel(
+                client_id=tok["app_id"],
+                token=tok["access_token"],
+                is_async=False,
+                log_path=str(TMP_DIR),
+            ).get_profile()
             value["valid"] = r.get("s") == "ok"
         except Exception:
             pass
@@ -93,8 +100,34 @@ def token_status() -> dict:
     return value
 
 
+def _process_pids_by_pattern(pattern: str) -> list[int]:
+    """Return PIDs matching a command pattern, cross-platform."""
+    if os.name == "nt":
+        escaped = pattern.replace("'", "''")
+        ps = (
+            "Get-CimInstance Win32_Process | "
+            "Where-Object { $_.CommandLine -match [regex]::Escape('%s') } | "
+            "Select-Object -ExpandProperty ProcessId"
+        ) % escaped
+        result = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, check=False)
+        pids = []
+        for line in result.stdout.splitlines():
+            text = line.strip()
+            if text and text.isdigit():
+                pids.append(int(text))
+        return pids
+
+    result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True, check=False)
+    pids = []
+    for line in result.stdout.splitlines():
+        text = line.strip()
+        if text and text.isdigit():
+            pids.append(int(text))
+    return pids
+
+
 def capture_running() -> bool:
-    return subprocess.run(["pgrep", "-f", "fyers_nifty_capture"], capture_output=True).returncode == 0
+    return bool(_process_pids_by_pattern("fyers_nifty_capture"))
 
 
 def start_capture() -> dict:
@@ -105,31 +138,33 @@ def start_capture() -> dict:
     if log_path.exists() and datetime.fromtimestamp(log_path.stat().st_mtime, IST).strftime("%Y-%m-%d") != today():
         log_path.replace(LIVE_DIR / "capture.prev.log")
     log = log_path.open("a", encoding="utf-8")
-    subprocess.Popen(
-        [sys.executable, "-u", str(ROOT / "fyers_nifty_capture.py")],
-        cwd=ROOT,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,  # keeps running if the dashboard restarts
-        # Restore Ctrl+C so stop_capture can shut it down cleanly (the server may have inherited SIG_IGN).
-        preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
-    )
+    kwargs = {
+        "cwd": ROOT,
+        "stdout": log,
+        "stderr": subprocess.STDOUT,
+        "start_new_session": True,
+    }
+    if os.name != "nt":
+        kwargs["preexec_fn"] = lambda: signal.signal(signal.SIGINT, signal.SIG_DFL)
+    subprocess.Popen([sys.executable, "-u", str(ROOT / "fyers_nifty_capture.py")], **kwargs)
     _capture["stopped_by_user"] = None
     return {"capture_running": True, "started": True}
 
 
 def stop_capture() -> dict:
-    out = subprocess.run(["pgrep", "-f", "fyers_nifty_capture"], capture_output=True, text=True).stdout.split()
-    pids = [int(p) for p in out if p.isdigit()]
+    pids = _process_pids_by_pattern("fyers_nifty_capture")
     for pid in pids:
-        os.kill(pid, signal.SIGINT)  # graceful: exits open position, writes the day's summary
+        try:
+            os.kill(pid, signal.SIGINT)
+        except (ProcessLookupError, OSError):
+            pass
 
     def force_later() -> None:
         time.sleep(15)
         for pid in pids:
             try:
                 os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except (ProcessLookupError, OSError):
                 pass
 
     threading.Thread(target=force_later, daemon=True).start()
@@ -209,9 +244,7 @@ def hero_zero_capture_loop() -> None:
         due = now.weekday() < 5 and (now.hour, now.minute) >= HERO_ZERO_START and (now.hour, now.minute) < HERO_ZERO_END
         status_path = output_dir / f"hero_zero_status_{session}.json"
         try:
-            process = subprocess.run(
-                ["pgrep", "-f", "[f]yers_hero_zero_capture.py"], capture_output=True, text=True
-            ).stdout.strip()
+            process = bool(_process_pids_by_pattern("fyers_hero_zero_capture.py"))
             retry_due = last_attempt_date != session or time.time() - last_attempt_at >= 120
             if due and not status_path.exists() and not process and retry_due:
                 output_dir.mkdir(parents=True, exist_ok=True)

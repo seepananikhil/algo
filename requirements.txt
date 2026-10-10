@@ -1,0 +1,6 @@
+pandas
+numpy
+python-dateutil
+pytz
+requests
+fyers-apiv3

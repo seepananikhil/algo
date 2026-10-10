@@ -20,6 +20,7 @@ from fyers_orders import load_nifty_options
 ROOT = Path(__file__).resolve().parent
 TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
 OUTPUT_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
+TMP_DIR = ROOT / "tmp" / "fyers" / "hero_zero"
 IST = timezone(timedelta(hours=5, minutes=30))
 NIFTY_INDEX = "NSE:NIFTY50-INDEX"
 SENSEX_INDEX = "BSE:SENSEX-INDEX"
@@ -97,7 +98,7 @@ class HeroZeroCapture:
         token = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
         self.app_id = token["app_id"]
         self.access_token = token["access_token"]
-        self.rest = fyersModel.FyersModel(client_id=self.app_id, token=self.access_token, is_async=False, log_path="/tmp")
+        self.rest = fyersModel.FyersModel(client_id=self.app_id, token=self.access_token, is_async=False, log_path=str(TMP_DIR))
         profile = self.rest.get_profile()
         if profile.get("s") != "ok":
             raise RuntimeError("Fyers token is invalid or expired")

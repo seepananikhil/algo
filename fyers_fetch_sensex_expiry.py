@@ -20,6 +20,7 @@ from fyers_apiv3 import fyersModel
 ROOT = Path(__file__).resolve().parent
 TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
 OUTPUT_DIR = ROOT / "captured_data" / "fyers" / "sensex_expiry"
+TMP_DIR = ROOT / "captured_data" / "fyers" / "temp"
 IST = timezone(timedelta(hours=5, minutes=30))
 INDEX_SYMBOL = "BSE:SENSEX-INDEX"
 FO_MASTER_URL = "https://public.fyers.in/sym_details/BSE_FO.csv"
@@ -28,7 +29,7 @@ FO_MASTER_URL = "https://public.fyers.in/sym_details/BSE_FO.csv"
 def make_client() -> fyersModel.FyersModel:
     token = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
     client = fyersModel.FyersModel(
-        client_id=token["app_id"], token=token["access_token"], is_async=False, log_path="/tmp"
+        client_id=token["app_id"], token=token["access_token"], is_async=False, log_path=str(TMP_DIR)
     )
     if client.get_profile().get("s") != "ok":
         raise SystemExit("Fyers token invalid or expired; log in before fetching.")
