@@ -11,12 +11,12 @@ from typing import Optional, Set
 import pandas as pd
 
 from backtest_midpoint_strategy import load_data
-from midpoint_strategy import TARGET_POINTS, backtest_midpoint_strategy, entry_stop, entry_too_far, pending_entry
+from midpoint_strategy import PAPER_LOTS, TARGET_POINTS, backtest_midpoint_strategy, entry_stop, entry_too_far, pending_entry
 
 IST = timezone(timedelta(hours=5, minutes=30))
 HEADER = ["detected_at", "event", "side", "entry_time", "candle_time", "price", "mid_point", "sl", "target", "reason", "pnl_points"]
 LOT_SIZE = 65  # NIFTY lot size; verify with your broker
-LEDGER_HEADER = ["date", "side", "entry_time", "entry_price", "exit_time", "exit_price", "exit_reason", "points", "rupees_1_lot"]
+LEDGER_HEADER = ["date", "side", "entry_time", "entry_price", "exit_time", "exit_price", "exit_reason", "points", "lots", "rupees"]
 
 
 def notify(title: str, text: str) -> None:
@@ -138,7 +138,7 @@ class LiveSignalEngine:
                     exit_key,
                     [detected, "EXIT", side, f"{entry_ts:%H:%M}", f"{exit_ts:%H:%M}", round(t.exit_price, 2), round(t.midpoint, 2),
                      round(t.stop, 2), round(t.target, 2), t.reason, round(points, 2)],
-                    f"EXIT {side} {points:+.2f} pts (Rs {points * LOT_SIZE:+,.0f})",
+                    f"EXIT {side} {points:+.2f} pts (Rs {points * LOT_SIZE * PAPER_LOTS:+,.0f})",
                     f"{exit_ts:%H:%M} @ {t.exit_price:.2f} [{t.reason}]",
                 )
                 self._record_paper_trade(entry_ts, side, fill, exit_ts, t.exit_price, t.reason, points)
@@ -153,6 +153,6 @@ class LiveSignalEngine:
             if new:
                 w.writerow(LEDGER_HEADER)
             w.writerow([f"{entry_ts:%Y-%m-%d}", side, f"{entry_ts:%H:%M}", round(entry_px, 2), f"{exit_ts:%H:%M}",
-                        round(exit_px, 2), reason, round(points, 2), round(points * LOT_SIZE, 2)])
+                        round(exit_px, 2), reason, round(points, 2), PAPER_LOTS, round(points * LOT_SIZE * PAPER_LOTS, 2)])
         total = pd.read_csv(self.ledger_file)
-        print(f"Paper P&L: {len(total)} trades, {total['points'].sum():+.2f} pts, Rs {total['rupees_1_lot'].sum():+,.0f} (1 lot)")
+        print(f"Paper P&L: {len(total)} trades, {total['points'].sum():+.2f} pts, Rs {total['rupees'].sum():+,.0f} ({PAPER_LOTS} lots)")

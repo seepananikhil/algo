@@ -86,6 +86,8 @@ def resolve_exit(
 
 
 MIDPOINT_BUFFER_POINTS = 5.0
+PAPER_LOTS = 2
+PAPER_STARTING_CAPITAL = 25_000
 WICK_TOUCH_TOLERANCE = 2.0  # a wick within this many points of the midpoint counts as touching it
 OPEN_TOLERANCE = 2.0  # the rejection candle may open up to this many points on the wrong side of the midpoint
 TARGET_POINTS = 50.0

@@ -1,4 +1,4 @@
-date,side,entry_time,entry_price,exit_time,exit_price,exit_reason,points,rupees_1_lot
-2026-10-06,PUT,09:23,22589.85,09:24,22600.1,midpoint_close_exit,-10.25,-666.25
-2026-10-06,CALL,09:27,22594.05,09:45,22620.35,reverse_after_sl_time_exit,26.3,1709.5
-2026-10-09,PUT,09:22,22331.95,09:27,22349.9,midpoint_close_exit,-17.95,-1166.75
+date,side,entry_time,entry_price,exit_time,exit_price,exit_reason,points,lots,rupees
+2026-10-06,PUT,09:23,22589.85,09:24,22600.1,midpoint_close_exit,-10.25,2,-1332.5
+2026-10-06,CALL,09:27,22594.05,09:45,22620.35,reverse_after_sl_time_exit,26.3,2,3419
+2026-10-09,PUT,09:22,22331.95,09:27,22349.9,midpoint_close_exit,-17.95,2,-2333.5

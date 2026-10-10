@@ -5,31 +5,32 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { CandleChart } from "@/components/candle-chart"
-import { SideBadge } from "@/components/common"
+import { RuleTradesTable, SideBadge } from "@/components/common"
 import { cn } from "@/lib/utils"
-import { chartTradesFromOptionFills, fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, withoutSupersededExitSignals, type DayData, type OptionTrade, type PaperTrade, type Signal } from "@/lib/api"
+import { chartTradesFromOptionFills, fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, withoutSupersededExitSignals, type DayData, type OptionTrade, type Signal } from "@/lib/api"
 
-/** "auto": paper/live trades, or the backtest for days before paper trading started. */
+/** "auto": recorded trades, or the backtest for days before paper trading started. */
 export type DayMode = "auto" | "backtest" | "paper"
 
 export function DayDetail({ date, mode = "auto", compact = false }: { date: string | null; mode?: DayMode; compact?: boolean }) {
   const day = usePoll<DayData>(date && `/api/day?date=${date}`)
-  const signals = usePoll<Signal[]>(date && mode !== "backtest" ? `/api/signals?date=${date}` : null)
-  const paper = usePoll<PaperTrade[]>(mode === "auto" ? "/api/paper-trades" : null)
-  const options = usePoll<OptionTrade[]>(mode === "auto" || mode === "paper" ? "/api/trades" : null)
-
-  const fills = mode === "auto" || mode === "paper" ? (options.data ?? []).filter((t) => t.date === date) : []
-  const visibleSignals = withoutSupersededExitSignals(signals.data ?? [], fills)
+  const signals = day.data?.signals ?? []
+  const paperTrades = day.data?.paper_trades ?? []
+  const fills = day.data?.option_trades ?? []
+  const visibleSignals = withoutSupersededExitSignals(signals, fills)
   const actual = mode === "backtest" ? [] : tradesFromSignals(visibleSignals)
-  const firstLive = (paper.data ?? []).map((t) => t.date).sort()[0]
-  const preLive = mode === "auto" && !actual.length && paper.data != null && date != null && (!firstLive || date < firstLive)
+  const hasRecordedTrades = paperTrades.length > 0 || fills.length > 0
+  const firstPaperDate = day.data?.first_paper_date
+  const preLive = mode === "auto" && !actual.length && !hasRecordedTrades && date != null && (!firstPaperDate || date < firstPaperDate)
   const useBacktest = mode === "backtest" || preLive
   const trades = useBacktest ? (day.data?.trades ?? []) : actual
-  const chartTrades = useBacktest || !fills.length ? trades : chartTradesFromOptionFills(fills)
+  const chartTrades = useBacktest
+    ? trades
+    : fills.length ? chartTradesFromOptionFills(fills) : actual
   const chartCandles = day.data?.candles
   const chartLoading = day.loading
   const total = trades.reduce((a, t) => a + t.pnl_points, 0)
-  const fillsPnl = fills.reduce((a, f) => a + f.pnl_rs, 0)
+  const fillsPnl = fills.reduce((sum, fill) => sum + (fill.net_rs ?? fill.pnl_rs), 0)
   const pnlText = useBacktest ? `${fmtPts(total)} pts` : fmtRs(fillsPnl)
   const pnlValue = useBacktest ? total : fillsPnl
   const pnlOverlay = (
@@ -41,7 +42,14 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
   const s = day.data?.setup
   const tradeCards = useBacktest
     ? <BacktestTradeCards trades={trades} />
-    : <OptionTradeCards fills={fills} signals={visibleSignals} />
+    : fills.length
+      ? <OptionTradeCards fills={fills} signals={visibleSignals} />
+      : actual.length
+        ? <BacktestTradeCards trades={actual} />
+        : <p className="py-6 text-center text-sm text-muted-foreground">No paper/live trades this day.</p>
+  const tradeList = useBacktest
+    ? <RuleTradesTable trades={trades} empty="No backtest trades this day." />
+    : <FillsTable fills={fills} signals={visibleSignals} empty="No paper/live trades this day." />
 
   if (compact) {
     return (
@@ -56,7 +64,7 @@ export function DayDetail({ date, mode = "auto", compact = false }: { date: stri
         ) : (
           <p className="py-16 text-center text-sm text-muted-foreground">No candles for this day.</p>
         )}
-        {tradeCards}
+        {tradeList}
       </div>
     )
   }
@@ -94,19 +102,15 @@ function BacktestTradeCards({ trades }: { trades: DayData["trades"] }) {
   return trades.map((trade, index) => {
     const pnlBorder = trade.pnl_points > 0 ? "border-l-emerald-500" : trade.pnl_points < 0 ? "border-l-red-500" : "border-l-border"
     return (
-      <Card key={`${trade.entry}-${index}`} size="sm" className={cn("border-l-[3px]", pnlBorder)}>
+      <Card key={`${trade.entry}-${index}`} size="sm" className={cn("border-l-[3px] bg-muted/20", pnlBorder)}>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2"><SideBadge side={trade.side} /><span className="truncate text-xs text-muted-foreground">{prettyReason(trade.reason)}</span></div>
             <strong className={cn("shrink-0 text-base font-bold tabular-nums", pnlClass(trade.pnl_points))}>{fmtPts(trade.pnl_points)} <span className="text-xs font-medium">pts</span></strong>
           </div>
           <div className="grid grid-cols-2 gap-2">
-            <TradeMoment label="ENTRY" time={trade.entry} price={fmtNum(trade.entry_price)} />
-            <TradeMoment label="EXIT" time={trade.exit || "—"} price={fmtNum(trade.exit_price)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3 border-t pt-2 text-xs">
-            <TradeValue label="Stop" value={fmtNum(trade.sl)} />
-            <TradeValue label="Target" value={fmtNum(trade.target)} />
+            <TradeMoment label="IN" time={trade.entry} price={fmtNum(trade.entry_price)} meta={`SL ${fmtNum(trade.sl)}`} />
+            <TradeMoment label="OUT" time={trade.exit || "—"} price={fmtNum(trade.exit_price)} meta={`TGT ${fmtNum(trade.target)}`} />
           </div>
         </CardContent>
       </Card>
@@ -118,47 +122,40 @@ function OptionTradeCards({ fills, signals }: { fills: OptionTrade[]; signals: S
   if (!fills.length) return <p className="py-6 text-center text-sm text-muted-foreground">No paper/live trades this day.</p>
   return fills.map((fill, index) => {
     const entrySignal = signals.find((signal) => signal.event === "ENTRY" && signal.side === fill.side && signal.entry_time.slice(0, 5) === fill.entry)
-    const pnlBorder = fill.pnl_rs > 0 ? "border-l-emerald-500" : fill.pnl_rs < 0 ? "border-l-red-500" : "border-l-border"
+    const pnl = fill.net_rs ?? fill.pnl_rs
+    const pnlBorder = pnl > 0 ? "border-l-emerald-500" : pnl < 0 ? "border-l-red-500" : "border-l-border"
     return (
-      <Card key={`${fill.entry}-${fill.option}-${index}`} size="sm" className={cn("border-l-[3px]", pnlBorder)}>
+      <Card key={`${fill.entry}-${fill.option}-${index}`} size="sm" className={cn("border-l-[3px] bg-muted/20", pnlBorder)}>
         <CardContent className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2"><SideBadge side={fill.side} /><span className="truncate text-sm font-medium">{fill.option}</span></div>
-            <strong className={cn("shrink-0 text-base font-bold tabular-nums", pnlClass(fill.pnl_rs))}>{fmtRs(fill.pnl_rs)}</strong>
+            <div className="text-right">
+              <strong className={cn("block text-base font-bold tabular-nums", pnlClass(pnl))}>{fmtRs(pnl)}</strong>
+              {fill.net_rs != null && <div className="text-[10px] text-muted-foreground tabular-nums">gross {fmtRs(fill.pnl_rs)} · fees {fmtRs(fill.charges_rs ?? 0)}</div>}
+            </div>
           </div>
           <div className="text-xs text-muted-foreground">{fill.qty} qty <span className="px-1">·</span> {fill.mode}</div>
           <div className="grid grid-cols-2 gap-2">
-            <TradeMoment label="ENTRY" time={fill.entry} price={fmtNum(fill.nifty_in)} />
-            <TradeMoment label="EXIT" time={fill.exit || "—"} price={fmtNum(fill.nifty_out)} />
-          </div>
-          <div className="grid grid-cols-2 gap-3 border-t pt-2 text-xs">
-            <TradeValue label="Premium bought" value={fmtRs(fill.buy_price)} />
-            <TradeValue label="Premium sold" value={fmtRs(fill.sell_price)} />
+            <TradeMoment label="IN" time={fill.entry} price={`NIFTY ${fmtNum(fill.nifty_in)}`} />
+            <TradeMoment label="OUT" time={fill.exit || "—"} price={`NIFTY ${fmtNum(fill.nifty_out)}`} />
           </div>
           <p className="text-xs text-muted-foreground">
             {fill.trigger_label ?? (entrySignal ? prettyReason(entrySignal.reason) : "signal")} → {prettyReason(fill.exit_reason)}
           </p>
+          {fill.net_rs != null && <p className="text-[11px] text-muted-foreground">Buy {fmtRs(fill.buy_price)} · {fmtRs(fill.buy_value_rs)} · Sell {fmtRs(fill.sell_price)} · {fmtRs(fill.sell_value_rs)}</p>}
         </CardContent>
       </Card>
     )
   })
 }
 
-function TradeMoment({ label, time, price }: { label: string; time: string; price: string }) {
+function TradeMoment({ label, time, price, meta }: { label: string; time: string; price: string; meta?: string }) {
   return (
-    <div className="min-w-0 rounded-md bg-muted/60 px-2 py-1.5">
-      <div className="text-[10px] font-semibold text-muted-foreground">{label}</div>
+    <div className="min-w-0 rounded-md border border-border/60 bg-background/80 px-2 py-1.5">
+      <div className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{label}</div>
       <div className="mt-0.5 text-sm font-semibold tabular-nums">{time}</div>
       <div className="truncate text-xs text-muted-foreground tabular-nums" title={price}>{price}</div>
-    </div>
-  )
-}
-
-function TradeValue({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="min-w-0">
-      <div className="text-muted-foreground">{label}</div>
-      <div className="truncate font-medium tabular-nums" title={value}>{value}</div>
+      {meta && <div className="truncate text-[10px] text-muted-foreground tabular-nums" title={meta}>{meta}</div>}
     </div>
   )
 }
@@ -172,33 +169,34 @@ export function FillsTable({ fills, signals = [], empty = "No option trades." }:
           <TableHead>Option</TableHead>
           {fills.some((fill) => fill.level != null) && <TableHead className="text-right">Level</TableHead>}
           <TableHead>In</TableHead>
-          <TableHead className="text-right">NIFTY in</TableHead>
-          <TableHead className="text-right">Buy</TableHead>
           <TableHead>Out</TableHead>
-          <TableHead className="text-right">NIFTY out</TableHead>
-          <TableHead className="text-right">Sell</TableHead>
           <TableHead>Trigger → exit</TableHead>
-          <TableHead className="text-right">P&L</TableHead>
+          <TableHead className="text-right">Net P&L</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {fills.map((f, i) => {
           const entrySignal = signals.find((signal) => signal.event === "ENTRY" && signal.side === f.side && signal.entry_time.slice(0, 5) === f.entry)
           return (
-          <TableRow key={i} className={f.pnl_rs > 0 ? "bg-emerald-500/10" : f.pnl_rs < 0 ? "bg-red-500/10" : undefined}>
+          <TableRow key={i} className="bg-transparent hover:bg-muted/20">
             <TableCell>
               <div className="flex items-center gap-2"><SideBadge side={f.side} /> {f.option}</div>
               <div className="text-xs text-muted-foreground">{f.qty} qty · {f.mode}</div>
             </TableCell>
             {fills.some((fill) => fill.level != null) && <TableCell className="text-right tabular-nums">{fmtNum(f.level)}</TableCell>}
-            <TableCell className="tabular-nums">{f.entry}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(f.nifty_in)}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(f.buy_price)}<div className="text-xs text-muted-foreground">{fmtRs(f.buy_value_rs)}</div></TableCell>
-            <TableCell className="tabular-nums">{f.exit}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(f.nifty_out)}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(f.sell_price)}<div className="text-xs text-muted-foreground">{fmtRs(f.sell_value_rs)}</div></TableCell>
+            <TableCell className="tabular-nums">
+              <div>{f.entry}</div>
+              <div className="text-xs text-muted-foreground">NIFTY {fmtNum(f.nifty_in)}</div>
+            </TableCell>
+            <TableCell className="tabular-nums">
+              <div>{f.exit}</div>
+              <div className="text-xs text-muted-foreground">NIFTY {fmtNum(f.nifty_out)}</div>
+            </TableCell>
             <TableCell className="text-xs text-muted-foreground">{f.trigger_label ?? (entrySignal ? prettyReason(entrySignal.reason) : "signal")} → {prettyReason(f.exit_reason)}</TableCell>
-            <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(f.pnl_rs))}>{fmtRs(f.pnl_rs)}</TableCell>
+            <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(f.net_rs ?? f.pnl_rs))}>
+              {fmtRs(f.net_rs ?? f.pnl_rs)}
+              {f.net_rs != null && <div className="text-[10px] font-normal text-muted-foreground">buy {fmtRs(f.buy_price)} · sell {fmtRs(f.sell_price)} · gross {fmtRs(f.pnl_rs)} · fees {fmtRs(f.charges_rs ?? 0)}</div>}
+            </TableCell>
           </TableRow>
           )
         })}

@@ -46,6 +46,11 @@ export type DayData = {
   forming: Partial<Candle>
   setup: Setup
   trades: RuleTrade[]
+  signals?: Signal[]
+  paper_trades?: PaperTrade[]
+  option_trades?: OptionTrade[]
+  first_paper_date?: string | null
+  execution_mode?: "PAPER" | "LIVE"
 }
 
 export type Signal = Record<string, string>
@@ -93,6 +98,8 @@ export type OptionTrade = {
   sell_price: number
   sell_value_rs: number
   pnl_rs: number
+  charges_rs?: number
+  net_rs?: number
   nifty_points: number
   exit_reason: string
   mode: string
@@ -150,6 +157,28 @@ export type PaperReport = {
     drawdown: number
   })[]
   daily: { date: string; trades: number; gross_rs: number; net_rs: number; points: number }[]
+}
+
+export type CapitalSummary = {
+  starting_capital: number
+  ending_capital: number
+  net_rs: number
+  return_pct: number
+  max_drawdown_rs: number
+  peak_deployed_rs: number
+  skipped_trades: number
+}
+
+export type CapitalReport = {
+  summary: CapitalSummary
+  trades: PaperReport["trades"]
+  daily: { date: string; trades: number; net_rs: number }[]
+  curve: {
+    timestamp: string
+    label: string
+    equity: number
+    drawdown: number
+  }[]
 }
 
 export type Backtest = {
@@ -215,18 +244,21 @@ export function usePoll<T>(url: string | null, intervalMs = 0) {
 
   const reload = useCallback(async () => {
     const u = urlRef.current
-    if (!u) return
+    if (!u) return false
     const id = ++requestId.current
     try {
       const d = await getJSON<T>(u)
       if (urlRef.current === u && requestId.current === id) {
         setData(d)
         setError(null)
+        return true
       }
+      return false
     } catch (e) {
       if (urlRef.current === u && requestId.current === id) {
         setError(e instanceof Error ? e.message : String(e))
       }
+      return false
     } finally {
       if (urlRef.current === u && requestId.current === id) setLoading(false)
     }
@@ -238,11 +270,17 @@ export function usePoll<T>(url: string | null, intervalMs = 0) {
     setError(null)
     setLoading(Boolean(url))
     if (!url) return
-    reload()
-    if (!intervalMs) return () => { requestId.current += 1 }
-    const id = setInterval(reload, intervalMs)
+    let active = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      const succeeded = await reload()
+      if (!active || (succeeded && !intervalMs)) return
+      timer = setTimeout(poll, succeeded ? intervalMs : 3000)
+    }
+    void poll()
     return () => {
-      clearInterval(id)
+      active = false
+      if (timer) clearTimeout(timer)
       requestId.current += 1
     }
   }, [url, intervalMs, reload])

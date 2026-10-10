@@ -24,7 +24,7 @@ from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 
-from midpoint_strategy import MIDPOINT_BUFFER_POINTS, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
+from midpoint_strategy import MIDPOINT_BUFFER_POINTS, PAPER_LOTS, PAPER_STARTING_CAPITAL, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
 
 ROOT = Path(__file__).resolve().parent
 TMP_DIR = ROOT / ".tmp"
@@ -37,6 +37,7 @@ UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
 MASTER_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_extended.csv"
 ARCHIVE_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_3y_archive.csv"
+PAPER_TRADES_CSV = LIVE_DIR / "paper_trades.csv"
 HERO_ZERO_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
 HOST, PORT = os.environ.get("HOST", "127.0.0.1"), int(os.environ.get("PORT", "8090"))
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -399,6 +400,8 @@ def public_settings() -> dict:
     out = {k: cfg.get(k) for k in EDITABLE_SETTINGS}
     out["auto_start_capture"] = bool(cfg.get("auto_start_capture", True))
     out["live_trading"] = bool(cfg.get("live_trading"))
+    if not out["live_trading"]:
+        out["lots"] = PAPER_LOTS
     out["capture_running"] = capture_running()
     return out
 
@@ -571,17 +574,20 @@ def status() -> dict:
         "capture_running": capture_running(),
         "auto_start_capture": bool(cfg.get("auto_start_capture", True)),
         "mode": "LIVE" if cfg.get("live_trading") else "PAPER",
-        "lots": cfg.get("lots", 1),
+        "lots": cfg.get("lots", 1) if cfg.get("live_trading") else PAPER_LOTS,
         "daily_loss_limit": cfg.get("daily_loss_limit"),
         "kill_switch": STOP_FILE.exists(),
         "last_tick": last_tick,
     }
 
 
-def option_trades() -> list:
-    """One row per option trade (BUY paired with the next SELL), all days."""
+def option_trades(date: str | None = None) -> list:
+    """One row per option trade (BUY paired with the next SELL), optionally for one date."""
     out = []
-    for path in sorted(LIVE_DIR.glob("live_orders_*.csv")):
+    paths = [LIVE_DIR / f"live_orders_{date}.csv"] if date else sorted(LIVE_DIR.glob("live_orders_*.csv"))
+    for path in paths:
+        if not path.exists():
+            continue
         date = path.stem.replace("live_orders_", "")
         open_buy = None
         for r in read_csv_rows(path):
@@ -614,6 +620,12 @@ def option_trades() -> list:
             })
             open_buy = None
     return out
+
+
+def paper_trades_for_day(date: str) -> tuple[list, str | None]:
+    rows = read_csv_rows(PAPER_TRADES_CSV)
+    first_date = min((row.get("date", "") for row in rows if row.get("date")), default=None)
+    return [row for row in rows if row.get("date") == date], first_date
 
 
 def est_charges(buy_value: float, sell_value: float) -> float:
@@ -714,6 +726,78 @@ def build_paper_report(source_trades: list) -> dict:
     }
 
 
+def capital_projection(source_trades: list) -> dict:
+    ordered = sorted(source_trades, key=lambda trade: (trade["date"], trade["entry"], trade["exit"]))
+    active = []
+    curve = [{"timestamp": "", "label": "Start", "equity": PAPER_STARTING_CAPITAL, "drawdown": 0.0}]
+    equity = float(PAPER_STARTING_CAPITAL)
+    equity_peak = equity
+    reserved_capital = 0.0
+    peak_deployed = 0.0
+    skipped_trades = 0
+    daily = {}
+    accepted_trades = []
+
+    def realize_through(timestamp: str) -> None:
+        nonlocal equity, equity_peak, reserved_capital
+        active.sort(key=lambda position: position["exit_at"])
+        while active and active[0]["exit_at"] <= timestamp:
+            position = active.pop(0)
+            equity += position["net_rs"]
+            reserved_capital -= position["reserved"]
+            equity_peak = max(equity_peak, equity)
+            curve.append({
+                "timestamp": position["exit_at"],
+                "label": position["exit_at"],
+                "equity": round(equity, 2),
+                "drawdown": round(equity - equity_peak, 2),
+            })
+
+    for trade in ordered:
+        entry_at = f"{trade['date']} {trade['entry']}"
+        exit_at = f"{trade['date']} {trade['exit']}"
+        realize_through(entry_at)
+        reserved = round(trade["buy_value_rs"] + trade["charges_rs"], 2)
+        if reserved > equity - reserved_capital + 1e-8:
+            skipped_trades += 1
+            continue
+        active.append({"exit_at": exit_at, "reserved": reserved, "net_rs": trade["net_rs"]})
+        reserved_capital += reserved
+        peak_deployed = max(peak_deployed, reserved_capital)
+        accepted_trades.append(trade)
+        day = daily.setdefault(trade["date"], {"date": trade["date"], "trades": 0, "net_rs": 0.0})
+        day["trades"] += 1
+        day["net_rs"] += trade["net_rs"]
+
+    while active:
+        active.sort(key=lambda position: position["exit_at"])
+        realize_through(active[0]["exit_at"])
+
+    max_drawdown = min((point["drawdown"] for point in curve), default=0.0)
+    return {
+        "curve": curve,
+        "trades": accepted_trades,
+        "daily": [
+            {"date": day["date"], "trades": day["trades"], "net_rs": round(day["net_rs"], 2)}
+            for day in sorted(daily.values(), key=lambda item: item["date"])
+        ],
+        "summary": {
+            "starting_capital": PAPER_STARTING_CAPITAL,
+            "ending_capital": round(equity, 2),
+            "net_rs": round(equity - PAPER_STARTING_CAPITAL, 2),
+            "return_pct": round((equity - PAPER_STARTING_CAPITAL) / PAPER_STARTING_CAPITAL * 100, 2),
+            "max_drawdown_rs": round(max_drawdown, 2),
+            "peak_deployed_rs": round(peak_deployed, 2),
+            "skipped_trades": skipped_trades,
+        },
+    }
+
+
+def capital_report() -> dict:
+    trades = paper_report()["trades"] + hero_zero_report()["trades"]
+    return capital_projection(trades)
+
+
 def tail(path: Path, lines: int) -> list:
     if not path.exists():
         return []
@@ -773,6 +857,8 @@ class Handler(BaseHTTPRequestHandler):
             forming = forming_candle(date, rows[-1]["time"] if rows else "")
             if cutoff and forming.get("time", "") > cutoff:
                 forming = {}
+            paper_trades, first_paper_date = paper_trades_for_day(date)
+            option_fills = build_paper_report(option_trades(date))["trades"]
             self._json({
                 "date": date,
                 "cutoff": cutoff,
@@ -780,6 +866,11 @@ class Handler(BaseHTTPRequestHandler):
                 "forming": forming,
                 "setup": setup_info(df),
                 "trades": current_rule_trades(df),
+                "signals": read_csv_rows(LIVE_DIR / f"signals_{date}.csv"),
+                "paper_trades": paper_trades,
+                "option_trades": option_fills,
+                "first_paper_date": first_paper_date,
+                "execution_mode": "LIVE" if read_config().get("live_trading") else "PAPER",
             })
         elif url.path == "/api/signals":
             self._json(read_csv_rows(LIVE_DIR / f"signals_{date}.csv"))
@@ -793,6 +884,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "unknown strategy"}, 404)
             report = hero_zero_report() if strategy == "hero_zero" else paper_report()
             self._json(report)
+        elif url.path == "/api/capital-report":
+            self._json(capital_report())
         elif url.path == "/api/paper-trades":
             self._json(read_csv_rows(LIVE_DIR / "paper_trades.csv"))
         elif url.path == "/api/log":

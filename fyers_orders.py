@@ -12,7 +12,7 @@ from typing import Optional
 
 import pandas as pd
 
-from midpoint_strategy import TRADE_WINDOW_MINUTES, TRAIL_ACTIVATE_POINTS, TRAIL_POINTS
+from midpoint_strategy import PAPER_LOTS, TRADE_WINDOW_MINUTES, TRAIL_ACTIVATE_POINTS, TRAIL_POINTS
 
 # One minute after the strategy's last exit candle (09:15 open + window) closes.
 SAFETY_EXIT_TIME = (datetime(2000, 1, 1, 9, 15) + timedelta(minutes=TRADE_WINDOW_MINUTES + 1)).time()
@@ -67,7 +67,8 @@ class OptionTrader:
         self.lock = threading.RLock()
         self.log_file = LIVE_DIR / f"live_orders_{now_ist():%Y-%m-%d}.csv"
         LIVE_DIR.mkdir(parents=True, exist_ok=True)
-        print(f"[orders] mode={self.mode} lots={self.settings['lots']} loss_limit=Rs {self.settings['daily_loss_limit']:.0f}")
+        self.lots = self.settings["lots"] if self.settings["live"] else PAPER_LOTS
+        print(f"[orders] mode={self.mode} lots={self.lots} loss_limit=Rs {self.settings['daily_loss_limit']:.0f}")
 
     # ---------- instrument selection ----------
     def pick_option(self, signal_side: str, index_price: float) -> pd.Series:
@@ -156,7 +157,7 @@ class OptionTrader:
             return
         try:
             opt = self.pick_option(signal_side, index_price)
-            qty = int(opt["lot_size"]) * self.settings["lots"]
+            qty = int(opt["lot_size"]) * self.lots
             order_id, fill = self._order(opt["symbol"], qty, 1)
         except Exception as exc:
             self._halt(f"entry failed: {exc}")
