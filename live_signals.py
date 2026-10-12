@@ -40,6 +40,7 @@ class LiveSignalEngine:
         self.seen: Set[str] = set()
         self.watch: Optional[dict] = None
         self.fills: dict = {}
+        self.option_paper_tracker = None
         self.ledger_file = signals_file.parent / "paper_trades.csv"
         if signals_file.exists():
             with signals_file.open("r", encoding="utf-8") as f:
@@ -83,6 +84,8 @@ class LiveSignalEngine:
             f"ENTRY {side}",
             f"{now:%H:%M:%S} @ {ltp:.2f} | SL {stop:.2f} TGT {target:.2f} mid {w['mid']:.2f}",
         )
+        if self.option_paper_tracker:
+            self.option_paper_tracker.on_signal("midpoint", side, ltp, now, stop_price=stop, spot_target=target)
         if self.trader:
             self.trader.enter(side, ltp, target, stop, key=f"{side}|{w['candle_time']:%H:%M}")
 

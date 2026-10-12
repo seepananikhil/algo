@@ -110,7 +110,7 @@ export function DayPage() {
         </div>
       </div>
 
-      <DayDetail key={date ?? "no-date"} date={date} mode="auto" />
+      <DayDetail key={date ?? "no-date"} date={date} mode="auto" allowTimeframeSwitch />
     </div>
   )
 }

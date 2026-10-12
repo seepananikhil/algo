@@ -26,6 +26,8 @@ import pandas as pd
 
 from midpoint_strategy import MIDPOINT_BUFFER_POINTS, PAPER_LOTS, PAPER_STARTING_CAPITAL, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
 from fyers_orders import available_equity_funds
+from key_level_strategy import aggregate_five_minute, backtest_key_levels, read_paper_events, settings_from_config as key_level_settings, summarize_key_level_trades
+from option_paper import read_option_paper_trades
 
 ROOT = Path(__file__).resolve().parent
 TMP_DIR = ROOT / ".tmp"
@@ -40,16 +42,20 @@ MASTER_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_extended.csv"
 ARCHIVE_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_3y_archive.csv"
 PAPER_TRADES_CSV = LIVE_DIR / "paper_trades.csv"
 HERO_ZERO_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
+KEY_LEVEL_DIR = ROOT / "captured_data" / "fyers" / "key_levels"
+KEY_LEVEL_EVENT_FILE = KEY_LEVEL_DIR / "key_level_paper_events.csv"
+OPTION_PAPER_EVENT_FILE = KEY_LEVEL_DIR / "key_level_option_paper_events.csv"
 HOST, PORT = os.environ.get("HOST", "127.0.0.1"), int(os.environ.get("PORT", "8090"))
 IST = timezone(timedelta(hours=5, minutes=30))
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _token_cache = {"at": 0.0, "mtime": None, "value": None}
 _master_cache = {"mtime": None, "df": None}
 _backtest_cache = {"mtime": None, "value": None}
+_key_level_backtest_cache = {"key": None, "value": None}
 _cache_lock = threading.Lock()
 _login_proc = {"proc": None}
 _capture = {"auto_started": None, "stopped_by_user": None}
-AUTO_START_WINDOW = ("09:00", "09:55")
+AUTO_START_WINDOW = ("09:00", "15:29")
 SENSEX_COLLECTOR_START = (16, 5)
 SENSEX_COLLECTOR_END_HOUR = 20
 SENSEX_COLLECTOR_RETRY_SECONDS = 15 * 60
@@ -64,6 +70,9 @@ EDITABLE_SETTINGS = {
     "option_target_pct": (int, 0, 200),
     "hero_zero_live_trading": (bool, None, None),
     "minimum_live_funds": (int, 10000, 10000000),
+    "key_levels_paper_enabled": (bool, None, None),
+    "key_levels_lots": (int, 1, PAPER_LOTS),
+    "hero_zero_lots": (int, 1, PAPER_LOTS),
 }
 
 
@@ -406,6 +415,9 @@ def public_settings() -> dict:
     out["minimum_live_funds"] = int(cfg.get("minimum_live_funds") or 25000)
     out["midpoint_live_trading"] = bool(cfg.get("midpoint_live_trading", cfg.get("live_trading", False)))
     out["hero_zero_live_trading"] = bool(cfg.get("hero_zero_live_trading", False))
+    out["key_levels_lots"] = int(cfg.get("key_levels_lots", 1))
+    out["hero_zero_lots"] = int(cfg.get("hero_zero_lots", 1))
+    out.update(key_level_settings(cfg))
     out["live_trading"] = out["midpoint_live_trading"]
     out["capture_running"] = capture_running()
     return out
@@ -658,6 +670,45 @@ def option_trades(date: str | None = None) -> list:
     return out
 
 
+def key_level_option_trades(date: str | None = None) -> list:
+    """Closed Key Levels paper/replay entries in the shared option-fill shape."""
+    out = []
+    for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE):
+        if trade["status"] != "closed" or (date and trade["date"] != date):
+            continue
+        side = trade["side"]
+        spot_points = trade["exit_spot"] - trade["spot_entry"] if side == "CALL" else trade["spot_entry"] - trade["exit_spot"]
+        out.append({
+            "date": trade["date"],
+            "side": side,
+            "option": trade["symbol"],
+            "qty": trade["qty"],
+            "entry": trade["entry_time"][:5],
+            "nifty_in": trade["spot_entry"],
+            "buy_price": trade["option_entry"],
+            "buy_value_rs": round(trade["capital_used"], 2),
+            "exit": trade["exit_time"][:5],
+            "nifty_out": trade["exit_spot"],
+            "sell_price": trade["exit_option"],
+            "sell_value_rs": round(trade["exit_option"] * trade["qty"], 2),
+            "pnl_rs": trade["pnl_rs"],
+            "nifty_points": round(spot_points, 2),
+            "exit_reason": trade["reason"],
+            "mode": "KEYLEVEL HISTORICAL PAPER REPLAY" if trade.get("source") == "historical_option_replay" else "KEYLEVEL PAPER",
+            "spot_at_entry": trade["spot_entry"],
+            "level": trade["level"],
+            "trigger_label": f"Key Levels · {trade.get('source') or 'paper'}",
+        })
+    return out
+
+
+def key_level_option_paper_rows(date: str | None = None) -> list:
+    trades = read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+    if date:
+        trades = [trade for trade in trades if trade["date"] == date]
+    return _option_paper_book(trades)["trades"]
+
+
 def paper_trades_for_day(date: str) -> tuple[list, str | None]:
     rows = read_csv_rows(PAPER_TRADES_CSV)
     first_date = min((row.get("date", "") for row in rows if row.get("date")), default=None)
@@ -722,6 +773,87 @@ def hero_zero_option_trades() -> list:
 
 def hero_zero_report() -> dict:
     return build_paper_report(hero_zero_option_trades())
+
+
+def _key_level_book(trades: list[dict]) -> dict:
+    daily: dict = {}
+    for trade in trades:
+        day = daily.setdefault(trade["date"], {"date": trade["date"], "trades": 0, "open_trades": 0, "net_points": 0.0})
+        if trade["status"] == "closed":
+            day["trades"] += 1
+            day["net_points"] += float(trade["pnl_points"])
+        else:
+            day["open_trades"] += 1
+    return {
+        "summary": summarize_key_level_trades(trades),
+        "trades": trades,
+        "daily": [{**row, "net_points": round(row["net_points"], 2)} for row in sorted(daily.values(), key=lambda item: item["date"])],
+    }
+
+
+def _option_paper_book(trades: list[dict]) -> dict:
+    closed = [trade for trade in trades if trade["status"] == "closed"]
+    net_pnl = []
+    for trade in closed:
+        buy_value = float(trade["option_entry"]) * int(trade["qty"])
+        sell_value = float(trade["exit_option"]) * int(trade["qty"])
+        charges = est_charges(buy_value, sell_value)
+        net = round(float(trade["pnl_rs"]) - charges, 2)
+        trade["charges_rs"] = charges
+        trade["net_pnl_rs"] = net
+        trade["net_return_pct"] = round(net / float(trade["capital_used"]) * 100, 2) if trade["capital_used"] else 0.0
+        net_pnl.append(net)
+    wins = sum(value > 0 for value in net_pnl)
+    equity = peak = max_drawdown = 0.0
+    for value in net_pnl:
+        equity += value
+        peak = max(peak, equity)
+        max_drawdown = min(max_drawdown, equity - peak)
+    return {
+        "summary": {
+            "trades": len(closed),
+            "open_trades": len(trades) - len(closed),
+            "wins": wins,
+            "losses": len(closed) - wins,
+            "win_rate_pct": round(wins * 100 / len(closed), 2) if closed else 0.0,
+            "gross_pnl_rs": round(sum(float(trade["pnl_rs"]) for trade in closed), 2),
+            "estimated_charges_rs": round(sum(float(trade["charges_rs"]) for trade in closed), 2),
+            "net_pnl_rs": round(sum(net_pnl), 2),
+            "avg_return_pct": round(sum(float(trade["net_return_pct"]) for trade in closed) / len(closed), 2) if closed else 0.0,
+            "max_drawdown_rs": round(max_drawdown, 2),
+        },
+        "trades": trades,
+    }
+
+
+def key_level_report() -> dict:
+    settings = key_level_settings(read_config())
+    paper_trades = read_paper_events(KEY_LEVEL_EVENT_FILE)
+    option_trades = read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+    today_date = today()
+    today_candles = candles(today_date)
+    today_replay_trades = backtest_key_levels(today_candles, settings) if not today_candles.empty else []
+    today_paper_trades = [trade for trade in paper_trades if trade["date"] == today_date]
+    cache_key = (history_mtime(), tuple(sorted(settings.items())))
+    with _cache_lock:
+        replay = _key_level_backtest_cache["value"] if _key_level_backtest_cache["key"] == cache_key else None
+    if replay is None:
+        history = master()
+        replay_trades = backtest_key_levels(history, settings) if not history.empty else []
+        replay = _key_level_book([{**trade, "source": "historical_replay"} for trade in replay_trades])
+        with _cache_lock:
+            _key_level_backtest_cache.update(key=cache_key, value=replay)
+    return {
+        "settings": settings,
+        "today": today_date,
+        "capture_running": capture_running(),
+        "paper": _key_level_book(paper_trades),
+        "today_replay": _key_level_book([{**trade, "source": "today_replay"} for trade in today_replay_trades]),
+        "today_paper": _key_level_book(today_paper_trades),
+        "option_paper": _option_paper_book(option_trades),
+        "today_option_paper": _option_paper_book([trade for trade in option_trades if trade["date"] == today_date]),
+        "backtest": replay,
+    }
 
 
 def build_paper_report(source_trades: list) -> dict:
@@ -831,7 +963,7 @@ def capital_projection(source_trades: list) -> dict:
 
 
 def capital_report() -> dict:
-    trades = paper_report()["trades"] + hero_zero_report()["trades"]
+    trades = paper_report()["trades"] + hero_zero_report()["trades"] + build_paper_report(key_level_option_trades())["trades"]
     return capital_projection(trades)
 
 
@@ -883,7 +1015,8 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/day":
             df = candles(date)
             cutoff = ""
-            if not df.empty:
+            full_session = q.get("full", ["0"])[0] == "1"
+            if not df.empty and not full_session:
                 end = df["timestamp"].iloc[0] + pd.Timedelta(minutes=TRADE_WINDOW_MINUTES)
                 df = df[df["timestamp"] <= end].reset_index(drop=True)
                 cutoff = end.strftime("%H:%M")
@@ -895,7 +1028,7 @@ class Handler(BaseHTTPRequestHandler):
             if cutoff and forming.get("time", "") > cutoff:
                 forming = {}
             paper_trades, first_paper_date = paper_trades_for_day(date)
-            option_fills = build_paper_report(option_trades(date))["trades"]
+            option_fills = build_paper_report(option_trades(date) + key_level_option_trades(date))["trades"]
             self._json({
                 "date": date,
                 "cutoff": cutoff,
@@ -909,18 +1042,53 @@ class Handler(BaseHTTPRequestHandler):
                 "first_paper_date": first_paper_date,
                 "execution_mode": "LIVE" if read_config().get("midpoint_live_trading", read_config().get("live_trading")) else "PAPER",
             })
+        elif url.path == "/api/key-level-day":
+            minute_candles = candles(date)
+            bars = aggregate_five_minute(minute_candles)
+            settings = key_level_settings(read_config())
+            replay_trades = backtest_key_levels(minute_candles, settings)
+            rows = [] if bars.empty else [
+                {"time": row.timestamp.strftime("%H:%M"), "open": row.open, "high": row.high, "low": row.low, "close": row.close}
+                for row in bars.itertuples()
+            ]
+            chart_trades = [
+                {
+                    "side": trade["side"],
+                    "entry": trade["entry_time"],
+                    "entry_price": trade["entry_price"],
+                    "sl": trade["stop"],
+                    "target": trade["target"],
+                    "exit": trade["exit_time"],
+                    "exit_price": trade["exit_price"],
+                    "reason": trade["exit_reason"],
+                    "pnl_points": trade["pnl_points"],
+                }
+                for trade in replay_trades
+            ]
+            self._json({
+                "date": date,
+                "timeframe_minutes": 5,
+                "candles": rows,
+                "trades": chart_trades,
+                "key_level_zone": {"level": replay_trades[0]["level"], "buffer": settings["key_level_break_buffer"]} if replay_trades else None,
+            })
         elif url.path == "/api/signals":
             self._json(read_csv_rows(LIVE_DIR / f"signals_{date}.csv"))
         elif url.path == "/api/orders":
             self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
             self._json(option_trades())
+        elif url.path == "/api/key-level-option-trades":
+            self._json(build_paper_report(key_level_option_trades(date))["trades"])
+        elif url.path == "/api/key-level-option-paper":
+            self._json(key_level_option_paper_rows(date))
         elif url.path == "/api/paper-report":
             strategy = q.get("strategy", [""])[0]
             if strategy not in ("", "midpoint", "hero_zero"):
                 return self._json({"error": "unknown strategy"}, 404)
-            report = hero_zero_report() if strategy == "hero_zero" else paper_report()
-            self._json(report)
+            else:
+                report = hero_zero_report() if strategy == "hero_zero" else paper_report()
+                self._json(report)
         elif url.path == "/api/capital-report":
             self._json(capital_report())
         elif url.path == "/api/paper-trades":
@@ -932,9 +1100,12 @@ class Handler(BaseHTTPRequestHandler):
             self._json(available_days())
         elif url.path == "/api/backtest":
             strategy = q.get("strategy", [""])[0]
-            if strategy not in ("", "midpoint"):
+            if strategy == "key_levels":
+                self._json(key_level_report())
+            elif strategy not in ("", "midpoint"):
                 return self._json({"error": "unknown strategy"}, 404)
-            self._json(backtest_report())
+            else:
+                self._json(backtest_report())
         elif url.path == "/api/settings":
             self._json(public_settings())
         elif url.path == "/api/funds":

@@ -12,7 +12,15 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
 
-type Form = { lots: string; daily_loss_limit: string; strike_offset: string; option_target_pct: string; minimum_live_funds: string }
+type Form = {
+  lots: string
+  daily_loss_limit: string
+  strike_offset: string
+  option_target_pct: string
+  minimum_live_funds: string
+  key_levels_lots: string
+  hero_zero_lots: string
+}
 
 export function SettingsPage() {
   const { data, reload } = usePoll<Settings>("/api/settings")
@@ -34,6 +42,8 @@ export function SettingsPage() {
         strike_offset: String(data.strike_offset),
         option_target_pct: String(data.option_target_pct ?? 10),
         minimum_live_funds: String(data.minimum_live_funds ?? 25000),
+        key_levels_lots: String(data.key_levels_lots),
+        hero_zero_lots: String(data.hero_zero_lots),
       })
     }
   }, [data, form])
@@ -60,6 +70,18 @@ export function SettingsPage() {
       option_target_pct: Number(form.option_target_pct),
       minimum_live_funds: Number(form.minimum_live_funds),
     }, "Midpoint settings saved")
+  }
+
+  function saveKeyLevels() {
+    if (!form) return
+    save({
+      key_levels_lots: Number(form.key_levels_lots),
+    }, "Key Levels settings saved")
+  }
+
+  function saveHeroZero() {
+    if (!form) return
+    save({ hero_zero_lots: Number(form.hero_zero_lots) }, "HeroZero settings saved")
   }
 
   async function checkFunds() {
@@ -151,7 +173,7 @@ export function SettingsPage() {
           <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
             <div>
               <div className={heroZeroLive ? "font-semibold text-red-500" : "font-semibold text-sky-500"}>HeroZero · {heroZeroLive ? "LIVE" : "PAPER"}</div>
-              <p className="text-xs text-muted-foreground">1 PE + 1 CE maximum</p>
+              <p className="text-xs text-muted-foreground">1 PE + 1 CE maximum · {data.hero_zero_lots} lot{data.hero_zero_lots === 1 ? "" : "s"} each</p>
             </div>
             <Switch
               checked={heroZeroLive}
@@ -166,13 +188,21 @@ export function SettingsPage() {
               aria-label="HeroZero live trading"
             />
           </div>
+          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
+            <div>
+              <div className="font-semibold text-sky-500">Key Levels · PAPER</div>
+              <p className="text-xs text-muted-foreground">{data.key_levels_lots} lot{data.key_levels_lots === 1 ? "" : "s"} per paper signal · LIVE not available yet</p>
+            </div>
+            <Switch checked={false} disabled aria-label="Key Levels live trading unavailable" />
+          </div>
         </CardContent>
       </Card>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
           <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
+          <TabsTrigger value="key_levels">Key Levels</TabsTrigger>
         </TabsList>
 
         <TabsContent value="midpoint" className="mt-4">
@@ -216,11 +246,43 @@ export function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>HeroZero settings</CardTitle>
-              <CardDescription>One lot each · at most one PE and one CE per expiry session, closest to spot.</CardDescription>
+              <CardDescription>One PE and one CE per expiry session, closest to spot.</CardDescription>
             </CardHeader>
-            <CardContent className="text-sm text-muted-foreground">
-              Estimated PE + CE entry reserve is about ₹1,700. LIVE orders check actual quotes and require the Midpoint LIVE balance threshold.
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="hero-zero-lots">Lots per leg</Label>
+                  <Input id="hero-zero-lots" type="number" min={1} max={2} step={1} value={form.hero_zero_lots} onChange={(event) => setForm({ ...form, hero_zero_lots: event.target.value })} />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Estimated PE + CE entry reserve is about ₹{(1700 * Number(form.hero_zero_lots || 1)).toLocaleString("en-IN")}. LIVE orders check actual quotes and require the Midpoint LIVE balance threshold.
+              </p>
             </CardContent>
+            <CardFooter className="justify-end">
+              <Button onClick={saveHeroZero}><Save /> Save HeroZero</Button>
+            </CardFooter>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="key_levels" className="mt-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Key Levels settings</CardTitle>
+              <CardDescription>Paper only for now. Entry rules are built in: 500-point levels, 10-point zone, two 5-minute holds with a zone retest.</CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="grid gap-1.5">
+                  <Label htmlFor="key-levels-lots">Lots per signal</Label>
+                  <Input id="key-levels-lots" type="number" min={1} max={2} step={1} value={form.key_levels_lots} onChange={(event) => setForm({ ...form, key_levels_lots: event.target.value })} />
+                </div>
+              </div>
+              <p className="text-sm text-muted-foreground">Exits at whichever comes first: stop at the far edge of the zone, +50 NIFTY points, or +30% of capital deployed (option premium), with a session-close exit. After a losing stop, one opposite-side reversal is allowed; after a second loss, one final signal.</p>
+            </CardContent>
+            <CardFooter className="justify-end">
+              <Button onClick={saveKeyLevels}><Save /> Save Key Levels</Button>
+            </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
@@ -231,7 +293,7 @@ export function SettingsPage() {
             <DialogTitle>Enable {confirmStrategy === "hero_zero" ? "HeroZero" : "Midpoint"} LIVE?</DialogTitle>
             <DialogDescription>
               {confirmStrategy === "hero_zero"
-                ? "HeroZero will place one live order for the selected PE and CE (one lot each), then attempt the expiry exit. Type LIVE to confirm."
+                ? `HeroZero will place one live order for the selected PE and CE (${data.hero_zero_lots} lot${data.hero_zero_lots === 1 ? "" : "s"} each), then attempt the expiry exit. Type LIVE to confirm.`
                 : `Midpoint will place real Fyers orders at ${data.lots} lot${data.lots === 1 ? "" : "s"} per signal after the funds check. Type LIVE to confirm.`}
             </DialogDescription>
           </DialogHeader>

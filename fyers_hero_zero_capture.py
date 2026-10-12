@@ -108,6 +108,7 @@ class HeroZeroCapture:
         self.session = session
         config = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
         self.live_trading = bool(config.get("hero_zero_live_trading", False))
+        self.lots = max(1, int(config.get("hero_zero_lots", 1)))
         self.minimum_live_funds = float(config.get("minimum_live_funds", 25000))
         self.take_put = True
         self.take_call = True
@@ -236,7 +237,7 @@ class HeroZeroCapture:
         if self.live_order_halted:
             return
         symbol = candidate["symbol"]
-        quantity = int(candidate["lot_size"])
+        quantity = int(candidate["lot_size"]) * self.lots
         try:
             available = available_equity_funds(self.rest.funds())
             if available is None:
@@ -325,10 +326,11 @@ class HeroZeroCapture:
             entry_price = candidate["quote"]["ltp"]
             exit_price = exit_quote["ltp"] if exit_quote else ""
             pnl_per_unit = round(exit_price - entry_price, 2) if exit_quote else ""
-            pnl_rs = round(pnl_per_unit * candidate["lot_size"], 2) if exit_quote else ""
+            quantity = int(candidate["lot_size"]) * self.lots
+            pnl_rs = round(pnl_per_unit * quantity, 2) if exit_quote else ""
             append_row(trades_file, PAPER_TRADE_HEADER, [
                 self.session.isoformat(), candidate["underlying"], candidate["expiry"], symbol,
-                candidate["option_type"], candidate["strike"], candidate["lot_size"],
+                candidate["option_type"], candidate["strike"], quantity,
                 candidate["spot_ltp"], candidate["distance_from_spot"],
                 candidate["snapshot_at"].strftime("%Y-%m-%d %H:%M:%S"), entry_price,
                 candidate["quote"]["volume"],

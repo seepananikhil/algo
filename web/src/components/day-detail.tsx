@@ -1,19 +1,23 @@
-import { useEffect, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CandleChart } from "@/components/candle-chart"
 import { RuleTradesTable, SideBadge } from "@/components/common"
 import { cn } from "@/lib/utils"
-import { chartTradesFromOptionFills, fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, withoutSupersededExitSignals, type DayData, type OptionTrade, type Signal } from "@/lib/api"
+import { chartTradesFromOptionFills, fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, tradesFromSignals, usePoll, withoutSupersededExitSignals, type DayData, type KeyLevelDay, type OptionTrade, type Signal } from "@/lib/api"
 
 /** "auto": recorded trades, or the backtest for days before paper trading started. */
 export type DayMode = "auto" | "backtest" | "paper"
 
-export function DayDetail({ date, mode = "auto", compact = false, chartOnly = false }: { date: string | null; mode?: DayMode; compact?: boolean; chartOnly?: boolean }) {
-  const day = usePoll<DayData>(date && `/api/day?date=${date}`)
+export function DayDetail({ date, mode = "auto", compact = false, chartOnly = false, allowTimeframeSwitch = false }: { date: string | null; mode?: DayMode; compact?: boolean; chartOnly?: boolean; allowTimeframeSwitch?: boolean }) {
+  const [timeframe, setTimeframe] = useState<"1m" | "5m">("1m")
+  const useFiveMinute = allowTimeframeSwitch && timeframe === "5m"
+  const day = usePoll<DayData>(date && `/api/day?date=${date}${allowTimeframeSwitch ? "&full=1" : ""}`)
+  const keyLevelDay = usePoll<KeyLevelDay>(date && useFiveMinute ? `/api/key-level-day?date=${date}` : null)
   const signals = day.data?.signals ?? []
   const paperTrades = day.data?.paper_trades ?? []
   const fills = day.data?.option_trades ?? []
@@ -24,15 +28,20 @@ export function DayDetail({ date, mode = "auto", compact = false, chartOnly = fa
   const preLive = mode === "auto" && !actual.length && !hasRecordedTrades && date != null && (!firstPaperDate || date < firstPaperDate)
   const useBacktest = mode === "backtest" || preLive
   const trades = useBacktest ? (day.data?.trades ?? []) : actual
-  const chartTrades = useBacktest
+  const spotTrades = useFiveMinute
+    ? (keyLevelDay.data?.trades ?? [])
+    : useBacktest
     ? trades
     : fills.length ? chartTradesFromOptionFills(fills) : actual
-  const chartCandles = day.data?.candles
-  const chartLoading = day.loading
-  const total = trades.reduce((a, t) => a + t.pnl_points, 0)
+  const chartTrades = useFiveMinute
+    ? (keyLevelDay.data?.trades ?? [])
+    : fills.length ? chartTradesFromOptionFills(fills) : spotTrades
+  const chartCandles = useFiveMinute ? keyLevelDay.data?.candles : day.data?.candles
+  const chartLoading = useFiveMinute ? keyLevelDay.loading : day.loading
+  const spotPoints = spotTrades.reduce((sum, trade) => sum + trade.pnl_points, 0)
   const fillsPnl = fills.reduce((sum, fill) => sum + (fill.net_rs ?? fill.pnl_rs), 0)
-  const pnlText = useBacktest ? `${fmtPts(total)} pts` : fmtRs(fillsPnl)
-  const pnlValue = useBacktest ? total : fillsPnl
+  const pnlText = fills.length ? fmtRs(fillsPnl) : `${fmtPts(spotPoints)} pts`
+  const pnlValue = fills.length ? fillsPnl : spotPoints
   const pnlOverlay = (
     <div className="flex items-baseline gap-2 rounded-md border bg-background/90 px-2.5 py-1.5 shadow-sm backdrop-blur-sm">
       <span className="text-xs text-muted-foreground">Day P&L</span>
@@ -40,25 +49,42 @@ export function DayDetail({ date, mode = "auto", compact = false, chartOnly = fa
     </div>
   )
   const s = day.data?.setup
-  const tradeList = useBacktest
+  const tradeList = fills.length
+    ? <FillsTable fills={fills} signals={visibleSignals} empty="No paper/live trades this day." />
+    : useFiveMinute
+    ? <RuleTradesTable trades={chartTrades} empty="No Key Levels trades this day." />
+    : useBacktest
     ? <RuleTradesTable trades={trades} empty="No backtest trades this day." />
     : <FillsTable fills={fills} signals={visibleSignals} empty="No paper/live trades this day." />
 
   if (compact) {
     return (
       <div className="flex flex-col gap-4">
+        {allowTimeframeSwitch && (
+          <div className={cn("flex items-center justify-between gap-3", chartOnly && "mx-auto w-full max-w-6xl")}>
+            <span className="text-sm text-muted-foreground">{useFiveMinute ? "5-minute Key Levels view" : "1-minute full-session view"}</span>
+            <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as "1m" | "5m")}>
+              <TabsList><TabsTrigger value="1m">1 min</TabsTrigger><TabsTrigger value="5m">5 min</TabsTrigger></TabsList>
+            </Tabs>
+          </div>
+        )}
         {chartLoading && !chartCandles ? (
           <div className="relative">
             <Skeleton className={chartOnly ? "aspect-video max-h-[620px] min-h-[320px] w-full" : "h-105 w-full"} />
             {!chartOnly && <div className="pointer-events-none absolute left-2 top-2 z-10">{pnlOverlay}</div>}
           </div>
+        ) : useFiveMinute && keyLevelDay.error ? (
+          <p className="py-16 text-center text-sm text-red-500">5-minute chart failed: {keyLevelDay.error}</p>
         ) : chartCandles?.length ? (
           <div className={chartOnly ? "mx-auto w-full max-w-6xl" : undefined}>
             <CandleChart
               date={date ?? day.data?.date ?? ""}
               candles={chartCandles}
+              forming={useFiveMinute ? undefined : day.data?.forming}
               setup={s}
               trades={chartTrades}
+              keyLevelZone={useFiveMinute ? keyLevelDay.data?.key_level_zone : undefined}
+              showTradeLevels={useFiveMinute}
               className={chartOnly ? "aspect-video max-h-[620px] min-h-[320px]" : undefined}
               overlay={chartOnly ? undefined : pnlOverlay}
             />
@@ -74,15 +100,24 @@ export function DayDetail({ date, mode = "auto", compact = false, chartOnly = fa
   return (
     <div className="mx-auto flex w-full max-w-6xl flex-col gap-4">
       <Card className="min-w-0">
-      
+        {allowTimeframeSwitch && (
+          <CardHeader className="flex flex-row items-center justify-between gap-3">
+            <div><CardTitle>NIFTY intraday chart</CardTitle><CardDescription>{date} · {useFiveMinute ? "5-minute Key Levels view" : "1-minute full-session view"}</CardDescription></div>
+            <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as "1m" | "5m")}>
+              <TabsList><TabsTrigger value="1m">1 min</TabsTrigger><TabsTrigger value="5m">5 min</TabsTrigger></TabsList>
+            </Tabs>
+          </CardHeader>
+        )}
         <CardContent>
           {chartLoading && !chartCandles ? (
             <div className="relative">
               <Skeleton className="aspect-video max-h-[620px] min-h-[320px] w-full" />
               <div className="pointer-events-none absolute left-2 top-2 z-10">{pnlOverlay}</div>
             </div>
+          ) : useFiveMinute && keyLevelDay.error ? (
+            <p className="py-16 text-center text-sm text-red-500">5-minute chart failed: {keyLevelDay.error}</p>
           ) : chartCandles?.length ? (
-            <CandleChart date={date ?? day.data?.date ?? ""} candles={chartCandles} setup={s} trades={chartTrades} className="aspect-video max-h-[620px] min-h-[320px]" overlay={pnlOverlay} />
+            <CandleChart date={date ?? day.data?.date ?? keyLevelDay.data?.date ?? ""} candles={chartCandles} forming={useFiveMinute ? undefined : day.data?.forming} setup={useFiveMinute ? undefined : s} trades={chartTrades} keyLevelZone={useFiveMinute ? keyLevelDay.data?.key_level_zone : undefined} showTradeLevels={useFiveMinute} className="aspect-video max-h-[620px] min-h-[320px]" overlay={pnlOverlay} />
           ) : (
             <p className="py-24 text-center text-sm text-muted-foreground">No candles for this day.</p>
           )}
@@ -148,12 +183,13 @@ export function FillsTable({ fills, signals = [], empty = "No option trades." }:
 }
 
 /** Inline day view (chart + trades) shown under the calendar; scrolls into view when a day is picked. */
-export function DayPanel({ date, mode, days, onPick, onClose }: {
+export function DayPanel({ date, mode, days, onPick, onClose, allowTimeframeSwitch = false }: {
   date: string | null
   mode: DayMode
   days: string[]
   onPick: (date: string) => void
   onClose: () => void
+  allowTimeframeSwitch?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const opened = date != null
@@ -181,7 +217,7 @@ export function DayPanel({ date, mode, days, onPick, onClose }: {
           </CardAction>
         </CardHeader>
         <CardContent>
-          <DayDetail date={date} mode={mode} compact />
+          <DayDetail date={date} mode={mode} compact allowTimeframeSwitch={allowTimeframeSwitch} />
         </CardContent>
       </Card>
     </div>

@@ -23,14 +23,18 @@ from fyers_apiv3.FyersWebsocket import data_ws
 
 from live_signals import LiveSignalEngine, notify
 from fyers_orders import OptionTrader
+from key_level_strategy import KeyLevelPaperTracker, settings_from_config as key_level_settings
+from option_paper import OptionPaperTracker
 
 ROOT = Path(__file__).resolve().parent
 TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
 OUT_DIR = ROOT / "captured_data" / "fyers" / "live"
+KEY_LEVEL_DIR = ROOT / "captured_data" / "fyers" / "key_levels"
+CONFIG_FILE = ROOT / "fyers_config.json"
 SYMBOL = "NSE:NIFTY50-INDEX"
 IST = timezone(timedelta(hours=5, minutes=30))
 MARKET_OPEN = (9, 15)
-MARKET_CLOSE = (10, 0)  # strategy only trades the first 30 minutes; nothing needed after 10:00
+MARKET_CLOSE = (15, 30)
 TS_FMT = "%Y-%m-%d %H:%M:%S"
 TMP_DIR = ROOT / "tmp"  # Windows-safe temp directory for Fyers SDK logging
 
@@ -62,11 +66,15 @@ class NiftyCapture:
         self.stop = threading.Event()
         day = now_ist().strftime("%Y-%m-%d")
         OUT_DIR.mkdir(parents=True, exist_ok=True)
+        KEY_LEVEL_DIR.mkdir(parents=True, exist_ok=True)
         self.sec_file = OUT_DIR / f"nifty_1s_{day}.csv"
         self.min_file = OUT_DIR / f"nifty_1min_{day}.csv"
         self.last_candle_epoch = self._last_written_epoch()
         self.signals = LiveSignalEngine(self.min_file, OUT_DIR / f"signals_{day}.csv")
         self.trader: Optional[OptionTrader] = None
+        self.option_paper_tracker: Optional[OptionPaperTracker] = None
+        cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+        self.key_level_tracker = KeyLevelPaperTracker(KEY_LEVEL_DIR / "key_level_paper_events.csv", key_level_settings(cfg))
 
     def _load_token(self) -> None:
         tok = json.loads(TOKEN_FILE.read_text(encoding="utf-8")) if TOKEN_FILE.exists() else {}
@@ -136,6 +144,9 @@ class NiftyCapture:
             self.signals.check_tick(ltp, ts)
             if self.trader:
                 self.trader.on_tick(ltp)
+            self.key_level_tracker.on_tick(ltp_ts, ltp)
+            if self.option_paper_tracker:
+                self.option_paper_tracker.on_tick(ltp_ts, ltp)
 
     def minute_loop(self) -> None:
         while not self.stop.is_set():
@@ -144,6 +155,10 @@ class NiftyCapture:
             nxt = (n + timedelta(minutes=1)).replace(second=3, microsecond=0)
             self.stop.wait((nxt - n).total_seconds())
             if self.fetch_candles():
+                try:
+                    self.key_level_tracker.on_completed_minute_file(self.min_file)
+                except Exception as exc:
+                    print(f"[{now_ist():%H:%M:%S}] key-level paper update failed: {exc}")
                 try:
                     self.signals.evaluate()
                 except Exception as exc:
@@ -193,8 +208,16 @@ class NiftyCapture:
 
         self.wait_for_valid_token()
         self.trader = OptionTrader(self.rest, notify)
+        cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+        self.option_paper_tracker = OptionPaperTracker(
+            self.rest, self.trader.options, KEY_LEVEL_DIR / "key_level_option_paper_events.csv",
+            lots_by_strategy={"key_levels": int(cfg.get("key_levels_lots", 1))},
+        )
+        self.signals.option_paper_tracker = self.option_paper_tracker
+        self.key_level_tracker.entry_callback = self.option_paper_tracker.on_signal
         self.signals.trader = self.trader
         self.fetch_candles()  # backfill anything missed earlier today
+        self.key_level_tracker.on_completed_minute_file(self.min_file)
         self.signals.evaluate()
         self.ws = data_ws.FyersDataSocket(
             access_token=f"{self.app_id}:{self.access_token}",
@@ -220,6 +243,10 @@ class NiftyCapture:
             pass
         finally:
             self.stop.set()
+            if self.ltp is not None:
+                self.key_level_tracker.close(now_ist(), self.ltp)
+                if self.option_paper_tracker:
+                    self.option_paper_tracker.close(now_ist(), self.ltp)
             if self.trader:
                 self.trader.exit("shutdown")
             try:
