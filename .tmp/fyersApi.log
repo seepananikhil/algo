@@ -251,3 +251,5 @@
 {"level":"ERROR","location":"[get_call:192] fyersModel","message":{"API":"/profile","error":"Expecting value: line 1 column 1 (char 0)"},"timestamp":"2026-10-12 09:59:14,687+0530","service":"FyersAPI"}
 {"level":"ERROR","location":"[get_call:192] fyersModel","message":{"API":"/profile","error":"Expecting value: line 1 column 1 (char 0)"},"timestamp":"2026-10-12 09:59:14,708+0530","service":"FyersAPI"}
 {"level":"ERROR","location":"[get_call:192] fyersModel","message":{"API":"/profile","error":"Expecting value: line 1 column 1 (char 0)"},"timestamp":"2026-10-12 11:36:54,193+0530","service":"FyersAPI"}
+{"level":"ERROR","location":"[get_call:192] fyersModel","message":{"API":"/profile","error":"Expecting value: line 1 column 1 (char 0)"},"timestamp":"2026-10-12 14:31:34,730+0530","service":"FyersAPI"}
+{"level":"ERROR","location":"[get_call:192] fyersModel","message":{"API":"/profile","error":"Expecting value: line 1 column 1 (char 0)"},"timestamp":"2026-10-12 14:32:38,015+0530","service":"FyersAPI"}

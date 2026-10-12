@@ -1,4 +1,4 @@
-"""Paper-only one-lot option tracking for Midpoint and Key Levels signals."""
+"""One-lot option tracking for Midpoint and Key Levels signals; Key Levels can mirror real orders when live is enabled."""
 
 from __future__ import annotations
 
@@ -77,13 +77,14 @@ def read_option_paper_trades(path: Path) -> list[dict]:
 
 
 class OptionPaperTracker:
-    """Tracks paper option quotes only; this class never submits broker orders."""
+    """Tracks paper option quotes; orders are sent only through the optional Key Levels live executor."""
 
-    def __init__(self, rest, options: pd.DataFrame, event_file: Path, lots_by_strategy: dict | None = None) -> None:
+    def __init__(self, rest, options: pd.DataFrame, event_file: Path, lots_by_strategy: dict | None = None, live=None) -> None:
         self.rest = rest
         self.options = options
         self.event_file = event_file
         self.lots_by_strategy = lots_by_strategy or {}
+        self.live = live
         self.positions = {}
         self.seen = set()
         for trade in read_option_paper_trades(event_file):
@@ -97,6 +98,7 @@ class OptionPaperTracker:
                     "entry_timestamp": timestamp,
                     "last_quote_timestamp": timestamp,
                     "last_option_price": trade["option_entry"],
+                    "live": trade.get("source") == "key_levels_live",
                 }
 
     def _append(self, row: dict) -> None:
@@ -161,6 +163,12 @@ class OptionPaperTracker:
             })
             return
 
+        is_live = False
+        if self.live is not None and strategy == "key_levels":
+            fill = self.live.buy(symbol, qty, option_price)
+            if fill is not None:
+                option_price, is_live = fill, True
+
         capital = round(option_price * qty, 2)
         spot_target = spot_target if spot_target is not None else (float(spot) + SPOT_TARGET_POINTS if side == "CALL" else float(spot) - SPOT_TARGET_POINTS)
         option_target = option_price * (1 + PREMIUM_TARGET_RETURN_PCT / 100)
@@ -186,6 +194,7 @@ class OptionPaperTracker:
             "spot_stop": float(stop_price) if stop_price is not None else None,
             "spot_target": spot_target,
             "option_target": option_target,
+            "live": is_live,
         }
         self.positions[strategy] = position
         self._append({
@@ -195,6 +204,7 @@ class OptionPaperTracker:
             "qty": qty, "spot_price": round(float(spot), 2), "option_price": round(option_price, 2),
             "capital_used": capital, "spot_stop": stop_price if stop_price is not None else "",
             "spot_target": round(spot_target, 2), "option_target": round(option_target, 2),
+            "source": "key_levels_live" if is_live else "",
         })
 
     def on_tick(self, timestamp, spot: float) -> None:
@@ -224,6 +234,8 @@ class OptionPaperTracker:
                 reason = "premium_return_30pct"
             elif strategy != "key_levels" and timestamp >= position["entry_timestamp"] + pd.Timedelta(minutes=MAX_HOLD_MINUTES):
                 reason = "time_exit_30m"
+            elif position.get("live") and timestamp.time() >= datetime_time(15, 20):
+                reason = "session_end_live"
             elif timestamp.time() >= datetime_time(15, 30):
                 reason = "session_end"
             else:
@@ -236,9 +248,15 @@ class OptionPaperTracker:
             self._exit(strategy, timestamp, float(spot), position["last_option_price"], reason)
 
     def _exit(self, strategy: str, timestamp, spot: float, option_price: float, reason: str) -> None:
-        position = self.positions.pop(strategy, None)
+        position = self.positions.get(strategy)
         if not position:
             return
+        if position.get("live") and self.live is not None:
+            fill = self.live.sell(position["symbol"], position["qty"], reason)
+            if fill is None:
+                return
+            option_price = fill
+        self.positions.pop(strategy, None)
         pnl = (option_price - position["option_entry"]) * position["qty"]
         return_pct = pnl / position["capital_used"] * 100 if position["capital_used"] else 0.0
         self._append({

@@ -22,13 +22,21 @@ type Form = {
   hero_zero_lots: string
 }
 
+type StrategyId = "midpoint" | "hero_zero" | "key_levels"
+
+const LIVE_MODE = {
+  midpoint: { field: "midpoint_live_trading", label: "Midpoint" },
+  hero_zero: { field: "hero_zero_live_trading", label: "HeroZero" },
+  key_levels: { field: "key_levels_live_trading", label: "Key Levels" },
+} as const
+
 export function SettingsPage() {
   const { data, reload } = usePoll<Settings>("/api/settings")
   const status = useStatus()
   const [form, setForm] = useState<Form | null>(null)
   const [tab, setTab] = useState("midpoint")
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmStrategy, setConfirmStrategy] = useState<"midpoint" | "hero_zero" | null>(null)
+  const [confirmStrategy, setConfirmStrategy] = useState<StrategyId | null>(null)
   const [typed, setTyped] = useState("")
   const [restart, setRestart] = useState(false)
   const [funds, setFunds] = useState<FundsStatus | null>(null)
@@ -84,6 +92,16 @@ export function SettingsPage() {
     save({ hero_zero_lots: Number(form.hero_zero_lots) }, "HeroZero settings saved")
   }
 
+  function setLiveMode(strategy: StrategyId, enabled: boolean) {
+    const { field, label } = LIVE_MODE[strategy]
+    if (enabled) {
+      setConfirmStrategy(strategy)
+      setConfirmOpen(true)
+    } else {
+      save({ [field]: false }, `${label} switched to PAPER`)
+    }
+  }
+
   async function checkFunds() {
     setFundsLoading(true)
     try {
@@ -97,11 +115,8 @@ export function SettingsPage() {
 
   async function confirmLive() {
     if (!confirmStrategy || typed !== "LIVE") return
-    const midpoint = confirmStrategy === "midpoint"
-    const body = midpoint
-      ? { midpoint_live_trading: true, confirm: typed }
-      : { hero_zero_live_trading: true, confirm: typed }
-    if (await save(body, `${midpoint ? "Midpoint" : "HeroZero"} LIVE enabled`)) {
+    const { field, label } = LIVE_MODE[confirmStrategy]
+    if (await save({ [field]: true, confirm: typed }, `${label} LIVE enabled`)) {
       setConfirmOpen(false)
       setConfirmStrategy(null)
       setTyped("")
@@ -111,6 +126,7 @@ export function SettingsPage() {
   if (!data || !form) return null
   const midpointLive = data.midpoint_live_trading ?? data.live_trading
   const heroZeroLive = data.hero_zero_live_trading
+  const keyLevelsLive = data.key_levels_live_trading
   const minimumFunds = Number(form.minimum_live_funds).toLocaleString("en-IN")
 
   return (
@@ -146,7 +162,7 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      <Card className={midpointLive || heroZeroLive ? "border-red-600/60" : undefined}>
+      <Card className={midpointLive || heroZeroLive || keyLevelsLive ? "border-red-600/60" : undefined}>
         <CardHeader>
           <CardTitle>Strategy modes</CardTitle>
           <CardDescription>Always visible. LIVE submits real Fyers orders.</CardDescription>
@@ -159,14 +175,7 @@ export function SettingsPage() {
             </div>
             <Switch
               checked={midpointLive}
-              onCheckedChange={(enabled) => {
-                if (enabled) {
-                  setConfirmStrategy("midpoint")
-                  setConfirmOpen(true)
-                } else {
-                  save({ midpoint_live_trading: false }, "Midpoint switched to PAPER")
-                }
-              }}
+              onCheckedChange={(enabled) => setLiveMode("midpoint", enabled)}
               aria-label="Midpoint live trading"
             />
           </div>
@@ -177,23 +186,20 @@ export function SettingsPage() {
             </div>
             <Switch
               checked={heroZeroLive}
-              onCheckedChange={(enabled) => {
-                if (enabled) {
-                  setConfirmStrategy("hero_zero")
-                  setConfirmOpen(true)
-                } else {
-                  save({ hero_zero_live_trading: false }, "HeroZero switched to PAPER")
-                }
-              }}
+              onCheckedChange={(enabled) => setLiveMode("hero_zero", enabled)}
               aria-label="HeroZero live trading"
             />
           </div>
           <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
             <div>
-              <div className="font-semibold text-sky-500">Key Levels · PAPER</div>
-              <p className="text-xs text-muted-foreground">{data.key_levels_lots} lot{data.key_levels_lots === 1 ? "" : "s"} per paper signal · LIVE not available yet</p>
+              <div className={keyLevelsLive ? "font-semibold text-red-500" : "font-semibold text-sky-500"}>Key Levels · {keyLevelsLive ? "LIVE" : "PAPER"}</div>
+              <p className="text-xs text-muted-foreground">{data.key_levels_lots} lot{data.key_levels_lots === 1 ? "" : "s"} per {keyLevelsLive ? "LIVE" : "paper"} signal</p>
             </div>
-            <Switch checked={false} disabled aria-label="Key Levels live trading unavailable" />
+            <Switch
+              checked={keyLevelsLive}
+              onCheckedChange={(enabled) => setLiveMode("key_levels", enabled)}
+              aria-label="Key Levels live trading"
+            />
           </div>
         </CardContent>
       </Card>
@@ -269,7 +275,7 @@ export function SettingsPage() {
           <Card>
             <CardHeader>
               <CardTitle>Key Levels settings</CardTitle>
-              <CardDescription>Paper only for now. Entry rules are built in: 500-point levels, 10-point zone, two 5-minute holds with a zone retest.</CardDescription>
+              <CardDescription>Entry rules are built in: 500-point levels, 10-point zone, two 5-minute holds with a zone retest. LIVE mirrors each signal as real Fyers orders; the paper ledger keeps recording either way.</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col gap-4">
               <div className="grid gap-4 sm:grid-cols-2">
@@ -290,10 +296,12 @@ export function SettingsPage() {
       <Dialog open={confirmOpen} onOpenChange={(open) => { setConfirmOpen(open); if (!open) { setConfirmStrategy(null); setTyped("") } }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Enable {confirmStrategy === "hero_zero" ? "HeroZero" : "Midpoint"} LIVE?</DialogTitle>
+            <DialogTitle>Enable {confirmStrategy === "hero_zero" ? "HeroZero" : confirmStrategy === "key_levels" ? "Key Levels" : "Midpoint"} LIVE?</DialogTitle>
             <DialogDescription>
               {confirmStrategy === "hero_zero"
                 ? `HeroZero will place one live order for the selected PE and CE (${data.hero_zero_lots} lot${data.hero_zero_lots === 1 ? "" : "s"} each), then attempt the expiry exit. Type LIVE to confirm.`
+                : confirmStrategy === "key_levels"
+                ? `Key Levels will buy the paper-selected option at ${data.key_levels_lots} lot${data.key_levels_lots === 1 ? "" : "s"} per signal after the funds check and sell on stop, target, or 15:20. If Fyers rejects an order, live entries halt for the day and paper tracking continues. Applies at the next capture start. Type LIVE to confirm.`
                 : `Midpoint will place real Fyers orders at ${data.lots} lot${data.lots === 1 ? "" : "s"} per signal after the funds check. Type LIVE to confirm.`}
             </DialogDescription>
           </DialogHeader>

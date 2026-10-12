@@ -11,7 +11,6 @@ import pandas as pd
 
 
 DEFAULTS = {
-    "key_levels_paper_enabled": True,
     "key_level_step": 500,
     "key_level_break_buffer": 10,
     "key_level_confirm_candles": 2,
@@ -26,10 +25,8 @@ EVENT_FIELDS = [
 
 
 def settings_from_config(config: dict) -> dict:
-    """Strategy rules are fixed; only the paper-tracking switch comes from config."""
-    settings = DEFAULTS.copy()
-    settings["key_levels_paper_enabled"] = bool(config.get("key_levels_paper_enabled", settings["key_levels_paper_enabled"]))
-    return settings
+    """Return the fixed Key Levels rules; legacy config values are intentionally ignored."""
+    return DEFAULTS.copy()
 
 
 def aggregate_five_minute(minute_candles: pd.DataFrame) -> pd.DataFrame:
@@ -344,7 +341,7 @@ class KeyLevelPaperTracker:
             writer.writerow({field: event.get(field, "") for field in EVENT_FIELDS})
 
     def on_completed_minutes(self, minute_candles: pd.DataFrame) -> None:
-        if not self.settings["key_levels_paper_enabled"] or self.halted_today or self.day_trade_count >= 3:
+        if self.halted_today or self.day_trade_count >= 3:
             return
         bars = aggregate_five_minute(minute_candles)
         if bars.empty:
@@ -384,8 +381,6 @@ class KeyLevelPaperTracker:
             self.on_completed_minutes(pd.read_csv(path))
 
     def on_tick(self, timestamp, spot_price: float) -> None:
-        if not self.settings["key_levels_paper_enabled"]:
-            return
         timestamp = pd.Timestamp(timestamp)
         price = float(spot_price)
         if self.pending:

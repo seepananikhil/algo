@@ -25,6 +25,7 @@ from live_signals import LiveSignalEngine, notify
 from fyers_orders import OptionTrader
 from key_level_strategy import KeyLevelPaperTracker, settings_from_config as key_level_settings
 from option_paper import OptionPaperTracker
+from key_level_live import KeyLevelLiveExecutor
 
 ROOT = Path(__file__).resolve().parent
 TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
@@ -209,9 +210,13 @@ class NiftyCapture:
         self.wait_for_valid_token()
         self.trader = OptionTrader(self.rest, notify)
         cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+        key_level_live = KeyLevelLiveExecutor(self.rest, cfg) if cfg.get("key_levels_live_trading") else None
+        if key_level_live:
+            print("[key-levels] LIVE order routing enabled")
         self.option_paper_tracker = OptionPaperTracker(
             self.rest, self.trader.options, KEY_LEVEL_DIR / "key_level_option_paper_events.csv",
             lots_by_strategy={"key_levels": int(cfg.get("key_levels_lots", 1))},
+            live=key_level_live,
         )
         self.signals.option_paper_tracker = self.option_paper_tracker
         self.key_level_tracker.entry_callback = self.option_paper_tracker.on_signal

@@ -296,12 +296,13 @@ class HeroZeroCapture:
                 self._log_live_order("SELL", candidate, quantity, "", "", str(exc), "failed_open_position")
                 print(f"CRITICAL: HeroZero LIVE exit failed for {symbol}; close it manually: {exc}")
 
-    def _write_paper_trades(self) -> int:
+    def _write_paper_trades(self) -> tuple[int, int]:
         trades_file = self.output_dir / f"hero_zero_trades_{self.session}.csv"
-        count = 0
-        if self.live_trading:
-            for symbol, result in self.live_results.items():
-                candidate = result["candidate"]
+        paper_count = 0
+        live_count = 0
+        for symbol, candidate in self.candidates.items():
+            result = self.live_results.get(symbol)
+            if result:
                 entry_price = result["entry_price"]
                 exit_price = result["exit_price"]
                 pnl_per_unit = round(exit_price - entry_price, 2)
@@ -315,10 +316,9 @@ class HeroZeroCapture:
                     exit_price, "", pnl_per_unit, round(pnl_per_unit * quantity, 2),
                     "closed", "hero_zero_live_market_exit", "hero_zero_live",
                 ])
-                count += 1
-            return count
+                live_count += 1
+                continue
 
-        for symbol, candidate in self.candidates.items():
             exit_quote, exit_reason = self._fetch_close_quote(symbol)
             if exit_quote is None:
                 exit_quote = self.exit_quotes.get(symbol)
@@ -336,10 +336,11 @@ class HeroZeroCapture:
                 candidate["quote"]["volume"],
                 exit_quote["received_at"].strftime("%Y-%m-%d %H:%M:%S.%f") if exit_quote else "",
                 exit_price, exit_quote["volume"] if exit_quote else "", pnl_per_unit, pnl_rs,
-                "closed" if exit_quote else "no_15:30_exit_quote", exit_reason, "live_ticks",
+                "closed" if exit_quote else "no_15:30_exit_quote", exit_reason,
+                "hero_zero_live_paper_fallback" if self.live_trading else "live_ticks",
             ])
-            count += 1
-        return count
+            paper_count += 1
+        return paper_count, live_count
 
     def _fetch_close_quote(self, symbol: str) -> tuple[Optional[dict], str]:
         response = self.rest.history(data={
@@ -401,7 +402,7 @@ class HeroZeroCapture:
             except Exception:
                 pass
 
-        paper_trade_count = self._write_paper_trades()
+        paper_trade_count, live_trade_count = self._write_paper_trades()
 
         result = {
             "date": self.session.isoformat(),
@@ -410,8 +411,8 @@ class HeroZeroCapture:
             "expiry_underlyings": self.expiry_info,
             "subscribed_symbols": len(self.universe),
             "selected_options": len(self.candidates),
-            "paper_trades": paper_trade_count if not self.live_trading else 0,
-            "live_trades": paper_trade_count if self.live_trading else 0,
+            "paper_trades": paper_trade_count,
+            "live_trades": live_trade_count,
             "open_live_positions": len(self.live_positions),
             "bands": {"NIFTY": list(NIFTY_PRICE_BAND), "SENSEX": list(SENSEX_PRICE_BAND)},
             "spot_windows": {"NIFTY": 50, "SENSEX": 100},

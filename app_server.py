@@ -70,7 +70,7 @@ EDITABLE_SETTINGS = {
     "option_target_pct": (int, 0, 200),
     "hero_zero_live_trading": (bool, None, None),
     "minimum_live_funds": (int, 10000, 10000000),
-    "key_levels_paper_enabled": (bool, None, None),
+    "key_levels_live_trading": (bool, None, None),
     "key_levels_lots": (int, 1, PAPER_LOTS),
     "hero_zero_lots": (int, 1, PAPER_LOTS),
 }
@@ -415,6 +415,7 @@ def public_settings() -> dict:
     out["minimum_live_funds"] = int(cfg.get("minimum_live_funds") or 25000)
     out["midpoint_live_trading"] = bool(cfg.get("midpoint_live_trading", cfg.get("live_trading", False)))
     out["hero_zero_live_trading"] = bool(cfg.get("hero_zero_live_trading", False))
+    out["key_levels_live_trading"] = bool(cfg.get("key_levels_live_trading", False))
     out["key_levels_lots"] = int(cfg.get("key_levels_lots", 1))
     out["hero_zero_lots"] = int(cfg.get("hero_zero_lots", 1))
     out.update(key_level_settings(cfg))
@@ -456,11 +457,12 @@ def update_settings(body: dict) -> tuple:
                 return {"error": "type LIVE to confirm Midpoint real-money trading"}, 400
             cfg["midpoint_live_trading"] = value
             cfg["live_trading"] = value
-        elif key == "hero_zero_live_trading":
+        elif key in ("hero_zero_live_trading", "key_levels_live_trading"):
+            label = "HeroZero" if key == "hero_zero_live_trading" else "Key Levels"
             if not isinstance(value, bool):
-                return {"error": "hero_zero_live_trading must be true/false"}, 400
+                return {"error": f"{key} must be true/false"}, 400
             if value and body.get("confirm") != "LIVE":
-                return {"error": "type LIVE to confirm HeroZero real-money trading"}, 400
+                return {"error": f"type LIVE to confirm {label} real-money trading"}, 400
             cfg[key] = value
         elif key in EDITABLE_SETTINGS:
             kind, lo, hi = EDITABLE_SETTINGS[key]
@@ -621,7 +623,7 @@ def status() -> dict:
         "market_open_day": is_market_weekday(),
         "token": token_status(),
         "capture_running": capture_running(),
-        "mode": "LIVE" if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or cfg.get("hero_zero_live_trading") or auto_live_started else "PAPER",
+        "mode": "LIVE" if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or cfg.get("hero_zero_live_trading") or cfg.get("key_levels_live_trading") or auto_live_started else "PAPER",
         "lots": int(cfg.get("lots", PAPER_LOTS)) if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or auto_live_started else PAPER_LOTS,
         "daily_loss_limit": cfg.get("daily_loss_limit"),
         "kill_switch": STOP_FILE.exists(),
@@ -670,40 +672,66 @@ def option_trades(date: str | None = None) -> list:
     return out
 
 
+def option_paper_fill(trade: dict, strategy: str) -> dict:
+    side = trade["side"]
+    spot_points = trade["exit_spot"] - trade["spot_entry"] if side == "CALL" else trade["spot_entry"] - trade["exit_spot"]
+    if strategy == "key_levels":
+        mode = "KEYLEVEL HISTORICAL PAPER REPLAY" if trade.get("source") == "historical_option_replay" else "KEYLEVEL PAPER"
+        label = "Key Levels"
+    else:
+        mode = "MIDPOINT PAPER SIMULATION"
+        label = "Midpoint"
+    return {
+        "date": trade["date"],
+        "side": side,
+        "option": trade["symbol"],
+        "qty": trade["qty"],
+        "entry": trade["entry_time"][:5],
+        "nifty_in": trade["spot_entry"],
+        "buy_price": trade["option_entry"],
+        "buy_value_rs": round(trade["capital_used"], 2),
+        "exit": trade["exit_time"][:5],
+        "nifty_out": trade["exit_spot"],
+        "sell_price": trade["exit_option"],
+        "sell_value_rs": round(trade["exit_option"] * trade["qty"], 2),
+        "pnl_rs": trade["pnl_rs"],
+        "nifty_points": round(spot_points, 2),
+        "exit_reason": trade["reason"],
+        "mode": mode,
+        "spot_at_entry": trade["spot_entry"],
+        "level": trade["level"] if strategy == "key_levels" else None,
+        "trigger_label": f"{label} · {trade.get('source') or 'paper'}",
+    }
+
+
+def midpoint_option_trades(date: str | None = None) -> list:
+    """Use actual Midpoint fills where available; otherwise include closed quote simulations."""
+    actual = option_trades(date)
+    actual_keys = {(trade["date"], trade["side"], trade["entry"]) for trade in actual}
+    paper = [
+        trade for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+        if trade["strategy"] == "midpoint" and trade["status"] == "closed"
+        and (date is None or trade["date"] == date)
+    ]
+    fallback = [
+        option_paper_fill(trade, "midpoint") for trade in paper
+        if (trade["date"], trade["side"], trade["entry_time"][:5]) not in actual_keys
+    ]
+    return actual + fallback
+
+
 def key_level_option_trades(date: str | None = None) -> list:
     """Closed Key Levels paper/replay entries in the shared option-fill shape."""
     out = []
     for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE):
-        if trade["status"] != "closed" or (date and trade["date"] != date):
+        if trade["strategy"] != "key_levels" or trade["status"] != "closed" or (date and trade["date"] != date):
             continue
-        side = trade["side"]
-        spot_points = trade["exit_spot"] - trade["spot_entry"] if side == "CALL" else trade["spot_entry"] - trade["exit_spot"]
-        out.append({
-            "date": trade["date"],
-            "side": side,
-            "option": trade["symbol"],
-            "qty": trade["qty"],
-            "entry": trade["entry_time"][:5],
-            "nifty_in": trade["spot_entry"],
-            "buy_price": trade["option_entry"],
-            "buy_value_rs": round(trade["capital_used"], 2),
-            "exit": trade["exit_time"][:5],
-            "nifty_out": trade["exit_spot"],
-            "sell_price": trade["exit_option"],
-            "sell_value_rs": round(trade["exit_option"] * trade["qty"], 2),
-            "pnl_rs": trade["pnl_rs"],
-            "nifty_points": round(spot_points, 2),
-            "exit_reason": trade["reason"],
-            "mode": "KEYLEVEL HISTORICAL PAPER REPLAY" if trade.get("source") == "historical_option_replay" else "KEYLEVEL PAPER",
-            "spot_at_entry": trade["spot_entry"],
-            "level": trade["level"],
-            "trigger_label": f"Key Levels · {trade.get('source') or 'paper'}",
-        })
+        out.append(option_paper_fill(trade, "key_levels"))
     return out
 
 
 def key_level_option_paper_rows(date: str | None = None) -> list:
-    trades = read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+    trades = [trade for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE) if trade["strategy"] == "key_levels"]
     if date:
         trades = [trade for trade in trades if trade["date"] == date]
     return _option_paper_book(trades)["trades"]
@@ -728,7 +756,7 @@ def est_charges(buy_value: float, sell_value: float) -> float:
 
 def paper_report() -> dict:
     """Paper/live option trades with estimated charges, net equity curve and drawdown."""
-    return build_paper_report(option_trades())
+    return build_paper_report(midpoint_option_trades())
 
 
 def hero_zero_option_trades() -> list:
@@ -829,7 +857,10 @@ def _option_paper_book(trades: list[dict]) -> dict:
 def key_level_report() -> dict:
     settings = key_level_settings(read_config())
     paper_trades = read_paper_events(KEY_LEVEL_EVENT_FILE)
-    option_trades = read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+    option_trades = [
+        trade for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+        if trade["strategy"] == "key_levels"
+    ]
     today_date = today()
     today_candles = candles(today_date)
     today_replay_trades = backtest_key_levels(today_candles, settings) if not today_candles.empty else []
@@ -1028,7 +1059,7 @@ class Handler(BaseHTTPRequestHandler):
             if cutoff and forming.get("time", "") > cutoff:
                 forming = {}
             paper_trades, first_paper_date = paper_trades_for_day(date)
-            option_fills = build_paper_report(option_trades(date) + key_level_option_trades(date))["trades"]
+            option_fills = build_paper_report(midpoint_option_trades(date) + key_level_option_trades(date))["trades"]
             self._json({
                 "date": date,
                 "cutoff": cutoff,

@@ -257,7 +257,7 @@ export function optionPaperTradeToFill(trade: OptionPaperTrade): OptionTrade {
     net_rs: trade.net_pnl_rs,
     nifty_points: trade.side === "CALL" ? exitSpot - trade.spot_entry : trade.spot_entry - exitSpot,
     exit_reason: trade.status === "open" ? "open" : trade.reason,
-    mode: `KEYLEVEL ${trade.source === "historical_option_replay" ? "HISTORICAL PAPER REPLAY" : "PAPER"}`,
+    mode: `KEYLEVEL ${trade.source === "historical_option_replay" ? "HISTORICAL PAPER REPLAY" : trade.source === "key_levels_live" ? "LIVE" : "PAPER"}`,
     level: trade.level ?? undefined,
     trigger_label: `Key Levels · ${trade.source ?? "paper"}`,
   }
@@ -267,7 +267,6 @@ export type KeyLevelReport = {
   today: string
   capture_running: boolean
   settings: {
-    key_levels_paper_enabled: boolean
     key_level_step: number
     key_level_break_buffer: number
     key_level_confirm_candles: number
@@ -339,9 +338,9 @@ export type Settings = {
   strike_offset: number
   option_target_pct: number
   minimum_live_funds: number
-  key_levels_paper_enabled: boolean
   key_levels_lots: number
   hero_zero_lots: number
+  key_levels_live_trading: boolean
   midpoint_live_trading: boolean
   hero_zero_live_trading: boolean
   live_trading: boolean
