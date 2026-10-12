@@ -15,10 +15,11 @@ from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
 
 from fyers_fetch_sensex_expiry import expiry_contracts as sensex_expiry_contracts
-from fyers_orders import load_nifty_options
+from fyers_orders import available_equity_funds, load_nifty_options, place_live_order
 
 ROOT = Path(__file__).resolve().parent
 TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
+CONFIG_FILE = ROOT / "fyers_config.json"
 OUTPUT_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
 TMP_DIR = ROOT / "tmp" / "fyers" / "hero_zero"
 IST = timezone(timedelta(hours=5, minutes=30))
@@ -34,6 +35,7 @@ SENSEX_PRICE_BAND = (20.0, 40.0)
 CANDIDATE_HEADER = ["date", "underlying", "expiry", "symbol", "option_type", "strike", "lot_size", "spot_ltp", "distance_from_spot", "band_low", "band_high", "snapshot_at", "received_at", "quote_age_seconds", "snapshot_ltp", "volume_at_snapshot", "source"]
 TICK_HEADER = ["date", "timestamp", "underlying", "symbol", "ltp", "volume", "exchange_time"]
 PAPER_TRADE_HEADER = ["date", "underlying", "expiry", "symbol", "option_type", "strike", "lot_size", "spot_ltp", "distance_from_spot", "entry_time", "entry_price", "entry_volume", "exit_time", "exit_price", "exit_volume", "pnl_per_unit", "pnl_rs", "status", "exit_reason", "source"]
+LIVE_ORDER_HEADER = ["date", "time", "action", "symbol", "qty", "order_id", "fill_price", "reason", "status"]
 
 
 def now_ist() -> datetime:
@@ -104,6 +106,11 @@ class HeroZeroCapture:
             raise RuntimeError("Fyers token is invalid or expired")
 
         self.session = session
+        config = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
+        self.live_trading = bool(config.get("hero_zero_live_trading", False))
+        self.minimum_live_funds = float(config.get("minimum_live_funds", 25000))
+        self.take_put = True
+        self.take_call = True
         self.universe = universe
         self.by_symbol = {c["symbol"]: c for c in universe}
         self.expiry_info = expiry_info
@@ -111,6 +118,10 @@ class HeroZeroCapture:
         self.spot_quotes: dict[str, dict] = {}
         self.candidates: dict[str, dict] = {}
         self.exit_quotes: dict[str, dict] = {}
+        self.live_positions: dict[str, dict] = {}
+        self.live_results: dict[str, dict] = {}
+        self.live_order_halted = False
+        self.live_reserved_funds = 0.0
         self.lock = threading.RLock()
         self.snapshot_taken = False
         self.output_dir = OUTPUT_DIR
@@ -118,6 +129,7 @@ class HeroZeroCapture:
         self.candidates_file = self.output_dir / f"hero_zero_candidates_{session}.csv"
         self.ticks_file = self.output_dir / f"hero_zero_ticks_{session}.csv"
         self.status_file = self.output_dir / f"hero_zero_status_{session}.json"
+        self.live_orders_file = self.output_dir / f"hero_zero_orders_{session}.csv"
         self.ws = None
 
     def on_connect(self) -> None:
@@ -161,6 +173,7 @@ class HeroZeroCapture:
 
     def _snapshot(self) -> None:
         now = now_ist()
+        eligible = {"PE": [], "CE": []}
         with self.lock:
             if self.snapshot_taken:
                 return
@@ -180,21 +193,130 @@ class HeroZeroCapture:
                 candidate = {**c, "band_low": low, "band_high": high, "snapshot_at": now,
                              "spot_ltp": spot_quote["ltp"], "distance_from_spot": distance,
                              "quote_age_seconds": round(age, 2), "quote": q}
-                self.candidates[symbol] = candidate
-                append_row(self.candidates_file, CANDIDATE_HEADER, [
-                    self.session.isoformat(), c["underlying"], c["expiry"], symbol, c["option_type"], c["strike"], c["lot_size"],
-                    spot_quote["ltp"], distance, low, high, now.strftime("%Y-%m-%d %H:%M:%S"), q["received_at"].strftime("%Y-%m-%d %H:%M:%S"),
-                    round(age, 2), q["ltp"], q["volume"], "live_ticks",
-                ])
-                append_row(self.ticks_file, TICK_HEADER, [
-                    self.session.isoformat(), now.strftime("%Y-%m-%d %H:%M:%S.%f"), c["underlying"],
-                    symbol, q["ltp"], q["volume"], q["exchange_time"],
-                ])
+                eligible[c["option_type"]].append(candidate)
+
+            limits = {"PE": int(self.take_put), "CE": int(self.take_call)}
+            for option_type, limit in limits.items():
+                chosen = sorted(
+                    eligible[option_type],
+                    key=lambda candidate: (
+                        abs(candidate["distance_from_spot"]),
+                        candidate["quote_age_seconds"],
+                        candidate["symbol"],
+                    ),
+                )[:limit]
+                for candidate in chosen:
+                    symbol = candidate["symbol"]
+                    quote = candidate["quote"]
+                    self.candidates[symbol] = candidate
+                    append_row(self.candidates_file, CANDIDATE_HEADER, [
+                        self.session.isoformat(), candidate["underlying"], candidate["expiry"], symbol,
+                        candidate["option_type"], candidate["strike"], candidate["lot_size"],
+                        candidate["spot_ltp"], candidate["distance_from_spot"], candidate["band_low"], candidate["band_high"],
+                        now.strftime("%Y-%m-%d %H:%M:%S"), quote["received_at"].strftime("%Y-%m-%d %H:%M:%S"),
+                        candidate["quote_age_seconds"], quote["ltp"], quote["volume"], "live_ticks",
+                    ])
+                    append_row(self.ticks_file, TICK_HEADER, [
+                        self.session.isoformat(), now.strftime("%Y-%m-%d %H:%M:%S.%f"), candidate["underlying"],
+                        symbol, quote["ltp"], quote["volume"], quote["exchange_time"],
+                    ])
+        selected = list(self.candidates.values())
         print(f"[{now:%H:%M:%S}] HeroZero selected {len(self.candidates)} options in target premium bands")
+        if self.live_trading:
+            for candidate in selected:
+                self._enter_live_order(candidate)
+
+    def _log_live_order(self, action: str, candidate: dict, quantity: int, order_id: str, fill: str | float, reason: str, status: str) -> None:
+        append_row(self.live_orders_file, LIVE_ORDER_HEADER, [
+            self.session.isoformat(), now_ist().strftime("%H:%M:%S"), action, candidate["symbol"], quantity,
+            order_id, fill, reason, status,
+        ])
+
+    def _enter_live_order(self, candidate: dict) -> None:
+        if self.live_order_halted:
+            return
+        symbol = candidate["symbol"]
+        quantity = int(candidate["lot_size"])
+        try:
+            available = available_equity_funds(self.rest.funds())
+            if available is None:
+                self.live_order_halted = True
+                self._log_live_order("SKIP", candidate, quantity, "", "", "available_funds_unavailable", "not_submitted")
+                print("HeroZero LIVE halted: available funds unavailable; no order submitted")
+                return
+            if available < self.minimum_live_funds:
+                self.live_order_halted = True
+                self._log_live_order("SKIP", candidate, quantity, "", "", "below_minimum_funds", "not_submitted")
+                print(f"HeroZero LIVE halted: Rs {available:.2f} available, Rs {self.minimum_live_funds:.2f} required")
+                return
+
+            quotes = self.rest.quotes(data={"symbols": symbol})
+            if quotes.get("s") != "ok" or not quotes.get("d"):
+                self._log_live_order("SKIP", candidate, quantity, "", "", "option_quote_unavailable", "not_submitted")
+                return
+            premium = float(quotes["d"][0]["v"]["lp"])
+            estimated_debit = premium * quantity * 1.05
+            required_funds = self.live_reserved_funds + estimated_debit
+            if available < required_funds:
+                self._log_live_order("SKIP", candidate, quantity, "", "", "insufficient_entry_funds", "not_submitted")
+                return
+
+            order_id, fill = place_live_order(self.rest, symbol, quantity, 1)
+            self.live_positions[symbol] = {
+                "candidate": candidate,
+                "quantity": quantity,
+                "entry_order_id": order_id,
+                "entry_price": fill,
+                "entry_time": now_ist(),
+                "reserved_funds": estimated_debit,
+            }
+            self.live_reserved_funds += estimated_debit
+            self._log_live_order("BUY", candidate, quantity, order_id, fill, "hero_zero_entry", "filled")
+            print(f"HeroZero LIVE BUY {symbol} qty {quantity} @ {fill}")
+        except Exception as exc:
+            self.live_order_halted = True
+            self._log_live_order("BUY", candidate, quantity, "", "", str(exc), "failed")
+            print(f"HeroZero LIVE entry failed; halting additional entries: {exc}")
+
+    def _exit_live_positions(self) -> None:
+        for symbol, position in list(self.live_positions.items()):
+            candidate = position["candidate"]
+            quantity = position["quantity"]
+            try:
+                order_id, fill = place_live_order(self.rest, symbol, quantity, -1)
+                exited_at = now_ist()
+                result = {**position, "exit_order_id": order_id, "exit_price": fill, "exit_time": exited_at}
+                self.live_results[symbol] = result
+                self._log_live_order("SELL", candidate, quantity, order_id, fill, "expiry_exit", "filled")
+                self.live_reserved_funds = max(0.0, self.live_reserved_funds - position["reserved_funds"])
+                self.live_positions.pop(symbol, None)
+                print(f"HeroZero LIVE SELL {symbol} qty {quantity} @ {fill}")
+            except Exception as exc:
+                self._log_live_order("SELL", candidate, quantity, "", "", str(exc), "failed_open_position")
+                print(f"CRITICAL: HeroZero LIVE exit failed for {symbol}; close it manually: {exc}")
 
     def _write_paper_trades(self) -> int:
         trades_file = self.output_dir / f"hero_zero_trades_{self.session}.csv"
         count = 0
+        if self.live_trading:
+            for symbol, result in self.live_results.items():
+                candidate = result["candidate"]
+                entry_price = result["entry_price"]
+                exit_price = result["exit_price"]
+                pnl_per_unit = round(exit_price - entry_price, 2)
+                quantity = result["quantity"]
+                append_row(trades_file, PAPER_TRADE_HEADER, [
+                    self.session.isoformat(), candidate["underlying"], candidate["expiry"], symbol,
+                    candidate["option_type"], candidate["strike"], quantity,
+                    candidate["spot_ltp"], candidate["distance_from_spot"],
+                    result["entry_time"].strftime("%Y-%m-%d %H:%M:%S"), entry_price,
+                    candidate["quote"]["volume"], result["exit_time"].strftime("%Y-%m-%d %H:%M:%S"),
+                    exit_price, "", pnl_per_unit, round(pnl_per_unit * quantity, 2),
+                    "closed", "hero_zero_live_market_exit", "hero_zero_live",
+                ])
+                count += 1
+            return count
+
         for symbol, candidate in self.candidates.items():
             exit_quote, exit_reason = self._fetch_close_quote(symbol)
             if exit_quote is None:
@@ -242,6 +364,8 @@ class HeroZeroCapture:
         start = now_ist().replace(hour=CAPTURE_START[0], minute=CAPTURE_START[1], second=0, microsecond=0)
         snapshot = now_ist().replace(hour=SNAPSHOT_TIME[0], minute=SNAPSHOT_TIME[1], second=0, microsecond=0)
         end = now_ist().replace(hour=CAPTURE_END[0], minute=CAPTURE_END[1], second=0, microsecond=0)
+        live_exit = now_ist().replace(hour=EXIT_CANDLE_TIME[0], minute=EXIT_CANDLE_TIME[1], second=0, microsecond=0)
+        next_live_exit_attempt = live_exit
         if now_ist() < start:
             time.sleep((start - now_ist()).total_seconds())
 
@@ -261,10 +385,15 @@ class HeroZeroCapture:
                 now = now_ist()
                 if not self.snapshot_taken and now >= snapshot:
                     self._snapshot()
+                if self.live_trading and self.live_positions and now >= next_live_exit_attempt:
+                    self._exit_live_positions()
+                    next_live_exit_attempt = now_ist() + timedelta(seconds=5)
                 time.sleep(0.2)
             if not self.snapshot_taken:
                 self._snapshot()
         finally:
+            if self.live_trading and self.live_positions:
+                self._exit_live_positions()
             try:
                 self.ws.close_connection()
             except Exception:
@@ -275,10 +404,13 @@ class HeroZeroCapture:
         result = {
             "date": self.session.isoformat(),
             "status": "captured",
+            "trading_mode": "LIVE" if self.live_trading else "PAPER",
             "expiry_underlyings": self.expiry_info,
             "subscribed_symbols": len(self.universe),
             "selected_options": len(self.candidates),
-            "paper_trades": paper_trade_count,
+            "paper_trades": paper_trade_count if not self.live_trading else 0,
+            "live_trades": paper_trade_count if self.live_trading else 0,
+            "open_live_positions": len(self.live_positions),
             "bands": {"NIFTY": list(NIFTY_PRICE_BAND), "SENSEX": list(SENSEX_PRICE_BAND)},
             "spot_windows": {"NIFTY": 50, "SENSEX": 100},
             "selection_time": "15:20 Asia/Kolkata",
@@ -287,6 +419,7 @@ class HeroZeroCapture:
             "candidates_csv": self.candidates_file.name,
             "ticks_csv": self.ticks_file.name,
             "paper_trades_csv": f"hero_zero_trades_{self.session}.csv",
+            "live_orders_csv": self.live_orders_file.name if self.live_trading else None,
         }
         write_status(self.status_file, result)
         return result

@@ -1,70 +1,109 @@
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_nifty_capture.py", line 242, in <module>
+    NiftyCapture().run()
+    ^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_nifty_capture.py", line 58, in __init__
+    self._load_token()
+  File "D:\nikhil\algo\fyers_nifty_capture.py", line 76, in _load_token
+    self.rest = fyersModel.FyersModel(client_id=self.app_id, token=self.access_token, is_async=False, log_path=str(TMP_DIR))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\site-packages\fyers_apiv3\fyersModel.py", line 730, in __init__
+    logger_handler=logging.FileHandler(self.log_path + "fyersApi.log"),
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\logging\__init__.py", line 1231, in __init__
+    StreamHandler.__init__(self, self._open())
+                                 ^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\logging\__init__.py", line 1263, in _open
+    return open_func(self.baseFilename, self.mode,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'D:\\nikhil\\algo\\tmp\\fyersApi.log'
 Waiting for market open (09:15 IST)...
-[orders] mode=DRY_RUN lots=1 loss_limit=Rs 1000
-[09:15:05] WebSocket connected, subscribing NSE:NIFTY50-INDEX
-Capturing to nifty_1s_2026-10-09.csv and nifty_1min_2026-10-09.csv until 15:30 IST (Ctrl+C to stop)
-[09:16:03] 1m 2026-10-09 09:15:00 O22314.95 H22351.05 L22299.25 C22349.35
-[09:17:03] 1m 2026-10-09 09:16:00 O22350.05 H22383.45 L22349.9 C22371.8
-[09:18:03] 1m 2026-10-09 09:17:00 O22371.6 H22381.45 L22359.25 C22367.65
-[09:19:03] 1m 2026-10-09 09:18:00 O22368.1 H22371.85 L22352.35 C22352.35
-[09:20:03] 1m 2026-10-09 09:19:00 O22353.6 H22354.3 L22316.95 C22319.85
-[09:21:03] 1m 2026-10-09 09:20:00 O22320.0 H22340.85 L22319.6 C22339.5
-[09:22:03] 1m 2026-10-09 09:21:00 O22338.25 H22344.45 L22324.15 C22324.9
-[09:22:03] ARMED PUT: enter at market on the first tick of 09:22 (mid 22341.35)
-*** ENTRY PUT: 09:22:04 @ 22331.95 | SL 22383.45 TGT 22281.95 mid 22341.35
-[orders] DRY_RUN BUY NSE:NIFTY26O1322250PE qty 65 @ 82.0
-[09:23:03] 1m 2026-10-09 09:22:00 O22325.35 H22341.65 L22323.9 C22337.7
-[09:24:03] 1m 2026-10-09 09:23:00 O22337.3 H22338.15 L22313.8 C22314.8
-[orders] DRY_RUN SELL NSE:NIFTY26O1322250PE @ 94.45 [option_target] trade Rs +809 day Rs +809
-[09:25:03] 1m 2026-10-09 09:24:00 O22315.05 H22324.0 L22300.25 C22302.7
-[09:26:03] 1m 2026-10-09 09:25:00 O22303.4 H22312.15 L22294.75 C22305.3
-[09:27:03] 1m 2026-10-09 09:26:00 O22305.0 H22331.35 L22300.45 C22331.15
-[09:28:03] 1m 2026-10-09 09:27:00 O22331.0 H22358.65 L22330.9 C22349.9
-*** EXIT PUT -17.95 pts (Rs -1,167): 09:27 @ 22349.90 [midpoint_close_exit]
-Paper P&L: 3 trades, -1.90 pts, Rs -124 (1 lot)
-[09:29:03] 1m 2026-10-09 09:28:00 O22349.85 H22367.8 L22349.8 C22361.85
-[09:29:43] WebSocket closed: {'code': 200, 'message': 'Connection Closed', 's': 'ok'}
+[orders] mode=LIVE lots=1 loss_limit=Rs 1000
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_nifty_capture.py", line 242, in <module>
+    NiftyCapture().run()
+  File "D:\nikhil\algo\fyers_nifty_capture.py", line 199, in run
+    self.ws = data_ws.FyersDataSocket(
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\site-packages\fyers_apiv3\FyersWebsocket\data_ws.py", line 264, in __init__
+    logger_handler=logging.FileHandler(self.log_path + "fyersDataSocket.log"),
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\logging\__init__.py", line 1231, in __init__
+    StreamHandler.__init__(self, self._open())
+                                 ^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\logging\__init__.py", line 1263, in _open
+    return open_func(self.baseFilename, self.mode,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'D:\\tmp\\fyersDataSocket.log'
+[orders] mode=LIVE lots=1 loss_limit=Rs 1000
+[09:16:50] 1m 2026-10-12 09:15:00 O22593.2 H22651.1 L22585.8 C22632.9
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_nifty_capture.py", line 242, in <module>
+    NiftyCapture().run()
+  File "D:\nikhil\algo\fyers_nifty_capture.py", line 199, in run
+    self.ws = data_ws.FyersDataSocket(
+              ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\site-packages\fyers_apiv3\FyersWebsocket\data_ws.py", line 264, in __init__
+    logger_handler=logging.FileHandler(self.log_path + "fyersDataSocket.log"),
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\logging\__init__.py", line 1231, in __init__
+    StreamHandler.__init__(self, self._open())
+                                 ^^^^^^^^^^^^
+  File "C:\Users\hp\AppData\Local\Programs\Python\Python312\Lib\logging\__init__.py", line 1263, in _open
+    return open_func(self.baseFilename, self.mode,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'D:\\tmp\\fyersDataSocket.log'
+[orders] mode=LIVE lots=1 loss_limit=Rs 1000
+[09:17:50] 1m 2026-10-12 09:16:00 O22636.8 H22647.5 L22621.75 C22643.8
+[09:17:52] WebSocket connected, subscribing NSE:NIFTY50-INDEX
+Capturing to nifty_1s_2026-10-12.csv and nifty_1min_2026-10-12.csv until 15:30 IST (Ctrl+C to stop)
+[09:18:03] 1m 2026-10-12 09:17:00 O22646.4 H22646.4 L22630.3 C22635.95
+[09:19:03] 1m 2026-10-12 09:18:00 O22637.65 H22637.65 L22606.25 C22611.0
+[09:20:03] 1m 2026-10-12 09:19:00 O22612.35 H22612.55 L22581.9 C22585.1
+[09:21:03] 1m 2026-10-12 09:20:00 O22586.55 H22595.05 L22575.5 C22586.0
+[09:22:03] 1m 2026-10-12 09:21:00 O22588.9 H22597.7 L22580.05 C22584.8
+[09:23:03] 1m 2026-10-12 09:22:00 O22588.35 H22588.35 L22559.1 C22560.95
+[09:24:03] 1m 2026-10-12 09:23:00 O22562.75 H22562.75 L22521.75 C22522.7
+[09:25:03] 1m 2026-10-12 09:24:00 O22523.75 H22533.6 L22512.0 C22529.9
+[09:26:03] 1m 2026-10-12 09:25:00 O22533.05 H22533.7 L22519.15 C22528.8
+[09:27:03] 1m 2026-10-12 09:26:00 O22531.5 H22551.9 L22529.95 C22546.5
+[09:28:03] 1m 2026-10-12 09:27:00 O22549.35 H22561.75 L22545.25 C22557.5
+[09:29:03] 1m 2026-10-12 09:28:00 O22559.55 H22574.7 L22551.55 C22573.8
+[09:30:03] 1m 2026-10-12 09:29:00 O22575.95 H22582.8 L22570.7 C22581.8
+[09:31:03] 1m 2026-10-12 09:30:00 O22584.25 H22587.6 L22568.8 C22569.45
+[09:32:03] 1m 2026-10-12 09:31:00 O22572.05 H22572.05 L22551.9 C22553.7
+[09:33:03] 1m 2026-10-12 09:32:00 O22555.75 H22566.9 L22543.6 C22554.6
+[09:34:03] 1m 2026-10-12 09:33:00 O22556.25 H22556.35 L22546.1 C22551.4
+[09:35:03] 1m 2026-10-12 09:34:00 O22554.0 H22554.0 L22534.75 C22535.2
+[09:36:03] 1m 2026-10-12 09:35:00 O22536.05 H22543.0 L22533.85 C22539.2
+[09:37:03] 1m 2026-10-12 09:36:00 O22540.3 H22540.3 L22524.8 C22524.8
+[09:38:03] 1m 2026-10-12 09:37:00 O22527.3 H22532.95 L22517.0 C22531.15
+[09:39:03] 1m 2026-10-12 09:38:00 O22533.55 H22534.65 L22522.75 C22523.95
+[09:40:03] 1m 2026-10-12 09:39:00 O22526.45 H22527.1 L22513.3 C22514.45
+[09:41:03] 1m 2026-10-12 09:40:00 O22516.85 H22527.15 L22508.3 C22526.65
+[09:42:03] 1m 2026-10-12 09:41:00 O22529.1 H22529.1 L22516.75 C22526.35
+[09:43:03] 1m 2026-10-12 09:42:00 O22528.05 H22531.55 L22518.1 C22521.45
+[09:44:03] 1m 2026-10-12 09:43:00 O22522.4 H22524.4 L22518.7 C22521.35
+[09:45:03] 1m 2026-10-12 09:44:00 O22521.65 H22521.65 L22509.95 C22512.15
+[09:46:03] 1m 2026-10-12 09:45:00 O22513.25 H22532.3 L22510.95 C22528.8
+[09:47:03] 1m 2026-10-12 09:46:00 O22529.85 H22538.15 L22527.6 C22535.85
+[09:48:03] 1m 2026-10-12 09:47:00 O22537.35 H22537.35 L22514.7 C22522.9
+[09:49:03] 1m 2026-10-12 09:48:00 O22524.4 H22524.4 L22516.45 C22520.0
+[09:50:03] 1m 2026-10-12 09:49:00 O22521.0 H22523.35 L22511.85 C22521.6
+[09:51:03] 1m 2026-10-12 09:50:00 O22523.9 H22523.9 L22508.9 C22510.55
+[09:52:03] 1m 2026-10-12 09:51:00 O22511.9 H22511.9 L22500.0 C22503.35
+[09:53:03] 1m 2026-10-12 09:52:00 O22505.75 H22505.75 L22482.65 C22482.95
+[09:54:03] 1m 2026-10-12 09:53:00 O22485.1 H22492.65 L22480.05 C22489.9
+[09:55:03] 1m 2026-10-12 09:54:00 O22491.7 H22491.7 L22472.15 C22475.9
+[09:56:03] 1m 2026-10-12 09:55:00 O22478.25 H22504.75 L22475.7 C22501.05
+[09:57:03] 1m 2026-10-12 09:56:00 O22502.3 H22524.45 L22502.1 C22522.5
+[09:58:03] 1m 2026-10-12 09:57:00 O22525.15 H22527.4 L22509.1 C22514.75
+[09:59:03] 1m 2026-10-12 09:58:00 O22516.05 H22517.45 L22506.9 C22509.0
+[10:00:00] 1m 2026-10-12 09:59:00 O22510.4 H22516.05 L22506.9 C22512.45
+[10:00:02] WebSocket closed: {'code': 200, 'message': 'Connection Closed', 's': 'ok'}
 Capture stopped.
-nifty_1min_2026-10-09.csv: 14 candles, 1 trade(s)
-  PUT  ENTRY 09:22 @ 22325.35  (mid 22341.35, SL 22383.45, TGT 22275.35)  -> EXIT 09:27 @ 22349.9 [midpoint_close_exit]  P/L -24.55
-  Day P/L: -24.55 points  ->  /Users/nikhilseepana/projects/algoneo/captured_data/fyers/live/strategy_trades_2026-10-09.csv
-[orders] mode=DRY_RUN lots=1 loss_limit=Rs 1000
-[09:29:59] WebSocket connected, subscribing NSE:NIFTY50-INDEX
-Capturing to nifty_1s_2026-10-09.csv and nifty_1min_2026-10-09.csv until 15:30 IST (Ctrl+C to stop)
-[09:31:03] 1m 2026-10-09 09:29:00 O22361.65 H22376.05 L22360.9 C22375.1
-[09:31:03] 1m 2026-10-09 09:30:00 O22375.55 H22388.7 L22368.95 C22374.35
-[09:32:03] 1m 2026-10-09 09:31:00 O22374.9 H22379.6 L22365.0 C22373.75
-[09:33:03] 1m 2026-10-09 09:32:00 O22374.75 H22379.1 L22362.5 C22368.15
-[09:34:03] 1m 2026-10-09 09:33:00 O22369.3 H22388.2 L22365.05 C22388.2
-[09:35:03] 1m 2026-10-09 09:34:00 O22388.55 H22401.15 L22388.05 C22393.8
-[09:36:03] 1m 2026-10-09 09:35:00 O22394.0 H22396.8 L22386.8 C22388.5
-[09:37:03] 1m 2026-10-09 09:36:00 O22388.25 H22400.35 L22387.6 C22393.1
-[09:38:03] 1m 2026-10-09 09:37:00 O22393.15 H22393.95 L22380.6 C22383.45
-[09:39:03] 1m 2026-10-09 09:38:00 O22383.65 H22420.45 L22383.65 C22417.15
-[09:40:03] 1m 2026-10-09 09:39:00 O22417.55 H22418.95 L22411.2 C22412.4
-[09:41:03] 1m 2026-10-09 09:40:00 O22412.15 H22418.15 L22407.0 C22411.35
-[09:42:03] 1m 2026-10-09 09:41:00 O22411.95 H22433.0 L22411.85 C22421.65
-[09:43:03] 1m 2026-10-09 09:42:00 O22421.6 H22430.0 L22421.6 C22427.2
-[09:44:03] 1m 2026-10-09 09:43:00 O22427.7 H22433.35 L22426.6 C22428.75
-[09:45:03] 1m 2026-10-09 09:44:00 O22428.45 H22429.95 L22422.7 C22428.75
-[09:46:03] 1m 2026-10-09 09:45:00 O22429.05 H22437.65 L22426.85 C22432.5
-[09:47:03] 1m 2026-10-09 09:46:00 O22432.65 H22443.1 L22432.35 C22441.2
-[09:48:03] 1m 2026-10-09 09:47:00 O22441.5 H22447.3 L22434.75 C22434.75
-[09:49:03] 1m 2026-10-09 09:48:00 O22435.4 H22449.1 L22435.2 C22441.55
-[09:50:03] 1m 2026-10-09 09:49:00 O22441.6 H22449.4 L22440.1 C22446.7
-[09:51:03] 1m 2026-10-09 09:50:00 O22445.95 H22452.0 L22439.85 C22451.95
-[09:52:03] 1m 2026-10-09 09:51:00 O22451.85 H22462.8 L22450.95 C22454.85
-[09:53:03] 1m 2026-10-09 09:52:00 O22454.75 H22454.75 L22437.0 C22437.9
-[09:54:03] 1m 2026-10-09 09:53:00 O22438.2 H22450.5 L22434.85 C22441.95
-[09:55:03] 1m 2026-10-09 09:54:00 O22442.4 H22461.6 L22441.25 C22460.75
-[09:56:03] 1m 2026-10-09 09:55:00 O22461.5 H22474.2 L22461.1 C22468.0
-[09:57:03] 1m 2026-10-09 09:56:00 O22468.2 H22480.45 L22466.25 C22477.4
-[09:58:03] 1m 2026-10-09 09:57:00 O22477.3 H22479.5 L22473.6 C22476.95
-[09:59:03] 1m 2026-10-09 09:58:00 O22476.8 H22480.05 L22470.55 C22470.9
-[10:00:00] 1m 2026-10-09 09:59:00 O22471.2 H22474.25 L22459.1 C22459.95
-[10:00:01] WebSocket closed: {'code': 200, 'message': 'Connection Closed', 's': 'ok'}
-Capture stopped.
-nifty_1min_2026-10-09.csv: 45 candles, 1 trade(s)
-  PUT  ENTRY 09:22 @ 22325.35  (mid 22341.35, SL 22383.45, TGT 22275.35)  -> EXIT 09:27 @ 22349.9 [midpoint_close_exit]  P/L -24.55
-  Day P/L: -24.55 points  ->  /Users/nikhilseepana/projects/algoneo/captured_data/fyers/live/strategy_trades_2026-10-09.csv
+nifty_1min_2026-10-12.csv: 45 candles, NO TRADE triggered.
 Trade log: added 45 candles to fyers_spot_1min_extended.csv
+D:\nikhil\algo\backtest_midpoint_strategy.py:204: Pandas4Warning: Timestamp.utcnow is deprecated and will be removed in a future version. Use Timestamp.now('UTC') instead.
+  "run_ts_utc": pd.Timestamp.utcnow().strftime("%Y-%m-%d %H:%M:%S"),
 Trade log rebuilt (trades CSV, day review, performance).

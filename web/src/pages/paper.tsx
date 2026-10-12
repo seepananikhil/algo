@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronLeft, ChevronRight, X } from "lucide-react"
-import { DayPanel } from "@/components/day-detail"
+import { DayDetail, DayPanel } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -149,6 +149,7 @@ function CapitalDayPanel({ date, trades, onClose }: {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className={cn("border-b pb-3 text-lg font-semibold tabular-nums", pnlClass(total))}>Day net: {fmtRs(total)}</p>
+          <DayDetail date={date} mode="paper" compact chartOnly />
           <Table>
             <TableHeader><TableRow>
               <TableHead>Option</TableHead>

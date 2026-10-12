@@ -94,7 +94,7 @@ export function LivePage() {
           <h1 className="text-xl font-semibold">Live</h1>
           <p className="text-sm text-muted-foreground">
             Session 09:15–09:50 · entries until 09:40 · {today}
-            {status && !status.capture_running && status.auto_start_capture && " · auto-starts weekdays 09:00–09:55"}
+            {status && !status.capture_running && " · auto-starts weekdays 09:00–09:55"}
           </p>
         </div>
         <div className="flex gap-2">

@@ -62,7 +62,6 @@ class NiftyCapture:
         self.stop = threading.Event()
         day = now_ist().strftime("%Y-%m-%d")
         OUT_DIR.mkdir(parents=True, exist_ok=True)
-        TMP_DIR.mkdir(parents=True, exist_ok=True)  # Ensure temp directory exists
         self.sec_file = OUT_DIR / f"nifty_1s_{day}.csv"
         self.min_file = OUT_DIR / f"nifty_1min_{day}.csv"
         self.last_candle_epoch = self._last_written_epoch()
@@ -73,6 +72,7 @@ class NiftyCapture:
         tok = json.loads(TOKEN_FILE.read_text(encoding="utf-8")) if TOKEN_FILE.exists() else {}
         self.app_id = tok.get("app_id", "")
         self.access_token = tok.get("access_token", "")
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
         self.rest = fyersModel.FyersModel(client_id=self.app_id, token=self.access_token, is_async=False, log_path=str(TMP_DIR))
 
     def wait_for_valid_token(self) -> None:
@@ -116,14 +116,22 @@ class NiftyCapture:
 
     def second_loop(self) -> None:
         next_tick = int(time.time()) + 1
+        stale_exit_requested = False
         while not self.stop.is_set():
             time.sleep(max(0.0, next_tick - time.time()))
             next_tick += 1
             with self.lock:
                 ltp, ltp_ts = self.ltp, self.ltp_ts
-            if ltp is None:
+            if ltp is None or ltp_ts is None:
                 continue
             ts = datetime.fromtimestamp(next_tick - 1, IST)
+            if (now_ist() - ltp_ts).total_seconds() > 3:
+                if self.trader and self.trader.position and not stale_exit_requested:
+                    print(f"[{ts:%H:%M:%S}] NIFTY feed stale; requesting market exit")
+                    self.trader.exit("stale_index_feed")
+                    stale_exit_requested = True
+                continue
+            stale_exit_requested = False
             append_row(self.sec_file, ["timestamp", "ltp", "last_tick_at"], [ts.strftime(TS_FMT), ltp, ltp_ts.strftime(TS_FMT)])
             self.signals.check_tick(ltp, ts)
             if self.trader:
@@ -190,7 +198,7 @@ class NiftyCapture:
         self.signals.evaluate()
         self.ws = data_ws.FyersDataSocket(
             access_token=f"{self.app_id}:{self.access_token}",
-            log_path="/tmp",
+            log_path=str(TMP_DIR),
             litemode=True,
             reconnect=True,
             on_message=self.on_message,

@@ -5,7 +5,6 @@ export type Status = {
   token: { valid: boolean; generated_at_utc: string | null }
   capture_running: boolean
   market_open_day?: boolean
-  auto_start_capture?: boolean
   mode: "PAPER" | "LIVE"
   lots: number
   daily_loss_limit: number | null
@@ -208,11 +207,15 @@ export type Settings = {
   daily_loss_limit: number
   strike_offset: number
   option_target_pct: number
-  auto_start_capture: boolean
+  minimum_live_funds: number
+  midpoint_live_trading: boolean
+  hero_zero_live_trading: boolean
   live_trading: boolean
   capture_running: boolean
   restart_required?: boolean
 }
+
+export type FundsStatus = { ok: true; available_equity_funds: number } | { ok: false; error: string }
 
 export async function getJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { cache: "no-store" })

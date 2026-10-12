@@ -25,6 +25,7 @@ from urllib.parse import parse_qs, urlparse
 import pandas as pd
 
 from midpoint_strategy import MIDPOINT_BUFFER_POINTS, PAPER_LOTS, PAPER_STARTING_CAPITAL, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
+from fyers_orders import available_equity_funds
 
 ROOT = Path(__file__).resolve().parent
 TMP_DIR = ROOT / ".tmp"
@@ -57,11 +58,12 @@ HERO_ZERO_END = (15, 31)
 
 # Only these config keys are exposed/editable from the UI (never app_id/secret_key).
 EDITABLE_SETTINGS = {
-    "lots": (int, 1, 20),
+    "lots": (int, 1, PAPER_LOTS),
     "daily_loss_limit": (int, 100, 100000),
     "strike_offset": (int, 0, 500),
     "option_target_pct": (int, 0, 200),
-    "auto_start_capture": (bool, None, None),
+    "hero_zero_live_trading": (bool, None, None),
+    "minimum_live_funds": (int, 10000, 10000000),
 }
 
 
@@ -194,8 +196,7 @@ def auto_start_loop() -> None:
                 time.sleep(30)
                 continue
             in_window = AUTO_START_WINDOW[0] <= now.strftime("%H:%M") <= AUTO_START_WINDOW[1]
-            enabled = read_config().get("auto_start_capture", True)
-            if in_window and enabled and _capture["stopped_by_user"] != day and _capture["auto_started"] != day:
+            if in_window and _capture["stopped_by_user"] != day and _capture["auto_started"] != day:
                 if not capture_running():
                     start_capture()
                     print(f"[{now:%H:%M:%S}] auto-started capture")
@@ -398,23 +399,57 @@ def read_config() -> dict:
 def public_settings() -> dict:
     cfg = read_config()
     out = {k: cfg.get(k) for k in EDITABLE_SETTINGS}
-    out["auto_start_capture"] = bool(cfg.get("auto_start_capture", True))
-    out["live_trading"] = bool(cfg.get("live_trading"))
-    if not out["live_trading"]:
-        out["lots"] = PAPER_LOTS
+    out["lots"] = int(cfg.get("lots", PAPER_LOTS))
+    out["daily_loss_limit"] = cfg.get("daily_loss_limit") if cfg.get("daily_loss_limit") is not None else 1000
+    out["strike_offset"] = cfg.get("strike_offset") if cfg.get("strike_offset") is not None else 100
+    out["option_target_pct"] = cfg.get("option_target_pct") if cfg.get("option_target_pct") is not None else 10
+    out["minimum_live_funds"] = int(cfg.get("minimum_live_funds") or 25000)
+    out["midpoint_live_trading"] = bool(cfg.get("midpoint_live_trading", cfg.get("live_trading", False)))
+    out["hero_zero_live_trading"] = bool(cfg.get("hero_zero_live_trading", False))
+    out["live_trading"] = out["midpoint_live_trading"]
     out["capture_running"] = capture_running()
     return out
+
+
+def broker_funds() -> dict:
+    if not TOKEN_FILE.exists():
+        return {"ok": False, "error": "Fyers token is missing; log in first."}
+    try:
+        from fyers_apiv3 import fyersModel
+
+        tok = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
+        client = fyersModel.FyersModel(
+            client_id=tok["app_id"],
+            token=tok["access_token"],
+            is_async=False,
+            log_path=str(TMP_DIR),
+        )
+        response = client.funds()
+        available = available_equity_funds(response)
+        if available is None:
+            message = response.get("message") or "Fyers did not return an available equity balance."
+            return {"ok": False, "error": message}
+        return {"ok": True, "available_equity_funds": round(available, 2)}
+    except Exception as exc:
+        return {"ok": False, "error": f"Unable to fetch Fyers funds: {exc}"}
 
 
 def update_settings(body: dict) -> tuple:
     cfg = read_config()
     for key, value in body.items():
-        if key == "live_trading":
+        if key in ("live_trading", "midpoint_live_trading"):
             if not isinstance(value, bool):
-                return {"error": "live_trading must be true/false"}, 400
+                return {"error": f"{key} must be true/false"}, 400
             if value and body.get("confirm") != "LIVE":
-                return {"error": "type LIVE to confirm real-money trading"}, 400
+                return {"error": "type LIVE to confirm Midpoint real-money trading"}, 400
+            cfg["midpoint_live_trading"] = value
             cfg["live_trading"] = value
+        elif key == "hero_zero_live_trading":
+            if not isinstance(value, bool):
+                return {"error": "hero_zero_live_trading must be true/false"}, 400
+            if value and body.get("confirm") != "LIVE":
+                return {"error": "type LIVE to confirm HeroZero real-money trading"}, 400
+            cfg[key] = value
         elif key in EDITABLE_SETTINGS:
             kind, lo, hi = EDITABLE_SETTINGS[key]
             if kind is bool:
@@ -431,7 +466,7 @@ def update_settings(body: dict) -> tuple:
     tmp.chmod(0o600)
     tmp.replace(CONFIG_FILE)
     out = public_settings()
-    out["restart_required"] = out["capture_running"]
+    out["restart_required"] = out["capture_running"] or bool(_process_pids_by_pattern("fyers_hero_zero_capture.py"))
     return out, 200
 
 
@@ -560,6 +595,8 @@ def setup_info(df: pd.DataFrame) -> dict:
 
 def status() -> dict:
     cfg = read_config()
+    live_orders = read_csv_rows(LIVE_DIR / f"live_orders_{today()}.csv")
+    auto_live_started = any(row.get("mode") == "LIVE" for row in live_orders)
     secs = LIVE_DIR / f"nifty_1s_{today()}.csv"
     last_tick = None
     if secs.exists():
@@ -572,9 +609,8 @@ def status() -> dict:
         "market_open_day": is_market_weekday(),
         "token": token_status(),
         "capture_running": capture_running(),
-        "auto_start_capture": bool(cfg.get("auto_start_capture", True)),
-        "mode": "LIVE" if cfg.get("live_trading") else "PAPER",
-        "lots": cfg.get("lots", 1) if cfg.get("live_trading") else PAPER_LOTS,
+        "mode": "LIVE" if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or cfg.get("hero_zero_live_trading") or auto_live_started else "PAPER",
+        "lots": int(cfg.get("lots", PAPER_LOTS)) if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or auto_live_started else PAPER_LOTS,
         "daily_loss_limit": cfg.get("daily_loss_limit"),
         "kill_switch": STOP_FILE.exists(),
         "last_tick": last_tick,
@@ -675,7 +711,8 @@ def hero_zero_option_trades() -> list:
                 "nifty_points": 0.0,
                 "exit_reason": row["exit_reason"],
                 "mode": (
-                    "HEROZERO REPLAY · SPOT UNVERIFIED" if "spot_stale" in row.get("source", "")
+                    "HEROZERO LIVE" if row.get("source") == "hero_zero_live"
+                    else "HEROZERO REPLAY · SPOT UNVERIFIED" if "spot_stale" in row.get("source", "")
                     else "HEROZERO 1M REPLAY" if "historical_1m_replay" in row.get("source", "")
                     else "HEROZERO PAPER"
                 ),
@@ -870,7 +907,7 @@ class Handler(BaseHTTPRequestHandler):
                 "paper_trades": paper_trades,
                 "option_trades": option_fills,
                 "first_paper_date": first_paper_date,
-                "execution_mode": "LIVE" if read_config().get("live_trading") else "PAPER",
+                "execution_mode": "LIVE" if read_config().get("midpoint_live_trading", read_config().get("live_trading")) else "PAPER",
             })
         elif url.path == "/api/signals":
             self._json(read_csv_rows(LIVE_DIR / f"signals_{date}.csv"))
@@ -900,6 +937,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(backtest_report())
         elif url.path == "/api/settings":
             self._json(public_settings())
+        elif url.path == "/api/funds":
+            funds = broker_funds()
+            self._json(funds, 200 if funds["ok"] else 502)
         else:
             self._json({"error": "not found"}, 404)
 
