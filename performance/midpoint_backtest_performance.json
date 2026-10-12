@@ -1,5 +1,5 @@
 {
-  "run_ts_utc": "2026-10-12 04:30:36",
+  "run_ts_utc": "2026-10-12 10:00:16",
   "input_csv": "captured_data/fyers/fyers_spot_1min_extended.csv",
   "rr": 1.0,
   "max_hold_bars": 20,

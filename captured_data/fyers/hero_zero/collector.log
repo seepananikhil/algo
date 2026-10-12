@@ -16,3 +16,6 @@
 [2026-10-10 09:01:28 IST] Scheduler failed: [WinError 2] The system cannot find the file specified
 [2026-10-10 09:01:58 IST] Scheduler failed: [WinError 2] The system cannot find the file specified
 [2026-10-10 09:02:28 IST] Scheduler failed: [WinError 2] The system cannot find the file specified
+
+[2026-10-12 15:05:08 IST] Starting HeroZero expiry capture.
+2026-10-12: no NIFTY or SENSEX expiry contracts; HeroZero capture skipped
