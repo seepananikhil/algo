@@ -350,6 +350,56 @@ export type Settings = {
 
 export type FundsStatus = { ok: true; available_equity_funds: number } | { ok: false; error: string }
 
+export type ManualOptionChoices = {
+  spot: number
+  atm: number
+  max_lots: number
+  expiries: { expiry: string; lot_size: number; strikes: number[] }[]
+}
+
+export type ManualPosition = {
+  symbol: string
+  net_qty: number
+  lot_size: number
+  average_price: number
+  pnl: number
+  realized_pnl: number
+  unrealized_pnl: number
+}
+
+export type ManualOrder = {
+  id: string
+  symbol: string
+  qty: number
+  side: number
+  type: number
+  status: number
+  limit_price: number
+  traded_price: number
+  filled_qty: number
+  time: string
+}
+
+export type ManualTradingSnapshot = {
+  updated_at: string
+  order_window_open: boolean
+  kill_switch: boolean
+  account_pnl: { realized: number; unrealized: number; total: number }
+  positions: ManualPosition[]
+  orders: ManualOrder[]
+}
+
+export type ManualOrderResult = {
+  ok: true
+  order_id: string
+  symbol: string
+  qty: number
+  action: "BUY" | "SELL"
+  order_type: "MARKET" | "LIMIT"
+}
+
+export type ManualOptionQuote = { symbol: string; lot_size: number; last_price: number }
+
 export async function getJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { cache: "no-store" })
   const data = await r.json()

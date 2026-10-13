@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import csv
 import json
+import math
 import mimetypes
 import os
 import re
@@ -25,7 +26,7 @@ from urllib.parse import parse_qs, urlparse
 import pandas as pd
 
 from midpoint_strategy import MIDPOINT_BUFFER_POINTS, PAPER_LOTS, PAPER_STARTING_CAPITAL, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
-from fyers_orders import available_equity_funds
+from fyers_orders import available_equity_funds, load_nifty_options
 from key_level_strategy import aggregate_five_minute, backtest_key_levels, read_paper_events, settings_from_config as key_level_settings, summarize_key_level_trades
 from option_paper import read_option_paper_trades
 
@@ -445,6 +446,247 @@ def broker_funds() -> dict:
         return {"ok": True, "available_equity_funds": round(available, 2)}
     except Exception as exc:
         return {"ok": False, "error": f"Unable to fetch Fyers funds: {exc}"}
+
+
+class ManualTradeError(Exception):
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
+
+
+def manual_fyers_client():
+    if not TOKEN_FILE.exists():
+        raise ManualTradeError("Fyers token is missing; log in first.", 401)
+    from fyers_apiv3 import fyersModel
+
+    tok = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
+    return fyersModel.FyersModel(
+        client_id=tok["app_id"],
+        token=tok["access_token"],
+        is_async=False,
+        log_path=str(TMP_DIR),
+    )
+
+
+def _manual_number(value, default: float = 0.0) -> float:
+    try:
+        result = float(value)
+        return result if math.isfinite(result) else default
+    except (TypeError, ValueError):
+        return default
+
+
+def _manual_contract(expiry_text: str, strike_value, option_type: str) -> dict:
+    try:
+        expiry = datetime.strptime(expiry_text, "%Y-%m-%d").date()
+        strike = float(strike_value)
+    except (TypeError, ValueError):
+        raise ManualTradeError("Choose a valid expiry and strike.") from None
+    option_type = str(option_type).upper()
+    if not math.isfinite(strike) or option_type not in ("CE", "PE"):
+        raise ManualTradeError("Choose a valid NIFTY CE or PE contract.")
+    options = load_nifty_options()
+    matches = options[
+        (options["expiry"] == expiry)
+        & (options["strike"] == strike)
+        & (options["opt_type"] == option_type)
+    ]
+    if matches.empty:
+        raise ManualTradeError("That NIFTY option contract is not available in the current symbol master.")
+    row = matches.iloc[0]
+    return {"symbol": str(row["symbol"]), "lot_size": int(row["lot_size"]), "expiry": expiry.isoformat(), "strike": strike, "option_type": option_type}
+
+
+def manual_option_choices() -> dict:
+    client = manual_fyers_client()
+    quote = client.quotes(data={"symbols": "NSE:NIFTY50-INDEX"})
+    quote_rows = quote.get("d") or []
+    if quote.get("s") != "ok" or not quote_rows:
+        raise ManualTradeError("Unable to get the current NIFTY reference quote from Fyers.", 502)
+    spot = _manual_number((quote_rows[0].get("v") or {}).get("lp"))
+    if spot <= 0:
+        raise ManualTradeError("Fyers did not return a valid NIFTY reference quote.", 502)
+
+    options = load_nifty_options()
+    current_date = datetime.now(IST).date()
+    expiries = sorted(expiry for expiry in options["expiry"].unique() if expiry >= current_date)[:4]
+    if not expiries:
+        raise ManualTradeError("No future NIFTY option expiries are available.", 503)
+    atm = round(spot / 50) * 50
+    choices = []
+    for expiry in expiries:
+        rows = options[(options["expiry"] == expiry) & (options["strike"].between(atm - 2000, atm + 2000))]
+        choices.append({
+            "expiry": expiry.isoformat(),
+            "lot_size": int(rows.iloc[0]["lot_size"]) if not rows.empty else 0,
+            "strikes": sorted(int(strike) for strike in rows["strike"].unique()),
+        })
+    return {"spot": spot, "atm": atm, "max_lots": max(1, int(PAPER_LOTS)), "expiries": choices}
+
+
+def manual_option_quote(query: dict) -> dict:
+    symbol = str((query.get("symbol") or [""])[0])
+    if symbol:
+        options = load_nifty_options()
+        matches = options[options["symbol"] == symbol]
+        if matches.empty:
+            raise ManualTradeError("Choose a NIFTY option from the current symbol master.")
+        row = matches.iloc[0]
+        contract = {"symbol": symbol, "lot_size": int(row["lot_size"])}
+    else:
+        expiry = str((query.get("expiry") or [""])[0])
+        strike = (query.get("strike") or [""])[0]
+        option_type = str((query.get("option_type") or [""])[0])
+        contract = _manual_contract(expiry, strike, option_type)
+
+    response = manual_fyers_client().quotes(data={"symbols": contract["symbol"]})
+    rows = response.get("d") or []
+    price = _manual_number((rows[0].get("v") or {}).get("lp")) if response.get("s") == "ok" and rows else 0
+    if price <= 0:
+        raise ManualTradeError("Fyers did not return a valid option quote.", 502)
+    return {"symbol": contract["symbol"], "lot_size": contract["lot_size"], "last_price": price}
+
+
+def manual_trading_snapshot() -> dict:
+    client = manual_fyers_client()
+    positions_response = client.positions()
+    orders_response = client.orderbook()
+    if positions_response.get("s") != "ok":
+        raise ManualTradeError("Fyers positions request failed.", 502)
+    if orders_response.get("s") != "ok":
+        raise ManualTradeError("Fyers order-book request failed.", 502)
+
+    open_positions = []
+    for row in positions_response.get("netPositions") or []:
+        symbol = str(row.get("symbol", ""))
+        if not (symbol.startswith("NSE:NIFTY") and symbol.endswith(("CE", "PE"))):
+            continue
+        net_qty = int(_manual_number(row.get("netQty")))
+        if net_qty == 0:
+            continue
+        open_positions.append({
+            "symbol": symbol,
+            "net_qty": net_qty,
+            "average_price": _manual_number(row.get("netAvg")),
+            "pnl": _manual_number(row.get("pl")),
+            "realized_pnl": _manual_number(row.get("realized_profit")),
+            "unrealized_pnl": _manual_number(row.get("unrealized_profit")),
+        })
+
+    if open_positions:
+        options = load_nifty_options()
+        lot_sizes = options.set_index("symbol")["lot_size"].to_dict()
+        for position in open_positions:
+            position["lot_size"] = int(lot_sizes.get(position["symbol"], 0))
+
+    orders = []
+    for row in (orders_response.get("orderBook") or [])[-50:]:
+        symbol = str(row.get("symbol", ""))
+        if not (symbol.startswith("NSE:NIFTY") and symbol.endswith(("CE", "PE"))):
+            continue
+        orders.append({
+            "id": str(row.get("id", "")),
+            "symbol": symbol,
+            "qty": int(_manual_number(row.get("qty"))),
+            "side": int(_manual_number(row.get("side"))),
+            "type": int(_manual_number(row.get("type"))),
+            "status": int(_manual_number(row.get("status"))),
+            "limit_price": _manual_number(row.get("limitPrice")),
+            "traded_price": _manual_number(row.get("tradedPrice")),
+            "filled_qty": int(_manual_number(row.get("filledQty"))),
+            "time": str(row.get("orderDateTime", "")),
+        })
+
+    overall = positions_response.get("overall") or {}
+    now = datetime.now(IST)
+    return {
+        "updated_at": now.isoformat(timespec="seconds"),
+        "order_window_open": is_market_weekday(now) and datetime.strptime("09:15", "%H:%M").time() <= now.time() <= datetime.strptime("15:30", "%H:%M").time(),
+        "kill_switch": STOP_FILE.exists(),
+        "account_pnl": {
+            "realized": _manual_number(overall.get("pl_realized")),
+            "unrealized": _manual_number(overall.get("pl_unrealized")),
+            "total": _manual_number(overall.get("pl_total")),
+        },
+        "positions": open_positions,
+        "orders": orders,
+    }
+
+
+def submit_manual_order(body: dict) -> dict:
+    if body.get("confirm") != "PLACE LIVE ORDER":
+        raise ManualTradeError("Type PLACE LIVE ORDER in the confirmation dialog to submit.")
+
+    action = str(body.get("action", "")).upper()
+    order_kind = str(body.get("order_type", "")).upper()
+    if action not in ("BUY", "SELL") or order_kind not in ("MARKET", "LIMIT"):
+        raise ManualTradeError("Choose Buy or Sell and Market or Limit.")
+    try:
+        lots = int(body.get("lots"))
+    except (TypeError, ValueError):
+        raise ManualTradeError("Lots must be a whole number.") from None
+    if lots < 1 or lots > int(PAPER_LOTS):
+        raise ManualTradeError(f"Lots must be between 1 and {int(PAPER_LOTS)}.")
+
+    if STOP_FILE.exists() and action == "BUY":
+        raise ManualTradeError("Kill switch is on; new manual buys are blocked.", 409)
+    now = datetime.now(IST)
+    if not is_market_weekday(now) or not (datetime.strptime("09:15", "%H:%M").time() <= now.time() <= datetime.strptime("15:30", "%H:%M").time()):
+        raise ManualTradeError("Manual live orders are disabled outside market hours.", 409)
+
+    if action == "BUY":
+        contract = _manual_contract(body.get("expiry", ""), body.get("strike"), body.get("option_type", ""))
+    else:
+        symbol = str(body.get("symbol", ""))
+        client = manual_fyers_client()
+        positions = client.positions()
+        if positions.get("s") != "ok":
+            raise ManualTradeError("Unable to verify the open position before selling.", 502)
+        open_row = next((row for row in positions.get("netPositions") or [] if row.get("symbol") == symbol), None)
+        if not symbol.startswith("NSE:NIFTY") or not symbol.endswith(("CE", "PE")) or not open_row:
+            raise ManualTradeError("Select an open NIFTY option position to sell.")
+        net_qty = int(_manual_number(open_row.get("netQty")))
+        options = load_nifty_options()
+        master = options[options["symbol"] == symbol]
+        if net_qty <= 0 or master.empty:
+            raise ManualTradeError("Manual sells can only reduce an open long NIFTY option position.", 409)
+        contract = {"symbol": symbol, "lot_size": int(master.iloc[0]["lot_size"])}
+        if lots * contract["lot_size"] > net_qty:
+            raise ManualTradeError("Sell quantity exceeds the currently open position.", 409)
+
+    quantity = lots * contract["lot_size"]
+    limit_price = 0.0
+    if order_kind == "LIMIT":
+        limit_price = _manual_number(body.get("limit_price"), -1)
+        if limit_price <= 0 or abs(limit_price * 20 - round(limit_price * 20)) > 1e-6:
+            raise ManualTradeError("Enter a positive limit price in ₹0.05 increments.")
+
+    client = manual_fyers_client()
+    if action == "BUY":
+        reference_price = limit_price
+        if order_kind == "MARKET":
+            quote = client.quotes(data={"symbols": contract["symbol"]})
+            rows = quote.get("d") or []
+            reference_price = _manual_number((rows[0].get("v") or {}).get("lp")) if quote.get("s") == "ok" and rows else 0
+        available = available_equity_funds(client.funds())
+        if reference_price <= 0 or available is None or available < reference_price * quantity * 1.05:
+            raise ManualTradeError("Buy blocked: could not verify the quote/funds or available funds are insufficient.", 409)
+
+    response = client.place_order(data={
+        "symbol": contract["symbol"],
+        "qty": quantity,
+        "type": 2 if order_kind == "MARKET" else 1,
+        "side": 1 if action == "BUY" else -1,
+        "productType": "INTRADAY",
+        "limitPrice": limit_price,
+        "stopPrice": 0,
+        "validity": "DAY",
+        "disclosedQty": 0,
+        "offlineOrder": False,
+    })
+    if response.get("s") != "ok":
+        raise ManualTradeError(f"Fyers rejected the order: {response.get('message', 'unknown error')}", 502)
+    return {"ok": True, "order_id": str(response.get("id", "")), "symbol": contract["symbol"], "qty": quantity, "action": action, "order_type": order_kind}
 
 
 def update_settings(body: dict) -> tuple:
@@ -1032,6 +1274,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _is_local_client(self) -> bool:
+        return self.client_address[0] in ("127.0.0.1", "::1")
+
     def do_GET(self):  # noqa: N802
         url = urlparse(self.path)
         q = parse_qs(url.query)
@@ -1142,6 +1387,21 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/funds":
             funds = broker_funds()
             self._json(funds, 200 if funds["ok"] else 502)
+        elif url.path in ("/api/manual-options", "/api/manual-trading", "/api/manual-quote"):
+            if not self._is_local_client():
+                return self._json({"error": "manual trading endpoints are local-only"}, 403)
+            try:
+                if url.path == "/api/manual-options":
+                    data = manual_option_choices()
+                elif url.path == "/api/manual-quote":
+                    data = manual_option_quote(q)
+                else:
+                    data = manual_trading_snapshot()
+                self._json(data)
+            except ManualTradeError as exc:
+                self._json({"error": str(exc)}, exc.status_code)
+            except Exception:
+                self._json({"error": "Unable to load manual trading data from Fyers."}, 502)
         else:
             self._json({"error": "not found"}, 404)
 
@@ -1176,7 +1436,16 @@ class Handler(BaseHTTPRequestHandler):
         # Custom header forces a CORS preflight (which we never approve), so other sites can't post here.
         if self.headers.get("X-Dashboard") != "1":
             return self._json({"error": "forbidden"}, 403)
-        if url.path == "/api/kill-switch/on":
+        if url.path == "/api/manual-order":
+            if not self._is_local_client():
+                return self._json({"error": "manual orders are local-only"}, 403)
+            try:
+                self._json(submit_manual_order(self._body()))
+            except ManualTradeError as exc:
+                self._json({"error": str(exc)}, exc.status_code)
+            except Exception:
+                self._json({"error": "Fyers order request failed."}, 502)
+        elif url.path == "/api/kill-switch/on":
             STOP_FILE.write_text(f"stopped from dashboard at {datetime.now(IST):%H:%M:%S}\n", encoding="utf-8")
             self._json({"kill_switch": True})
         elif url.path == "/api/kill-switch/off":

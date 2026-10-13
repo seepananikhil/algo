@@ -66,8 +66,10 @@ def load_settings() -> dict:
     }
 
 
-def place_live_order(rest, symbol: str, qty: int, side: int) -> tuple[str, float]:
+def place_live_order(rest, symbol: str, qty: int, side: int, on_order_accepted=None) -> tuple[str, float]:
     """Place and confirm a Fyers market order. side 1 = buy, -1 = sell."""
+    if qty <= 0 or side not in (-1, 1):
+        raise ValueError(f"invalid order quantity or side: qty={qty}, side={side}")
     response = rest.place_order(data={
         "symbol": symbol, "qty": qty, "type": 2, "side": side, "productType": "INTRADAY",
         "limitPrice": 0, "stopPrice": 0, "validity": "DAY", "disclosedQty": 0, "offlineOrder": False,
@@ -75,12 +77,21 @@ def place_live_order(rest, symbol: str, qty: int, side: int) -> tuple[str, float
     if response.get("s") != "ok":
         raise RuntimeError(f"order rejected: {response.get('code')} {response.get('message')}")
     order_id = response["id"]
+    if on_order_accepted is not None:
+        on_order_accepted(order_id)
     for _ in range(20):
         orderbook = rest.orderbook(data={"id": order_id})
+        if orderbook.get("s") not in (None, "ok"):
+            raise RuntimeError(f"order {order_id} status lookup failed: {orderbook.get('message', '')}")
         orders = orderbook.get("orderBook") or []
         if orders:
-            order = orders[0]
+            order = next((row for row in orders if str(row.get("id", order_id)) == str(order_id)), None)
+            if order is None:
+                raise RuntimeError(f"Fyers returned no matching order for accepted order {order_id}")
             if order.get("status") == 2:
+                filled_qty = order.get("filledQty")
+                if filled_qty not in (None, "") and int(filled_qty) != qty:
+                    raise RuntimeError(f"order {order_id} filled {filled_qty} of {qty} requested")
                 return order_id, float(order.get("tradedPrice") or 0)
             if order.get("status") in (1, 5):
                 raise RuntimeError(f"order {order_id} not filled: status {order.get('status')} {order.get('message', '')}")
@@ -144,11 +155,45 @@ class OptionTrader:
             return float(r["d"][0]["v"]["lp"])
         return None
 
-    def _order(self, symbol: str, qty: int, side: int) -> tuple:
+    def _order(self, symbol: str, qty: int, side: int, on_order_accepted=None) -> tuple:
         """side 1 = buy, -1 = sell. Returns (order_id, fill_price)."""
         if not self.settings["live"]:
             return "dry-run", self.option_ltp(symbol)
-        return place_live_order(self.rest, symbol, qty, side)
+        return place_live_order(self.rest, symbol, qty, side, on_order_accepted=on_order_accepted)
+
+    def _verify_open_position(self, pos: dict) -> int:
+        """Return the broker-confirmed quantity only when it matches this saved position."""
+        response = self.rest.positions()
+        rows = response.get("netPositions")
+        if response.get("s") != "ok" or not isinstance(rows, list):
+            raise RuntimeError(response.get("message") or "Fyers positions response was incomplete")
+
+        open_positions = []
+        for row in rows:
+            symbol = str(row.get("symbol", ""))
+            if not (symbol.startswith("NSE:NIFTY") and symbol.endswith(("CE", "PE"))):
+                continue
+            try:
+                net_qty = int(row.get("netQty") or 0)
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(f"Cannot read Fyers quantity for {symbol}") from exc
+            if net_qty and row.get("productType") == pos.get("product_type", "INTRADAY"):
+                open_positions.append(row)
+
+        if len(open_positions) != 1:
+            raise RuntimeError(f"Expected one open NIFTY INTRADAY position, found {len(open_positions)}")
+        broker_position = open_positions[0]
+        if broker_position.get("symbol") != pos.get("symbol"):
+            raise RuntimeError(f"Fyers open position {broker_position.get('symbol')} does not match saved {pos.get('symbol')}")
+        try:
+            net_quantity = int(broker_position.get("netQty"))
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(f"Cannot read Fyers quantity for {pos.get('symbol')}") from exc
+        if net_quantity <= 0 or net_quantity != int(pos.get("qty") or 0):
+            raise RuntimeError(
+                f"Fyers quantity {net_quantity} does not match saved quantity {pos.get('qty')} for {pos.get('symbol')}"
+            )
+        return net_quantity
 
     def _log(self, action, symbol, qty, order_id, fill, index_price, reason, trade_pnl="") -> None:
         new = not self.log_file.exists()
@@ -197,6 +242,13 @@ class OptionTrader:
                 return
 
         if not open_positions:
+            if saved and (saved.get("entry_pending") or saved.get("exit_pending")):
+                order_id = saved.get("exit_order_id") if saved.get("exit_pending") else saved.get("entry_order_id")
+                self._halt(
+                    f"Pending Fyers order {order_id or '(order ID unavailable)'} has no confirmed open position; "
+                    "verify its order-book status before resuming"
+                )
+                return
             self.position_state_file.unlink(missing_ok=True)
             return
         if not self.settings["live"]:
@@ -211,6 +263,8 @@ class OptionTrader:
 
         try:
             broker_position = open_positions[0]
+            if broker_position.get("productType") != saved.get("product_type", "INTRADAY"):
+                raise ValueError("Fyers position product does not match saved Midpoint position")
             net_quantity = int(broker_position.get("netQty"))
             if net_quantity <= 0:
                 raise ValueError(f"unexpected broker net quantity {net_quantity}")
@@ -285,6 +339,7 @@ class OptionTrader:
             if self.settings["live"]:
                 self.position = {
                     "symbol": opt["symbol"],
+                    "product_type": "INTRADAY",
                     "qty": qty,
                     "signal_side": signal_side,
                     "entry_fill": None,
@@ -296,15 +351,21 @@ class OptionTrader:
                     "trailing": False,
                     "live": True,
                     "entry_pending": True,
+                    "entry_order_id": None,
                     "option_quote_failures": 0,
                 }
                 self._write_position_state()
-            order_id, fill = self._order(opt["symbol"], qty, 1)
+            def save_entry_order_id(order_id):
+                self.position.update({"entry_order_id": order_id, "entry_order_status": "accepted"})
+                self._write_position_state()
+
+            order_id, fill = self._order(opt["symbol"], qty, 1, on_order_accepted=save_entry_order_id)
         except Exception as exc:
             self._halt(f"entry failed: {exc}")
             return
         if self.settings["live"]:
-            self.position.update({"entry_fill": fill, "entry_pending": False, "entry_order_id": order_id})
+            self.position.update({"entry_fill": fill, "entry_pending": False, "entry_order_id": order_id,
+                                  "entry_order_status": "filled"})
             self._write_position_state()
         else:
             self.position = {
@@ -329,21 +390,38 @@ class OptionTrader:
         if not pos or pos.get("exit_pending"):
             return
         if self.settings["live"]:
+            try:
+                exit_qty = self._verify_open_position(pos)
+            except Exception as exc:
+                self._halt(f"EXIT BLOCKED: cannot verify saved position at Fyers: {exc}")
+                return
             pos["exit_pending"] = reason
+            pos["exit_qty"] = exit_qty
+            pos["exit_order_id"] = None
+            pos["exit_order_status"] = "pending_submission"
             self._write_position_state()
+        else:
+            exit_qty = pos["qty"]
+
+        def save_exit_order_id(order_id):
+            pos.update({"exit_order_id": order_id, "exit_order_status": "accepted"})
+            if self.settings["live"]:
+                self._write_position_state()
+
         try:
-            order_id, fill = self._order(pos["symbol"], pos["qty"], -1)
+            order_id, fill = self._order(pos["symbol"], exit_qty, -1, on_order_accepted=save_exit_order_id)
         except Exception as exc:
             self._halt(f"EXIT FAILED for {pos['symbol']}: {exc} - close it manually in Fyers")
             return
+        pos["exit_order_status"] = "filled"
         if pos.get("key"):
             self.closed_keys.add(pos["key"])
+        pnl = ((fill or 0) - (pos["entry_fill"] or 0)) * exit_qty
+        self.day_pnl += pnl
+        self._log("SELL", pos["symbol"], exit_qty, order_id, fill, index_price, reason, round(pnl, 2))
         self.position = None
         if self.settings["live"]:
             self._write_position_state()
-        pnl = ((fill or 0) - (pos["entry_fill"] or 0)) * pos["qty"]
-        self.day_pnl += pnl
-        self._log("SELL", pos["symbol"], pos["qty"], order_id, fill, index_price, reason, round(pnl, 2))
         print(f"[orders] {self.mode} SELL {pos['symbol']} @ {fill} [{reason}] trade Rs {pnl:+,.0f} day Rs {self.day_pnl:+,.0f}")
         if self.day_pnl <= -self.settings["daily_loss_limit"]:
             self._halt(f"daily loss limit hit (Rs {self.day_pnl:,.0f})")
