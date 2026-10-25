@@ -2267,6 +2267,89 @@ def vix_trend_runner_backtest_report() -> dict:
     }
 
 
+def trend_runner_5y_backtest_report() -> dict:
+    """Official 5-Year Backtest report for NIFTY Trend Runner (2021-2026, 1240 trading days)."""
+    csv_path = ROOT / "performance" / "trend_runner_5y_trades.csv"
+    if not csv_path.exists():
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+    lot_size = 25
+    raw_trades = read_csv_rows(csv_path)
+    trades, equity, peak = [], 0.0, 0.0
+    daily_map = {}
+    monthly_map = {}
+    reasons_map = {}
+
+    for r in raw_trades:
+        try:
+            r_date = str(r.get("date", ""))
+            side = str(r.get("side", "CALL"))
+            entry_spot = round(float(r.get("entry_price") or 0.0), 2)
+            exit_spot = round(float(r.get("exit_price") or 0.0), 2)
+            pnl_pts = round(float(r.get("pnl_points") or 0.0), 2)
+            equity += pnl_pts
+            peak = max(peak, equity)
+            reason = str(r.get("exit_reason", ""))
+
+            sl_spot = round(float(r.get("sl") or (entry_spot - 30.0 if side == "CALL" else entry_spot + 30.0)), 2)
+            tgt_spot = round(float(r.get("target") or (entry_spot + 250.0 if side == "CALL" else entry_spot - 250.0)), 2)
+
+            trades.append({
+                "date": r_date,
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": reason,
+                "pnl_points": pnl_pts,
+                "equity": round(equity, 2),
+                "drawdown": round(equity - peak, 2),
+            })
+
+            d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0})
+            d["points"] = round(d["points"] + pnl_pts, 2)
+            d["trades"] += 1
+
+            m = r_date[:7]
+            monthly_map[m] = round(monthly_map.get(m, 0.0) + pnl_pts, 2)
+
+            reasons_map[reason] = reasons_map.get(reason, 0) + 1
+        except Exception:
+            continue
+
+    n = len(trades)
+    wins = sum(1 for x in trades if x["pnl_points"] > 0)
+    sorted_daily = sorted(daily_map.values(), key=lambda x: x["date"])
+    sorted_monthly = [{"month": m, "points": pts} for m, pts in sorted(monthly_map.items())]
+    sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+    return {
+        "summary": {
+            "from": sorted_daily[0]["date"] if sorted_daily else "",
+            "to": sorted_daily[-1]["date"] if sorted_daily else "",
+            "days": len(sorted_daily),
+            "trades": n,
+            "wins": wins,
+            "losses": sum(1 for x in trades if x["pnl_points"] < 0),
+            "win_rate": round(100.0 * wins / n, 2) if n else 0.0,
+            "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+            "total_points": round(equity, 2),
+            "avg_points": round(equity / n, 2) if n else 0.0,
+            "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
+            "best": max((x["pnl_points"] for x in trades), default=0.0),
+            "worst": min((x["pnl_points"] for x in trades), default=0.0),
+            "lot_size": lot_size,
+        },
+        "trades": trades,
+        "daily": sorted_daily,
+        "monthly": sorted_monthly,
+        "exit_reasons": sorted_reasons,
+    }
+
+
 def sr_breakout_backtest_report() -> dict:
     """Historical backtest performance for Support & Resistance Breakout Run Strategy."""
     csv_path = ROOT / "performance" / "sr_breakout_trades.csv"
@@ -2868,7 +2951,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(available_days())
         elif url.path == "/api/backtest":
             strategy = q.get("strategy", [""])[0]
-            if strategy in ("trend_runner", "vix_trend", "trend_expansion"):
+            if strategy in ("trend_runner_5y", "5y_trend", "trend_5y"):
+                self._json(trend_runner_5y_backtest_report())
+            elif strategy in ("trend_runner", "vix_trend", "trend_expansion"):
                 self._json(vix_trend_runner_backtest_report())
             elif strategy == "key_levels":
                 self._json(key_level_report())
@@ -3022,7 +3107,11 @@ if __name__ == "__main__":
     threading.Thread(target=trend_runner_forward_loop, daemon=True, name="trend-runner-forward").start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Dashboard: http://{HOST}:{PORT}/  (Ctrl+C to stop)")
-    try:
-        server.serve_forever()
-    except KeyboardInterrupt:
-        pass
+    while True:
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            break
+        except Exception as exc:
+            print(f"Server exception: {exc}, continuing in 2s...")
+            time.sleep(2)
