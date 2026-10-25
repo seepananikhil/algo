@@ -1,0 +1,14 @@
+Config,T2 Trades,T2 Win Rate,T2 Net Pts,T2 Avg Pts,Trade 1 Net,Total Net Pts,Max DD
+"Current Base (No BE, No Color, Cooloff 2m)",56,32.1,412.1,7.36,6216.55,6628.65,-390.0
+BE Trigger @ +25 pts (Lock +5 pts),56,58.9,465.7,8.32,6216.55,6682.25,-355.0
+BE Trigger @ +25 pts (Lock +0 pts),56,19.6,465.7,8.32,6216.55,6682.25,-360.0
+BE Trigger @ +30 pts (Lock +5 pts),56,51.8,379.6,6.78,6216.55,6596.15,-355.0
+BE Trigger @ +35 pts (Lock +10 pts),56,42.9,449.6,8.03,6216.55,6666.15,-350.0
+BE Trigger @ +40 pts (Lock +10 pts),56,39.3,524.6,9.37,6216.55,6741.15,-350.0
+Candle Color Confirmation (c>o / c<o),56,32.1,412.1,7.36,6216.55,6628.65,-390.0
+Candle Color + BE Trigger @ +25 pts (Lock +5),56,58.9,465.7,8.32,6216.55,6682.25,-355.0
+Candle Color + BE Trigger @ +30 pts (Lock +5),56,51.8,379.6,6.78,6216.55,6596.15,-355.0
+Cooloff 5 mins (5 bars),55,32.7,442.1,8.04,6216.55,6658.65,-390.0
+Cooloff 10 mins (10 bars),51,33.3,367.1,7.2,6216.55,6583.65,-330.0
+Cooloff 5 mins + BE Trigger @ +30 pts (Lock +5),55,54.5,444.6,8.08,6216.55,6661.15,-325.0
+Candle Color + Cooloff 5m + BE @ +30 pts,55,54.5,444.6,8.08,6216.55,6661.15,-325.0
