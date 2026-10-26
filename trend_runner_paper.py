@@ -213,7 +213,7 @@ class TrendRunnerPaperEngine:
         reentry_req_color: bool = False,
         reentry_cooloff_bars: int = 30,
         call_cutoff_time: str = "10:30",
-        allow_call_reentry: bool = False,
+        allow_call_reentry: bool = True,
         **kwargs,
     ) -> None:
         self.sl_points = sl_points
@@ -579,9 +579,9 @@ class TrendRunnerPaperEngine:
             if self.last_trade_pnl >= 60.0:
                 return None
 
-            # 3. Quality Gate: High-Conviction Re-entry Gate:
+            # 3. Symmetric Re-entry Gate:
             # Window: 09:30 to 13:00 IST
-            # CALL Trade 2 re-entries are disabled by default (65% loss rate). PUT re-entries generate +2,183 pts.
+            # Both CALL and PUT re-entries are enabled symmetrically with 30-min cool-off and Day High/Low expansion.
             if "09:30" <= t_str <= "13:00":
                 # Dynamic Expansion Re-entry (Breakout continuation after 30-min cool-off)
                 if self.last_trade_sig:
