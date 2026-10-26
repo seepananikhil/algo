@@ -9,6 +9,8 @@ import { SideBadge, StatCard } from "@/components/common"
 import { PnlCalendar } from "@/components/pnl-calendar"
 import { StrategyStreakSummary } from "@/components/strategy-streak-summary"
 import { cn } from "@/lib/utils"
+import { RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, type Backtest } from "@/lib/api"
 
 /** Backtest restricted to one year ("all" = everything), with equity/drawdown restarting at 0. */
@@ -124,8 +126,26 @@ export function BacktestPage() {
               : `Current rules on ${s.days} days (${s.from} → ${s.to}). Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, before option premium effects).`}
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           {strategyTabs}
+          <button
+            onClick={async () => {
+              toast.info("Syncing latest NIFTY 1-min data from GitHub & updating backtests...")
+              try {
+                const res = await fetch("/api/backtest/sync")
+                const d = await res.json()
+                if (d.ok) toast.success("Backtest updated with latest data!")
+                else toast.error("Sync error: " + (d.message || "Failed"))
+              } catch (e) {
+                toast.error("Failed to connect to update service.")
+              }
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border hover:bg-muted/50 transition-colors cursor-pointer"
+            title="Pull latest data from technovusin/nifty50-historical-data and re-run backtest"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+            Sync & Update Data
+          </button>
           <Tabs value={year} onValueChange={(v) => { setYear(v as string); setPicked(null) }}>
             <TabsList><TabsTrigger value="all">All</TabsTrigger>{years.map((y) => <TabsTrigger key={y} value={y}>{y}</TabsTrigger>)}</TabsList>
           </Tabs>
@@ -221,8 +241,8 @@ export function BacktestPage() {
         date={picked}
         mode="backtest"
         strategy={
-          strategy === "trend_runner"
-            ? "trend_runner"
+          strategy === "trend_runner_10y" || strategy === "trend_runner"
+            ? "trend_runner_10y"
             : "midpoint"
         }
         days={data.daily.map((d) => d.date)}

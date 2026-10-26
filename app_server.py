@@ -659,6 +659,54 @@ def master() -> pd.DataFrame:
         return _master_cache["df"]
 
 
+def load_technovusin_day(date_str: str) -> pd.DataFrame:
+    """Load 1-minute NIFTY candles for a specific day from technovusin repository."""
+    year = date_str[:4]
+    month = date_str[:7]
+    base = ROOT / "captured_data" / "technovusin_nifty50" / "1min" / year
+    if not base.exists():
+        return pd.DataFrame()
+
+    yearly_file = base / f"NIFTY50_1min_{year}.csv"
+    if yearly_file.exists():
+        try:
+            df = pd.read_csv(yearly_file)
+        except Exception:
+            return pd.DataFrame()
+    else:
+        monthly_file = base / f"NIFTY50_1min_{month}.csv"
+        if monthly_file.exists():
+            try:
+                df = pd.read_csv(monthly_file)
+            except Exception:
+                return pd.DataFrame()
+        else:
+            return pd.DataFrame()
+
+    ts_col = "Timestamp" if "Timestamp" in df.columns else "timestamp"
+    df[ts_col] = pd.to_datetime(df[ts_col], errors="coerce")
+    sub = df[df[ts_col].dt.strftime("%Y-%m-%d") == date_str].copy()
+    if sub.empty:
+        return pd.DataFrame()
+
+    sub.rename(columns={
+        ts_col: "timestamp",
+        "Open": "open",
+        "High": "high",
+        "Low": "low",
+        "Close": "close",
+        "Volume": "volume",
+        "open": "open",
+        "high": "high",
+        "low": "low",
+        "close": "close",
+        "volume": "volume",
+    }, inplace=True)
+    if "volume" not in sub.columns:
+        sub["volume"] = 1.0
+    return sub.sort_values("timestamp").reset_index(drop=True)
+
+
 def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
     sym = str(symbol or "NIFTY").strip().upper()
     if sym == "SENSEX":
@@ -674,11 +722,7 @@ def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
                 pass
         return pd.DataFrame()
 
-    m = master()
-    master_day = pd.DataFrame()
-    if not m.empty:
-        master_day = m[m["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
-
+    # 1. Check live capture file (today's active trading)
     path = LIVE_DIR / f"nifty_1min_{date}.csv"
     if path.exists():
         try:
@@ -686,28 +730,36 @@ def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
             if not df.empty and "timestamp" in df.columns:
                 df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
                 df = df.dropna(subset=["timestamp"])
-                if master_day.empty:
-                    return df
-                # Combine master archive with live file to ensure full 09:15-15:30 session coverage
-                combined = pd.concat([master_day, df], ignore_index=True)
-                combined = combined.drop_duplicates("timestamp", keep="last").sort_values("timestamp").reset_index(drop=True)
-                return combined
+                return df
         except Exception:
             pass
 
-    if master_day.empty:
-        n5_path = ROOT / "captured_data" / "fyers" / "nifty_5min.csv"
-        if n5_path.exists():
-            try:
-                n5 = pd.read_csv(n5_path)
-                n5["timestamp"] = pd.to_datetime(n5["timestamp"])
-                day_n5 = n5[n5["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
-                if not day_n5.empty:
-                    return day_n5
-            except Exception:
-                pass
+    # 2. Check 10-Year Technovusin dataset (covers 2017 to 2026 seamlessly)
+    tech_df = load_technovusin_day(date)
+    if not tech_df.empty:
+        return tech_df
 
-    return master_day
+    # 3. Check legacy Fyers master archive
+    m = master()
+    master_day = pd.DataFrame()
+    if not m.empty:
+        master_day = m[m["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+        if not master_day.empty:
+            return master_day
+
+    # 4. Check 5min fallback
+    n5_path = ROOT / "captured_data" / "fyers" / "nifty_5min.csv"
+    if n5_path.exists():
+        try:
+            n5 = pd.read_csv(n5_path)
+            n5["timestamp"] = pd.to_datetime(n5["timestamp"])
+            day_n5 = n5[n5["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+            if not day_n5.empty:
+                return day_n5
+        except Exception:
+            pass
+
+    return pd.DataFrame()
 
 
 def available_days() -> list:
@@ -2362,9 +2414,35 @@ def sr_breakout_spot_trades_for_day(date: str) -> list:
 
 def vix_trend_runner_spot_trades_for_day(date: str) -> list:
     """Historical spot trades for Nifty Trend Expansion Runner on date."""
+    for fname in ["nifty_10y_backtest_trades.csv", "vix_trend_runner_trades.csv"]:
+        csv_path = ROOT / "performance" / fname
+        if not csv_path.exists():
+            continue
+        out = []
+        for r in read_csv_rows(csv_path):
+            if r.get("date") == date:
+                side = str(r.get("side", "CALL"))
+                entry_spot = float(r.get("entry_price") or 0.0)
+                exit_spot = float(r.get("exit_price") or 0.0)
+                sl_spot = float(r.get("sl") or (entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0))
+                tgt_spot = float(r.get("target") or (entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0))
+                out.append({
+                    "side": side,
+                    "entry": str(r.get("entry_time", ""))[:5],
+                    "entry_price": entry_spot,
+                    "sl": sl_spot,
+                    "target": tgt_spot,
+                    "exit": str(r.get("exit_time", ""))[:5],
+                    "exit_price": exit_spot,
+                    "reason": str(r.get("exit_reason", "")),
+                    "pnl_points": float(r.get("pnl_points") or 0.0),
+                })
+        if out:
+            return out
+    return []
+
+def _legacy_vix_trades_unused(date: str) -> list:
     csv_path = ROOT / "performance" / "vix_trend_runner_trades.csv"
-    if not csv_path.exists():
-        return []
     out = []
     for r in read_csv_rows(csv_path):
         if r.get("date") == date:
@@ -2947,7 +3025,7 @@ class Handler(BaseHTTPRequestHandler):
             key_level_fills = key_level_option_trades(date)
             midpoint_fills = midpoint_option_trades(date)
 
-            if strategy_param in ("trend_runner", "trend", "vix_runner", "vix_trend", "trend_expansion"):
+            if strategy_param in ("trend_runner", "trend_runner_10y", "10y", "trend", "vix_runner", "vix_trend", "trend_expansion"):
                 selected_option_trades = live_trend_fills
                 selected_paper_trades = []
             elif strategy_param in ("compression_scalp", "sniper", "scalp", "micro_scalp"):
@@ -2971,7 +3049,7 @@ class Handler(BaseHTTPRequestHandler):
             
             if strategy_param in ("compression_scalp", "sniper", "scalp"):
                 rule_trades = compression_scalp_spot_trades_for_day(date)
-            elif strategy_param in ("trend_runner", "vix_trend", "trend_expansion"):
+            elif strategy_param in ("trend_runner", "trend_runner_10y", "10y", "vix_trend", "trend_expansion"):
                 rule_trades = vix_trend_runner_spot_trades_for_day(date)
             elif strategy_param in ("sr_breakout", "swing_sr", "breakout"):
                 rule_trades = sr_breakout_spot_trades_for_day(date)
@@ -3072,9 +3150,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json(today_log(LIVE_DIR / "capture.log", n))
         elif url.path == "/api/days":
             self._json(available_days())
+        elif url.path in ("/api/backtest/sync", "/api/backtest/update"):
+            def _run_sync_task():
+                try:
+                    import subprocess, sys
+                    subprocess.run([sys.executable, str(ROOT / "update_historical_data.py")], check=True)
+                except Exception as e:
+                    print(f"Sync error: {e}")
+            import threading
+            threading.Thread(target=_run_sync_task, daemon=True).start()
+            return self._json({"ok": True, "message": "Historical data sync & backtest update started in background."})
         elif url.path == "/api/backtest":
-            strategy = q.get("strategy", [""])[0]
-            if strategy in ("trend_runner_10y", "10y", "10year", "trend_10y"):
+            strategy = q.get("strategy", ["trend_runner_10y"])[0].lower()
+            if strategy in ("", "trend_runner_10y", "10y", "10year", "trend_10y"):
                 self._json(nifty_10y_backtest_report())
             elif strategy in ("trend_runner", "vix_trend", "trend_expansion"):
                 self._json(vix_trend_runner_backtest_report())

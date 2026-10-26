@@ -46,7 +46,7 @@ export function DayDetail({
   const fills = isStrategyFiltered
     ? allFills.filter((f) => {
         const m = (f.mode || "").toUpperCase()
-        if (strategy === "trend_runner" || strategy === "trend" || strategy === "vix_runner" || strategy === "vix_trend" || strategy === "trend_expansion") {
+        if (strategy === "trend_runner" || strategy === "trend_runner_10y" || strategy === "10y" || strategy === "trend" || strategy === "vix_runner" || strategy === "vix_trend" || strategy === "trend_expansion") {
           return m.includes("TREND")
         }
         if (strategy === "compression_scalp" || strategy === "scalper" || strategy === "sniper" || strategy === "scalp" || strategy === "micro_scalp") {
