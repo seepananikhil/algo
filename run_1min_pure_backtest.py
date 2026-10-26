@@ -1,7 +1,7 @@
 import pandas as pd
 import numpy as np
 from pathlib import Path
-from trend_runner_paper import TrendRunnerPaperEngine
+from trend_runner_paper import TrendRunnerPaperEngine, get_vix_change_pct
 
 # Silence print logging
 TrendRunnerPaperEngine._print_entry = lambda *args, **kwargs: None
@@ -48,13 +48,14 @@ engine = TrendRunnerPaperEngine(
     enable_pyramiding=False,
     sl_points=30.0,
     reentry_sl_points=30.0,
-    reentry=False,
-    max_trades_per_day=1,
+    reentry=True,
+    max_trades_per_day=2,
     r1_trigger=70.0, r1_lock=20.0,
     r2_trigger=130.0, r2_lock=60.0,
     r3_trigger=180.0, r3_lock=110.0,
     r4_trigger=230.0, r4_lock=165.0,
     r5_trigger=280.0, r5_lock=220.0,
+    r6_trigger=330.0, r6_lock=270.0,
     target_pts=None,
     williams_fallback=True,
     lots=1,
@@ -79,10 +80,14 @@ for d in days:
     engine.dyn_or_high = 0.0
     engine.dyn_or_low = 999999.0
     engine.last_trade_sig = ""
+    engine.last_trade_exit_reason = ""
+    engine.last_trade_max_fav = 0.0
+    engine.last_trade_sl = 0.0
+    engine.last_trade_pnl = 0.0
     engine.bars_since_last_exit = 999
     engine.current_day_str = str(d)
     
-    vix_chg = vix_map.get(d, 0.0)
+    vix_chg = vix_map[d] if d in vix_map else get_vix_change_pct(str(d))
     or_bars = g[(g['time_str'] >= '09:15') & (g['time_str'] <= '09:30')]
     or_high = float(or_bars['high'].max()) if not or_bars.empty else float(g.iloc[:15]['high'].max())
     or_low = float(or_bars['low'].min()) if not or_bars.empty else float(g.iloc[:15]['low'].min())
