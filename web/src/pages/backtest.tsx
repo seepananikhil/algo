@@ -56,24 +56,23 @@ const tooltip = {
   labelStyle: { color: "var(--muted-foreground)" },
 }
 
-
-
+type StrategyKey = "trend_runner_10y" | "trend_runner" | "midpoint"
 
 export function BacktestPage() {
-  const [strategy, setStrategy] = useState<"midpoint" | "trend_runner" | "sniper">(() => {
-    const saved = localStorage.getItem("backtest_strategy")
-    return (saved === "trend_runner" || saved === "midpoint" || saved === "sniper") ? saved : "trend_runner"
+  const [strategy, setStrategy] = useState<StrategyKey>(() => {
+    const saved = localStorage.getItem("backtest_strategy") as StrategyKey
+    return (saved === "trend_runner_10y" || saved === "trend_runner" || saved === "midpoint") ? saved : "trend_runner_10y"
   })
-  const handleStrategyChange = (value: "midpoint" | "trend_runner" | "sniper") => {
+  const handleStrategyChange = (value: StrategyKey) => {
     localStorage.setItem("backtest_strategy", value)
     setStrategy(value)
   }
   const { data: raw, loading, error } = usePoll<Backtest>(
-    strategy === "midpoint"
-      ? "/api/backtest"
+    strategy === "trend_runner_10y"
+      ? "/api/backtest?strategy=trend_runner_10y"
       : strategy === "trend_runner"
       ? "/api/backtest?strategy=trend_runner"
-      : "/api/backtest?strategy=compression_scalp"
+      : "/api/backtest"
   )
   const [filter, setFilter] = useState("all")
   const [yearPick, setYear] = useState<string | null>(null)
@@ -91,10 +90,10 @@ export function BacktestPage() {
   }, [data, filter])
 
   const strategyTabs = (
-    <Tabs value={strategy} onValueChange={(value) => handleStrategyChange(value as "midpoint" | "trend_runner" | "sniper")}>
-      <TabsList>
-        <TabsTrigger value="trend_runner">Trend Runner (3Y 1-Min)</TabsTrigger>
-        <TabsTrigger value="sniper">Sniper Scalp (2026)</TabsTrigger>
+    <Tabs value={strategy} onValueChange={(value) => handleStrategyChange(value as StrategyKey)}>
+      <TabsList className="flex flex-wrap gap-1">
+        <TabsTrigger value="trend_runner_10y">Trend Runner (10Y Master 2017–2026)</TabsTrigger>
+        <TabsTrigger value="trend_runner">Trend Runner (3Y Archive)</TabsTrigger>
         <TabsTrigger value="midpoint">Midpoint Equilibrium</TabsTrigger>
       </TabsList>
     </Tabs>
@@ -111,17 +110,17 @@ export function BacktestPage() {
       <div className="flex flex-wrap items-end justify-between gap-2">
         <div>
           <h1 className="text-xl font-semibold">
-            {strategy === "trend_runner"
+            {strategy === "trend_runner_10y"
+              ? "Trend Runner · 10-Year 1-Minute Master Backtest (2017–2026)"
+              : strategy === "trend_runner"
               ? "Trend Runner · Pure 1-Minute Backtest (2023–2026)"
-              : strategy === "sniper"
-              ? "Sniper (Micro Scalper) Backtest Performance"
-              : "Midpoint Backtest Performance"}
+              : "Midpoint Equilibrium (Slow) Backtest Performance"}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {strategy === "trend_runner"
+            {strategy === "trend_runner_10y"
+              ? `10-Year continuous 1-minute backtest across ${s.days} days (${s.from} → ${s.to}) from technovusin/nifty50-historical-data. 30 pt SL, 6-tier ratchets (+20, +60, +110, +165, +220, +270), symmetric T2 re-entries with 30-min cool-off. ₹ ≈ points × ${s.lot_size} (1 lot, 25 qty).`
+              : strategy === "trend_runner"
               ? `Pure 1-minute candle breakout with Dynamic Range Expansion, 30 pt SL, 5-tier ratchets (+20, +60, +110, +165, +220), and single trade per day on ${s.days} days (${s.from} → ${s.to}). Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, 25 qty).`
-              : strategy === "sniper"
-              ? `Adaptive Micro-Compression Momentum Scalper on ${s.days} days (${s.from} → ${s.to}). SL 14 pts, Target 22 pts, 8-bar max hold. Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, 65 qty).`
               : `Current rules on ${s.days} days (${s.from} → ${s.to}). Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, before option premium effects).`}
           </p>
         </div>
@@ -143,86 +142,70 @@ export function BacktestPage() {
       </div>
 
       <StrategyStreakSummary
-        title={strategy === "trend_runner" ? "Trend Expansion Strategy Streaks & Recovery" : strategy === "sniper" ? "Sniper Strategy Streaks & Recovery" : "Midpoint Strategy Streaks & Recovery"}
+        title={
+          strategy === "trend_runner"
+            ? "Trend Expansion Strategy Streaks & Recovery"
+            : "Midpoint Strategy Streaks & Recovery"
+        }
         description="Consecutive winning/losing days, drawdown recovery duration in days, and daily expectancy across all backtested trading days."
         daily={data.daily.map((d) => ({ date: d.date, value: d.points, trades: d.trades }))}
         unit="pts"
       />
 
-
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Equity curve</CardTitle>
-            <CardDescription>Cumulative points and drawdown, trade by trade</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={curve} syncId="bt">
+      <Card>
+        <CardHeader>
+          <CardTitle>Equity curve</CardTitle>
+          <CardDescription>Cumulative points and drawdown, trade by trade</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[320px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={curve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                  <linearGradient id="dd" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
                 <XAxis dataKey="label" hide />
-                <YAxis {...axis} width={50} />
-                <Tooltip {...tooltip} formatter={(v) => [fmtNum(Number(v)), "Equity"]} />
-                <Area type="linear" dataKey="equity" stroke="#10b981" strokeWidth={2} fill="url(#eq)" />
+                <YAxis {...axis} tickFormatter={(v) => `${v}`} />
+                <Tooltip {...tooltip} formatter={(v: any, name: any) => [`${fmtPts(Number(v))}`, name === "equity" ? "Equity" : "Drawdown"]} />
+                <Area type="monotone" dataKey="equity" stroke="#10b981" strokeWidth={2} fill="url(#eq)" />
+                <Area type="monotone" dataKey="drawdown" stroke="#ef4444" strokeWidth={1} fill="url(#dd)" />
               </AreaChart>
             </ResponsiveContainer>
-            <ResponsiveContainer width="100%" height={110}>
-              <AreaChart data={curve} syncId="bt">
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" hide />
-                <YAxis {...axis} width={50} />
-                <Tooltip {...tooltip} formatter={(v) => [fmtNum(Number(v)), "Drawdown"]} />
-                <Area type="stepAfter" dataKey="drawdown" stroke="#ef4444" fill="#ef4444" fillOpacity={0.25} />
-              </AreaChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </CardContent>
+      </Card>
 
-        <div className="flex flex-col gap-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Monthly points</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={180}>
-                <BarChart data={data.monthly}>
-                  <CartesianGrid stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="month" {...axis} tickFormatter={(m: string) => m.slice(5)} />
-                  <YAxis {...axis} width={40} />
-                  <Tooltip {...tooltip} cursor={{ fill: "var(--muted)" }} formatter={(v) => [fmtPts(Number(v)), "Points"]} />
-                  <Bar dataKey="points" radius={[4, 4, 0, 0]}>
-                    {data.monthly.map((m) => (
-                      <Cell key={m.month} fill={m.points >= 0 ? "#10b981" : "#ef4444"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Exit reasons</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-2">
-              {data.exit_reasons.map((r) => (
-                <div key={r.reason} className="flex items-center gap-2 text-sm">
-                  <span className="flex-1 truncate text-muted-foreground">{prettyReason(r.reason)}</span>
-                  <div className="h-1.5 w-24 overflow-hidden rounded-full bg-muted">
-                    <div className="h-full bg-primary" style={{ width: `${(100 * r.count) / s.trades}%` }} />
-                  </div>
-                  <span className="w-6 text-right tabular-nums">{r.count}</span>
-                </div>
-              ))}
-            </CardContent>
-          </Card>
-        </div>
-      </div>
+      <Card>
+        <CardHeader>
+          <CardTitle>Monthly P&L (points)</CardTitle>
+          <CardDescription>Performance month by month</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="h-[200px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={data.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                <XAxis dataKey="month" {...axis} />
+                <YAxis {...axis} tickFormatter={(v) => `${v}`} />
+                <Tooltip {...tooltip} formatter={(v: any) => [`${fmtPts(Number(v))}`, "Points"]} />
+                <Bar dataKey="points" radius={[4, 4, 0, 0]}>
+                  {data.monthly.map((m, i) => (
+                    <Cell key={i} fill={m.points >= 0 ? "#10b981" : "#ef4444"} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -234,8 +217,19 @@ export function BacktestPage() {
         </CardContent>
       </Card>
 
-      <DayPanel date={picked} mode="backtest" strategy={strategy === "trend_runner" ? "trend_runner" : strategy === "sniper" ? "compression_scalp" : "midpoint"} days={data.daily.map((d) => d.date)} onPick={setPicked} onClose={() => setPicked(null)} allowTimeframeSwitch={true} />
-
+      <DayPanel
+        date={picked}
+        mode="backtest"
+        strategy={
+          strategy === "trend_runner"
+            ? "trend_runner"
+            : "midpoint"
+        }
+        days={data.daily.map((d) => d.date)}
+        onPick={setPicked}
+        onClose={() => setPicked(null)}
+        allowTimeframeSwitch={true}
+      />
 
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
@@ -261,7 +255,7 @@ export function BacktestPage() {
                 <TableHead className="text-right">Price</TableHead>
                 <TableHead>Exit</TableHead>
                 <TableHead className="text-right">Price</TableHead>
-                <TableHead>Reason</TableHead>
+                <TableHead>Setup / Reason</TableHead>
                 <TableHead className="text-right">Points</TableHead>
                 <TableHead className="text-right">Equity</TableHead>
               </TableRow>
@@ -275,7 +269,7 @@ export function BacktestPage() {
                   <TableCell className="text-right tabular-nums">{fmtNum(t.entry_price)}</TableCell>
                   <TableCell className="tabular-nums">{t.exit}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtNum(t.exit_price)}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{prettyReason(t.reason)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}</TableCell>
                   <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(t.pnl_points))}>{fmtPts(t.pnl_points)}</TableCell>
                   <TableCell className="text-right tabular-nums">{fmtNum(t.equity)}</TableCell>
                 </TableRow>

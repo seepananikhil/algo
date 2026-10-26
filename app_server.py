@@ -447,9 +447,9 @@ def scalper_status() -> dict:
     return {
         "enabled": bool(cfg.get("scalper_paper_trading", True) or cfg.get("scalper_live_trading", False)),
         "mode": "LIVE" if cfg.get("scalper_live_trading") else "PAPER",
-        "sl_pts": float(cfg.get("scalper_sl_pts", 9.0)),
-        "target_pts": float(cfg.get("scalper_target_pts", 25.0)),
-        "max_trades": int(cfg.get("scalper_max_trades", 1)),
+        "sl_pts": float(cfg.get("scalper_sl_pts", 18.0)),
+        "target_pts": float(cfg.get("scalper_target_pts", 35.0)),
+        "max_trades": int(cfg.get("scalper_max_trades", 2)),
         "trades_today_count": len(today_trades),
         "today_trades": today_trades,
     }
@@ -469,9 +469,9 @@ def scalper_forward_loop() -> None:
                 time.sleep(5)
                 continue
 
-            sl_pts = float(cfg.get("scalper_sl_pts", 9.0))
-            tgt_pts = float(cfg.get("scalper_target_pts", 25.0))
-            max_trades = int(cfg.get("scalper_max_trades", 1))
+            sl_pts = float(cfg.get("scalper_sl_pts", 18.0))
+            tgt_pts = float(cfg.get("scalper_target_pts", 35.0))
+            max_trades = int(cfg.get("scalper_max_trades", 2))
             stop_on_loss = bool(cfg.get("scalper_stop_on_loss", True))
             max_hold = int(cfg.get("scalper_max_hold", 10))
 
@@ -804,9 +804,9 @@ def public_settings() -> dict:
     out["scalper_paper_trading"] = bool(cfg.get("scalper_paper_trading", True))
     out["scalper_live_trading"] = bool(cfg.get("scalper_live_trading", False))
     out["scalper_lots"] = int(cfg.get("scalper_lots", 1))
-    out["scalper_sl_pts"] = float(cfg.get("scalper_sl_pts", 9.0))
-    out["scalper_target_pts"] = float(cfg.get("scalper_target_pts", 25.0))
-    out["scalper_max_trades"] = int(cfg.get("scalper_max_trades", 1))
+    out["scalper_sl_pts"] = float(cfg.get("scalper_sl_pts", 18.0))
+    out["scalper_target_pts"] = float(cfg.get("scalper_target_pts", 35.0))
+    out["scalper_max_trades"] = int(cfg.get("scalper_max_trades", 2))
     out["scalper_stop_on_loss"] = bool(cfg.get("scalper_stop_on_loss", True))
     out["hourly_trend_paper_trading"] = bool(cfg.get("hourly_trend_paper_trading", True))
     out["hourly_trend_live_trading"] = bool(cfg.get("hourly_trend_live_trading", False))
@@ -1825,8 +1825,8 @@ def compression_scalp_live_paper_trades(date: str | None = None) -> list:
             charges = float(row.get("charges_rs") or est_charges(buy_val, sell_val))
             net_rs = float(row.get("net_rs") or (pnl_rs - charges))
 
-            sl_pts = float(cfg.get("scalper_sl_pts", 9.0))
-            tgt_pts = float(cfg.get("scalper_target_pts", 25.0))
+            sl_pts = float(cfg.get("scalper_sl_pts", 18.0))
+            tgt_pts = float(cfg.get("scalper_target_pts", 35.0))
             sl_spot = float(row.get("sl") or round(entry_spot - sl_pts if side == "CALL" else entry_spot + sl_pts, 2))
             tgt_spot = float(row.get("target") or round(entry_spot + tgt_pts if side == "CALL" else entry_spot - tgt_pts, 2))
 
@@ -1963,8 +1963,8 @@ def compression_scalp_spot_trades_for_day(date: str) -> list:
     if not csv_path.exists():
         return []
     cfg = read_config()
-    sl_pts = float(cfg.get("scalper_sl_pts", 9.0))
-    tgt_pts = float(cfg.get("scalper_target_pts", 25.0))
+    sl_pts = float(cfg.get("scalper_sl_pts", 18.0))
+    tgt_pts = float(cfg.get("scalper_target_pts", 35.0))
     out = []
     for r in read_csv_rows(csv_path):
         if r.get("date") == date:
@@ -1994,8 +1994,8 @@ def compression_scalp_backtest_report() -> dict:
         return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
 
     cfg = read_config()
-    sl_pts = float(cfg.get("scalper_sl_pts", 9.0))
-    tgt_pts = float(cfg.get("scalper_target_pts", 25.0))
+    sl_pts = float(cfg.get("scalper_sl_pts", 18.0))
+    tgt_pts = float(cfg.get("scalper_target_pts", 35.0))
     lot_size = 65
 
     raw_trades = read_csv_rows(csv_path)
@@ -2052,6 +2052,184 @@ def compression_scalp_backtest_report() -> dict:
 
     return {
         "summary": {
+            "from": sorted_daily[0]["date"] if sorted_daily else "",
+            "to": sorted_daily[-1]["date"] if sorted_daily else "",
+            "days": len(sorted_daily),
+            "trades": n,
+            "wins": wins,
+            "losses": sum(1 for x in trades if x["pnl_points"] < 0),
+            "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+            "total_points": round(equity, 2),
+            "avg_points": round(equity / n, 2) if n else 0.0,
+            "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
+            "best": max((x["pnl_points"] for x in trades), default=0.0),
+            "worst": min((x["pnl_points"] for x in trades), default=0.0),
+            "lot_size": lot_size,
+        },
+        "trades": trades,
+        "daily": sorted_daily,
+        "monthly": sorted_monthly,
+        "exit_reasons": sorted_reasons,
+    }
+
+
+def nifty_10y_backtest_report() -> dict:
+    """Historical 10-Year backtest performance (2017-2026) for Nifty Trend Expansion Runner."""
+    return vix_trend_runner_backtest_report(ROOT / "performance" / "nifty_10y_backtest_trades.csv")
+
+
+def aggressive_midpoint_scalp_report(key_level_only: bool = False) -> dict:
+    """Historical backtest performance for Aggressive Morning Midpoint & Key Level Scalp."""
+    filename = "aggressive_key_level_trades.csv" if key_level_only else "aggressive_midpoint_scalp_trades.csv"
+    csv_path = ROOT / "performance" / filename
+    if not csv_path.exists():
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+    raw_trades = read_csv_rows(csv_path)
+    trades, equity, peak = [], 0.0, 0.0
+    daily_map = {}
+    monthly_map = {}
+    reasons_map = {}
+    lot_size = 65
+
+    for r in raw_trades:
+        try:
+            r_date = str(r.get("date", ""))
+            side = str(r.get("side", "CALL"))
+            entry_spot = round(float(r.get("entry") or 0.0), 2)
+            exit_spot = round(float(r.get("exit_price") or 0.0), 2)
+            sl_spot = round(float(r.get("stop") or 0.0), 2)
+            tgt_spot = round(float(r.get("target") or 0.0), 2)
+            pnl_pts = round(float(r.get("pnl_points") or 0.0), 2)
+            equity += pnl_pts
+            peak = max(peak, equity)
+            reason = str(r.get("reason", ""))
+
+            trade_item = {
+                "date": r_date,
+                "side": side,
+                "setup": str(r.get("setup", "")),
+                "entry": str(r.get("entry_time", "")),
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", "")),
+                "exit_price": exit_spot,
+                "reason": reason,
+                "pnl_points": pnl_pts,
+                "equity": round(equity, 2),
+                "drawdown": round(equity - peak, 2),
+                "bars_held": int(r.get("bars_held", 0)),
+            }
+            trades.append(trade_item)
+
+            if r_date not in daily_map:
+                daily_map[r_date] = {"date": r_date, "points": 0.0, "trades": 0}
+            daily_map[r_date]["points"] = round(daily_map[r_date]["points"] + pnl_pts, 2)
+            daily_map[r_date]["trades"] += 1
+
+            m_key = r_date[:7]
+            monthly_map[m_key] = round(monthly_map.get(m_key, 0.0) + pnl_pts, 2)
+            reasons_map[reason] = reasons_map.get(reason, 0) + 1
+        except Exception:
+            continue
+
+    n = len(trades)
+    wins = sum(1 for x in trades if x["pnl_points"] > 0)
+    sorted_daily = sorted(daily_map.values(), key=lambda d: d["date"])
+    sorted_monthly = [{"month": m, "points": pts} for m, pts in sorted(monthly_map.items())]
+    sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+    return {
+        "summary": {
+            "strategy": "Aggressive Morning Midpoint & Key Level Scalp",
+            "from": sorted_daily[0]["date"] if sorted_daily else "",
+            "to": sorted_daily[-1]["date"] if sorted_daily else "",
+            "days": len(sorted_daily),
+            "trades": n,
+            "wins": wins,
+            "losses": sum(1 for x in trades if x["pnl_points"] < 0),
+            "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+            "total_points": round(equity, 2),
+            "avg_points": round(equity / n, 2) if n else 0.0,
+            "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
+            "best": max((x["pnl_points"] for x in trades), default=0.0),
+            "worst": min((x["pnl_points"] for x in trades), default=0.0),
+            "lot_size": lot_size,
+        },
+        "trades": trades,
+        "daily": sorted_daily,
+        "monthly": sorted_monthly,
+        "exit_reasons": sorted_reasons,
+    }
+
+
+def c1_pdc_retest_report() -> dict:
+    """Historical backtest performance for C1 Color + PDC Break & Retest."""
+    csv_path = ROOT / "performance" / "c1_pdc_retest_trades.csv"
+    if not csv_path.exists():
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+    raw_trades = read_csv_rows(csv_path)
+    trades, equity, peak = [], 0.0, 0.0
+    daily_map = {}
+    monthly_map = {}
+    reasons_map = {}
+    lot_size = 65
+
+    for r in raw_trades:
+        try:
+            r_date = str(r.get("date", ""))
+            side = str(r.get("side", "CALL"))
+            entry_spot = round(float(r.get("entry") or 0.0), 2)
+            exit_spot = round(float(r.get("exit_price") or 0.0), 2)
+            sl_spot = round(float(r.get("stop") or 0.0), 2)
+            tgt_spot = round(float(r.get("target") or 0.0), 2)
+            pnl_pts = round(float(r.get("pnl_points") or 0.0), 2)
+            equity += pnl_pts
+            peak = max(peak, equity)
+            reason = str(r.get("reason", ""))
+            c1_col = str(r.get("c1_color", ""))
+            pdc_val = str(r.get("pdc", ""))
+
+            trade_item = {
+                "date": r_date,
+                "side": side,
+                "setup": f"C1_{c1_col}_PDC_RETEST",
+                "entry": str(r.get("entry_time", "")),
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", "")),
+                "exit_price": exit_spot,
+                "reason": reason,
+                "pnl_points": pnl_pts,
+                "equity": round(equity, 2),
+                "drawdown": round(equity - peak, 2),
+                "bars_held": int(r.get("bars_held", 0)),
+            }
+            trades.append(trade_item)
+
+            if r_date not in daily_map:
+                daily_map[r_date] = {"date": r_date, "points": 0.0, "trades": 0}
+            daily_map[r_date]["points"] = round(daily_map[r_date]["points"] + pnl_pts, 2)
+            daily_map[r_date]["trades"] += 1
+
+            m_key = r_date[:7]
+            monthly_map[m_key] = round(monthly_map.get(m_key, 0.0) + pnl_pts, 2)
+            reasons_map[reason] = reasons_map.get(reason, 0) + 1
+        except Exception:
+            continue
+
+    n = len(trades)
+    wins = sum(1 for x in trades if x["pnl_points"] > 0)
+    sorted_daily = sorted(daily_map.values(), key=lambda d: d["date"])
+    sorted_monthly = [{"month": m, "points": pts} for m, pts in sorted(monthly_map.items())]
+    sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+    return {
+        "summary": {
+            "strategy": "C1 Color + PDC Break & Retest",
             "from": sorted_daily[0]["date"] if sorted_daily else "",
             "to": sorted_daily[-1]["date"] if sorted_daily else "",
             "days": len(sorted_daily),
@@ -2209,9 +2387,10 @@ def vix_trend_runner_spot_trades_for_day(date: str) -> list:
     return out
 
 
-def vix_trend_runner_backtest_report() -> dict:
-    """Historical backtest performance over 738 days for Nifty Trend Expansion Runner (with India VIX confluence)."""
-    csv_path = ROOT / "performance" / "vix_trend_runner_trades.csv"
+def vix_trend_runner_backtest_report(csv_path: Path | None = None) -> dict:
+    """Historical backtest performance for Nifty Trend Expansion Runner (with India VIX confluence)."""
+    if csv_path is None:
+        csv_path = ROOT / "performance" / "vix_trend_runner_trades.csv"
     if not csv_path.exists():
         return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
 
@@ -2895,7 +3074,9 @@ class Handler(BaseHTTPRequestHandler):
             self._json(available_days())
         elif url.path == "/api/backtest":
             strategy = q.get("strategy", [""])[0]
-            if strategy in ("trend_runner", "vix_trend", "trend_expansion"):
+            if strategy in ("trend_runner_10y", "10y", "10year", "trend_10y"):
+                self._json(nifty_10y_backtest_report())
+            elif strategy in ("trend_runner", "vix_trend", "trend_expansion"):
                 self._json(vix_trend_runner_backtest_report())
             elif strategy == "key_levels":
                 self._json(key_level_report())
@@ -2905,6 +3086,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(mtf_orb_5y_backtest_report())
             elif strategy in ("hourly_trend", "hourly"):
                 self._json(hourly_trend_report())
+            elif strategy in ("c1_pdc_retest", "pdc_retest", "c1_retest"):
+                self._json(c1_pdc_retest_report())
+            elif strategy in ("midpoint_aggressive", "aggressive_scalp", "midpoint_scalp", "aggressive"):
+                self._json(aggressive_midpoint_scalp_report(key_level_only=False))
+            elif strategy in ("key_levels_aggressive", "aggressive_key_levels"):
+                self._json(aggressive_midpoint_scalp_report(key_level_only=True))
             elif strategy in ("sr_breakout", "swing_sr", "breakout"):
                 self._json(sr_breakout_backtest_report())
             elif strategy not in ("", "midpoint"):
