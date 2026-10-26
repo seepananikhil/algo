@@ -93,3 +93,12 @@ run_ts_utc,input_csv,rr,max_hold_bars,total_trades,wins,losses,win_rate_pct,tota
 2026-10-10 05:24:51,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,61,32,29,52.46,607.8,9.96,13.41,0.22,50.0,-29.75,2
 2026-10-12 04:30:36,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,71,40,31,56.34,804.0,11.32,17.86,0.25,50.0,-130.5,2
 2026-10-12 10:00:16,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,71,40,31,56.34,804.0,11.32,17.86,0.25,50.0,-130.5,2
+2026-10-13 10:00:11,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,71,40,31,56.34,804.0,11.32,17.86,0.25,50.0,-130.5,2
+2026-10-13 11:15:28,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,61,31,30,50.82,520.15,8.53,26.01,0.43,50.0,-20.0,2
+2026-10-14 10:00:18,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,61,31,30,50.82,520.15,8.53,26.01,0.43,50.0,-20.0,2
+2026-10-14 16:44:22,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,61,31,30,50.82,520.15,8.53,26.01,0.43,50.0,-20.0,2
+2026-10-14 17:03:03,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,93,48,45,51.61,985.95,10.6,49.26,0.53,50.0,-20.0,3
+2026-10-14 17:05:42,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,93,48,45,51.61,985.95,10.6,49.26,0.53,50.0,-20.0,3
+2026-10-14 18:35:47,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,81,42,39,51.85,938.65,11.59,46.93,0.58,50.0,-20.0,3
+2026-10-15 09:01:56,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,81,42,39,51.85,938.65,11.59,46.93,0.58,50.0,-20.0,3
+2026-10-15 18:39:01,captured_data/fyers/fyers_spot_1min_extended.csv,1.0,20,81,42,39,51.85,938.65,11.59,46.93,0.58,50.0,-20.0,3

@@ -19,3 +19,152 @@
 
 [2026-10-12 15:05:08 IST] Starting HeroZero expiry capture.
 2026-10-12: no NIFTY or SENSEX expiry contracts; HeroZero capture skipped
+
+[2026-10-14 15:05:07 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:07:09 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:09:11 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:11:13 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:13:15 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:15:17 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:17:18 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:19:20 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:21:23 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:23:25 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:25:27 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:27:30 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-14 15:29:32 IST] Starting HeroZero expiry capture.
+Traceback (most recent call last):
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 454, in <module>
+    main()
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 450, in main
+    result = HeroZeroCapture(session).run()
+             ^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\nikhil\algo\fyers_hero_zero_capture.py", line 83, in __init__
+    raise RuntimeError("Fyers token is invalid or expired")
+RuntimeError: Fyers token is invalid or expired
+
+[2026-10-15 15:05:16 IST] Starting HeroZero expiry capture.
+2026-10-15: no NIFTY expiry contracts; HeroZero skipped
+
+[2026-10-16 15:05:22 IST] Starting HeroZero expiry capture (Kotak/SENSEX).
+2026-10-16: no SENSEX or NIFTY expiry contracts today; HeroZero skipped

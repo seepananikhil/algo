@@ -18,6 +18,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
+import pandas as pd
+
 from fyers_apiv3 import fyersModel
 from fyers_apiv3.FyersWebsocket import data_ws
 
@@ -160,6 +162,14 @@ class NiftyCapture:
                     self.key_level_tracker.on_completed_minute_file(self.min_file)
                 except Exception as exc:
                     print(f"[{now_ist():%H:%M:%S}] key-level paper update failed: {exc}")
+                try:
+                    if self.option_paper_tracker and self.min_file.exists():
+                        df_m = pd.read_csv(self.min_file)
+                        if not df_m.empty:
+                            last_r = df_m.iloc[-1]
+                            self.option_paper_tracker.on_completed_candle(last_r["timestamp"], float(last_r["close"]))
+                except Exception as exc:
+                    print(f"[{now_ist():%H:%M:%S}] option paper candle update failed: {exc}")
                 try:
                     self.signals.evaluate()
                 except Exception as exc:

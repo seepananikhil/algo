@@ -1,4 +1,5 @@
 import type {
+  AutoscaleInfo,
   IPrimitivePaneRenderer,
   IPrimitivePaneView,
   ISeriesApi,
@@ -8,7 +9,7 @@ import type {
   Time,
 } from "lightweight-charts"
 
-export type Band = { top: number; bottom: number; fill?: string; edge?: string }
+export type Band = { top: number; bottom: number; fill?: string; edge?: string; autoscale?: boolean }
 
 /** Full-width shaded price bands with dashed edges, drawn behind the candles. */
 export class PriceBandPrimitive implements ISeriesPrimitive<Time> {
@@ -31,6 +32,18 @@ export class PriceBandPrimitive implements ISeriesPrimitive<Time> {
   setBands(bands: Band[]) {
     this.bands = bands
     this.requestUpdate?.()
+  }
+
+  autoscaleInfo(): AutoscaleInfo | null {
+    const active = this.bands.filter((b) => b.autoscale !== false && Number.isFinite(b.top) && Number.isFinite(b.bottom))
+    if (!active.length) return null
+    let minValue = Infinity
+    let maxValue = -Infinity
+    for (const b of active) {
+      minValue = Math.min(minValue, b.bottom, b.top)
+      maxValue = Math.max(maxValue, b.bottom, b.top)
+    }
+    return minValue <= maxValue ? { priceRange: { minValue, maxValue } } : null
   }
 
   paneViews(): readonly IPrimitivePaneView[] {

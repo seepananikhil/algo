@@ -2,14 +2,34 @@ import { useCallback, useEffect, useRef, useState } from "react"
 
 export type Status = {
   now: string
-  token: { valid: boolean; generated_at_utc: string | null }
+  token: {
+    valid: boolean
+    generated_at_utc: string | null
+    broker?: string
+    ucc?: string | null
+    greeting_name?: string | null
+    reason?: string | null
+  }
+  broker?: "FYERS" | "KOTAK_NEO"
+  broker_status?: {
+    active_broker: "FYERS" | "KOTAK_NEO"
+    fyers: { valid: boolean; generated_at_utc: string | null }
+    kotak_neo: {
+      valid: boolean
+      ucc: string | null
+      greeting_name: string | null
+      logged_in_at: string | null
+      reason: string | null
+    }
+  }
   capture_running: boolean
   market_open_day?: boolean
   mode: "PAPER" | "LIVE"
   lots: number
   daily_loss_limit: number | null
   kill_switch: boolean
-  last_tick: { time: string; ltp: number } | null
+  last_tick: { time: string; ltp: number; change?: number | null; per_change?: number | null; prev_close?: number | null } | null
+  sensex_last_tick?: { time: string; ltp: number; change?: number | null; per_change?: number | null; prev_close?: number | null } | null
 }
 
 export type Candle = { time: string; open: number; high: number; low: number; close: number }
@@ -35,12 +55,15 @@ export type Setup = {
   buffer?: number
   range_fixed_at?: string
   key_levels?: { price: number; distance: number; nearby: boolean }[]
+  key_level_zone?: { level: number; buffer: number } | null
   key_breaks?: { time: string; price: number; side: "CALL" | "PUT"; confirmed: boolean; distance: number }[]
   armed?: { side: "CALL" | "PUT"; candle: string; level: number; stop: number }
 }
 
 export type DayData = {
   date: string
+  symbol?: string
+  prev_close?: number | null
   candles: Candle[]
   forming: Partial<Candle>
   setup: Setup
@@ -83,6 +106,45 @@ export function tradesFromSignals(signals: Signal[]): RuleTrade[] {
   return out
 }
 
+export type PositionRow = {
+  symbol: string
+  side: "CALL" | "PUT" | "EQUITY"
+  net_qty?: number
+  qty?: number
+  lot_size?: number
+  lots?: number
+  buy_avg: number
+  sell_avg: number
+  buy_amt?: number
+  sell_amt?: number
+  invested?: number
+  ltp?: number
+  current_value?: number
+  unrealized_pnl?: number
+  pnl_pct?: number
+  realized_pnl?: number
+  exchange?: string
+  product?: string
+  expiry?: string
+}
+
+export type PositionsResponse = {
+  ok: boolean
+  broker: "FYERS" | "KOTAK_NEO"
+  error?: string
+  open_positions: PositionRow[]
+  closed_positions: PositionRow[]
+  summary: {
+    realized_pnl: number
+    unrealized_pnl: number
+    net_pnl: number
+    open_count: number
+    closed_count: number
+    total_invested: number
+    current_value?: number
+  }
+}
+
 export type OptionTrade = {
   date: string
   side: "CALL" | "PUT"
@@ -106,6 +168,8 @@ export type OptionTrade = {
   distance_from_spot?: number | null
   level?: number | null
   trigger_label?: string
+  sl?: number | null
+  target?: number | null
 }
 
 export function withoutSupersededExitSignals(signals: Signal[], fills: OptionTrade[]): Signal[] {
@@ -122,8 +186,8 @@ export function chartTradesFromOptionFills(fills: OptionTrade[]): RuleTrade[] {
     side: fill.side,
     entry: fill.entry,
     entry_price: fill.nifty_in,
-    sl: Number.NaN,
-    target: Number.NaN,
+    sl: fill.sl != null && !Number.isNaN(fill.sl) ? fill.sl : Number.NaN,
+    target: fill.target != null && !Number.isNaN(fill.target) ? fill.target : Number.NaN,
     exit: fill.exit,
     exit_price: fill.nifty_out,
     reason: fill.exit_reason,
@@ -284,6 +348,8 @@ export type KeyLevelDay = {
   date: string
   timeframe_minutes: 5
   candles: Candle[]
+  forming?: Partial<Candle> | null
+  current_price?: number | null
   trades: RuleTrade[]
   key_level_zone: { level: number; buffer: number } | null
 }
@@ -333,6 +399,7 @@ export type Backtest = {
 }
 
 export type Settings = {
+  broker?: "FYERS" | "KOTAK_NEO"
   lots: number
   daily_loss_limit: number
   strike_offset: number
@@ -341,20 +408,35 @@ export type Settings = {
   key_levels_lots: number
   hero_zero_lots: number
   key_levels_live_trading: boolean
+  scalper_paper_trading?: boolean
+  scalper_live_trading?: boolean
+  scalper_lots?: number
+  scalper_sl_pts?: number
+  scalper_target_pts?: number
+  scalper_max_trades?: number
+  hourly_trend_paper_trading?: boolean
+  hourly_trend_live_trading?: boolean
+  hourly_trend_lots?: number
   midpoint_live_trading: boolean
   hero_zero_live_trading: boolean
   live_trading: boolean
   capture_running: boolean
   restart_required?: boolean
+  kotak_mobile_number?: string
+  kotak_ucc?: string
+  kotak_consumer_key_set?: boolean
+  kotak_mpin_set?: boolean
+  kotak_totp_secret_set?: boolean
 }
 
-export type FundsStatus = { ok: true; available_equity_funds: number } | { ok: false; error: string }
+export type FundsStatus = { ok: true; available_equity_funds: number; broker?: string } | { ok: false; error: string; broker?: string }
 
 export type ManualOptionChoices = {
   spot: number
   atm: number
   max_lots: number
   expiries: { expiry: string; lot_size: number; strikes: number[] }[]
+  symbol?: string
 }
 
 export type ManualPosition = {

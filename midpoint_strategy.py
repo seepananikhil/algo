@@ -91,12 +91,13 @@ PAPER_STARTING_CAPITAL = 25_000
 WICK_TOUCH_TOLERANCE = 2.0  # a wick within this many points of the midpoint counts as touching it
 OPEN_TOLERANCE = 2.0  # the rejection candle may open up to this many points on the wrong side of the midpoint
 TARGET_POINTS = 50.0
-TRAIL_ACTIVATE_POINTS: Optional[float] = None  # set (e.g. 40.0) to enable a trailing stop; None = fixed target only
+TRAIL_ACTIVATE_POINTS: Optional[float] = 40.0  # locks in profit once trade reaches +40 pts
 TRAIL_POINTS = 10.0
-HARD_STOP_POINTS: Optional[float] = None  # set (e.g. 10.0) for a fixed stop from entry; None = range edge
-MAX_ENTRY_DISTANCE: Optional[float] = None  # set (e.g. 25.0) to skip entries filling further than this from the midpoint
+HARD_STOP_POINTS: Optional[float] = 20.0  # hard-cap maximum stop loss to 20 pts from entry
+MAX_ENTRY_DISTANCE: Optional[float] = 25.0  # skip entries further than 25 pts from midpoint
 MIN_SETUP_MINUTES = 5
 MIN_FIRST_CANDLE_BODY_RATIO = 0.12
+MIN_OPENING_RANGE: Optional[float] = 50.0  # filter out chop days where opening swing range < 50 pts
 TRADE_WINDOW_MINUTES = 35  # exits by 09:50
 MIN_MINUTES_LEFT_FOR_ENTRY = 10  # last entry 09:40
 
@@ -129,6 +130,9 @@ def day_setup(work: pd.DataFrame, day_indices: List[int]) -> Optional[dict]:
         low_j = float(work.loc[j, "low"])
         makes_new_extreme = high_j > ref_high or low_j < ref_low
         if not makes_new_extreme and (j - day_start) >= MIN_SETUP_MINUTES:
+            swing_range = ref_high - ref_low
+            if MIN_OPENING_RANGE is not None and swing_range < MIN_OPENING_RANGE:
+                return None
             return {
                 "day_start": day_start,
                 "day_end": day_indices[-1],
@@ -145,98 +149,23 @@ def day_setup(work: pd.DataFrame, day_indices: List[int]) -> Optional[dict]:
     return None
 
 
-def key_levels_for_range(setup: dict, step: int = 500) -> List[int]:
-    """Round price levels near the daily midpoint range. Used as directional confirmation filters."""
-    lo = int((setup["ref_low"] - 1000) // step) * step
-    hi = int((setup["ref_high"] + 1000) // step) * step
-    return list(range(lo, hi + step, step))
-
-
-def key_breakout_signal(work: pd.DataFrame, idx: int, side: str, setup: dict, max_follow_candles: int = 3) -> Optional[int]:
-    """Return a qualifying key level for breakout continuation.
-
-    Aggressive rule: if the first bar or the next immediate bars break a round level and hold it,
-    we can take the trade without waiting for a full retrace back into the midpoint.
-    """
-    levels = key_levels_for_range(setup)
-    base = idx
-
-    if side == "LONG":
-        valid_levels = [lvl for lvl in levels if lvl > setup["mid"] and lvl <= setup["ref_high"] + 1000]
-        for lvl in valid_levels:
-            for j in range(base, min(len(work), base + max_follow_candles + 1)):
-                candle = work.iloc[j]
-                if candle["close"] >= lvl and candle["high"] >= lvl:
-                    follow_ok = True
-                    for k in range(j + 1, min(len(work), j + 3)):
-                        next_candle = work.iloc[k]
-                        if next_candle["close"] < lvl:
-                            follow_ok = False
-                            break
-                    if follow_ok and abs(float(work.loc[j, "close"]) - setup["mid"]) <= 80:
-                        return int(lvl)
-        return None
-
-    valid_levels = [lvl for lvl in levels if lvl < setup["mid"] and lvl >= setup["ref_low"] - 1000]
-    for lvl in valid_levels:
-        for j in range(base, min(len(work), base + max_follow_candles + 1)):
-            candle = work.iloc[j]
-            if candle["close"] <= lvl and candle["low"] <= lvl:
-                follow_ok = True
-                for k in range(j + 1, min(len(work), j + 3)):
-                    next_candle = work.iloc[k]
-                    if next_candle["close"] > lvl:
-                        follow_ok = False
-                        break
-                if follow_ok and abs(float(work.loc[j, "close"]) - setup["mid"]) <= 80:
-                    return int(lvl)
-    return None
 
 
 def buffer_entry_level(side: str, mid: float) -> float:
     return mid + MIDPOINT_BUFFER_POINTS if side == "LONG" else mid - MIDPOINT_BUFFER_POINTS
 
 
-def has_breakdown_confirmation(work: pd.DataFrame, k: int, side: str, mid: float, lookback: int = 3) -> bool:
-    """Require recent momentum in the same direction before accepting a midpoint rejection trade.
-
-    This keeps the strategy from entering on isolated wick snaps that are not backed by a
-    fresh directional breakdown. We treat a 3-candle confirmation as the minimum bar count.
-    """
-    if k <= lookback:
-        return True
-
-    recent = work.iloc[max(0, k - lookback):k].copy()
-    if recent.empty:
-        return True
-
-    if side == "SHORT":
-        closes_below_mid = int((recent["close"] < mid).sum())
-        recent_down = int((recent["close"].diff().fillna(0) < 0).sum())
-        last_low = float(recent["low"].iloc[-1])
-        return closes_below_mid >= 2 and recent_down >= 1 and last_low <= mid
-
-    closes_above_mid = int((recent["close"] > mid).sum())
-    recent_up = int((recent["close"].diff().fillna(0) > 0).sum())
-    last_high = float(recent["high"].iloc[-1])
-    return closes_above_mid >= 2 and recent_up >= 1 and last_high >= mid
-
-
 def wick_rejection_side(work: pd.DataFrame, k: int, mid: float) -> Optional[str]:
     """Candle k wicked into (or within WICK_TOUCH_TOLERANCE of) the midpoint and closed back beyond the buffer."""
+    if k < 1:
+        return None
     o, h, l, c = (float(work.loc[k, x]) for x in ("open", "high", "low", "close"))
     prev_close = float(work.loc[k - 1, "close"])
     tol = WICK_TOUCH_TOLERANCE
     if prev_close > mid and o > mid - OPEN_TOLERANCE and l <= mid + tol and c >= mid + MIDPOINT_BUFFER_POINTS:
-        side = "LONG"
-        if has_breakdown_confirmation(work, k, side, mid):
-            return side
-        return None
+        return "LONG"
     if prev_close < mid and o < mid + OPEN_TOLERANCE and h >= mid - tol and c <= mid - MIDPOINT_BUFFER_POINTS:
-        side = "SHORT"
-        if has_breakdown_confirmation(work, k, side, mid):
-            return side
-        return None
+        return "SHORT"
     return None
 
 
@@ -247,30 +176,40 @@ def scan_entry(
     last_idx: int,
     side_filter: Optional[str] = None,
 ) -> dict:
-    """Try breakout continuation first, then fall back to midpoint wick rejection."""
+    """Midpoint wick rejection entry with adaptive 2-candle post-break confirmation.
+
+    If the breakdown/breakout was already confirmed (>= 2 closes on side before the rejection candle),
+    entry triggers on the immediate next open (k + 1).
+    If it was a fresh break (< 2 closes prior), requires 1 sustaining candle at k + 1, entering on k + 2.
+    """
     limit = min(setup["last_entry_idx"], last_idx)
-
-    for k in range(max(earliest_idx, setup["day_start"] + 1), limit - 1):
-        for side in ("LONG", "SHORT"):
-            if side_filter is not None and side != side_filter:
-                continue
-            level = key_breakout_signal(work, k, side, setup, max_follow_candles=3)
-            if level is not None:
-                entry_idx = k + 1
-                if entry_idx > limit:
-                    entry_idx = limit
-                return {
-                    "status": "entry",
-                    "idx": entry_idx,
-                    "side": side,
-                    "price": float(work.loc[entry_idx, "open"]),
-                    "level": level,
-                }
-
-    for k in range(max(earliest_idx, setup["day_start"] + 1), limit):
-        side = wick_rejection_side(work, k, setup["mid"])
-        if side and (side_filter is None or side == side_filter):
-            return {"status": "entry", "idx": k + 1, "side": side, "price": float(work.loc[k + 1, "open"])}
+    mid = setup["mid"]
+    day_start = setup["day_start"]
+    for k in range(max(earliest_idx, day_start + 1), limit):
+        side = wick_rejection_side(work, k, mid)
+        if not side or (side_filter is not None and side != side_filter):
+            continue
+        closes_on_side = 0
+        if k - 1 >= day_start:
+            c1 = float(work.loc[k - 1, "close"])
+            if (side == "SHORT" and c1 < mid) or (side == "LONG" and c1 > mid):
+                closes_on_side += 1
+        if k - 2 >= day_start:
+            c2 = float(work.loc[k - 2, "close"])
+            if (side == "SHORT" and c2 < mid) or (side == "LONG" and c2 > mid):
+                closes_on_side += 1
+        if closes_on_side >= 2:
+            entry_idx = k + 1
+            if entry_idx <= last_idx:
+                return {"status": "entry", "idx": entry_idx, "side": side, "price": float(work.loc[entry_idx, "open"])}
+        else:
+            if k + 1 <= last_idx:
+                next_c = float(work.loc[k + 1, "close"])
+                sustained = (next_c <= mid) if side == "SHORT" else (next_c >= mid)
+                if sustained:
+                    entry_idx = min(k + 2, limit)
+                    if entry_idx <= last_idx:
+                        return {"status": "entry", "idx": entry_idx, "side": side, "price": float(work.loc[entry_idx, "open"])}
     return {"status": "none", "earliest": earliest_idx, "side_filter": side_filter}
 
 
@@ -381,23 +320,67 @@ def plan_day(
 
 
 def _armed_for_next(work: pd.DataFrame, setup: dict, r: dict, day_indices: List[int]) -> Optional[dict]:
-    """If the last closed candle is a wick rejection, enter at market on the next candle's first tick."""
+    """If the last closed candle triggers or confirms an entry, arm for the next candle's first tick."""
     last_idx = day_indices[-1]
     last_entry_ts = work.loc[day_indices[0], "timestamp"] + pd.Timedelta(
         minutes=TRADE_WINDOW_MINUTES - MIN_MINUTES_LEFT_FOR_ENTRY
     )
-    if work.loc[last_idx, "timestamp"] >= last_entry_ts or last_idx < max(r["earliest"], setup["day_start"] + 1):
+    if work.loc[last_idx, "timestamp"] >= last_entry_ts:
         return None
-    side = wick_rejection_side(work, last_idx, setup["mid"])
-    if side is None or (r["side_filter"] and side != r["side_filter"]):
-        return None
-    return {
-        "side": side,
-        "candle_time": work.loc[last_idx, "timestamp"] + pd.Timedelta(minutes=1),
-        "level": buffer_entry_level(side, setup["mid"]),
-        "mid": setup["mid"],
-        "stop": setup["ref_low"] if side == "LONG" else setup["ref_high"],
-    }
+
+    mid = setup["mid"]
+    earliest = max(r.get("earliest", 0), setup["day_start"] + 1)
+    side_filter = r.get("side_filter")
+
+    # Case 1: last_idx itself is a rejection bar, and was already confirmed (>= 2 closes prior to it)
+    if last_idx >= earliest:
+        side = wick_rejection_side(work, last_idx, mid)
+        if side and (side_filter is None or side == side_filter):
+            closes_on_side = 0
+            if last_idx - 1 >= setup["day_start"]:
+                c1 = float(work.loc[last_idx - 1, "close"])
+                if (side == "SHORT" and c1 < mid) or (side == "LONG" and c1 > mid):
+                    closes_on_side += 1
+            if last_idx - 2 >= setup["day_start"]:
+                c2 = float(work.loc[last_idx - 2, "close"])
+                if (side == "SHORT" and c2 < mid) or (side == "LONG" and c2 > mid):
+                    closes_on_side += 1
+            if closes_on_side >= 2:
+                return {
+                    "side": side,
+                    "candle_time": work.loc[last_idx, "timestamp"] + pd.Timedelta(minutes=1),
+                    "level": buffer_entry_level(side, mid),
+                    "mid": mid,
+                    "stop": setup["ref_low"] if side == "LONG" else setup["ref_high"],
+                }
+
+    # Case 2: last_idx - 1 was a rejection bar on a fresh break (<2 closes prior), and last_idx is the sustaining bar
+    prev_idx = last_idx - 1
+    if prev_idx >= earliest:
+        side = wick_rejection_side(work, prev_idx, mid)
+        if side and (side_filter is None or side == side_filter):
+            closes_on_side = 0
+            if prev_idx - 1 >= setup["day_start"]:
+                c1 = float(work.loc[prev_idx - 1, "close"])
+                if (side == "SHORT" and c1 < mid) or (side == "LONG" and c1 > mid):
+                    closes_on_side += 1
+            if prev_idx - 2 >= setup["day_start"]:
+                c2 = float(work.loc[prev_idx - 2, "close"])
+                if (side == "SHORT" and c2 < mid) or (side == "LONG" and c2 > mid):
+                    closes_on_side += 1
+            if closes_on_side < 2:
+                next_c = float(work.loc[last_idx, "close"])
+                sustained = (next_c <= mid) if side == "SHORT" else (next_c >= mid)
+                if sustained:
+                    return {
+                        "side": side,
+                        "candle_time": work.loc[last_idx, "timestamp"] + pd.Timedelta(minutes=1),
+                        "level": buffer_entry_level(side, mid),
+                        "mid": mid,
+                        "stop": setup["ref_low"] if side == "LONG" else setup["ref_high"],
+                    }
+
+    return None
 
 
 def run_day(work: pd.DataFrame, day_indices: List[int], max_hold_bars: int = 20) -> Tuple[Optional[dict], List[Trade]]:

@@ -100,11 +100,25 @@ def place_live_order(rest, symbol: str, qty: int, side: int, on_order_accepted=N
 
 
 def load_nifty_options() -> pd.DataFrame:
+    cache = ROOT / "captured_data" / "fyers" / "nifty_options_cache.pkl"
+    today_date = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
+    if cache.exists():
+        try:
+            mtime = datetime.fromtimestamp(cache.stat().st_mtime, tz=timezone(timedelta(hours=5, minutes=30))).date()
+            if mtime == today_date:
+                return pd.read_pickle(cache)
+        except Exception:
+            pass
     cols = {8: "expiry_epoch", 9: "symbol", 3: "lot_size", 13: "underlying", 15: "strike", 16: "opt_type"}
     raw = pd.read_csv(SYMBOL_MASTER_URL, header=None, usecols=list(cols))
     df = raw.rename(columns=cols)
     df = df[(df["underlying"] == "NIFTY") & (df["opt_type"].isin(["CE", "PE"]))].copy()
     df["expiry"] = pd.to_datetime(df["expiry_epoch"], unit="s", utc=True).dt.tz_convert("Asia/Kolkata").dt.date
+    try:
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df.to_pickle(cache)
+    except Exception:
+        pass
     return df
 
 

@@ -1,5 +1,23 @@
 {
-  "app_id": "YOUR_APP_ID",
-  "secret_key": "YOUR_SECRET_KEY",
-  "redirect_uri": "http://127.0.0.1:8080/callback"
+  "broker": "FYERS",
+  "app_id": "YOUR_FYERS_APP_ID",
+  "secret_key": "YOUR_FYERS_SECRET_KEY",
+  "redirect_uri": "http://127.0.0.1:8080/callback",
+  "kotak_neo": {
+    "consumer_key": "YOUR_KOTAK_CONSUMER_KEY",
+    "consumer_secret": "YOUR_KOTAK_CONSUMER_SECRET",
+    "mobile_number": "+919876543210",
+    "ucc": "YOUR_KOTAK_UCC",
+    "mpin": "123456",
+    "totp_secret": "OPTIONAL_BASE32_TOTP_KEY_FOR_AUTO_LOGIN",
+    "environment": "prod"
+  },
+  "lots": 1,
+  "daily_loss_limit": 1000,
+  "strike_offset": 100,
+  "option_target_pct": 10,
+  "minimum_live_funds": 25000,
+  "midpoint_live_trading": false,
+  "hero_zero_live_trading": false,
+  "key_levels_live_trading": false
 }

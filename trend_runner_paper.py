@@ -553,28 +553,23 @@ class TrendRunnerPaperEngine:
                             stage_name = "STAGE1_TREND"
 
         elif trade_num == 2 and self.reentry:
-            # Matured Trend Protection Gate:
+            # 1. Strict Cool-off Gate: Must wait at least reentry_cooloff_bars (30 min) after Trade 1 exit
+            # Prevents immediate revenge entries (e.g. 2 min after stop out)
+            if self.bars_since_last_exit < self.reentry_cooloff_bars:
+                return None
+
+            # 2. Matured Trend Protection Gate:
             # If Trade 1 secured >= +60 pts (Tier 2+ Ratchet lock, excursion >= 130 pts), the daily trend
-            # is already matured/exhausted. Re-entering after a >= +60 pt win yields 0% win rate (6 out of 6
-            # were full -30 pt losses). Blocking Trade 2 here locks in the day's profit and saves -180 pts.
+            # is already matured/exhausted. Re-entering after a >= +60 pt win yields 0% win rate.
+            # Blocking Trade 2 here locks in the day's profit and saves -180 pts.
             if self.last_trade_pnl >= 60.0:
                 return None
 
-            # High-Conviction Re-entry Gate:
+            # 3. High-Conviction Re-entry Gate:
             # Window: 09:30 to 13:00 IST
             if "09:30" <= t_str <= "13:00":
-                # 1. Wick Reclaim Re-entry (Trade 1 was wicked out after positive momentum >= 15 pts)
-                # CRITICAL: Must be outside the Opening Range (never short or buy inside consolidation)
-                if self.last_trade_exit_reason == "STOP_LOSS" and self.last_trade_max_fav >= 15.0 and self.bars_since_last_exit <= 25:
-                    if self.last_trade_sig == "LONG" and c > self.last_trade_sl and c > o and c > vwap and c >= or_high:
-                        sig = "LONG"
-                        stage_name = "REENTRY_WICK_RECLAIM"
-                    elif self.last_trade_sig == "SHORT" and c < self.last_trade_sl and c < o and c < vwap and c <= or_low:
-                        sig = "SHORT"
-                        stage_name = "REENTRY_WICK_RECLAIM"
-
-                # 2. Dynamic Expansion Re-entry (Breakout continuation after cool-off)
-                if not sig and self.bars_since_last_exit >= self.reentry_cooloff_bars and self.last_trade_sig:
+                # Dynamic Expansion Re-entry (Breakout continuation after 30-min cool-off)
+                if self.last_trade_sig:
                     if self.last_trade_sig == "LONG" and c >= prev_dh and c > o and c > vwap:
                         sig = "LONG"
                         stage_name = "REENTRY_EXPANSION"

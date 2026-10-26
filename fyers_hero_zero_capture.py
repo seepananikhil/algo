@@ -1,20 +1,23 @@
 #!/usr/bin/env python3
-"""Paper-data capture for low-premium options on NIFTY and SENSEX expiry sessions."""
+"""Targeted Hero-Zero option capture for NIFTY expiry sessions.
+
+At 15:19 IST: Queries NIFTY spot, identifies nearby strikes around ATM (±150 pts).
+At 15:20 IST: Takes a fast REST snapshot, selects 1 CE and 1 PE in the ₹8.0–₹12.0 target band.
+From 15:20 to 15:29:50 IST: Tracks selected positions and logs ticks.
+At 15:29:50 IST: Closes positions at market on final candle before expiry.
+"""
 
 from __future__ import annotations
 
 import csv
 import json
-import threading
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 from fyers_apiv3 import fyersModel
-from fyers_apiv3.FyersWebsocket import data_ws
 
-from fyers_fetch_sensex_expiry import expiry_contracts as sensex_expiry_contracts
 from fyers_orders import available_equity_funds, load_nifty_options, place_live_order
 
 ROOT = Path(__file__).resolve().parent
@@ -24,17 +27,26 @@ OUTPUT_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
 TMP_DIR = ROOT / "tmp" / "fyers" / "hero_zero"
 IST = timezone(timedelta(hours=5, minutes=30))
 NIFTY_INDEX = "NSE:NIFTY50-INDEX"
-SENSEX_INDEX = "BSE:SENSEX-INDEX"
-CAPTURE_START = (15, 5)
+
 SNAPSHOT_TIME = (15, 20)
-EXIT_TIME = (15, 30)
-EXIT_CANDLE_TIME = (15, 29)
-CAPTURE_END = (15, 31)
+EXIT_TIME = (15, 29, 50)
+CAPTURE_END = (15, 30, 30)
+
 NIFTY_PRICE_BAND = (8.0, 12.0)
-SENSEX_PRICE_BAND = (20.0, 40.0)
-CANDIDATE_HEADER = ["date", "underlying", "expiry", "symbol", "option_type", "strike", "lot_size", "spot_ltp", "distance_from_spot", "band_low", "band_high", "snapshot_at", "received_at", "quote_age_seconds", "snapshot_ltp", "volume_at_snapshot", "source"]
+FALLBACK_PRICE_BAND = (5.0, 16.0)
+
+CANDIDATE_HEADER = [
+    "date", "underlying", "expiry", "symbol", "option_type", "strike", "lot_size",
+    "spot_ltp", "distance_from_spot", "band_low", "band_high", "snapshot_at",
+    "received_at", "quote_age_seconds", "snapshot_ltp", "volume_at_snapshot", "source"
+]
 TICK_HEADER = ["date", "timestamp", "underlying", "symbol", "ltp", "volume", "exchange_time"]
-PAPER_TRADE_HEADER = ["date", "underlying", "expiry", "symbol", "option_type", "strike", "lot_size", "spot_ltp", "distance_from_spot", "entry_time", "entry_price", "entry_volume", "exit_time", "exit_price", "exit_volume", "pnl_per_unit", "pnl_rs", "status", "exit_reason", "source"]
+PAPER_TRADE_HEADER = [
+    "date", "underlying", "expiry", "symbol", "option_type", "strike", "lot_size",
+    "spot_ltp", "distance_from_spot", "entry_time", "entry_price", "entry_volume",
+    "exit_time", "exit_price", "exit_volume", "pnl_per_unit", "pnl_rs", "status",
+    "exit_reason", "source"
+]
 LIVE_ORDER_HEADER = ["date", "time", "action", "symbol", "qty", "order_id", "fill_price", "reason", "status"]
 
 
@@ -51,56 +63,21 @@ def append_row(path: Path, header: list, row: list) -> None:
         writer.writerow(row)
 
 
-def within_spot_window(underlying: str, strike: float, spot: float) -> bool:
-    max_distance = 50.0 if underlying == "NIFTY" else 100.0
-    return abs(strike - spot) <= max_distance
-
-
 def write_status(path: Path, value: dict) -> None:
     temp = path.with_suffix(".tmp")
     temp.write_text(json.dumps(value, indent=2), encoding="utf-8")
     temp.replace(path)
 
 
-def expiry_universe(session: date) -> tuple[list[dict], dict]:
-    universe: list[dict] = []
-    expiries = {"NIFTY": [], "SENSEX": []}
-    nifty = load_nifty_options()
-    nifty = nifty[nifty["expiry"] == session]
-    for r in nifty.itertuples(index=False):
-        item = {
-            "underlying": "NIFTY",
-            "expiry": session.isoformat(),
-            "symbol": str(r.symbol),
-            "lot_size": int(r.lot_size),
-            "option_type": str(r.opt_type),
-            "strike": float(r.strike),
-        }
-        universe.append(item)
-    if universe:
-        expiries["NIFTY"].append(session.isoformat())
-
-    sensex = sensex_expiry_contracts(session)
-    for c in sensex:
-        universe.append({
-            "underlying": "SENSEX",
-            "expiry": session.isoformat(),
-            "symbol": c["symbol"],
-            "lot_size": c["lot_size"],
-            "option_type": c["option_type"],
-            "strike": float(c["strike"]),
-        })
-    if sensex:
-        expiries["SENSEX"].append(session.isoformat())
-    return universe, expiries
-
-
 class HeroZeroCapture:
-    def __init__(self, session: date, universe: list[dict], expiry_info: dict) -> None:
+    def __init__(self, session: date) -> None:
         token = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
         self.app_id = token["app_id"]
         self.access_token = token["access_token"]
-        self.rest = fyersModel.FyersModel(client_id=self.app_id, token=self.access_token, is_async=False, log_path=str(TMP_DIR))
+        TMP_DIR.mkdir(parents=True, exist_ok=True)
+        self.rest = fyersModel.FyersModel(
+            client_id=self.app_id, token=self.access_token, is_async=False, log_path=str(TMP_DIR) + "/"
+        )
         profile = self.rest.get_profile()
         if profile.get("s") != "ok":
             raise RuntimeError("Fyers token is invalid or expired")
@@ -109,123 +86,20 @@ class HeroZeroCapture:
         config = json.loads(CONFIG_FILE.read_text(encoding="utf-8")) if CONFIG_FILE.exists() else {}
         self.live_trading = bool(config.get("hero_zero_live_trading", False))
         self.lots = max(1, int(config.get("hero_zero_lots", 1)))
-        self.minimum_live_funds = float(config.get("minimum_live_funds", 25000))
-        self.take_put = True
-        self.take_call = True
-        self.universe = universe
-        self.by_symbol = {c["symbol"]: c for c in universe}
-        self.expiry_info = expiry_info
-        self.quotes: dict[str, dict] = {}
-        self.spot_quotes: dict[str, dict] = {}
-        self.candidates: dict[str, dict] = {}
-        self.exit_quotes: dict[str, dict] = {}
-        self.live_positions: dict[str, dict] = {}
-        self.live_results: dict[str, dict] = {}
-        self.live_order_halted = False
-        self.live_reserved_funds = 0.0
-        self.lock = threading.RLock()
-        self.snapshot_taken = False
+        self.minimum_live_funds = float(config.get("minimum_live_funds", 10000))
+
         self.output_dir = OUTPUT_DIR
         self.output_dir.mkdir(parents=True, exist_ok=True)
         self.candidates_file = self.output_dir / f"hero_zero_candidates_{session}.csv"
         self.ticks_file = self.output_dir / f"hero_zero_ticks_{session}.csv"
         self.status_file = self.output_dir / f"hero_zero_status_{session}.json"
         self.live_orders_file = self.output_dir / f"hero_zero_orders_{session}.csv"
-        self.ws = None
 
-    def on_connect(self) -> None:
-        symbols = list(self.by_symbol) + [NIFTY_INDEX, SENSEX_INDEX]
-        print(f"[{now_ist():%H:%M:%S}] HeroZero connected; subscribing to {len(symbols)} expiry options")
-        self.ws.subscribe(symbols=symbols, data_type="SymbolUpdate")
-
-    def on_message(self, msg) -> None:
-        if not isinstance(msg, dict):
-            return
-        symbol = msg.get("symbol")
-        if symbol in (NIFTY_INDEX, SENSEX_INDEX) and msg.get("ltp") is not None:
-            with self.lock:
-                self.spot_quotes[symbol] = {"ltp": float(msg["ltp"]), "received_at": now_ist()}
-            return
-        if symbol not in self.by_symbol or msg.get("ltp") is None:
-            return
-        received = now_ist()
-        quote = {
-            "ltp": float(msg["ltp"]),
-            "volume": msg.get("vol_traded_today", ""),
-            "exchange_time": msg.get("exch_feed_time", msg.get("last_traded_time", "")),
-            "received_at": received,
-        }
-        with self.lock:
-            self.quotes[symbol] = quote
-            if symbol in self.candidates and self.snapshot_taken and received.strftime("%H:%M") >= "15:20":
-                c = self.by_symbol[symbol]
-                append_row(self.ticks_file, TICK_HEADER, [
-                    self.session.isoformat(), received.strftime("%Y-%m-%d %H:%M:%S.%f"),
-                    c["underlying"], symbol, quote["ltp"], quote["volume"], quote["exchange_time"],
-                ])
-                if received.strftime("%H:%M") == f"{EXIT_CANDLE_TIME[0]:02d}:{EXIT_CANDLE_TIME[1]:02d}":
-                    self.exit_quotes[symbol] = quote
-
-    def on_error(self, msg) -> None:
-        print(f"[{now_ist():%H:%M:%S}] HeroZero websocket error: {msg}")
-
-    def on_close(self, msg) -> None:
-        print(f"[{now_ist():%H:%M:%S}] HeroZero websocket closed: {msg}")
-
-    def _snapshot(self) -> None:
-        now = now_ist()
-        eligible = {"PE": [], "CE": []}
-        with self.lock:
-            if self.snapshot_taken:
-                return
-            self.snapshot_taken = True
-            for symbol, q in self.quotes.items():
-                c = self.by_symbol[symbol]
-                low, high = NIFTY_PRICE_BAND if c["underlying"] == "NIFTY" else SENSEX_PRICE_BAND
-                age = max(0.0, (now - q["received_at"]).total_seconds())
-                spot_symbol = NIFTY_INDEX if c["underlying"] == "NIFTY" else SENSEX_INDEX
-                spot_quote = self.spot_quotes.get(spot_symbol)
-                if age > 60 or not low <= q["ltp"] <= high or not spot_quote:
-                    continue
-                spot_age = max(0.0, (now - spot_quote["received_at"]).total_seconds())
-                if spot_age > 60 or not within_spot_window(c["underlying"], c["strike"], spot_quote["ltp"]):
-                    continue
-                distance = round(c["strike"] - spot_quote["ltp"], 2)
-                candidate = {**c, "band_low": low, "band_high": high, "snapshot_at": now,
-                             "spot_ltp": spot_quote["ltp"], "distance_from_spot": distance,
-                             "quote_age_seconds": round(age, 2), "quote": q}
-                eligible[c["option_type"]].append(candidate)
-
-            limits = {"PE": int(self.take_put), "CE": int(self.take_call)}
-            for option_type, limit in limits.items():
-                chosen = sorted(
-                    eligible[option_type],
-                    key=lambda candidate: (
-                        abs(candidate["distance_from_spot"]),
-                        candidate["quote_age_seconds"],
-                        candidate["symbol"],
-                    ),
-                )[:limit]
-                for candidate in chosen:
-                    symbol = candidate["symbol"]
-                    quote = candidate["quote"]
-                    self.candidates[symbol] = candidate
-                    append_row(self.candidates_file, CANDIDATE_HEADER, [
-                        self.session.isoformat(), candidate["underlying"], candidate["expiry"], symbol,
-                        candidate["option_type"], candidate["strike"], candidate["lot_size"],
-                        candidate["spot_ltp"], candidate["distance_from_spot"], candidate["band_low"], candidate["band_high"],
-                        now.strftime("%Y-%m-%d %H:%M:%S"), quote["received_at"].strftime("%Y-%m-%d %H:%M:%S"),
-                        candidate["quote_age_seconds"], quote["ltp"], quote["volume"], "live_ticks",
-                    ])
-                    append_row(self.ticks_file, TICK_HEADER, [
-                        self.session.isoformat(), now.strftime("%Y-%m-%d %H:%M:%S.%f"), candidate["underlying"],
-                        symbol, quote["ltp"], quote["volume"], quote["exchange_time"],
-                    ])
-        selected = list(self.candidates.values())
-        print(f"[{now:%H:%M:%S}] HeroZero selected {len(self.candidates)} options in target premium bands")
-        if self.live_trading:
-            for candidate in selected:
-                self._enter_live_order(candidate)
+        self.candidates: dict[str, dict] = {}
+        self.live_positions: dict[str, dict] = {}
+        self.live_results: dict[str, dict] = {}
+        self.live_order_halted = False
+        self.live_reserved_funds = 0.0
 
     def _log_live_order(self, action: str, candidate: dict, quantity: int, order_id: str, fill: str | float, reason: str, status: str) -> None:
         append_row(self.live_orders_file, LIVE_ORDER_HEADER, [
@@ -296,135 +170,276 @@ class HeroZeroCapture:
                 self._log_live_order("SELL", candidate, quantity, "", "", str(exc), "failed_open_position")
                 print(f"CRITICAL: HeroZero LIVE exit failed for {symbol}; close it manually: {exc}")
 
-    def _write_paper_trades(self) -> tuple[int, int]:
-        trades_file = self.output_dir / f"hero_zero_trades_{self.session}.csv"
-        paper_count = 0
-        live_count = 0
-        for symbol, candidate in self.candidates.items():
-            result = self.live_results.get(symbol)
-            if result:
-                entry_price = result["entry_price"]
-                exit_price = result["exit_price"]
-                pnl_per_unit = round(exit_price - entry_price, 2)
-                quantity = result["quantity"]
-                append_row(trades_file, PAPER_TRADE_HEADER, [
-                    self.session.isoformat(), candidate["underlying"], candidate["expiry"], symbol,
-                    candidate["option_type"], candidate["strike"], quantity,
-                    candidate["spot_ltp"], candidate["distance_from_spot"],
-                    result["entry_time"].strftime("%Y-%m-%d %H:%M:%S"), entry_price,
-                    candidate["quote"]["volume"], result["exit_time"].strftime("%Y-%m-%d %H:%M:%S"),
-                    exit_price, "", pnl_per_unit, round(pnl_per_unit * quantity, 2),
-                    "closed", "hero_zero_live_market_exit", "hero_zero_live",
-                ])
-                live_count += 1
-                continue
+    def _quote_with_retry(self, symbols_str: str, max_retries: int = 3) -> dict:
+        for attempt in range(max_retries):
+            try:
+                resp = self.rest.quotes(data={"symbols": symbols_str})
+                if resp.get("s") == "ok":
+                    return resp
+            except Exception as exc:
+                print(f"Quotes call failed (attempt {attempt+1}/{max_retries}): {exc}")
+                try:
+                    self.rest = fyersModel.FyersModel(
+                        client_id=self.app_id, token=self.access_token, is_async=False, log_path=str(TMP_DIR) + "/"
+                    )
+                except Exception:
+                    pass
+            time.sleep(0.5)
+        return {}
 
-            exit_quote, exit_reason = self._fetch_close_quote(symbol)
-            if exit_quote is None:
-                exit_quote = self.exit_quotes.get(symbol)
-                exit_reason = "time_exit_15:30_last_tick_fallback" if exit_quote else "missing_15:30_exit_quote"
-            entry_price = candidate["quote"]["ltp"]
-            exit_price = exit_quote["ltp"] if exit_quote else ""
-            pnl_per_unit = round(exit_price - entry_price, 2) if exit_quote else ""
-            quantity = int(candidate["lot_size"]) * self.lots
-            pnl_rs = round(pnl_per_unit * quantity, 2) if exit_quote else ""
-            append_row(trades_file, PAPER_TRADE_HEADER, [
-                self.session.isoformat(), candidate["underlying"], candidate["expiry"], symbol,
-                candidate["option_type"], candidate["strike"], quantity,
-                candidate["spot_ltp"], candidate["distance_from_spot"],
-                candidate["snapshot_at"].strftime("%Y-%m-%d %H:%M:%S"), entry_price,
-                candidate["quote"]["volume"],
-                exit_quote["received_at"].strftime("%Y-%m-%d %H:%M:%S.%f") if exit_quote else "",
-                exit_price, exit_quote["volume"] if exit_quote else "", pnl_per_unit, pnl_rs,
-                "closed" if exit_quote else "no_15:30_exit_quote", exit_reason,
-                "hero_zero_live_paper_fallback" if self.live_trading else "live_ticks",
-            ])
-            paper_count += 1
-        return paper_count, live_count
+    def _select_candidates(self, nifty_today) -> dict[str, dict]:
+        """Query Nifty spot and nearby strikes, then select 1 CE and 1 PE."""
+        now = now_ist()
+        spot_resp = self._quote_with_retry(NIFTY_INDEX)
+        if not spot_resp.get("d"):
+            print("Failed to get NIFTY spot quote after retries")
+            return {}
+        spot_ltp = float(spot_resp["d"][0]["v"]["lp"])
+        atm = round(spot_ltp / 50.0) * 50.0
+        candidate_strikes = [
+            atm - 250.0, atm - 200.0, atm - 150.0, atm - 100.0, atm - 50.0,
+            atm,
+            atm + 50.0, atm + 100.0, atm + 150.0, atm + 200.0, atm + 250.0,
+        ]
 
-    def _fetch_close_quote(self, symbol: str) -> tuple[Optional[dict], str]:
-        response = self.rest.history(data={
-            "symbol": symbol,
-            "resolution": "1",
-            "date_format": "1",
-            "range_from": self.session.isoformat(),
-            "range_to": self.session.isoformat(),
-            "cont_flag": "1",
-        })
-        if response.get("s") != "ok":
-            return None, ""
-        for epoch, _open, _high, _low, close, volume in response.get("candles") or []:
-            candle_time = datetime.fromtimestamp(epoch, IST)
-            if candle_time.strftime("%H:%M") == f"{EXIT_CANDLE_TIME[0]:02d}:{EXIT_CANDLE_TIME[1]:02d}":
-                return {
-                    "ltp": float(close),
-                    "volume": volume,
-                    "received_at": (candle_time + timedelta(minutes=1)).replace(second=0, microsecond=0),
-                }, "time_exit_15:30_candle_close"
-        return None, ""
+        sub = nifty_today[nifty_today["strike"].isin(candidate_strikes)]
+        if sub.empty:
+            print("No nearby strikes found in today's expiry master")
+            return {}
+
+        symbols = list(sub["symbol"].unique())
+        quote_resp = self._quote_with_retry(",".join(symbols))
+        quotes = {}
+        for d in quote_resp.get("d") or []:
+            sym = d.get("n")
+            v = d.get("v") or {}
+            if sym and v.get("lp") is not None:
+                quotes[sym] = {
+                    "ltp": float(v["lp"]),
+                    "volume": v.get("volume", ""),
+                    "exchange_time": v.get("tt", ""),
+                }
+
+        chosen = {}
+        for opt_type in ("CE", "PE"):
+            for band_low, band_high in (NIFTY_PRICE_BAND, FALLBACK_PRICE_BAND):
+                matching = []
+                for r in sub.itertuples(index=False):
+                    if str(r.opt_type) != opt_type:
+                        continue
+                    sym = str(r.symbol)
+                    q = quotes.get(sym)
+                    if not q or q["ltp"] <= 0:
+                        continue
+                    ltp = q["ltp"]
+                    if band_low <= ltp <= band_high:
+                        matching.append({
+                            "underlying": "NIFTY",
+                            "expiry": str(r.expiry),
+                            "symbol": sym,
+                            "lot_size": int(r.lot_size),
+                            "option_type": opt_type,
+                            "strike": float(r.strike),
+                            "spot_ltp": spot_ltp,
+                            "distance_from_spot": round(float(r.strike) - spot_ltp, 2),
+                            "band_low": band_low,
+                            "band_high": band_high,
+                            "snapshot_at": now,
+                            "snapshot_ltp": ltp,
+                            "quote": q,
+                        })
+                if matching:
+                    best = sorted(
+                        matching,
+                        key=lambda c: (abs(c["snapshot_ltp"] - 10.0), abs(c["distance_from_spot"]))
+                    )[0]
+                    chosen[best["symbol"]] = best
+                    break
+
+        has_ce = any(c["option_type"] == "CE" for c in chosen.values())
+        has_pe = any(c["option_type"] == "PE" for c in chosen.values())
+        if not (has_ce and has_pe):
+            print(f"[{now:%H:%M:%S}] Candidate check failed: CE={has_ce}, PE={has_pe}. Backing off!")
+            return {}
+
+        return chosen
 
     def run(self) -> dict:
-        start = now_ist().replace(hour=CAPTURE_START[0], minute=CAPTURE_START[1], second=0, microsecond=0)
-        snapshot = now_ist().replace(hour=SNAPSHOT_TIME[0], minute=SNAPSHOT_TIME[1], second=0, microsecond=0)
-        end = now_ist().replace(hour=CAPTURE_END[0], minute=CAPTURE_END[1], second=0, microsecond=0)
-        live_exit = now_ist().replace(hour=EXIT_CANDLE_TIME[0], minute=EXIT_CANDLE_TIME[1], second=0, microsecond=0)
-        next_live_exit_attempt = live_exit
-        if now_ist() < start:
-            time.sleep((start - now_ist()).total_seconds())
+        nifty = load_nifty_options()
+        nifty_today = nifty[nifty["expiry"] == self.session]
+        if nifty_today.empty:
+            result = {
+                "date": self.session.isoformat(),
+                "status": "not_expiry_session",
+                "expiry_underlyings": {"NIFTY": []},
+            }
+            write_status(self.status_file, result)
+            print(f"{self.session}: no NIFTY expiry contracts; HeroZero skipped")
+            return result
 
-        self.ws = data_ws.FyersDataSocket(
-            access_token=f"{self.app_id}:{self.access_token}",
-            log_path="/tmp",
-            litemode=False,
-            reconnect=True,
-            on_message=self.on_message,
-            on_connect=self.on_connect,
-            on_error=self.on_error,
-            on_close=self.on_close,
-        )
-        self.ws.connect()
-        try:
-            while now_ist() < end:
-                now = now_ist()
-                if not self.snapshot_taken and now >= snapshot:
-                    self._snapshot()
-                if self.live_trading and self.live_positions and now >= next_live_exit_attempt:
-                    self._exit_live_positions()
-                    next_live_exit_attempt = now_ist() + timedelta(seconds=5)
-                time.sleep(0.2)
-            if not self.snapshot_taken:
-                self._snapshot()
-        finally:
-            if self.live_trading and self.live_positions:
-                self._exit_live_positions()
+        print(f"[{now_ist():%H:%M:%S}] HeroZero ready for NIFTY expiry {self.session} ({len(nifty_today)} contracts)")
+
+        # 1. Wait until 15:19:58 IST for the 15:20 snapshot
+        target_snapshot = now_ist().replace(hour=SNAPSHOT_TIME[0], minute=SNAPSHOT_TIME[1], second=0, microsecond=0)
+        now = now_ist()
+        if now < target_snapshot:
+            wait_sec = (target_snapshot - now).total_seconds()
+            print(f"[{now:%H:%M:%S}] Waiting {wait_sec:.0f}s until 15:20:00 IST snapshot...")
+            time.sleep(max(0.0, wait_sec - 1.0))
+            while now_ist() < target_snapshot:
+                time.sleep(0.05)
+
+        # 2. Take fast REST snapshot at 15:20 IST (retries for up to 30s if transient error)
+        snap_deadline = max(now_ist() + timedelta(seconds=30), target_snapshot + timedelta(seconds=30))
+        snap_now = now_ist()
+        while now_ist() < snap_deadline:
+            snap_now = now_ist()
+            self.candidates = self._select_candidates(nifty_today)
+            if self.candidates and len(self.candidates) == 2:
+                break
+            time.sleep(2.0)
+
+        if not self.candidates or len(self.candidates) != 2:
+            print(f"[{snap_now:%H:%M:%S}] HeroZero BACK OFF: Either CE or PE missing in target band. No entry taken.")
+            result = {
+                "date": self.session.isoformat(),
+                "status": "backed_off_incomplete_strangle",
+                "trading_mode": "LIVE" if self.live_trading else "PAPER",
+                "selected_options": len(self.candidates),
+                "paper_trades": 0,
+                "live_trades": 0,
+                "open_live_positions": 0,
+                "reason": "Missing either CE or PE in target band; avoided single-leg entry",
+            }
+            write_status(self.status_file, result)
+            return result
+
+        print(f"[{snap_now:%H:%M:%S}] HeroZero confirmed BOTH legs ({len(self.candidates)} options):")
+        for sym, c in self.candidates.items():
+            print(f"  -> {c['option_type']} {c['strike']} ({sym}): LTP = {c['snapshot_ltp']} (spot dist {c['distance_from_spot']:+0.1f})")
+            append_row(self.candidates_file, CANDIDATE_HEADER, [
+                self.session.isoformat(), "NIFTY", c["expiry"], sym,
+                c["option_type"], c["strike"], c["lot_size"],
+                c["spot_ltp"], c["distance_from_spot"], c["band_low"], c["band_high"],
+                snap_now.strftime("%Y-%m-%d %H:%M:%S"), snap_now.strftime("%Y-%m-%d %H:%M:%S"),
+                0.0, c["snapshot_ltp"], c["quote"].get("volume", ""), "rest_snapshot",
+            ])
+            append_row(self.ticks_file, TICK_HEADER, [
+                self.session.isoformat(), snap_now.strftime("%Y-%m-%d %H:%M:%S.%f"),
+                "NIFTY", sym, c["snapshot_ltp"], c["quote"].get("volume", ""), c["quote"].get("exchange_time", ""),
+            ])
+
+        # 3. Enter LIVE orders if enabled (STRICTLY both CE and PE)
+        if self.live_trading and len(self.candidates) == 2:
+            print(f"[{now_ist():%H:%M:%S}] Entering BOTH legs live...")
+            for candidate in self.candidates.values():
+                self._enter_live_order(candidate)
+
+        # 4. Track positions every 2 seconds until 15:29:50 exit
+        exit_target = now_ist().replace(hour=EXIT_TIME[0], minute=EXIT_TIME[1], second=EXIT_TIME[2], microsecond=0)
+        tracked_symbols = list(self.candidates.keys()) + [NIFTY_INDEX]
+        latest_quotes = {}
+
+        while now_ist() < exit_target:
+            if tracked_symbols:
+                try:
+                    q_resp = self.rest.quotes(data={"symbols": ",".join(tracked_symbols)})
+                    tick_now = now_ist()
+                    for d in q_resp.get("d") or []:
+                        s = d.get("n")
+                        v = d.get("v") or {}
+                        if s and v.get("lp") is not None:
+                            lp = float(v["lp"])
+                            vol = v.get("volume", "")
+                            tt = v.get("tt", "")
+                            latest_quotes[s] = {"ltp": lp, "volume": vol, "received_at": tick_now}
+                            if s in self.candidates:
+                                append_row(self.ticks_file, TICK_HEADER, [
+                                    self.session.isoformat(), tick_now.strftime("%Y-%m-%d %H:%M:%S.%f"),
+                                    "NIFTY", s, lp, vol, tt,
+                                ])
+                except Exception:
+                    pass
+            time.sleep(2.0)
+
+        # 5. Exit LIVE positions at 15:29:50 IST
+        if self.live_trading and self.live_positions:
+            self._exit_live_positions()
+
+        # 6. Fetch final exit quotes
+        if tracked_symbols:
             try:
-                self.ws.close_connection()
+                final_resp = self.rest.quotes(data={"symbols": ",".join(tracked_symbols)})
+                final_now = now_ist()
+                for d in final_resp.get("d") or []:
+                    s = d.get("n")
+                    v = d.get("v") or {}
+                    if s and v.get("lp") is not None:
+                        latest_quotes[s] = {"ltp": float(v["lp"]), "volume": v.get("volume", ""), "received_at": final_now}
             except Exception:
                 pass
 
-        paper_trade_count, live_trade_count = self._write_paper_trades()
+        # 7. Write trades to CSV
+        trades_file = self.output_dir / f"hero_zero_trades_{self.session}.csv"
+        paper_count = 0
+        live_count = 0
+        for sym, candidate in self.candidates.items():
+            result = self.live_results.get(sym)
+            if result:
+                entry_price = result["entry_price"]
+                exit_price = result["exit_price"]
+                qty = result["quantity"]
+                pnl_per_unit = round(exit_price - entry_price, 2)
+                pnl_rs = round(pnl_per_unit * qty, 2)
+                append_row(trades_file, PAPER_TRADE_HEADER, [
+                    self.session.isoformat(), "NIFTY", candidate["expiry"], sym,
+                    candidate["option_type"], candidate["strike"], qty,
+                    candidate["spot_ltp"], candidate["distance_from_spot"],
+                    result["entry_time"].strftime("%Y-%m-%d %H:%M:%S"), entry_price,
+                    candidate["quote"].get("volume", ""), result["exit_time"].strftime("%Y-%m-%d %H:%M:%S"),
+                    exit_price, "", pnl_per_unit, pnl_rs,
+                    "closed", "hero_zero_live_market_exit", "hero_zero_live",
+                ])
+                live_count += 1
+            else:
+                entry_price = candidate["snapshot_ltp"]
+                q_exit = latest_quotes.get(sym)
+                exit_price = q_exit["ltp"] if q_exit else entry_price
+                qty = int(candidate["lot_size"]) * self.lots
+                pnl_per_unit = round(exit_price - entry_price, 2)
+                pnl_rs = round(pnl_per_unit * qty, 2)
+                exit_time_str = (q_exit["received_at"] if q_exit else now_ist()).strftime("%Y-%m-%d %H:%M:%S")
+                append_row(trades_file, PAPER_TRADE_HEADER, [
+                    self.session.isoformat(), "NIFTY", candidate["expiry"], sym,
+                    candidate["option_type"], candidate["strike"], qty,
+                    candidate["spot_ltp"], candidate["distance_from_spot"],
+                    candidate["snapshot_at"].strftime("%Y-%m-%d %H:%M:%S"), entry_price,
+                    candidate["quote"].get("volume", ""), exit_time_str,
+                    exit_price, q_exit.get("volume", "") if q_exit else "", pnl_per_unit, pnl_rs,
+                    "closed", "time_exit_15:30",
+                    "hero_zero_live_paper_fallback" if self.live_trading else "live_ticks",
+                ])
+                paper_count += 1
 
         result = {
             "date": self.session.isoformat(),
             "status": "captured",
             "trading_mode": "LIVE" if self.live_trading else "PAPER",
-            "expiry_underlyings": self.expiry_info,
-            "subscribed_symbols": len(self.universe),
+            "expiry_underlyings": {"NIFTY": [self.session.isoformat()]},
             "selected_options": len(self.candidates),
-            "paper_trades": paper_trade_count,
-            "live_trades": live_trade_count,
+            "paper_trades": paper_count,
+            "live_trades": live_count,
             "open_live_positions": len(self.live_positions),
-            "bands": {"NIFTY": list(NIFTY_PRICE_BAND), "SENSEX": list(SENSEX_PRICE_BAND)},
-            "spot_windows": {"NIFTY": 50, "SENSEX": 100},
+            "bands": {"NIFTY": list(NIFTY_PRICE_BAND)},
             "selection_time": "15:20 Asia/Kolkata",
             "exit_time": "15:30 Asia/Kolkata",
-            "capture_end": "15:31 Asia/Kolkata",
             "candidates_csv": self.candidates_file.name,
             "ticks_csv": self.ticks_file.name,
             "paper_trades_csv": f"hero_zero_trades_{self.session}.csv",
             "live_orders_csv": self.live_orders_file.name if self.live_trading else None,
         }
         write_status(self.status_file, result)
+        print(f"[{now_ist():%H:%M:%S}] HeroZero session completed: {json.dumps(result)}")
         return result
 
 
@@ -432,13 +447,7 @@ def main() -> None:
     session = now_ist().date()
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     status_file = OUTPUT_DIR / f"hero_zero_status_{session}.json"
-    universe, expiry_info = expiry_universe(session)
-    if not universe:
-        write_status(status_file, {"date": session.isoformat(), "status": "not_expiry_session", "expiry_underlyings": expiry_info})
-        print(f"{session}: no NIFTY or SENSEX expiry contracts; HeroZero capture skipped")
-        return
-    result = HeroZeroCapture(session, universe, expiry_info).run()
-    print(json.dumps(result))
+    result = HeroZeroCapture(session).run()
 
 
 if __name__ == "__main__":

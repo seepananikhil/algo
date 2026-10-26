@@ -10,6 +10,7 @@ import { BacktestPage } from "@/pages/backtest"
 import { PaperPage } from "@/pages/paper"
 import { LoginPage } from "@/pages/login"
 import { SettingsPage } from "@/pages/settings"
+import { ManualTradingPage } from "@/pages/manual"
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
           <Routes>
             <Route element={<Layout />}>
               <Route index element={<LivePage />} />
+              <Route path="manual" element={<ManualTradingPage />} />
               <Route path="day" element={<DayPage />} />
               <Route path="paper" element={<PaperPage />} />
               <Route path="backtest" element={<BacktestPage />} />

@@ -9,7 +9,8 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { StatCard } from "@/components/common"
 import { PnlCalendar } from "@/components/pnl-calendar"
-import { fmtNum, fmtRs, optionPaperTradeToFill, pnlClass, usePoll, type CapitalReport, type KeyLevelReport, type OptionPaperTrade, type PaperReport } from "@/lib/api"
+import { StrategyStreakSummary } from "@/components/strategy-streak-summary"
+import { fmtNum, fmtRs, optionPaperTradeToFill, pnlClass, usePoll, type CapitalReport, type KeyLevelReport, type OptionPaperTrade, type OptionTrade, type PaperReport } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const axis = { stroke: "var(--muted-foreground)", fontSize: 11, tickLine: false, axisLine: false }
@@ -127,10 +128,11 @@ function CapitalCurve({ report }: { report: CapitalReport }) {
   )
 }
 
-function CapitalDayPanel({ date, trades, onClose }: {
+function CapitalDayPanel({ date, trades, onClose, strategy = "all" }: {
   date: string
   trades: PaperReport["trades"]
   onClose: () => void
+  strategy?: string
 }) {
   const ref = useRef<HTMLDivElement>(null)
   useEffect(() => { ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }) }, [date])
@@ -140,7 +142,13 @@ function CapitalDayPanel({ date, trades, onClose }: {
     <div ref={ref} className="scroll-mt-20">
       <Card>
         <CardHeader>
-          <CardTitle>Combined paper trades</CardTitle>
+          <CardTitle>
+            {strategy === "trend_runner"
+              ? "Trend Catcher paper trades"
+              : strategy === "compression_scalp"
+              ? "Micro Scalper paper trades"
+              : "Combined paper trades"}
+          </CardTitle>
           <CardDescription>Funded entries · net after estimated charges</CardDescription>
           <CardAction className="flex items-center gap-1">
             <span className="min-w-28 text-center text-sm font-medium tabular-nums">{date}</span>
@@ -149,7 +157,7 @@ function CapitalDayPanel({ date, trades, onClose }: {
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <p className={cn("border-b pb-3 text-lg font-semibold tabular-nums", pnlClass(total))}>Day net: {fmtRs(total)}</p>
-          <DayDetail date={date} mode="paper" compact chartOnly allowTimeframeSwitch />
+          <DayDetail key={`${date}-${strategy}`} date={date} mode="paper" strategy={strategy} compact chartOnly allowTimeframeSwitch />
           <Table>
             <TableHeader><TableRow>
               <TableHead>Option</TableHead>
@@ -165,7 +173,7 @@ function CapitalDayPanel({ date, trades, onClose }: {
                     <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", trade.side === "CALL" ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
                     {trade.option}
                   </div>
-                  <div className="text-xs text-muted-foreground">{trade.mode.includes("HEROZERO") ? "HeroZero" : trade.mode.includes("KEYLEVEL") ? "Key Levels" : "Midpoint"} · {trade.qty} qty</div>
+                  <div className="text-xs text-muted-foreground">{trade.mode.includes("TREND") ? "Trend Catcher" : trade.mode.includes("HEROZERO") ? "HeroZero" : trade.mode.includes("KEYLEVEL") ? "Key Levels" : trade.mode.includes("SCALP") ? "Micro Scalp (Sniper)" : "Midpoint"} · {trade.qty} qty</div>
                 </TableCell>
                 <TableCell className="tabular-nums">
                   <div>{trade.entry}</div>
@@ -186,6 +194,58 @@ function CapitalDayPanel({ date, trades, onClose }: {
         </CardContent>
       </Card>
     </div>
+  )
+}
+
+function StrategyTradesTable({ title, trades }: { title: string; trades: (OptionTrade & { charges_rs: number; net_rs: number })[] }) {
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>{title}</CardTitle>
+        <CardDescription>{trades.length} paper trade(s) · net rupee P&amp;L after estimated charges.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {trades.length ? (
+          <Table>
+            <TableHeader><TableRow>
+              <TableHead>Date</TableHead>
+              <TableHead>Option</TableHead>
+              <TableHead>In</TableHead>
+              <TableHead>Out</TableHead>
+              <TableHead>Exit Reason</TableHead>
+              <TableHead className="text-right">Net P&amp;L</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>{trades.map((trade, index) => (
+              <TableRow key={`${trade.date}-${trade.entry}-${index}`} className="bg-transparent hover:bg-muted/20">
+                <TableCell className="font-medium tabular-nums">{trade.date}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-2">
+                    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", trade.side === "CALL" ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
+                    {trade.option}
+                  </div>
+                  <div className="text-xs text-muted-foreground">{trade.mode} · {trade.qty} qty</div>
+                </TableCell>
+                <TableCell className="tabular-nums">
+                  <div>{trade.entry} @ {trade.nifty_in}</div>
+                  <div className="text-xs text-muted-foreground">Buy {fmtRs(trade.buy_price)}</div>
+                </TableCell>
+                <TableCell className="tabular-nums">
+                  <div>{trade.exit} @ {trade.nifty_out}</div>
+                  <div className="text-xs text-muted-foreground">Sell {fmtRs(trade.sell_price)}</div>
+                </TableCell>
+                <TableCell className="text-xs text-muted-foreground">{trade.exit_reason}</TableCell>
+                <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs))}>
+                  {fmtRs(trade.net_rs)}
+                  <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs)} · fees {fmtRs(trade.charges_rs)}</div>
+                </TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        ) : (
+          <p className="py-6 text-center text-sm text-muted-foreground">No paper trades recorded yet.</p>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 
@@ -228,6 +288,12 @@ function KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
         <StatCard label="Max drawdown" value={fmtRs(summary.max_drawdown_rs)} className="text-red-500" />
         <StatCard label="Today" value={report.today_option_paper.summary.trades} hint={report.capture_running ? "capture running" : "capture stopped"} />
       </div>
+      <StrategyStreakSummary
+        title="Key Levels Paper Streaks & Recovery"
+        description="Consecutive winning/losing days, drawdown recovery duration, and daily performance metrics for Key Levels paper trading."
+        daily={daily}
+        unit="rs"
+      />
       <Card>
         <CardHeader><CardTitle>Calendar (daily net P&amp;L)</CardTitle><CardDescription>Historical option replays and captured paper quotes are included and source-labeled.</CardDescription></CardHeader>
         <CardContent><PnlCalendar daily={daily} format={fmtRs} onPick={setPicked} /></CardContent>
@@ -252,10 +318,12 @@ function KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
 }
 
 export function PaperPage() {
-  const [strategy, setStrategy] = useState<"all" | "midpoint" | "hero_zero" | "key_levels">("all")
+  const [strategy, setStrategy] = useState<"all" | "trend_runner" | "midpoint" | "hero_zero" | "key_levels" | "compression_scalp">("all")
   const [picked, setPicked] = useState<string | null>(null)
+  const trendRunner = usePoll<PaperReport>(strategy === "trend_runner" ? "/api/paper-report?strategy=trend_runner" : null, 30000)
   const midpoint = usePoll<PaperReport>(strategy === "midpoint" ? "/api/paper-report" : null, 30000)
   const heroZero = usePoll<PaperReport>(strategy === "hero_zero" ? "/api/paper-report?strategy=hero_zero" : null, 30000)
+  const scalp = usePoll<PaperReport>(strategy === "compression_scalp" ? "/api/paper-report?strategy=compression_scalp" : null, 30000)
   const capital = usePoll<CapitalReport>(strategy === "all" ? "/api/capital-report" : null, 30000)
   const keyLevelPaper = usePoll<KeyLevelReport>(strategy === "key_levels" ? "/api/backtest?strategy=key_levels" : null, 30000)
 
@@ -264,9 +332,10 @@ export function PaperPage() {
     if (keyLevelPaper.loading || !keyLevelPaper.data) return <Skeleton className="h-150 w-full" />
     return (
       <div className="flex flex-col gap-4">
-        <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as "all" | "midpoint" | "hero_zero" | "key_levels"); setPicked(null) }}>
+        <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as any); setPicked(null) }}>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="compression_scalp">Micro Scalper</TabsTrigger>
             <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
             <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
             <TabsTrigger value="key_levels">Key Levels</TabsTrigger>
@@ -289,20 +358,27 @@ export function PaperPage() {
       <div className="flex flex-col gap-4">
         <div>
           <h1 className="text-xl font-semibold">Paper P&amp;L</h1>
-          <p className="text-sm text-muted-foreground">Combined Midpoint, HeroZero, and Key Levels paper account balance.</p>
+          <p className="text-sm text-muted-foreground">Combined Midpoint, Trend Catcher, Micro Scalper, and HeroZero paper account balance.</p>
         </div>
-        <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as "all" | "midpoint" | "hero_zero" | "key_levels"); setPicked(null) }}>
+        <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as any); setPicked(null) }}>
           <TabsList>
             <TabsTrigger value="all">All</TabsTrigger>
+            <TabsTrigger value="trend_runner">Trend Catcher</TabsTrigger>
+            <TabsTrigger value="compression_scalp">Micro Scalper</TabsTrigger>
             <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
             <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
-            <TabsTrigger value="key_levels">Key Levels</TabsTrigger>
           </TabsList>
         </Tabs>
         <div className="grid max-w-lg grid-cols-2 gap-3">
           <StatCard label="Starting capital" value={fmtRs(summary.starting_capital)} />
           <StatCard label="Ending capital" value={fmtRs(summary.ending_capital)} className={pnlClass(summary.net_rs)} />
         </div>
+        <StrategyStreakSummary
+          title="Combined Portfolio Streaks & Recovery"
+          description="Aggregated consecutive winning/losing day streaks and drawdown recovery time across funded Midpoint, HeroZero, Key Levels, and Micro Scalper trades."
+          daily={capital.data.daily.map((day) => ({ date: day.date, value: day.net_rs, trades: day.trades }))}
+          unit="rs"
+        />
         <CapitalCurve report={capital.data} />
         <div className="grid gap-4 xl:grid-cols-2">
           <Card>
@@ -338,12 +414,12 @@ export function PaperPage() {
             </CardContent>
           </Card>
         </div>
-        {selectedDay && <CapitalDayPanel date={selectedDay.date} trades={selectedTrades} onClose={() => setPicked(null)} />}
+        {selectedDay && <CapitalDayPanel date={selectedDay.date} trades={selectedTrades} onClose={() => setPicked(null)} strategy="all" />}
       </div>
     )
   }
 
-  const selectedReport = strategy === "hero_zero" ? heroZero : midpoint
+  const selectedReport = strategy === "trend_runner" ? trendRunner : strategy === "hero_zero" ? heroZero : strategy === "compression_scalp" ? scalp : midpoint
   const loading = selectedReport.loading
   const error = selectedReport.error
   const data = selectedReport.data
@@ -363,24 +439,35 @@ export function PaperPage() {
       <div>
         <h1 className="text-xl font-semibold">Paper P&L</h1>
         <p className="text-sm text-muted-foreground">
-          {strategy === "midpoint"
+          {strategy === "trend_runner"
+            ? "Trend Catcher (VIX Runner) Live Paper: Forward paper execution capturing 100+ to 300+ point runs with VIX confluence, 28-pt fixed risk, 3-tier ratchet, and Chandelier trailing stop."
+            : strategy === "compression_scalp"
+            ? "Micro Scalper (Sniper) Live Paper: Forward paper execution during market hours with live prices and entries/exits. Historical backtest is available under Backtest → Sniper Scalp."
+            : strategy === "midpoint"
             ? "Paper fills; estimated charges included. Paper fills use LTP and exclude spread/slippage."
             : "One-lot simulated entries per contract; fresh 15:20 spot required, with an unfiltered stale-spot replay on Oct 8."}
         </p>
       </div>
 
-      <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as "all" | "midpoint" | "hero_zero" | "key_levels"); setPicked(null) }}>
+      <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as any); setPicked(null) }}>
         <TabsList>
           <TabsTrigger value="all">All</TabsTrigger>
+          <TabsTrigger value="trend_runner">Trend Catcher</TabsTrigger>
+          <TabsTrigger value="compression_scalp">Micro Scalper</TabsTrigger>
           <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
           <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
-          <TabsTrigger value="key_levels">Key Levels</TabsTrigger>
         </TabsList>
       </Tabs>
 
       {!s.trades ? (
         <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">
-          {strategy === "hero_zero" ? "No completed HeroZero expiry paper trades yet." : "No midpoint paper option trades yet."}
+          {strategy === "trend_runner"
+            ? "No Trend Catcher paper trades recorded yet. Run `python trend_runner_paper.py` during market hours or in replay mode."
+            : strategy === "hero_zero"
+            ? "No completed HeroZero expiry paper trades yet."
+            : strategy === "compression_scalp"
+            ? "No live market paper trades recorded yet. Real-time paper entries and exits will log here during tomorrow's live market sessions (09:20–11:30 & 13:15–15:05 IST). Historical performance is available under Backtest → Sniper Scalp."
+            : "No midpoint paper option trades yet."}
         </CardContent></Card>
       ) : <>
 
@@ -393,7 +480,20 @@ export function PaperPage() {
         <StatCard label="Avg net / trade" value={fmtRs(s.net_rs / s.trades)} className={pnlClass(s.net_rs)} />
       </div>
 
-      
+      <StrategyStreakSummary
+        title={strategy === "trend_runner" ? "Trend Catcher Paper Streaks & Recovery" : strategy === "compression_scalp" ? "Micro Scalper Paper Streaks & Recovery" : strategy === "midpoint" ? "Midpoint Paper Streaks & Recovery" : "HeroZero Paper Streaks & Recovery"}
+        description={
+          strategy === "trend_runner"
+            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Trend Catcher (VIX Runner) paper trading."
+            : strategy === "compression_scalp"
+            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Micro Scalper paper trading."
+            : strategy === "midpoint"
+            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Midpoint paper trading."
+            : "Consecutive winning/losing expiries and recovery time in days for HeroZero paper trading."
+        }
+        daily={data.daily.map((d) => ({ date: d.date, value: d.net_rs, trades: d.trades }))}
+        unit="rs"
+      />
 
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
@@ -463,10 +563,23 @@ export function PaperPage() {
       </Card>
 
       {strategy === "midpoint" ? (
-        <DayPanel date={picked} mode="paper" days={dates} onPick={setPicked} onClose={() => setPicked(null)} allowTimeframeSwitch />
+        <DayPanel date={picked} mode="paper" strategy="midpoint" days={dates} onPick={setPicked} onClose={() => setPicked(null)} allowTimeframeSwitch />
       ) : strategy === "hero_zero" && picked ? (
         <HeroZeroDayPanel date={picked} days={dates} data={data} onPick={setPicked} onClose={() => setPicked(null)} />
+      ) : (strategy === "compression_scalp" || strategy === "trend_runner") && picked ? (
+        <CapitalDayPanel date={picked} trades={data.trades.filter((t) => t.date === picked)} onClose={() => setPicked(null)} strategy={strategy} />
       ) : null}
+
+      <StrategyTradesTable
+        title={
+          strategy === "trend_runner"
+            ? (picked ? `Trend Catcher paper trades · ${picked}` : "Trend Catcher paper trade log")
+            : strategy === "compression_scalp"
+            ? (picked ? `Micro Scalper paper trades · ${picked}` : "Micro Scalper paper trade log")
+            : (picked ? `Paper trades · ${picked}` : "Paper trade log")
+        }
+        trades={picked ? data.trades.filter((t) => t.date === picked) : data.trades}
+      />
       </>}
     </div>
   )

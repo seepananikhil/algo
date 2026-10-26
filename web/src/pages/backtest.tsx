@@ -60,19 +60,17 @@ const tooltip = {
 
 
 export function BacktestPage() {
-  const [strategy, setStrategy] = useState<"midpoint" | "trend_runner" | "trend_runner_5y" | "sniper">(() => {
+  const [strategy, setStrategy] = useState<"midpoint" | "trend_runner" | "sniper">(() => {
     const saved = localStorage.getItem("backtest_strategy")
-    return (saved === "trend_runner" || saved === "trend_runner_5y" || saved === "midpoint" || saved === "sniper") ? saved : "trend_runner"
+    return (saved === "trend_runner" || saved === "midpoint" || saved === "sniper") ? saved : "trend_runner"
   })
-  const handleStrategyChange = (value: "midpoint" | "trend_runner" | "trend_runner_5y" | "sniper") => {
+  const handleStrategyChange = (value: "midpoint" | "trend_runner" | "sniper") => {
     localStorage.setItem("backtest_strategy", value)
     setStrategy(value)
   }
   const { data: raw, loading, error } = usePoll<Backtest>(
     strategy === "midpoint"
       ? "/api/backtest"
-      : strategy === "trend_runner_5y"
-      ? "/api/backtest?strategy=trend_runner_5y"
       : strategy === "trend_runner"
       ? "/api/backtest?strategy=trend_runner"
       : "/api/backtest?strategy=compression_scalp"
@@ -93,10 +91,9 @@ export function BacktestPage() {
   }, [data, filter])
 
   const strategyTabs = (
-    <Tabs value={strategy} onValueChange={(value) => handleStrategyChange(value as "midpoint" | "trend_runner" | "trend_runner_5y" | "sniper")}>
+    <Tabs value={strategy} onValueChange={(value) => handleStrategyChange(value as "midpoint" | "trend_runner" | "sniper")}>
       <TabsList>
         <TabsTrigger value="trend_runner">Trend Runner (3Y 1-Min)</TabsTrigger>
-        <TabsTrigger value="trend_runner_5y">Trend Runner (5Y Extended)</TabsTrigger>
         <TabsTrigger value="sniper">Sniper Scalp (2026)</TabsTrigger>
         <TabsTrigger value="midpoint">Midpoint Equilibrium</TabsTrigger>
       </TabsList>
@@ -116,8 +113,6 @@ export function BacktestPage() {
           <h1 className="text-xl font-semibold">
             {strategy === "trend_runner"
               ? "Trend Runner · Pure 1-Minute Backtest (2023–2026)"
-              : strategy === "trend_runner_5y"
-              ? "Trend Runner · 5-Year Extended Backtest (2021–2026)"
               : strategy === "sniper"
               ? "Sniper (Micro Scalper) Backtest Performance"
               : "Midpoint Backtest Performance"}
@@ -125,8 +120,6 @@ export function BacktestPage() {
           <p className="text-sm text-muted-foreground">
             {strategy === "trend_runner"
               ? `Pure 1-minute candle breakout with Dynamic Range Expansion, 30 pt SL, 5-tier ratchets (+20, +60, +110, +165, +220), and single trade per day on ${s.days} days (${s.from} → ${s.to}). Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, 25 qty).`
-              : strategy === "trend_runner_5y"
-              ? `5-Year robustness backtest spanning 1,240 trading days across 2021–2026 with Dynamic Range Expansion, 30 pt SL, 5-tier ratchets, and 1 trade per day. Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, 25 qty).`
               : strategy === "sniper"
               ? `Adaptive Micro-Compression Momentum Scalper on ${s.days} days (${s.from} → ${s.to}). SL 14 pts, Target 22 pts, 8-bar max hold. Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, 65 qty).`
               : `Current rules on ${s.days} days (${s.from} → ${s.to}). Points are NIFTY index points; ₹ ≈ points × ${s.lot_size} (1 lot, before option premium effects).`}

@@ -1,3 +1,4 @@
+import { cn } from "@/lib/utils"
 import { useEffect, useRef, useState } from "react"
 import { useSearchParams } from "react-router-dom"
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react"
@@ -11,9 +12,11 @@ export function DayPage() {
   const [params, setParams] = useSearchParams()
   const days = usePoll<string[]>("/api/days")
   const date = params.get("date") ?? days.data?.[0] ?? null
+  const strategy = params.get("strategy") ?? "all"
   const list = days.data ?? []
   const idx = date ? list.indexOf(date) : -1
-  const go = (d: string | undefined) => d && setParams({ date: d })
+  const go = (d: string | undefined) => d && setParams({ date: d, strategy })
+  const setStrategy = (s: string) => date && setParams({ date, strategy: s })
   const [calendarOpen, setCalendarOpen] = useState(false)
   const [calendarMonth, setCalendarMonth] = useState(date?.slice(0, 7) ?? new Date().toISOString().slice(0, 7))
   const calendarRef = useRef<HTMLDivElement>(null)
@@ -48,69 +51,100 @@ export function DayPage() {
     setCalendarMonth(`${shifted.getFullYear()}-${String(shifted.getMonth() + 1).padStart(2, "0")}`)
   }
 
-  return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-semibold">Day viewer</h1>
-          <p className="text-sm text-muted-foreground">Paper/live trades for any captured day</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="icon" aria-label="Older day" disabled={idx < 0 || idx >= list.length - 1} onClick={() => go(list[idx + 1])}>
-            <ChevronLeft />
-          </Button>
-          <div ref={calendarRef} className="relative">
-            <Button
-              type="button"
-              variant="outline"
-              aria-haspopup="dialog"
-              aria-expanded={calendarOpen}
-              onClick={() => setCalendarOpen((open) => !open)}
-            >
-              <CalendarDays />
-              {date ?? "Choose date"}
-            </Button>
-            {calendarOpen && (
-              <div role="dialog" aria-label="Choose trading date" className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border bg-popover p-3 text-popover-foreground shadow-xl">
-                <div className="mb-2 flex items-center justify-between">
-                  <Button type="button" variant="ghost" size="icon-sm" aria-label="Previous month" onClick={() => shiftMonth(-1)}><ChevronLeft /></Button>
-                  <span className="text-sm font-medium">{monthLabel}</span>
-                  <Button type="button" variant="ghost" size="icon-sm" aria-label="Next month" onClick={() => shiftMonth(1)}><ChevronRight /></Button>
-                </div>
-                <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
-                  {WEEKDAYS.map((weekday) => <span key={weekday} className="py-1">{weekday}</span>)}
-                </div>
-                <div className="grid grid-cols-7 gap-1">
-                  {Array.from({ length: monthOffset }, (_, index) => <span key={`blank-${index}`} />)}
-                  {Array.from({ length: daysInMonth }, (_, index) => {
-                    const day = `${calendarMonth}-${String(index + 1).padStart(2, "0")}`
-                    const hasData = availableDates.has(day)
-                    const selected = day === date
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        disabled={!hasData}
-                        aria-pressed={selected}
-                        aria-label={`${day}${hasData ? ", captured" : ", no captured data"}`}
-                        onClick={() => { go(day); setCalendarOpen(false) }}
-                        className={`aspect-square rounded-md text-sm tabular-nums transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground/30 ${selected ? "bg-primary text-primary-foreground" : hasData ? "bg-muted hover:bg-accent hover:text-accent-foreground" : ""}`}
-                      >
-                        {index + 1}
-                      </button>
-                    )
-                  })}
-                </div>
-              </div>
-            )}
+  const dateControls = (
+    <div className="flex items-center gap-1.5">
+      <span className="font-bold text-sm tracking-tight text-foreground pr-1 whitespace-nowrap">Day viewer</span>
+      <Button variant="outline" size="icon-xs" aria-label="Older day" disabled={idx < 0 || idx >= list.length - 1} onClick={() => go(list[idx + 1])} className="h-6.5 w-6.5">
+        <ChevronLeft className="h-3.5 w-3.5" />
+      </Button>
+      <div ref={calendarRef} className="relative">
+        <Button
+          type="button"
+          variant="outline"
+          size="xs"
+          aria-haspopup="dialog"
+          aria-expanded={calendarOpen}
+          onClick={() => setCalendarOpen((open) => !open)}
+          className="h-6.5 gap-1.5 px-2 text-xs font-semibold"
+        >
+          <CalendarDays className="h-3.5 w-3.5 text-primary" />
+          {date ?? "Choose date"}
+        </Button>
+        {calendarOpen && (
+          <div role="dialog" aria-label="Choose trading date" className="absolute left-0 top-full z-50 mt-2 w-72 rounded-lg border bg-popover p-3 text-popover-foreground shadow-xl">
+            <div className="mb-2 flex items-center justify-between">
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="Previous month" onClick={() => shiftMonth(-1)}><ChevronLeft /></Button>
+              <span className="text-sm font-medium">{monthLabel}</span>
+              <Button type="button" variant="ghost" size="icon-sm" aria-label="Next month" onClick={() => shiftMonth(1)}><ChevronRight /></Button>
+            </div>
+            <div className="grid grid-cols-7 gap-1 text-center text-xs text-muted-foreground">
+              {WEEKDAYS.map((weekday) => <span key={weekday} className="py-1">{weekday}</span>)}
+            </div>
+            <div className="grid grid-cols-7 gap-1">
+              {Array.from({ length: monthOffset }, (_, index) => <span key={`blank-${index}`} />)}
+              {Array.from({ length: daysInMonth }, (_, index) => {
+                const day = `${calendarMonth}-${String(index + 1).padStart(2, "0")}`
+                const hasData = availableDates.has(day)
+                const selected = day === date
+                return (
+                  <button
+                    key={day}
+                    type="button"
+                    disabled={!hasData}
+                    aria-pressed={selected}
+                    aria-label={`${day}${hasData ? ", captured" : ", no captured data"}`}
+                    onClick={() => { go(day); setCalendarOpen(false) }}
+                    className={`aspect-square rounded-md text-sm tabular-nums transition-colors disabled:cursor-not-allowed disabled:text-muted-foreground/30 ${selected ? "bg-primary text-primary-foreground" : hasData ? "bg-muted hover:bg-accent hover:text-accent-foreground" : ""}`}
+                  >
+                    {index + 1}
+                  </button>
+                )
+              })}
+            </div>
           </div>
-          <Button variant="outline" size="icon" aria-label="Newer day" disabled={idx <= 0} onClick={() => go(list[idx - 1])}>
-            <ChevronRight />
-          </Button>
-        </div>
+        )}
       </div>
-
-      <DayDetail key={date ?? "no-date"} date={date} mode="auto" allowTimeframeSwitch />
+      <Button variant="outline" size="icon-xs" aria-label="Newer day" disabled={idx <= 0} onClick={() => go(list[idx - 1])} className="h-6.5 w-6.5">
+        <ChevronRight className="h-3.5 w-3.5" />
+      </Button>
+      <div className="flex items-center gap-1 ml-2 border-l border-border/40 pl-2">
+        <span className="text-[11px] text-muted-foreground mr-1 hidden md:inline">Strategy:</span>
+        {([
+          { id: "all", label: "All" },
+          { id: "trend_runner", label: "Trend Catcher" },
+          { id: "compression_scalp", label: "Micro Scalper" },
+          { id: "midpoint", label: "Midpoint" },
+          { id: "key_levels", label: "Key Levels" },
+        ] as const).map((s) => {
+          const active = strategy === s.id
+          return (
+            <button
+              key={s.id}
+              type="button"
+              onClick={() => setStrategy(s.id)}
+              className={cn(
+                "h-6 px-2 text-[11px] font-semibold rounded-md transition-colors whitespace-nowrap",
+                active
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              {s.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
+  )
+
+  return (
+    <DayDetail
+      key={`${date ?? "no-date"}-${strategy}`}
+      date={date}
+      strategy={strategy}
+      mode="auto"
+      allowTimeframeSwitch
+      headerLeading={dateControls}
+    />
   )
 }

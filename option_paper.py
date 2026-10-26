@@ -221,13 +221,36 @@ class OptionPaperTracker:
                 except Exception:
                     pass
             option_price = position["last_option_price"]
-            stop_hit = (
-                position["spot_stop"] is not None
-                and (float(spot) <= position["spot_stop"] if position["side"] == "CALL" else float(spot) >= position["spot_stop"])
-            )
+            if strategy == "key_levels":
+                is_call = position["side"] == "CALL"
+                trail_act = 20
+                trail_pts = 20
+                spot_f = float(spot)
+                position["best_spot"] = max(position.get("best_spot", position["spot_entry"]), spot_f) if is_call else min(position.get("best_spot", position["spot_entry"]), spot_f)
+                fav = (position["best_spot"] - position["spot_entry"]) if is_call else (position["spot_entry"] - position["best_spot"])
+                if fav >= trail_act:
+                    tstop = (position["best_spot"] - trail_pts) if is_call else (position["best_spot"] + trail_pts)
+                    if position["spot_stop"] is None or (tstop > position["spot_stop"] if is_call else tstop < position["spot_stop"]):
+                        position["spot_stop"] = tstop
+                        position["spot_trail_active"] = True
+
+            if strategy == "key_levels":
+                stop_hit = (
+                    position["spot_stop"] is not None
+                    and position.get("spot_trail_active")
+                    and (float(spot) <= position["spot_stop"] if position["side"] == "CALL" else float(spot) >= position["spot_stop"])
+                )
+                reason_stop = "spot_trail_stop"
+            else:
+                stop_hit = (
+                    position["spot_stop"] is not None
+                    and (float(spot) <= position["spot_stop"] if position["side"] == "CALL" else float(spot) >= position["spot_stop"])
+                )
+                reason_stop = "spot_stop_zone"
+
             target_hit = float(spot) >= position["spot_target"] if position["side"] == "CALL" else float(spot) <= position["spot_target"]
             if stop_hit:
-                reason = "spot_stop_zone"
+                reason = reason_stop
             elif target_hit:
                 reason = "spot_target_50"
             elif option_price >= position["option_target"]:
@@ -241,6 +264,23 @@ class OptionPaperTracker:
             else:
                 continue
             self._exit(strategy, timestamp, float(spot), option_price, reason)
+
+    def on_completed_candle(self, timestamp, close_spot: float) -> None:
+        position = self.positions.get("key_levels")
+        if not position or position.get("spot_trail_active"):
+            return
+        is_call = position["side"] == "CALL"
+        stop = position.get("spot_stop")
+        if stop is None:
+            return
+        close_f = float(close_spot)
+        if (close_f < stop if is_call else close_f > stop):
+            ts = pd.Timestamp(timestamp)
+            if ts.tzinfo is None:
+                ts = ts.tz_localize("Asia/Kolkata")
+            else:
+                ts = ts.tz_convert("Asia/Kolkata")
+            self._exit("key_levels", ts, close_f, position.get("last_option_price", position["option_entry"]), "spot_stop_zone_1m_close")
 
     def close(self, timestamp, spot: float, reason: str = "session_end") -> None:
         timestamp = pd.Timestamp(timestamp)

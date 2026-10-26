@@ -20,33 +20,50 @@ import type { Candle, RuleTrade, Setup } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { PriceBandPrimitive, type Band } from "@/components/price-band"
 
+import { cn } from "@/lib/utils"
+
 // Treat IST wall-clock as UTC so the axis shows market time (09:15 etc.).
-const toTime = (date: string, hhmm: string) => (Date.parse(`${date}T${hhmm}:00Z`) / 1000) as UTCTimestamp
+const toTime = (date: string, hhmm: string) => {
+  const d = date || new Date().toISOString().slice(0, 10)
+  const parts = (hhmm || "09:15").slice(0, 5).split(":")
+  const h = (parts[0] || "09").padStart(2, "0")
+  const m = (parts[1] || "15").padStart(2, "0")
+  const ts = Date.parse(`${d}T${h}:${m}:00Z`)
+  return (isNaN(ts) ? 0 : ts / 1000) as UTCTimestamp
+}
 
-// 09:15–09:50 inclusive; reserve this width so a few early candles don't fill the chart.
-const SESSION_BARS = 36
-
-function fitSession(c: IChartApi, bars: number) {
-  if (bars >= SESSION_BARS) c.timeScale().fitContent()
-  else c.timeScale().setVisibleLogicalRange({ from: -0.5, to: SESSION_BARS - 0.5 })
+function fitSession(c: IChartApi, bars: number, fullDay = false) {
+  if (!c || bars <= 0) return
+  try {
+    const timeScale = c.timeScale()
+    // 4 bars of breathing room on the left so 09:15 candle and label are never cut off
+    const fromIndex = -4
+    const toIndex = fullDay || bars >= 50 ? bars + 3 : Math.max(bars + 2, 38)
+    timeScale.setVisibleLogicalRange({ from: fromIndex, to: toIndex })
+  } catch {}
 }
 
 type Props = {
   date: string
   candles: Candle[]
   forming?: Partial<Candle>
+  currentPrice?: number
   setup?: Setup
   trades?: RuleTrade[]
   keyLevelZone?: { level: number; buffer: number } | null
+  showKeyLevels?: boolean
   showTradeLevels?: boolean
   className?: string
   overlay?: ReactNode
   zoomable?: boolean
+  minimalToolbar?: boolean
+  hideToolbar?: boolean
+  fullDay?: boolean
   /** Changing this (e.g. the timeframe) drops any manual zoom and refits the session. */
   resetKey?: string
 }
 
-export function CandleChart({ date, candles, forming, setup, trades = [], keyLevelZone, showTradeLevels = false, className = "h-[clamp(420px,62vh,680px)]", overlay, zoomable = false, resetKey = "" }: Props) {
+export function CandleChart({ date, candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, minimalToolbar = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
@@ -63,16 +80,52 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
 
   useEffect(() => {
     if (!el.current) return
+    const isLight = resolvedTheme === "light"
+    const gridLineColor = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)"
+    const borderColor = isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.1)"
+    const textColor = isLight ? "#52525b" : "#a1a1aa"
+
     const c = createChart(el.current, {
       autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#a1a1aa",
-        fontFamily: "Geist Variable, sans-serif",
+        textColor: textColor,
+        fontSize: 11,
+        fontFamily: "Geist Mono, monospace, sans-serif",
       },
-      grid: { vertLines: { visible: false }, horzLines: { color: "rgba(255,255,255,0.04)" } },
-      rightPriceScale: { borderColor: "rgba(255,255,255,0.1)", scaleMargins: { top: 0.06, bottom: 0.06 } },
-      timeScale: { borderColor: "rgba(255,255,255,0.1)", timeVisible: true, secondsVisible: false, rightOffset: 0 },
+      grid: { vertLines: { visible: false }, horzLines: { color: gridLineColor } },
+      rightPriceScale: { borderColor: borderColor, scaleMargins: { top: 0.04, bottom: 0.04 }, entireTextOnly: true },
+      timeScale: {
+        borderColor: borderColor,
+        timeVisible: true,
+        secondsVisible: false,
+        rightOffset: 3,
+        barSpacing: 6,
+        minBarSpacing: 0.2,
+        fixLeftEdge: false,
+        fixRightEdge: false,
+        tickMarkFormatter: (time: Time) => {
+          if (typeof time === "number") {
+            const d = new Date(time * 1000)
+            const hh = String(d.getUTCHours()).padStart(2, "0")
+            const mm = String(d.getUTCMinutes()).padStart(2, "0")
+            return `${hh}:${mm}`
+          }
+          return null
+        },
+      },
+      localization: {
+        priceFormatter: (p: number) => Math.round(p).toString(),
+        timeFormatter: (time: Time) => {
+          if (typeof time === "number") {
+            const d = new Date(time * 1000)
+            const hh = String(d.getUTCHours()).padStart(2, "0")
+            const mm = String(d.getUTCMinutes()).padStart(2, "0")
+            return `${hh}:${mm}`
+          }
+          return String(time)
+        },
+      },
       crosshair: { mode: 0 },
       handleScroll: zoomable,
       handleScale: zoomable,
@@ -85,6 +138,11 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
       wickDownColor: "#ef4444",
       priceLineVisible: false,
       lastValueVisible: false,
+      priceFormat: {
+        type: "custom",
+        formatter: (p: number) => Math.round(p).toString(),
+        minMove: 1,
+      },
     })
     chart.current = c
     series.current = s
@@ -92,7 +150,16 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
     band.current = new PriceBandPrimitive()
     s.attachPrimitive(band.current)
     // Keep the whole session in view when the card resizes, unless the user zoomed.
-    const ro = new ResizeObserver(() => { if (!manualRange.current) fitSession(c, bars.current) })
+    const ro = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
+          c.resize(Math.floor(entry.contentRect.width), Math.floor(entry.contentRect.height), true)
+          if (!manualRange.current && bars.current > 0) {
+            fitSession(c, bars.current, fullDay)
+          }
+        }
+      }
+    })
     ro.observe(el.current)
     const node = el.current
     const markManual = () => { manualRange.current = true }
@@ -119,9 +186,9 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
     const line = light ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)"
     const border = light ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.1)"
     chart.current?.applyOptions({
-      layout: { textColor: light ? "#52525b" : "#a1a1aa" },
+      layout: { textColor: light ? "#52525b" : "#a1a1aa", fontSize: 11 },
       grid: { horzLines: { color: line } },
-      rightPriceScale: { borderColor: border },
+      rightPriceScale: { borderColor: border, scaleMargins: { top: 0.04, bottom: 0.04 }, entireTextOnly: true },
       timeScale: { borderColor: border },
     })
   }, [resolvedTheme])
@@ -129,26 +196,43 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
   useEffect(() => {
     const s = series.current
     if (!s) return
-    const data = candles.map((k) => ({ time: toTime(date, k.time), open: k.open, high: k.high, low: k.low, close: k.close }))
-    if (forming?.time && forming.open != null) {
-      data.push({
-        time: toTime(date, forming.time),
-        open: forming.open,
-        high: forming.high!,
-        low: forming.low!,
-        close: forming.close!,
-      })
+    const dataMap = new Map<number, { time: UTCTimestamp; open: number; high: number; low: number; close: number }>()
+    for (const k of candles) {
+      if (k.open == null || k.high == null || k.low == null || k.close == null) continue
+      const t = toTime(date, k.time)
+      if (t > 0) {
+        dataMap.set(t, { time: t, open: k.open, high: k.high, low: k.low, close: k.close })
+      }
     }
+    if (forming?.time && forming.open != null && forming.high != null && forming.low != null && forming.close != null) {
+      const t = toTime(date, forming.time)
+      if (t > 0) {
+        dataMap.set(t, {
+          time: t,
+          open: forming.open,
+          high: forming.high,
+          low: forming.low,
+          close: forming.close,
+        })
+      }
+    }
+    const data = Array.from(dataMap.values()).sort((a, b) => (a.time as number) - (b.time as number))
+
     // Polling hands us new arrays every few seconds; skip redraws when nothing changed.
     const frame = `${date}|${resetKey}`
     if (viewKey.current !== frame) {
       viewKey.current = frame
       manualRange.current = false
     }
-    const key = JSON.stringify([date, data.length, data.at(-1), setup, trades, keyLevelZone, showTradeLevels])
+    const key = JSON.stringify([date, data.length, data.at(-1), currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels])
     if (key === dataKey.current) return
     dataKey.current = key
-    s.setData(data)
+
+    try {
+      s.setData(data)
+    } catch (err) {
+      console.warn("CandleChart setData error:", err)
+    }
 
     lines.current.forEach((l) => s.removePriceLine(l))
     lines.current = []
@@ -163,25 +247,91 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
       if (price == null || Number.isNaN(price)) return
       lines.current.push(s.createPriceLine({ price, color, title, lineWidth, lineStyle: style, axisLabelVisible: axisLabel }))
     }
-    add(setup?.range_high, "#38bdf8")
-    add(setup?.range_low, "#38bdf8")
-    add(setup?.mid, "#f59e0b", LineStyle.Solid)
-    if (keyLevelZone) add(keyLevelZone.level, "#00e5ff", LineStyle.Solid, true, "KEY", 3)
-    for (const level of setup?.key_levels ?? []) {
-      if (level.nearby) add(level.price, "#00e5ff", LineStyle.Solid, true, "", 3)
+
+    // Clean subtle reference lines without axis badge clutter
+    if (currentPrice != null) {
+      add(currentPrice, "rgba(249, 115, 22, 0.7)", LineStyle.Dotted, false, "", 1)
+    }
+    add(setup?.range_high, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "HIGH", 1)
+    add(setup?.range_low, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "LOW", 1)
+    // Prominent Midpoint line with clean axis badge
+    add(setup?.mid, "#fbbf24", LineStyle.Solid, true, "MID", 2)
+
+    let sessionLow = Infinity
+    let sessionHigh = -Infinity
+    for (const bar of data) {
+      if (bar.low < sessionLow) sessionLow = bar.low
+      if (bar.high > sessionHigh) sessionHigh = bar.high
     }
     const bands: Band[] = []
-    if (setup?.mid != null && setup.buffer) bands.push({ top: setup.mid + setup.buffer, bottom: setup.mid - setup.buffer })
-    if (keyLevelZone) {
+    if (setup?.mid != null && setup.buffer) {
       bands.push({
-        top: keyLevelZone.level + keyLevelZone.buffer,
-        bottom: keyLevelZone.level - keyLevelZone.buffer,
-        fill: "rgba(0, 229, 255, 0.12)",
-        edge: "rgba(0, 229, 255, 0.85)",
+        top: setup.mid + setup.buffer,
+        bottom: setup.mid - setup.buffer,
+        fill: "rgba(251, 191, 36, 0.08)",
+        edge: "rgba(251, 191, 36, 0.3)",
+        autoscale: false,
       })
     }
+
+    if (showKeyLevels || showTradeLevels || keyLevelZone) {
+      let sessionLow = Infinity
+      let sessionHigh = -Infinity
+      for (const bar of data) {
+        if (bar.low < sessionLow) sessionLow = bar.low
+        if (bar.high > sessionHigh) sessionHigh = bar.high
+      }
+      const step = 500
+      const defaultBuffer = keyLevelZone?.buffer ?? setup?.key_level_zone?.buffer ?? 10
+      const levelSet = new Set<number>()
+      if (Number.isFinite(sessionLow) && Number.isFinite(sessionHigh)) {
+        const startLevel = Math.floor((sessionLow - defaultBuffer) / step) * step
+        const endLevel = Math.ceil((sessionHigh + defaultBuffer) / step) * step
+        for (let lvl = startLevel; lvl <= endLevel; lvl += step) levelSet.add(lvl)
+      }
+      for (const level of setup?.key_levels ?? []) {
+        if (Number.isFinite(level.price)) levelSet.add(level.price)
+      }
+      const explicitZone = keyLevelZone ?? setup?.key_level_zone ?? null
+      if (explicitZone && Number.isFinite(explicitZone.level)) levelSet.add(explicitZone.level)
+
+      const allLevels = [...levelSet].sort((a, b) => a - b)
+      const lastClose = data.at(-1)?.close ?? 0
+      const distToSession = (lvl: number) =>
+        Number.isFinite(sessionLow) && Number.isFinite(sessionHigh)
+          ? Math.max(sessionLow - lvl, 0, lvl - sessionHigh)
+          : Infinity
+      const primaryLevel =
+        explicitZone?.level ??
+        (allLevels.length
+          ? [...allLevels].sort((a, b) => distToSession(a) - distToSession(b) || Math.abs(lastClose - a) - Math.abs(lastClose - b))[0]
+          : null)
+
+      for (const lvl of allLevels) {
+        const isPrimary = lvl === primaryLevel
+        const nearSession = distToSession(lvl) <= 150
+        if (!isPrimary && !nearSession) continue
+
+        // Only show axis badge on the primary key level to prevent badge overlap
+        add(
+          lvl,
+          isPrimary ? "#06b6d4" : "rgba(6, 182, 212, 0.45)",
+          isPrimary ? LineStyle.Solid : LineStyle.Dashed,
+          isPrimary,
+          isPrimary ? "KEY" : "",
+          isPrimary ? 2 : 1
+        )
+        bands.push({
+          top: lvl + defaultBuffer,
+          bottom: lvl - defaultBuffer,
+          fill: "rgba(6, 182, 212, 0.06)",
+          edge: "rgba(6, 182, 212, 0.25)",
+          autoscale: false,
+        })
+      }
+    }
     band.current?.setBands(bands)
-    if (setup?.armed) add(setup.armed.level, "#a855f7", LineStyle.Dotted)
+    if (setup?.armed) add(setup.armed.level, "#c084fc", LineStyle.Solid, true, "ARMED", 2)
     if (showTradeLevels) {
       for (const trade of trades) {
         add(trade.sl, "#ef4444", LineStyle.Dashed, true, "SL")
@@ -192,26 +342,46 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
     const m: SeriesMarker<Time>[] = []
     for (const t of trades) {
       const call = t.side === "CALL"
-      m.push({
-        time: toTime(date, t.entry),
-        position: call ? "belowBar" : "aboveBar",
-        color: call ? "#10b981" : "#ef4444",
-        shape: call ? "arrowUp" : "arrowDown",
-      })
-      if (!t.reason.endsWith("open")) {
+      if (t.entry) {
         m.push({
-          time: toTime(date, t.exit),
+          time: toTime(date, t.entry.slice(0, 5)),
+          position: call ? "belowBar" : "aboveBar",
+          color: call ? "#10b981" : "#ef4444",
+          shape: call ? "arrowUp" : "arrowDown",
+          size: 1,
+        })
+      }
+      if (t.exit && !(t.reason && t.reason.endsWith("open"))) {
+        m.push({
+          time: toTime(date, t.exit.slice(0, 5)),
           position: call ? "aboveBar" : "belowBar",
           color: "#71717a",
           shape: call ? "arrowDown" : "arrowUp",
+          size: 1,
         })
       }
     }
     m.sort((a, b) => (a.time as number) - (b.time as number))
-    markers.current?.setMarkers(m)
+    try {
+      markers.current?.setMarkers(m)
+    } catch (e) {
+      console.warn("CandleChart: failed to set markers", e)
+    }
     bars.current = data.length
-    if (chart.current && !manualRange.current) fitSession(chart.current, data.length)
-  }, [date, candles, forming, setup, trades, keyLevelZone, showTradeLevels, resetKey])
+    if (chart.current && !manualRange.current) {
+      fitSession(chart.current, data.length, fullDay)
+      requestAnimationFrame(() => {
+        if (chart.current && !manualRange.current) {
+          fitSession(chart.current, data.length, fullDay)
+        }
+      })
+    }
+  }, [date, candles, forming, currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels, fullDay, resetKey])
+
+  useEffect(() => {
+    manualRange.current = false
+    if (chart.current) fitSession(chart.current, bars.current, fullDay)
+  }, [fullDay])
 
   function showWindow(fromTime: string, toTime_: string) {
     const c = chart.current
@@ -221,7 +391,7 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
     candles.forEach((k, index) => { if (k.time <= toTime_) last = index })
     if (first < 0 || last < first) return
     manualRange.current = true
-    c.timeScale().setVisibleLogicalRange({ from: first - 0.5, to: Math.max(last, first + 4) + 0.5 })
+    c.timeScale().setVisibleLogicalRange({ from: first - 4, to: last + 3 })
   }
 
   function zoom(factor: number) {
@@ -238,16 +408,41 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
     manualRange.current = false
     setFrom("")
     setTo("")
-    if (chart.current) fitSession(chart.current, bars.current)
+    if (chart.current) fitSession(chart.current, bars.current, fullDay)
   }
 
-  const chartBox = (
-    <div className={`relative w-full ${className}`}>
-      <div ref={el} className="absolute inset-0" />
+  const chartArea = (
+    <div className="relative w-full flex-1 min-h-[300px]" style={{ minHeight: "300px", height: "100%" }}>
+      <div ref={el} className="w-full h-full min-h-[300px]" style={{ minHeight: "300px", height: "100%" }} />
       {overlay && <div className="pointer-events-none absolute left-2 top-2 z-10 sm:left-3 sm:top-3">{overlay}</div>}
     </div>
   )
-  if (!zoomable) return chartBox
+
+  if (hideToolbar || !zoomable) {
+    return (
+      <div className={cn("relative w-full flex-1 min-h-[300px]", className)} style={{ minHeight: "300px", height: "100%" }}>
+        <div ref={el} className="w-full h-full min-h-[300px]" style={{ minHeight: "300px", height: "100%" }} />
+        {overlay && <div className="pointer-events-none absolute left-2 top-2 z-10 sm:left-3 sm:top-3">{overlay}</div>}
+      </div>
+    )
+  }
+
+  if (minimalToolbar) {
+    return (
+      <div className={`flex flex-col gap-1 w-full h-full flex-1 min-h-0 ${className}`}>
+        <div className="flex items-center justify-between shrink-0 px-1 py-0.5">
+          <div className="flex items-center gap-1">
+            <Button variant="outline" size="icon-xs" aria-label="Zoom in" onClick={() => zoom(0.7)} className="h-6 w-6"><ZoomIn className="h-3 w-3" /></Button>
+            <Button variant="outline" size="icon-xs" aria-label="Zoom out" onClick={() => zoom(1.4)} className="h-6 w-6"><ZoomOut className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "09:50")} className="h-6 px-1.5 text-[11px] font-medium">09:15–09:50</Button>
+            <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "11:30")} className="h-6 px-1.5 text-[11px] font-medium">Morning</Button>
+            <Button variant="ghost" size="xs" onClick={reset} className="h-6 px-1.5 text-[11px] font-medium gap-1"><RotateCcw className="h-2.5 w-2.5" /> Full day</Button>
+          </div>
+        </div>
+        {chartArea}
+      </div>
+    )
+  }
 
   const applyCustom = (nextFrom: string, nextTo: string) => {
     if (nextFrom && nextTo && nextFrom <= nextTo) showWindow(nextFrom, nextTo)
@@ -255,20 +450,22 @@ export function CandleChart({ date, candles, forming, setup, trades = [], keyLev
   const timeInput = "h-6 rounded-md border bg-background px-1.5 text-xs text-foreground"
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex flex-wrap items-center gap-1.5">
-        <Button variant="outline" size="icon-xs" aria-label="Zoom in" onClick={() => zoom(0.6)}><ZoomIn /></Button>
-        <Button variant="outline" size="icon-xs" aria-label="Zoom out" onClick={() => zoom(1.6)}><ZoomOut /></Button>
-        <Button variant="outline" size="xs" onClick={() => showWindow("09:15", "09:50")}>09:15–09:50</Button>
-        <Button variant="outline" size="xs" onClick={() => showWindow("09:15", "11:00")}>Morning</Button>
-        <Button variant="outline" size="xs" onClick={reset}><RotateCcw /> Full day</Button>
-        <span className="ml-1 flex items-center gap-1 text-xs text-muted-foreground">
+    <div className={`flex flex-col gap-1 w-full h-full flex-1 min-h-0 ${className}`}>
+      <div className="flex items-center justify-between gap-1 shrink-0 px-1 py-0.5">
+        <div className="flex items-center gap-1">
+          <Button variant="outline" size="icon-xs" aria-label="Zoom in" onClick={() => zoom(0.6)} className="h-6 w-6"><ZoomIn className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon-xs" aria-label="Zoom out" onClick={() => zoom(1.6)} className="h-6 w-6"><ZoomOut className="h-3 w-3" /></Button>
+          <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "09:50")} className="h-6 px-1.5 text-[11px] font-medium">09:15–09:50</Button>
+          <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "11:30")} className="h-6 px-1.5 text-[11px] font-medium">Morning</Button>
+          <Button variant="ghost" size="xs" onClick={reset} className="h-6 px-1.5 text-[11px] font-medium gap-1"><RotateCcw className="h-2.5 w-2.5" /> Full day</Button>
+        </div>
+        <div className="hidden lg:flex items-center gap-1 text-[11px] text-muted-foreground">
           <input aria-label="From time" type="time" className={timeInput} value={from} onChange={(event) => { setFrom(event.target.value); applyCustom(event.target.value, to) }} />
-          to
+          <span>–</span>
           <input aria-label="To time" type="time" className={timeInput} value={to} onChange={(event) => { setTo(event.target.value); applyCustom(from, event.target.value) }} />
-        </span>
+        </div>
       </div>
-      {chartBox}
+      {chartArea}
     </div>
   )
 }

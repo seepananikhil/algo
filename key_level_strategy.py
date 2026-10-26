@@ -15,6 +15,10 @@ DEFAULTS = {
     "key_level_break_buffer": 10,
     "key_level_confirm_candles": 2,
     "key_level_target_points": 50,
+    "key_level_trail_activate_points": 20,
+    "key_level_trail_points": 20,
+    "key_level_max_entry_distance": None,
+    "key_level_max_entry_time": None,
 }
 BAR_MINUTES = 5
 ZONE_TOUCH_TOLERANCE = 2.0
@@ -25,8 +29,17 @@ EVENT_FIELDS = [
 
 
 def settings_from_config(config: dict) -> dict:
-    """Return the fixed Key Levels rules; legacy config values are intentionally ignored."""
-    return DEFAULTS.copy()
+    """Return Key Levels rules, allowing overrides for configurable parameters."""
+    settings = DEFAULTS.copy()
+    if isinstance(config, dict):
+        for key in DEFAULTS:
+            if key in config and config[key] is not None and config[key] != "":
+                try:
+                    default_type = type(DEFAULTS[key]) if DEFAULTS[key] is not None else float
+                    settings[key] = default_type(config[key])
+                except (ValueError, TypeError):
+                    settings[key] = config[key]
+    return settings
 
 
 def aggregate_five_minute(minute_candles: pd.DataFrame) -> pd.DataFrame:
@@ -128,6 +141,11 @@ def _simulate_trade(bars: pd.DataFrame, signal: dict, settings: dict, minute_can
     target = entry + settings["key_level_target_points"] if is_call else entry - settings["key_level_target_points"]
     last_idx = len(bars) - 1
 
+    trail_activate = settings.get("key_level_trail_activate_points")
+    trail_points = settings.get("key_level_trail_points")
+    trail_active = False
+    best = entry
+
     status = "open"
     for idx in range(entry_idx, last_idx + 1):
         candle = bars.iloc[idx]
@@ -137,15 +155,6 @@ def _simulate_trade(bars: pd.DataFrame, signal: dict, settings: dict, minute_can
             & (minute_candles["timestamp"] < bucket_start + pd.Timedelta(minutes=BAR_MINUTES))
         ]
         for minute in minute_rows.itertuples(index=False):
-            stop_hit = float(minute.low) <= stop if is_call else float(minute.high) >= stop
-            if stop_hit:
-                open_price = float(minute.open)
-                exit_time = minute.timestamp
-                exit_price = min(open_price, stop) if is_call else max(open_price, stop)
-                exit_idx = idx
-                reason = "stop_zone"
-                status = "closed"
-                break
             target_hit = float(minute.high) >= target if is_call else float(minute.low) <= target
             if target_hit:
                 exit_time = minute.timestamp
@@ -154,6 +163,44 @@ def _simulate_trade(bars: pd.DataFrame, signal: dict, settings: dict, minute_can
                 reason = "target"
                 status = "closed"
                 break
+
+            if trail_active:
+                stop_hit = float(minute.low) <= stop if is_call else float(minute.high) >= stop
+                if stop_hit:
+                    open_price = float(minute.open)
+                    exit_time = minute.timestamp
+                    exit_price = min(open_price, stop) if is_call else max(open_price, stop)
+                    exit_idx = idx
+                    reason = "trail_stop"
+                    status = "closed"
+                    break
+            else:
+                stop_hit = float(minute.close) < stop if is_call else float(minute.close) > stop
+                if stop_hit:
+                    exit_time = minute.timestamp
+                    exit_price = float(minute.close)
+                    exit_idx = idx
+                    reason = "stop_zone_1m_close"
+                    status = "closed"
+                    break
+
+            if is_call:
+                best = max(best, float(minute.high))
+                fav = best - entry
+                if trail_activate and trail_points and fav >= trail_activate:
+                    trail_stop = best - trail_points
+                    if trail_stop > stop:
+                        stop = trail_stop
+                        trail_active = True
+            else:
+                best = min(best, float(minute.low))
+                fav = entry - best
+                if trail_activate and trail_points and fav >= trail_activate:
+                    trail_stop = best + trail_points
+                    if trail_stop < stop:
+                        stop = trail_stop
+                        trail_active = True
+
         if status == "closed":
             break
 
@@ -212,6 +259,8 @@ def backtest_key_levels(minute_candles: pd.DataFrame, config: dict | None = None
         day: group.drop(columns="date").reset_index(drop=True)
         for day, group in minute_work.groupby("date", sort=True)
     }
+    max_dist = settings.get("key_level_max_entry_distance")
+    max_time = settings.get("key_level_max_entry_time")
     trades = []
     for _, day in bars.groupby("date", sort=True):
         day = day.reset_index(drop=True)
@@ -220,15 +269,22 @@ def backtest_key_levels(minute_candles: pd.DataFrame, config: dict | None = None
         highs = day["high"].to_numpy(dtype=float, copy=False)
         lows = day["low"].to_numpy(dtype=float, copy=False)
         next_allowed_idx = 1
-        side_filter = None
         day_trades = []
         confirms = settings["key_level_confirm_candles"]
         for confirmation_idx in range(1 + confirms, len(day) - 1):
             if confirmation_idx < next_allowed_idx:
                 continue
+            if max_time is not None:
+                entry_time_str = day.iloc[confirmation_idx + 1]["timestamp"].strftime("%H:%M")
+                if entry_time_str > max_time:
+                    continue
             signal = _confirmed_signal_from_arrays(closes, highs, lows, confirmation_idx, settings)
-            if signal is None or (side_filter is not None and signal["side"] != side_filter):
+            if signal is None:
                 continue
+            if max_dist is not None:
+                entry_open = float(day.iloc[confirmation_idx + 1]["open"])
+                if abs(entry_open - signal["level"]) > max_dist:
+                    continue
             trade = _simulate_trade(day, signal, settings, minute_day)
             exit_idx = trade.pop("_exit_idx")
             trades.append(trade)
@@ -236,10 +292,6 @@ def backtest_key_levels(minute_candles: pd.DataFrame, config: dict | None = None
             next_allowed_idx = exit_idx + 1
             if trade["status"] == "open" or trade["pnl_points"] >= 0 or len(day_trades) >= 3:
                 break
-            if len(day_trades) == 1:
-                side_filter = "PUT" if signal["side"] == "CALL" else "CALL"
-            else:
-                side_filter = None
     return trades
 
 
@@ -324,8 +376,7 @@ class KeyLevelPaperTracker:
         closed_today = [trade for trade in session_trades if trade["status"] == "closed"]
         if self.day_trade_count >= 3 or (closed_today and closed_today[-1]["pnl_points"] >= 0):
             self.halted_today = True
-        elif len(closed_today) == 1:
-            self.side_filter = "PUT" if closed_today[-1]["side"] == "CALL" else "CALL"
+        self.side_filter = None
 
     @staticmethod
     def _trade_id(date: str, break_time: str, level: float, side: str) -> str:
@@ -343,6 +394,18 @@ class KeyLevelPaperTracker:
     def on_completed_minutes(self, minute_candles: pd.DataFrame) -> None:
         if self.halted_today or self.day_trade_count >= 3:
             return
+        if minute_candles.empty:
+            return
+
+        if self.position and not self.position.get("trail_active"):
+            last_1m = minute_candles.iloc[-1]
+            close_1m = float(last_1m["close"])
+            is_call = self.position["side"] == "CALL"
+            if (close_1m < self.position["stop"] if is_call else close_1m > self.position["stop"]):
+                exit_ts = pd.Timestamp(last_1m["timestamp"])
+                self._exit(exit_ts, close_1m, "stop_zone_1m_close")
+                return
+
         bars = aggregate_five_minute(minute_candles)
         if bars.empty:
             return
@@ -356,23 +419,28 @@ class KeyLevelPaperTracker:
             self.last_bucket = bar["timestamp"]
             if self.pending or self.position:
                 continue
+            max_time = self.settings.get("key_level_max_entry_time")
+            entry_time = bar["timestamp"] + pd.Timedelta(minutes=BAR_MINUTES)
+            if max_time and entry_time.strftime("%H:%M") > max_time:
+                continue
             signal = confirmed_signal(bars, idx, self.settings)
-            if signal is None or (self.side_filter is not None and signal["side"] != self.side_filter):
+            if signal is None:
                 continue
             break_time = bars.iloc[signal["break_idx"]]["timestamp"].strftime("%H:%M")
             trade_id = self._trade_id(bar["timestamp"].strftime("%Y-%m-%d"), break_time, signal["level"], signal["side"])
             if trade_id in self.processed_ids:
                 continue
+            target_pts = self.settings.get("key_level_target_points", 50)
             self.pending = {
                 "trade_id": trade_id,
                 "date": bar["timestamp"].strftime("%Y-%m-%d"),
-                "entry_time": bar["timestamp"] + pd.Timedelta(minutes=BAR_MINUTES),
+                "entry_time": entry_time,
                 "side": signal["side"],
                 "level": signal["level"],
                 "break_time": break_time,
                 "confirm_time": bar["timestamp"].strftime("%H:%M"),
                 "stop": signal["stop"],
-                "target": signal["stop"] + settings_from_config(self.settings)["key_level_target_points"] if signal["side"] == "CALL" else signal["stop"] - settings_from_config(self.settings)["key_level_target_points"],
+                "target": signal["stop"] + target_pts if signal["side"] == "CALL" else signal["stop"] - target_pts,
             }
             break
 
@@ -382,13 +450,26 @@ class KeyLevelPaperTracker:
 
     def on_tick(self, timestamp, spot_price: float) -> None:
         timestamp = pd.Timestamp(timestamp)
+        if timestamp.tzinfo is not None:
+            timestamp = timestamp.tz_convert("Asia/Kolkata").tz_localize(None)
         price = float(spot_price)
         if self.pending:
             entry_time = self.pending["entry_time"]
             if entry_time <= timestamp < entry_time + pd.Timedelta(minutes=BAR_MINUTES):
+                max_dist = self.settings.get("key_level_max_entry_distance")
+                if max_dist is not None and abs(price - self.pending["level"]) > max_dist:
+                    self.pending = None
+                    return
                 side = self.pending["side"]
                 target = price + self.settings["key_level_target_points"] if side == "CALL" else price - self.settings["key_level_target_points"]
-                self.position = {**self.pending, "entry_price": price, "target": target, "entry_tick_time": timestamp}
+                self.position = {
+                    **self.pending,
+                    "entry_price": price,
+                    "target": target,
+                    "best_price": price,
+                    "trail_active": False,
+                    "entry_tick_time": timestamp,
+                }
                 self.processed_ids.add(self.pending["trade_id"])
                 self.day_trade_count += 1
                 self._append({
@@ -413,11 +494,32 @@ class KeyLevelPaperTracker:
         if not self.position:
             return
         position = self.position
-        hit_stop = price <= position["stop"] if position["side"] == "CALL" else price >= position["stop"]
-        if hit_stop:
-            self._exit(timestamp, position["stop"], "stop_zone")
-            return
-        hit_target = price >= position["target"] if position["side"] == "CALL" else price <= position["target"]
+        is_call = position["side"] == "CALL"
+        trail_act = self.settings.get("key_level_trail_activate_points")
+        trail_pts = self.settings.get("key_level_trail_points")
+        if is_call:
+            position["best_price"] = max(position.get("best_price", position["entry_price"]), price)
+            fav = position["best_price"] - position["entry_price"]
+            if trail_act and trail_pts and fav >= trail_act:
+                trail_stop = position["best_price"] - trail_pts
+                if trail_stop > position["stop"]:
+                    position["stop"] = trail_stop
+                    position["trail_active"] = True
+        else:
+            position["best_price"] = min(position.get("best_price", position["entry_price"]), price)
+            fav = position["entry_price"] - position["best_price"]
+            if trail_act and trail_pts and fav >= trail_act:
+                trail_stop = position["best_price"] + trail_pts
+                if trail_stop < position["stop"]:
+                    position["stop"] = trail_stop
+                    position["trail_active"] = True
+
+        if position.get("trail_active"):
+            hit_stop = price <= position["stop"] if is_call else price >= position["stop"]
+            if hit_stop:
+                self._exit(timestamp, position["stop"], "trail_stop")
+                return
+        hit_target = price >= position["target"] if is_call else price <= position["target"]
         if hit_target:
             self._exit(timestamp, position["target"], "target")
 
@@ -438,10 +540,4 @@ class KeyLevelPaperTracker:
         self.position = None
         if spot_pnl >= 0 or self.day_trade_count >= 3:
             self.halted_today = True
-            self.side_filter = None
-        elif self.day_trade_count == 1:
-            self.side_filter = "PUT" if position["side"] == "CALL" else "CALL"
-        elif self.day_trade_count == 2:
-            self.side_filter = None
-        else:
-            self.halted_today = True
+        self.side_filter = None
