@@ -212,6 +212,8 @@ class TrendRunnerPaperEngine:
         reentry_be_lock: float = 5.0,
         reentry_req_color: bool = False,
         reentry_cooloff_bars: int = 30,
+        call_cutoff_time: str = "10:30",
+        allow_call_reentry: bool = False,
         **kwargs,
     ) -> None:
         self.sl_points = sl_points
@@ -220,6 +222,8 @@ class TrendRunnerPaperEngine:
         self.reentry_be_lock = reentry_be_lock
         self.reentry_req_color = reentry_req_color
         self.reentry_cooloff_bars = reentry_cooloff_bars
+        self.call_cutoff_time = call_cutoff_time
+        self.allow_call_reentry = allow_call_reentry
         self.sl_mode = sl_mode
         self.lots = lots
         self.sizing_mode = sizing_mode
@@ -541,8 +545,9 @@ class TrendRunnerPaperEngine:
                     # Captures major trends where VIX cools mildly while blocking counter-trend traps
                     if body_ratio >= 0.80:
                         if (c > self.dyn_or_high) and (c > o) and (c > vwap) and (vix_chg <= 0.0):
-                            sig = "LONG"
-                            stage_name = "STAGE1_TREND"
+                            if t_str <= self.call_cutoff_time:
+                                sig = "LONG"
+                                stage_name = "STAGE1_TREND"
                         elif (c < self.dyn_or_low) and (c < o) and (c < vwap) and (vix_chg >= 0.0):
                             sig = "SHORT"
                             stage_name = "STAGE1_TREND"
@@ -551,7 +556,7 @@ class TrendRunnerPaperEngine:
                     if not sig and body_ratio >= 0.60:
                         raw_long = (c > self.dyn_or_high) and (c > o) and (c > vwap)
                         vix_long = (vix_chg <= -self.vix_call_th)
-                        if raw_long and vix_long:
+                        if raw_long and vix_long and (t_str <= self.call_cutoff_time):
                             sig = "LONG"
                             stage_name = "STAGE1_TREND"
 
@@ -574,12 +579,13 @@ class TrendRunnerPaperEngine:
             if self.last_trade_pnl >= 60.0:
                 return None
 
-            # 3. High-Conviction Re-entry Gate:
+            # 3. Quality Gate: High-Conviction Re-entry Gate:
             # Window: 09:30 to 13:00 IST
+            # CALL Trade 2 re-entries are disabled by default (65% loss rate). PUT re-entries generate +2,183 pts.
             if "09:30" <= t_str <= "13:00":
                 # Dynamic Expansion Re-entry (Breakout continuation after 30-min cool-off)
                 if self.last_trade_sig:
-                    if self.last_trade_sig == "LONG" and c >= prev_dh and c > o and c > vwap:
+                    if self.last_trade_sig == "LONG" and self.allow_call_reentry and c >= prev_dh and c > o and c > vwap:
                         sig = "LONG"
                         stage_name = "REENTRY_EXPANSION"
                     elif self.last_trade_sig == "SHORT" and c <= prev_dl and c < o and c < vwap:
