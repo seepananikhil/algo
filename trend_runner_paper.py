@@ -441,6 +441,7 @@ class TrendRunnerPaperEngine:
             if closed:
                 pnl_pts = (exit_px - entry_px) if sig == "LONG" else (entry_px - exit_px)
                 total_lots = pos.get("base_lots", self.lots)
+                futures_pnl_rs = pnl_pts * total_lots * LOT_SIZE
 
                 opt_symbol = pos.get("option_symbol", "")
                 opt_entry_px = float(pos.get("option_entry_price") or 0.0)
@@ -460,9 +461,13 @@ class TrendRunnerPaperEngine:
                         print(f"  [Warning] Live option exit quote fetch failed: {exc}")
 
                 if opt_entry_px > 0 and opt_exit_px > 0:
-                    pnl_rs = (opt_exit_px - opt_entry_px) * total_lots * LOT_SIZE
+                    opt_pnl_pts = opt_exit_px - opt_entry_px
+                    opt_pnl_rs = opt_pnl_pts * total_lots * LOT_SIZE
                 else:
-                    pnl_rs = pnl_pts * total_lots * LOT_SIZE
+                    opt_pnl_pts = round(pnl_pts * 0.75, 2)
+                    opt_pnl_rs = opt_pnl_pts * total_lots * LOT_SIZE
+
+                diff_rs = futures_pnl_rs - opt_pnl_rs
 
                 trade_result = {
                     "date": self.current_day_str,
@@ -473,6 +478,8 @@ class TrendRunnerPaperEngine:
                     "option_symbol": opt_symbol,
                     "option_entry_price": round(opt_entry_px, 2),
                     "option_exit_price": round(opt_exit_px, 2),
+                    "option_pnl_points": round(opt_pnl_pts, 2),
+                    "option_pnl_rupees": round(opt_pnl_rs, 2),
                     "entry_time": pos["entry_time"],
                     "entry_price": round(entry_px, 2),
                     "exit_time": t_str,
@@ -480,7 +487,9 @@ class TrendRunnerPaperEngine:
                     "initial_sl": round(pos["initial_sl"], 2),
                     "final_sl": round(curr_sl, 2),
                     "pnl_points": round(pnl_pts, 2),
-                    "pnl_rupees": round(pnl_rs, 2),
+                    "pnl_rupees": round(opt_pnl_rs, 2),
+                    "futures_pnl_rupees": round(futures_pnl_rs, 2),
+                    "diff_rupees": round(diff_rs, 2),
                     "max_fav": round(pos["max_fav"], 2),
                     "rr": round(pnl_pts / pos["sl_pts"], 2),
                     "exit_reason": exit_reason,
@@ -700,22 +709,25 @@ class TrendRunnerPaperEngine:
         print("\n" + "#" * 70)
         print(f" [POSITION CLOSED]  {res['side']}  Exit Time: {res['exit_time']}  Reason: {res['exit_reason']}")
         print("#" * 70)
-        print(f"  Entry Price : {res['entry_price']:.2f}  -->  Exit Price: {res['exit_price']:.2f}")
+        fut_pnl = res.get('futures_pnl_rupees', res['pnl_points'] * res['total_lots'] * LOT_SIZE)
+        fut_sign = "+" if fut_pnl > 0 else ""
+        print(f"  Futures (1.0 Delta)  : Entry {res['entry_price']:.2f} -> Exit {res['exit_price']:.2f} | PnL: {fut_sign}Rs {fut_pnl:,.2f} ({res['pnl_points']:+.2f} pts)")
         if res.get("option_entry_price") and res.get("option_exit_price"):
-            print(f"  Option Exec : {res.get('option_symbol')} Buy: Rs {res['option_entry_price']:.2f} -> Sell: Rs {res['option_exit_price']:.2f}")
-        print(f"  Base Points : {res['pnl_points']:+.2f} pts  |  R:R: {res['rr']}R")
-        print(f"  Lots Traded : {res['total_lots']} Lot(s){pyr_str}")
-        print(f"  Net PnL Rs  : {pnl_sign}Rs {res['pnl_rupees']:,.2f}")
-        print(f"  Peak Run    : +{res['max_fav']:.2f} pts  |  Trailing Stop: {res['final_sl']:.2f}")
+            opt_pnl = res.get("option_pnl_rupees", res["pnl_rupees"])
+            opt_sign = "+" if opt_pnl > 0 else ""
+            print(f"  Option (ITM-150)     : {res.get('option_symbol')} Buy Rs {res['option_entry_price']:.2f} -> Sell Rs {res['option_exit_price']:.2f} | PnL: {opt_sign}Rs {opt_pnl:,.2f} ({res.get('option_pnl_points', 0):+.2f} pts)")
+            print(f"  Futures vs Option    : Difference Rs {res.get('diff_rupees', 0):+,.2f}")
+        print(f"  Lots Traded          : {res['total_lots']} Lot(s){pyr_str}  |  R:R: {res['rr']}R")
+        print(f"  Peak Run             : +{res['max_fav']:.2f} pts  |  Trailing Stop: {res['final_sl']:.2f}")
         print("#" * 70 + "\n")
 
     def _log_trade(self, res: dict) -> None:
         canonical_cols = [
             "date", "trade_num", "stage", "side", "option", "option_symbol",
-            "option_entry_price", "option_exit_price", "entry_time", "entry_price",
-            "sl", "final_sl", "target", "exit_time", "exit_price", "exit_reason",
-            "pnl_points", "pnl_rupees", "max_fav", "max_adv", "rr", "lots", "qty",
-            "vix_chg", "initial_sl", "base_lots", "total_lots", "pyramided"
+            "option_entry_price", "option_exit_price", "option_pnl_points", "option_pnl_rupees",
+            "entry_time", "entry_price", "sl", "final_sl", "target", "exit_time", "exit_price", "exit_reason",
+            "pnl_points", "pnl_rupees", "futures_pnl_rupees", "diff_rupees",
+            "max_fav", "max_adv", "rr", "lots", "qty", "vix_chg", "initial_sl", "base_lots", "total_lots", "pyramided"
         ]
 
         for fpath in [PAPER_LOG_CSV, LIVE_PAPER_CSV]:

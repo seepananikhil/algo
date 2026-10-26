@@ -1917,6 +1917,10 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
             init_sl = float(row.get("initial_sl") or (entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0))
             tgt_spot = round(entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0, 2)
 
+            futures_pnl = round(pnl_pts * qty, 2)
+            opt_pnl = float(row.get("option_pnl_rupees") or pnl_rs)
+            diff = round(futures_pnl - opt_pnl, 2)
+
             out.append({
                 "date": r_date,
                 "side": side,
@@ -1931,6 +1935,9 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
                 "sell_price": sell_px,
                 "sell_value_rs": sell_val,
                 "pnl_rs": pnl_rs,
+                "futures_pnl_rs": futures_pnl,
+                "option_pnl_rs": opt_pnl,
+                "diff_rs": diff,
                 "nifty_points": pnl_pts,
                 "exit_reason": row.get("exit_reason", ""),
                 "mode": "TREND CATCHER PAPER",
