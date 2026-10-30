@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Daily update script for NIFTY50 and SENSEX spot historical data.
+"""Daily update script for NIFTY50 and SENSEX spot historical data using Kotak Neo.
 
 Appends today's 1-minute candles to the current month's CSV in historical_data:
   historical_data/nifty50/1min/YYYY/NIFTY50_1min_YYYY-MM.csv
@@ -15,39 +15,101 @@ from pathlib import Path
 
 import pandas as pd
 
-from fyers_headless_auth import get_authenticated_client
+from neo_auth import get_neo_client
 
 ROOT = Path(__file__).resolve().parent.parent
 IST = timezone(timedelta(hours=5, minutes=30))
 
 INDICES = {
     "NIFTY50": {
-        "symbol": "NSE:NIFTY50-INDEX",
+        "neosymbol": "nse_cm|26000",
         "dir": ROOT / "historical_data" / "nifty50",
         "file_prefix": "NIFTY50_1min_",
     },
     "SENSEX": {
-        "symbol": "BSE:SENSEX-INDEX",
+        "neosymbol": "bse_cm|1",
         "dir": ROOT / "historical_data" / "sensex",
         "file_prefix": "SENSEX_1min_",
     },
 }
 
 
+def parse_neo_candles(res: dict | list) -> pd.DataFrame:
+    """Parse candles from Kotak Neo historical data response into a standardized DataFrame."""
+    if not res:
+        return pd.DataFrame()
+
+    raw_items = []
+    if isinstance(res, dict):
+        raw_items = res.get("data") or res.get("result") or res.get("candles") or []
+        if isinstance(raw_items, dict):
+            raw_items = raw_items.get("candles") or []
+    elif isinstance(res, list):
+        raw_items = res
+
+    if not raw_items:
+        return pd.DataFrame()
+
+    rows = []
+    for item in raw_items:
+        if isinstance(item, list) and len(item) >= 5:
+            # Format: [timestamp/epoch, open, high, low, close, volume]
+            rows.append({
+                "ts_raw": item[0],
+                "Open": float(item[1]),
+                "High": float(item[2]),
+                "Low": float(item[3]),
+                "Close": float(item[4]),
+                "Volume": int(item[5]) if len(item) > 5 else 0,
+            })
+        elif isinstance(item, dict):
+            ts = item.get("time") or item.get("timestamp") or item.get("date") or item.get("datetime")
+            rows.append({
+                "ts_raw": ts,
+                "Open": float(item.get("open") or item.get("Open") or 0.0),
+                "High": float(item.get("high") or item.get("High") or 0.0),
+                "Low": float(item.get("low") or item.get("Low") or 0.0),
+                "Close": float(item.get("close") or item.get("Close") or 0.0),
+                "Volume": int(item.get("volume") or item.get("Volume") or 0),
+            })
+
+    if not rows:
+        return pd.DataFrame()
+
+    df = pd.DataFrame(rows)
+    # Convert ts_raw to Epoch and Timestamp (IST)
+    if pd.api.types.is_numeric_dtype(df["ts_raw"]):
+        # Epoch seconds or milliseconds
+        sample = df["ts_raw"].iloc[0]
+        unit = "ms" if sample > 1e11 else "s"
+        dt = pd.to_datetime(df["ts_raw"], unit=unit, utc=True).dt.tz_convert("Asia/Kolkata")
+    else:
+        dt = pd.to_datetime(df["ts_raw"]).dt.tz_localize("Asia/Kolkata") if pd.to_datetime(df["ts_raw"]).dt.tz is None else pd.to_datetime(df["ts_raw"]).dt.tz_convert("Asia/Kolkata")
+
+    df["Epoch"] = (dt.astype("int64") // 10**9)
+    df["Timestamp"] = dt.dt.strftime("%Y-%m-%dT%H:%M:%S")
+    return df[["Epoch", "Timestamp", "Open", "High", "Low", "Close", "Volume"]]
+
+
 def update_index_for_date(client, index_name: str, session: date) -> None:
     cfg = INDICES[index_name]
-    response = client.history(data={
-        "symbol": cfg["symbol"],
-        "resolution": "1",
-        "date_format": "1",
-        "range_from": session.isoformat(),
-        "range_to": session.isoformat(),
-        "cont_flag": "1",
-    })
+    from_date = session.strftime("%Y-%m-%d")
+    to_date = session.strftime("%Y-%m-%d")
 
-    candles = response.get("candles") or []
-    if not candles:
-        print(f"No candles found for {index_name} on {session}")
+    try:
+        response = client.historical_data(
+            neosymbol=cfg["neosymbol"],
+            interval="1min",
+            from_date=from_date,
+            to_date=to_date,
+        )
+    except Exception as exc:
+        print(f"Error fetching {index_name} from Kotak Neo: {exc}")
+        return
+
+    new_df = parse_neo_candles(response)
+    if new_df.empty:
+        print(f"No candles returned for {index_name} on {session}")
         return
 
     year_str = str(session.year)
@@ -55,14 +117,6 @@ def update_index_for_date(client, index_name: str, session: date) -> None:
     target_dir = cfg["dir"] / "1min" / year_str
     target_dir.mkdir(parents=True, exist_ok=True)
     target_file = target_dir / f"{cfg['file_prefix']}{month_str}.csv"
-
-    new_df = pd.DataFrame(candles, columns=["Epoch", "Open", "High", "Low", "Close", "Volume"])
-    new_df["Timestamp"] = (
-        pd.to_datetime(new_df["Epoch"], unit="s", utc=True)
-        .dt.tz_convert("Asia/Kolkata")
-        .dt.strftime("%Y-%m-%dT%H:%M:%S")
-    )
-    new_df = new_df[["Epoch", "Timestamp", "Open", "High", "Low", "Close", "Volume"]]
 
     if target_file.exists():
         existing = pd.read_csv(target_file)
@@ -74,7 +128,7 @@ def update_index_for_date(client, index_name: str, session: date) -> None:
     combined.to_csv(target_file, index=False)
     print(f"Updated {target_file} (Total rows: {len(combined):,})")
 
-    # Build Parquet if DuckDB is installed
+    # Rebuild Parquet files with DuckDB if available
     sql_script = cfg["dir"] / "scripts" / "build_parquet.sql"
     if sql_script.exists():
         try:
@@ -90,7 +144,7 @@ def main() -> None:
     args = parser.parse_args()
 
     session = date.fromisoformat(args.date) if args.date else datetime.now(IST).date()
-    client = get_authenticated_client()
+    client = get_neo_client()
 
     for name in INDICES:
         update_index_for_date(client, name, session)

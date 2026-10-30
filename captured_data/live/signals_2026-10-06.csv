@@ -1,0 +1,5 @@
+detected_at,event,side,entry_time,candle_time,price,mid_point,sl,target,reason,pnl_points
+09:23:56,ENTRY,PUT,09:23,09:23:56,22589.85,22594.85,22628.1,22549.85,buffer_touch_1s,
+09:25:03,EXIT,PUT,09:23,09:24,22600.1,22594.85,22628.1,22549.85,midpoint_close_exit,-10.25
+09:27:04,ENTRY,CALL,09:27,09:27:04,22594.05,22594.85,22561.6,22634.05,buffer_touch_1s,
+09:47:03,EXIT,CALL,09:27,09:45,22620.35,22594.85,22561.6,22635.65,reverse_after_sl_time_exit,26.3

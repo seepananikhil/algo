@@ -224,7 +224,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Simple midpoint retrace strategy backtest")
     parser.add_argument(
         "--csv",
-        default="captured_data/fyers/fyers_spot_1min_extended.csv",
+        default="captured_data/spot_1min_extended.csv",
         help="Path to OHLC CSV",
     )
     parser.add_argument("--rr", type=float, default=1.0, help="Risk-reward multiple for target")
@@ -236,7 +236,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--out",
-        default="captured_data/fyers/midpoint_backtest_trades.csv",
+        default="captured_data/midpoint_backtest_trades.csv",
         help="Output CSV for trade list",
     )
     parser.add_argument(
@@ -302,3 +302,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

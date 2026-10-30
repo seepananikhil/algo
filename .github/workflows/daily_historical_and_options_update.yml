@@ -32,7 +32,7 @@ jobs:
       - name: Install Dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install pandas requests pyotp fyers-apiv3 duckdb
+          pip install pandas requests pyotp kotakneoapi duckdb
 
       - name: Install DuckDB CLI
         run: |
@@ -43,11 +43,11 @@ jobs:
 
       - name: Update Spot Historical Data (NIFTY & SENSEX)
         env:
-          FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
-          FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
-          FYERS_CLIENT_ID: ${{ secrets.FYERS_CLIENT_ID }}
-          FYERS_PIN: ${{ secrets.FYERS_PIN }}
-          FYERS_TOTP_KEY: ${{ secrets.FYERS_TOTP_KEY }}
+          NEO_CONSUMER_KEY: ${{ secrets.NEO_CONSUMER_KEY }}
+          NEO_MOBILE_NUMBER: ${{ secrets.NEO_MOBILE_NUMBER }}
+          NEO_UCC: ${{ secrets.NEO_UCC }}
+          NEO_TOTP_KEY: ${{ secrets.NEO_TOTP_KEY }}
+          NEO_MPIN: ${{ secrets.NEO_MPIN }}
         run: |
           DATE_ARG=""
           if [ -n "${{ github.event.inputs.target_date }}" ]; then
@@ -57,18 +57,18 @@ jobs:
 
       - name: Fetch Weekly Options Data (NIFTY & SENSEX)
         env:
-          FYERS_APP_ID: ${{ secrets.FYERS_APP_ID }}
-          FYERS_SECRET_KEY: ${{ secrets.FYERS_SECRET_KEY }}
-          FYERS_CLIENT_ID: ${{ secrets.FYERS_CLIENT_ID }}
-          FYERS_PIN: ${{ secrets.FYERS_PIN }}
-          FYERS_TOTP_KEY: ${{ secrets.FYERS_TOTP_KEY }}
+          NEO_CONSUMER_KEY: ${{ secrets.NEO_CONSUMER_KEY }}
+          NEO_MOBILE_NUMBER: ${{ secrets.NEO_MOBILE_NUMBER }}
+          NEO_UCC: ${{ secrets.NEO_UCC }}
+          NEO_TOTP_KEY: ${{ secrets.NEO_TOTP_KEY }}
+          NEO_MPIN: ${{ secrets.NEO_MPIN }}
         run: |
           DATE_ARG=""
           if [ -n "${{ github.event.inputs.target_date }}" ]; then
             DATE_ARG="--date ${{ github.event.inputs.target_date }}"
           fi
-          python scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch skipped or not an expiry session"
-          python scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch skipped or not an expiry session"
+          python scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
+          python scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
 
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5

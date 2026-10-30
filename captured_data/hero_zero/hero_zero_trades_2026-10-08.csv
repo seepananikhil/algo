@@ -1,0 +1,3 @@
+date,underlying,expiry,symbol,option_type,strike,lot_size,spot_ltp,distance_from_spot,entry_time,entry_price,entry_volume,exit_time,exit_price,exit_volume,pnl_per_unit,pnl_rs,status,exit_reason,source
+2026-10-08,SENSEX,2026-10-08,BSE:SENSEX26O0871300PE,PE,71300,20,71461.62,-161.62,2026-10-08 15:20:00,23.55,7679940,2026-10-08 15:30:00,0.15,3984440,-23.40,-468.00,closed,time_exit_15:30_candle_close,historical_1m_replay_spot_stale
+2026-10-08,SENSEX,2026-10-08,BSE:SENSEX26O0871500CE,CE,71500,20,71461.62,38.38,2026-10-08 15:20:00,34.6,6305100,2026-10-08 15:30:00,93.0,6369880,58.40,1168.00,closed,time_exit_15:30_candle_close,historical_1m_replay_spot_stale
