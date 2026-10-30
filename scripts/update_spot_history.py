@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Daily update script for NIFTY50 and SENSEX spot historical data using Kotak Neo.
 
-Appends today's 1-minute candles to the current month's CSV in historical_data:
-  historical_data/nifty50/1min/YYYY/NIFTY50_1min_YYYY-MM.csv
-  historical_data/sensex/1min/YYYY/SENSEX_1min_YYYY-MM.csv
+Updates both intraday 1-minute CSVs and consolidated daily OHLC CSVs:
+  - historical_data/{index}/1min/YYYY/{INDEX}_1min_YYYY-MM.csv
+  - historical_data/{index}/daily/{INDEX}_daily.csv
+  - Rebuilds Parquet files via DuckDB including {INDEX}_daily.parquet
 """
 
 from __future__ import annotations
@@ -25,11 +26,13 @@ INDICES = {
         "neosymbol": "nse_cm|26000",
         "dir": ROOT / "historical_data" / "nifty50",
         "file_prefix": "NIFTY50_1min_",
+        "daily_file": "NIFTY50_daily.csv",
     },
     "SENSEX": {
         "neosymbol": "bse_cm|1",
         "dir": ROOT / "historical_data" / "sensex",
         "file_prefix": "SENSEX_1min_",
+        "daily_file": "SENSEX_daily.csv",
     },
 }
 
@@ -53,7 +56,6 @@ def parse_neo_candles(res: dict | list) -> pd.DataFrame:
     rows = []
     for item in raw_items:
         if isinstance(item, list) and len(item) >= 5:
-            # Format: [timestamp/epoch, open, high, low, close, volume]
             rows.append({
                 "ts_raw": item[0],
                 "Open": float(item[1]),
@@ -77,9 +79,7 @@ def parse_neo_candles(res: dict | list) -> pd.DataFrame:
         return pd.DataFrame()
 
     df = pd.DataFrame(rows)
-    # Convert ts_raw to Epoch and Timestamp (IST)
     if pd.api.types.is_numeric_dtype(df["ts_raw"]):
-        # Epoch seconds or milliseconds
         sample = df["ts_raw"].iloc[0]
         unit = "ms" if sample > 1e11 else "s"
         dt = pd.to_datetime(df["ts_raw"], unit=unit, utc=True).dt.tz_convert("Asia/Kolkata")
@@ -112,6 +112,7 @@ def update_index_for_date(client, index_name: str, session: date) -> None:
         print(f"No candles returned for {index_name} on {session}")
         return
 
+    # 1. Update Intraday 1-minute CSV
     year_str = str(session.year)
     month_str = f"{session.year:04d}-{session.month:02d}"
     target_dir = cfg["dir"] / "1min" / year_str
@@ -126,14 +127,42 @@ def update_index_for_date(client, index_name: str, session: date) -> None:
         combined = new_df.sort_values("Epoch")
 
     combined.to_csv(target_file, index=False)
-    print(f"Updated {target_file} (Total rows: {len(combined):,})")
+    print(f"Updated 1-min file: {target_file} (Total rows: {len(combined):,})")
 
-    # Rebuild Parquet files with DuckDB if available
+    # 2. Update Consolidated Daily OHLC CSV
+    daily_dir = cfg["dir"] / "daily"
+    daily_dir.mkdir(parents=True, exist_ok=True)
+    daily_file = daily_dir / cfg["daily_file"]
+
+    # Compute daily candle from today's candles
+    today_candles = combined[combined["Timestamp"].str.startswith(from_date)]
+    if not today_candles.empty:
+        daily_bar = pd.DataFrame([{
+            "Epoch": int(today_candles.iloc[0]["Epoch"]),
+            "Date": from_date,
+            "Open": float(today_candles.iloc[0]["Open"]),
+            "High": float(today_candles["High"].max()),
+            "Low": float(today_candles["Low"].min()),
+            "Close": float(today_candles.iloc[-1]["Close"]),
+            "Volume": int(today_candles["Volume"].sum()),
+        }])
+
+        if daily_file.exists():
+            existing_daily = pd.read_csv(daily_file)
+            combined_daily = pd.concat([existing_daily, daily_bar], ignore_index=True)
+            combined_daily = combined_daily.drop_duplicates(subset=["Date"], keep="last").sort_values("Date")
+        else:
+            combined_daily = daily_bar
+
+        combined_daily.to_csv(daily_file, index=False)
+        print(f"Updated daily OHLC: {daily_file} (Total daily bars: {len(combined_daily):,})")
+
+    # 3. Rebuild Parquet files with DuckDB if available
     sql_script = cfg["dir"] / "scripts" / "build_parquet.sql"
     if sql_script.exists():
         try:
             subprocess.run(["duckdb", "-c", f".read {sql_script}"], cwd=cfg["dir"], check=False)
-            print(f"Rebuilt Parquet files for {index_name}")
+            print(f"Rebuilt Parquet files (including daily) for {index_name}")
         except Exception:
             pass
 

@@ -68,3 +68,13 @@ COPY (
     min(low) AS low, last(close ORDER BY epoch) AS close
   FROM 'parquet/NIFTY50_01min.parquet' GROUP BY 2 ORDER BY 2
 ) TO 'parquet/NIFTY50_60min.parquet' (FORMAT parquet, COMPRESSION zstd);
+
+-- Daily 1-Day candle bars
+COPY (
+  SELECT min(epoch) AS epoch,
+    ts::DATE AS date,
+    first(open ORDER BY epoch) AS open, max(high) AS high,
+    min(low) AS low, last(close ORDER BY epoch) AS close,
+    sum(coalesce(volume, 0)) AS volume
+  FROM 'parquet/NIFTY50_01min.parquet' GROUP BY 2 ORDER BY 2
+) TO 'parquet/NIFTY50_daily.parquet' (FORMAT parquet, COMPRESSION zstd);
