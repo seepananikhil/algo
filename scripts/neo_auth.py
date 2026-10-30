@@ -45,10 +45,9 @@ def get_neo_client() -> NeoAPI:
         except Exception:
             pass
 
-    if not consumer_key:
-        raise RuntimeError(
-            "NEO_CONSUMER_KEY is required. Set it as an environment variable or in neo_config.json"
-        )
+    if not consumer_key or consumer_key == "dummy_consumer_key":
+        print("[NOTICE] Dummy Kotak Neo credentials detected. Update secrets in GitHub to enable live market data fetching.")
+        return None
 
     client = NeoAPI(consumer_key=consumer_key, environment="prod")
 

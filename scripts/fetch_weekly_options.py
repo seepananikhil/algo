@@ -185,6 +185,8 @@ def main() -> None:
         return
 
     client = get_neo_client()
+    if client is None:
+        return
 
     # Fetch spot index
     session_str = session.isoformat()

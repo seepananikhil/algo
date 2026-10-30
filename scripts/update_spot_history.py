@@ -145,6 +145,8 @@ def main() -> None:
 
     session = date.fromisoformat(args.date) if args.date else datetime.now(IST).date()
     client = get_neo_client()
+    if client is None:
+        return
 
     for name in INDICES:
         update_index_for_date(client, name, session)
