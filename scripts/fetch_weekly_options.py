@@ -171,6 +171,7 @@ def main() -> None:
     parser.add_argument("--date", help="Session date YYYY-MM-DD (defaults to today in IST)")
     parser.add_argument("--count", type=int, default=15, help="Strikes above and below open")
     parser.add_argument("--force", action="store_true", help="Overwrite existing output file")
+    parser.add_argument("--expiry-only", action="store_true", help="Only fetch if session date is an exact expiry date")
     args = parser.parse_args()
 
     cfg = CONFIG[args.index]
@@ -202,7 +203,7 @@ def main() -> None:
         raise SystemExit(f"No spot index candles returned for {args.index} on {session}")
 
     reference = float(spot.iloc[0]["open"])
-    contracts = get_expiry_contracts(client, cfg["exch_seg"], cfg["symbol_name"], session)
+    contracts = get_expiry_contracts(client, cfg["exch_seg"], cfg["symbol_name"], session, expiry_only=args.expiry_only)
     if not contracts:
         raise SystemExit(f"No expiry contracts found for {args.index} on {session}")
 
