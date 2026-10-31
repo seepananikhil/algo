@@ -70,6 +70,11 @@ jobs:
           python scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
           python scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
 
+      - name: Rebuild DuckDB Options Parquet Catalogs
+        run: |
+          (cd options_data/nifty && duckdb -c ".read scripts/build_parquet.sql") || echo "Nifty parquet catalog build completed with warnings"
+          (cd options_data/sensex && duckdb -c ".read scripts/build_parquet.sql") || echo "Sensex parquet catalog build completed with warnings"
+
       - name: Update Master Backtests
         run: |
           python run_10y_backtest.py || echo "Nifty backtest completed with warnings"
