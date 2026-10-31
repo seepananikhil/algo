@@ -62,6 +62,75 @@ _master_cache = {"mtime": None, "df": None}
 _backtest_cache = {"mtime": None, "value": None}
 _key_level_backtest_cache = {"key": None, "value": None}
 _cache_lock = threading.Lock()
+_sync_state = {
+    "status": "idle",
+    "message": "Ready",
+    "started_at": None,
+    "completed_at": None,
+    "last_sync_date": None,
+}
+_sync_lock = threading.Lock()
+
+def trigger_backtest_sync(reason: str = "manual") -> dict:
+    with _sync_lock:
+        if _sync_state["status"] == "running":
+            return {"ok": True, "running": True, "message": "Backtest sync already in progress..."}
+        _sync_state["status"] = "running"
+        _sync_state["message"] = f"Updating historical data & running backtests ({reason})..."
+        _sync_state["started_at"] = datetime.now(IST).isoformat()
+
+    def _worker():
+        try:
+            import subprocess, sys, shutil
+            print(f"[{datetime.now(IST)}] Starting backtest sync ({reason})...")
+            # If update_historical_data.py exists, run it
+            script = ROOT / "update_historical_data.py"
+            if script.exists():
+                res = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+                if res.returncode == 0:
+                    nifty_10y = ROOT / "performance" / "nifty_10y_backtest_trades.csv"
+                    vix_file = ROOT / "performance" / "vix_trend_runner_trades.csv"
+                    if nifty_10y.exists():
+                        shutil.copy2(nifty_10y, vix_file)
+                    with _cache_lock:
+                        _backtest_cache.update(mtime=None, value=None)
+                    with _sync_lock:
+                        _sync_state["status"] = "completed"
+                        _sync_state["message"] = "Backtests updated successfully with latest data."
+                        _sync_state["completed_at"] = datetime.now(IST).isoformat()
+                        _sync_state["last_sync_date"] = datetime.now(IST).strftime("%Y-%m-%d")
+                    print(f"[{datetime.now(IST)}] Backtest sync completed successfully.")
+                    return
+                else:
+                    err = res.stderr[-300:] if res.stderr else "Update script failed"
+                    with _sync_lock:
+                        _sync_state["status"] = "failed"
+                        _sync_state["message"] = f"Backtest update failed: {err}"
+                        _sync_state["completed_at"] = datetime.now(IST).isoformat()
+                    return
+        except Exception as exc:
+            with _sync_lock:
+                _sync_state["status"] = "failed"
+                _sync_state["message"] = f"Backtest exception: {exc}"
+                _sync_state["completed_at"] = datetime.now(IST).isoformat()
+            print(f"[{datetime.now(IST)}] Backtest sync error: {exc}")
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return {"ok": True, "running": True, "message": _sync_state["message"]}
+
+def daily_backtest_sync_loop() -> None:
+    """Trigger daily backtest sync after market close (16:35 IST on weekdays)."""
+    while True:
+        try:
+            now = datetime.now(IST)
+            if now.weekday() < 5 and now.hour == 16 and now.minute == 35:
+                today_str = now.strftime("%Y-%m-%d")
+                if _sync_state.get("last_sync_date") != today_str:
+                    trigger_backtest_sync(reason="daily_schedule_1635")
+        except Exception as e:
+            pass
+        time.sleep(30)
+
 _login_proc = {"proc": None}
 _capture = {"auto_started": None, "stopped_by_user": None}
 AUTO_START_WINDOW = ("09:00", "15:29")
@@ -1142,10 +1211,14 @@ class Handler(BaseHTTPRequestHandler):
             strategy = q.get("strategy", [""])[0]
             if strategy == "key_levels":
                 self._json(key_level_report())
-            elif strategy not in ("", "midpoint"):
-                return self._json({"error": "unknown strategy"}, 404)
+            elif strategy in ("midpoint", "10y_midpoint"):
+                midpoint_file = ROOT / "performance" / "nifty_10y_midpoint_trades.csv"
+                if midpoint_file.exists():
+                    self._json(vix_trend_runner_backtest_report(midpoint_file))
+                else:
+                    self._json(backtest_report())
             else:
-                self._json(backtest_report())
+                return self._json({"error": "unknown strategy"}, 404)
         elif url.path == "/api/settings":
             self._json(public_settings())
         elif url.path == "/api/funds":
@@ -1214,6 +1287,7 @@ if __name__ == "__main__":
     threading.Thread(target=hero_zero_capture_loop, daemon=True, name="hero-zero-capture").start()
     threading.Thread(target=sensex_expiry_collector_loop, daemon=True, name="sensex-expiry-collector").start()
     threading.Thread(target=auto_start_loop, daemon=True).start()
+    threading.Thread(target=daily_backtest_sync_loop, daemon=True, name="daily-backtest-sync").start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Dashboard: http://{HOST}:{PORT}/  (Ctrl+C to stop)")
     try:

@@ -70,6 +70,12 @@ jobs:
           python scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
           python scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
 
+      - name: Update Master Backtests
+        run: |
+          python run_10y_backtest.py || echo "Nifty backtest completed with warnings"
+          python run_sensex_multiyear_trend_backtest.py || echo "Sensex backtest completed with warnings"
+          python run_10y_midpoint_backtest.py || echo "Midpoint backtest completed with warnings"
+
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
