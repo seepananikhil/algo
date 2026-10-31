@@ -2,19 +2,23 @@
 """Fetch weekly expiry option candles (NIFTY & SENSEX) using Kotak Neo.
 
 Outputs to standardized CSV format:
-  options_data/nifty/1min/YYYY/NIFTY_options_1min_YYYY-MM-DD.csv
-  options_data/sensex/1min/YYYY/SENSEX_options_1min_YYYY-MM-DD.csv
+  options_data/nifty/1min/YYYY/MM/YYYY-MM-DD/{strike}/CE.csv, PE.csv, spot.csv
+  options_data/sensex/1min/YYYY/MM/YYYY-MM-DD/{strike}/CE.csv, PE.csv, spot.csv
 """
 
 from __future__ import annotations
 
 import argparse
+import calendar
+import io
 import json
+import re
 import time
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 import pandas as pd
+import requests
 
 from neo_auth import get_neo_client
 
@@ -23,20 +27,56 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 CONFIG = {
     "NIFTY": {
-        "spot_neosymbol": "nse_cm|26000",
+        "spot_neosymbol": "nse_cm|Nifty 50",
         "exch_seg": "nse_fo",
         "symbol_name": "NIFTY",
         "output_dir": ROOT / "options_data" / "nifty" / "1min",
         "prefix": "NIFTY",
     },
     "SENSEX": {
-        "spot_neosymbol": "bse_cm|1",
+        "spot_neosymbol": "bse_cm|SENSEX",
         "exch_seg": "bse_fo",
         "symbol_name": "SENSEX",
         "output_dir": ROOT / "options_data" / "sensex" / "1min",
         "prefix": "SENSEX",
     },
 }
+
+MONTH_MAP = {
+    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6, "7": 7, "8": 8, "9": 9,
+    "O": 10, "OCT": 10,
+    "N": 11, "NOV": 11,
+    "D": 12, "DEC": 12,
+    "JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6,
+    "JUL": 7, "AUG": 8, "SEP": 9
+}
+
+
+def parse_expiry_from_trdsymbol(symbol: str) -> date | None:
+    """Parse expiry date from standard exchange trading symbol."""
+    # Pattern 1: Weekly e.g. NIFTY26N0323000CE, SENSEX26N0675000PE
+    m = re.search(r"(?:NIFTY|SENSEX)(\d{2})([1-9OND])(\d{2})", symbol)
+    if m:
+        yy, m_code, dd = m.groups()
+        year = 2000 + int(yy)
+        month = MONTH_MAP.get(m_code)
+        if month:
+            try:
+                return date(year, month, int(dd))
+            except Exception:
+                pass
+
+    # Pattern 2: Monthly e.g. NIFTY26NOV23000CE, SENSEX26DEC75000PE
+    m2 = re.search(r"(?:NIFTY|SENSEX)(\d{2})([A-Z]{3})(\d{4,6})(?:CE|PE)", symbol)
+    if m2:
+        yy, mon_str, _ = m2.groups()
+        year = 2000 + int(yy)
+        month = MONTH_MAP.get(mon_str)
+        if month:
+            last_day = calendar.monthrange(year, month)[1]
+            return date(year, month, last_day)
+
+    return None
 
 
 def parse_neo_candles(res: dict | list) -> pd.DataFrame:
@@ -68,14 +108,15 @@ def parse_neo_candles(res: dict | list) -> pd.DataFrame:
             })
         elif isinstance(item, dict):
             ts = item.get("time") or item.get("timestamp") or item.get("date") or item.get("datetime")
-            rows.append({
-                "ts_raw": ts,
-                "open": float(item.get("open") or item.get("Open") or 0.0),
-                "high": float(item.get("high") or item.get("High") or 0.0),
-                "low": float(item.get("low") or item.get("Low") or 0.0),
-                "close": float(item.get("close") or item.get("Close") or 0.0),
-                "volume": int(item.get("volume") or item.get("Volume") or 0),
-            })
+            if ts:
+                rows.append({
+                    "ts_raw": ts,
+                    "open": float(item.get("open", 0.0)),
+                    "high": float(item.get("high", 0.0)),
+                    "low": float(item.get("low", 0.0)),
+                    "close": float(item.get("close", 0.0)),
+                    "volume": int(item.get("volume", 0)),
+                })
 
     if not rows:
         return pd.DataFrame()
@@ -93,66 +134,88 @@ def parse_neo_candles(res: dict | list) -> pd.DataFrame:
     return df.drop_duplicates("epoch").sort_values("epoch").reset_index(drop=True)
 
 
-def get_expiry_contracts(client, exch_seg: str, symbol_name: str, session: date) -> list[dict]:
-    """Retrieve option contracts matching the underlying and session expiry date."""
-    # Try reading from scrip_master
+def load_scrip_master(client, exch_seg: str) -> pd.DataFrame:
+    """Download and cache live scrip master from Kotak Neo."""
     cache_dir = Path.home() / ".kotak_neo" / "scrip_cache"
-    master_df = None
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    cache_file = cache_dir / f"{exch_seg}_{today_str}.csv"
 
-    if cache_dir.exists():
-        files = list(cache_dir.glob(f"{exch_seg}_*.csv"))
-        if files:
-            latest_file = max(files, key=lambda f: f.stat().st_mtime)
-            try:
-                master_df = pd.read_csv(latest_file)
-            except Exception:
-                pass
-
-    if master_df is None:
+    if cache_file.exists() and cache_file.stat().st_size > 1000000:
         try:
-            client.scrip_master(exchange_segment=exch_seg)
-            files = list(cache_dir.glob(f"{exch_seg}_*.csv"))
-            if files:
-                latest_file = max(files, key=lambda f: f.stat().st_mtime)
-                master_df = pd.read_csv(latest_file)
-        except Exception as exc:
-            print(f"Could not load scrip_master: {exc}")
-            return []
+            return pd.read_csv(cache_file)
+        except Exception:
+            pass
 
+    try:
+        url_or_data = client.scrip_master(exchange_segment=exch_seg)
+        if isinstance(url_or_data, str) and url_or_data.startswith("http"):
+            resp = requests.get(url_or_data, timeout=45)
+            if resp.status_code == 200:
+                cache_file.write_bytes(resp.content)
+                return pd.read_csv(cache_file)
+    except Exception as exc:
+        print(f"Could not download live scrip master: {exc}")
+
+    # Fallback to any recent valid file in cache
+    files = sorted(cache_dir.glob(f"{exch_seg}_*.csv"))
+    if files:
+        return pd.read_csv(files[-1])
+    return pd.DataFrame()
+
+
+def get_expiry_contracts(client, exch_seg: str, symbol_name: str, session: date, expiry_only: bool = False) -> list[dict]:
+    """Retrieve option contracts for active weekly expiry."""
+    master_df = load_scrip_master(client, exch_seg)
     if master_df is None or master_df.empty:
         return []
 
-    # Filter for OPTIDX and matching underlying
     sym_col = "pSymbolName" if "pSymbolName" in master_df.columns else "symbol"
     inst_col = "pInstType" if "pInstType" in master_df.columns else "inst_type"
-    expiry_col = "lExpiryDate " if "lExpiryDate " in master_df.columns else ("pExpiryDate" if "pExpiryDate" in master_df.columns else "expiry")
+    expiry_col = [c for c in master_df.columns if "expiry" in c.lower()]
+    exp_col = expiry_col[0] if expiry_col else "expiry"
 
     df_filtered = master_df[(master_df[sym_col] == symbol_name)]
     if inst_col in df_filtered.columns:
-        df_filtered = df_filtered[df_filtered[inst_col] == "OPTIDX"]
+        df_filtered = df_filtered[df_filtered[inst_col].isin(["OPTIDX", "IO"])]
+
+    parsed_rows = []
+    for _, row in df_filtered.iterrows():
+        trd_sym = str(row.get("pTrdSymbol") or row.get("trading_symbol") or "")
+        exp_date = parse_expiry_from_trdsymbol(trd_sym)
+
+        # Fallback to column if trading symbol doesn't match
+        if exp_date is None and exp_col in row and pd.notna(row[exp_col]):
+            val = str(row[exp_col])
+            if val.isdigit() and int(val) > 1700000000:
+                exp_date = pd.to_datetime(int(val), unit="s", utc=True).tz_convert("Asia/Kolkata").date()
+
+        if exp_date and exp_date >= session:
+            parsed_rows.append((exp_date, row))
+
+    if not parsed_rows:
+        print(f"No active expiry contracts found on or after {session}")
+        return []
+
+    target_expiry = min(exp_date for exp_date, _ in parsed_rows)
+    if expiry_only and target_expiry != session:
+        print(f"Skipping: session {session} is not an expiry date (nearest is {target_expiry})")
+        return []
+
+    print(f"Active weekly expiry for {symbol_name} on session {session}: {target_expiry}")
 
     contracts = []
-    for _, row in df_filtered.iterrows():
-        exp_raw = row.get(expiry_col)
-        if pd.isna(exp_raw):
-            continue
-        try:
-            if str(exp_raw).isdigit():
-                exp_date = pd.to_datetime(int(exp_raw), unit="s", utc=True).tz_convert("Asia/Kolkata").date()
-            else:
-                exp_date = pd.to_datetime(exp_raw).date()
-        except Exception:
-            continue
-
-        if exp_date == session:
+    for exp_date, row in parsed_rows:
+        if exp_date == target_expiry:
             token = str(row.get("pSymbol") or row.get("token"))
             trd_sym = str(row.get("pTrdSymbol") or row.get("trading_symbol"))
             opt_type = str(row.get("pOptionType") or row.get("option_type") or "")
             strike_raw = row.get("dStrikePrice;") if "dStrikePrice;" in row else row.get("strike")
             strike = float(strike_raw) if pd.notna(strike_raw) else 0.0
 
-            # Normalize strike if precision offset
-            if strike > 100000 and symbol_name == "NIFTY":
+            if strike > 1000000 and symbol_name == "SENSEX":
+                strike = strike / 100.0
+            elif strike > 100000 and symbol_name == "NIFTY":
                 strike = strike / 100.0
 
             contracts.append({
@@ -160,9 +223,35 @@ def get_expiry_contracts(client, exch_seg: str, symbol_name: str, session: date)
                 "symbol": trd_sym,
                 "strike": strike,
                 "option_type": opt_type,
+                "expiry": exp_date.isoformat(),
             })
 
     return contracts
+
+
+def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retries: int = 5) -> pd.DataFrame:
+    """Fetch candles with rate limit handling and exponential backoff."""
+    for attempt in range(max_retries):
+        try:
+            res = client.historical_data(
+                neosymbol=neosymbol,
+                interval="1min",
+                from_date=session_str,
+                to_date=session_str,
+            )
+            if isinstance(res, dict) and res.get("code") == 429:
+                time.sleep(2.0 + attempt * 1.5)
+                continue
+            df = parse_neo_candles(res)
+            if not df.empty:
+                return df
+        except Exception as exc:
+            if "too many" in str(exc).lower():
+                time.sleep(2.0 + attempt * 1.5)
+            else:
+                break
+        time.sleep(0.5)
+    return pd.DataFrame()
 
 
 def main() -> None:
@@ -192,20 +281,14 @@ def main() -> None:
 
     # Fetch spot index
     session_str = session.isoformat()
-    spot_raw = client.historical_data(
-        neosymbol=cfg["spot_neosymbol"],
-        interval="1min",
-        from_date=session_str,
-        to_date=session_str,
-    )
-    spot = parse_neo_candles(spot_raw)
+    spot = fetch_candles_with_retry(client, cfg["spot_neosymbol"], session_str)
     if spot.empty:
         raise SystemExit(f"No spot index candles returned for {args.index} on {session}")
 
     reference = float(spot.iloc[0]["open"])
     contracts = get_expiry_contracts(client, cfg["exch_seg"], cfg["symbol_name"], session, expiry_only=args.expiry_only)
     if not contracts:
-        raise SystemExit(f"No expiry contracts found for {args.index} on {session}")
+        raise SystemExit(f"No active weekly contracts found for {args.index} on {session}")
 
     strikes = sorted({c["strike"] for c in contracts})
     below = sorted((s for s in strikes if s < reference), reverse=True)[:args.count]
@@ -213,15 +296,17 @@ def main() -> None:
     selected_strikes = set(below + above)
 
     selected = [c for c in contracts if c["strike"] in selected_strikes and c["option_type"] in ("CE", "PE")]
+    print(f"Fetching 1-min candles for {len(selected)} option contracts around spot reference {reference}...")
 
     records = []
-    # Index spot row
+    target_expiry = contracts[0]["expiry"]
+    # Spot row
     spot_out = pd.DataFrame({
         "Epoch": spot["epoch"],
         "Timestamp": spot["timestamp"],
         "InstrumentType": "INDEX",
         "Symbol": cfg["spot_neosymbol"],
-        "Expiry": session.isoformat(),
+        "Expiry": target_expiry,
         "OptionType": "",
         "Strike": None,
         "SpotRef": reference,
@@ -237,14 +322,8 @@ def main() -> None:
 
     spot_close_map = spot.set_index("epoch")["close"].to_dict()
 
-    for c in selected:
-        opt_raw = client.historical_data(
-            neosymbol=c["neosymbol"],
-            interval="1min",
-            from_date=session_str,
-            to_date=session_str,
-        )
-        opt_candles = parse_neo_candles(opt_raw)
+    for idx, c in enumerate(selected, 1):
+        opt_candles = fetch_candles_with_retry(client, c["neosymbol"], session_str)
         if opt_candles.empty:
             continue
 
@@ -253,7 +332,7 @@ def main() -> None:
             "Timestamp": opt_candles["timestamp"],
             "InstrumentType": "OPTION",
             "Symbol": c["symbol"],
-            "Expiry": session.isoformat(),
+            "Expiry": c["expiry"],
             "OptionType": c["option_type"],
             "Strike": c["strike"],
             "SpotRef": reference,
@@ -266,7 +345,7 @@ def main() -> None:
             "DuplicateCount": 1,
         })
         records.append(opt_out)
-        time.sleep(0.1)
+        time.sleep(0.6)  # Rate limit respect
 
     df_out = pd.concat(records, ignore_index=True)
     df_out.to_csv(out_csv, index=False)
@@ -277,11 +356,10 @@ def main() -> None:
     date_dir.mkdir(parents=True, exist_ok=True)
 
     # Save spot.csv
-    spot_df = df_out[df_out["InstrumentType"] == "INDEX"].copy()
-    if not spot_df.empty:
+    if not spot_out.empty:
         spot_cols = ["Epoch", "Timestamp", "Open", "High", "Low", "Close", "Volume", "Symbol"]
-        spot_cols = [col for col in spot_cols if col in spot_df.columns]
-        spot_df[spot_cols].to_csv(date_dir / "spot.csv", index=False)
+        spot_cols = [col for col in spot_cols if col in spot_out.columns]
+        spot_out[spot_cols].to_csv(date_dir / "spot.csv", index=False)
 
     # Save each strike's CE.csv and PE.csv
     opt_df = df_out[df_out["InstrumentType"] == "OPTION"].copy()
@@ -293,7 +371,7 @@ def main() -> None:
         for opt_type in ["CE", "PE"]:
             sub = opt_df[(opt_df["Strike"] == strike) & (opt_df["OptionType"] == opt_type)].copy()
             if not sub.empty:
-                sub_cols = [c for c in opt_cols if c in sub.columns]
+                sub_cols = [col for col in opt_cols if col in sub.columns]
                 sub[sub_cols].to_csv(st_dir / f"{opt_type}.csv", index=False)
 
     print(f"Partitioned into strike folders under: {date_dir}")

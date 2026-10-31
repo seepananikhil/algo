@@ -23,13 +23,13 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 INDICES = {
     "NIFTY50": {
-        "neosymbol": "nse_cm|26000",
+        "neosymbol": "nse_cm|Nifty 50",
         "dir": ROOT / "historical_data" / "nifty50",
         "file_prefix": "NIFTY50_1min_",
         "daily_file": "NIFTY50_daily.csv",
     },
     "SENSEX": {
-        "neosymbol": "bse_cm|1",
+        "neosymbol": "bse_cm|SENSEX",
         "dir": ROOT / "historical_data" / "sensex",
         "file_prefix": "SENSEX_1min_",
         "daily_file": "SENSEX_daily.csv",
