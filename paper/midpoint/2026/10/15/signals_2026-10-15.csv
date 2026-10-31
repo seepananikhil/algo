@@ -1,3 +1,0 @@
-detected_at,event,side,entry_time,candle_time,price,mid_point,sl,target,reason,pnl_points
-09:27:21,ENTRY,CALL,09:22,09:22,22699.9,22687.6,22679.9,22749.9,,
-09:27:21,EXIT,CALL,09:22,09:26,22732.75,22687.6,22679.9,22749.9,trail_stop,32.85

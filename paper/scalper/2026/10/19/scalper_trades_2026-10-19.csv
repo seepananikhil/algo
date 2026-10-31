@@ -1,2 +1,0 @@
-date,side,setup,pdc,c1_color,entry_time,exit_time,entry,stop,target,exit_price,pnl_points,bars_held,reason,month,equity,peak,drawdown
-2026-10-19,PUT,C1_RED_PDC_RETEST,23146.15,RED,09:21,09:22,23124.6,23144.6,23094.6,23144.6,-20.0,1,STOP,2026-10,10.0,30.0,-20.0

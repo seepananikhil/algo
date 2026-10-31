@@ -1,3 +1,0 @@
-date,side,entry_time,entry_price,exit_time,exit_price,exit_reason,points,lots,rupees
-2026-10-26,CALL,09:32,22470.5,09:32,22455.1,midpoint_close_exit,-15.4,2,-2002.0
-2026-10-26,PUT,09:35,22437.15,09:43,22458.5,reverse_after_sl_stop,-21.35,2,-2775.5

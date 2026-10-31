@@ -1,3 +1,0 @@
-date,underlying,expiry,symbol,option_type,strike,lot_size,spot_ltp,distance_from_spot,band_low,band_high,snapshot_at,received_at,quote_age_seconds,snapshot_ltp,volume_at_snapshot,source
-2026-10-22,SENSEX,2026-10-22,BSE:SENSEX26O2273500CE,CE,73500,20,73292.13,207.87,25,35,2026-10-22 15:18:00,,,28.85,,kotak_price_band_sweetspot
-2026-10-22,SENSEX,2026-10-22,BSE:SENSEX26O2273100PE,PE,73100,20,73292.13,-192.13,25,35,2026-10-22 15:18:00,,,22.80,,kotak_price_band_sweetspot

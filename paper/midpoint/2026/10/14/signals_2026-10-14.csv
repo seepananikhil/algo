@@ -1,3 +1,0 @@
-detected_at,event,side,entry_time,candle_time,price,mid_point,sl,target,reason,pnl_points
-22:35:24,ENTRY,PUT,09:27,09:27,22689.3,22708.05,22709.3,22639.3,,
-22:35:24,EXIT,PUT,09:27,09:35,22709.3,22708.05,22709.3,22639.3,stop,-20.0
