@@ -9,8 +9,9 @@ options_data/
 ├── nifty/
 │   ├── 1min/
 │   │   └── 2026/
-│   │       ├── NIFTY_options_1min_2026-10-08.csv
-│   │       └── NIFTY_options_1min_2026-10-15.csv
+│   │       └── 10/
+│   │           ├── NIFTY_options_1min_2026-10-08.csv
+│   │           └── NIFTY_options_1min_2026-10-15.csv
 │   ├── parquet/               # Parquet files built with DuckDB (not in git)
 │   │   └── NIFTY_options_master.parquet
 │   ├── scripts/
@@ -20,7 +21,8 @@ options_data/
 └── sensex/
     ├── 1min/
     │   └── 2026/
-    │       └── SENSEX_options_1min_2026-10-08.csv
+    │       └── 10/
+    │           └── SENSEX_options_1min_2026-10-08.csv
     ├── parquet/               # Parquet files built with DuckDB (not in git)
     │   └── SENSEX_options_master.parquet
     ├── scripts/

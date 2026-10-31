@@ -112,9 +112,10 @@ def update_index_for_date(client, index_name: str, session: date) -> None:
         print(f"No candles returned for {index_name} on {session}")
         return
 
-    # 1. Save Clean Daily 1-Minute CSV File (One file per trading session)
+    # 1. Save Clean Daily 1-Minute CSV File (One file per trading session in YYYY/MM/)
     year_str = str(session.year)
-    target_dir = cfg["dir"] / "1min" / year_str
+    month_str = f"{session.month:02d}"
+    target_dir = cfg["dir"] / "1min" / year_str / month_str
     target_dir.mkdir(parents=True, exist_ok=True)
     target_file = target_dir / f"{cfg['file_prefix']}{from_date}.csv"
 

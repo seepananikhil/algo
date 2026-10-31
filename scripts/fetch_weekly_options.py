@@ -176,7 +176,8 @@ def main() -> None:
     cfg = CONFIG[args.index]
     session = date.fromisoformat(args.date) if args.date else datetime.now(IST).date()
     year_str = str(session.year)
-    out_dir = cfg["output_dir"] / year_str
+    month_str = f"{session.month:02d}"
+    out_dir = cfg["output_dir"] / year_str / month_str
     out_dir.mkdir(parents=True, exist_ok=True)
     out_csv = out_dir / f"{cfg['prefix']}_options_1min_{session.isoformat()}.csv"
 

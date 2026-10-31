@@ -6,7 +6,7 @@ COPY (
     Epoch::BIGINT AS epoch, Timestamp::TIMESTAMP AS ts,
     Open::DOUBLE AS open, High::DOUBLE AS high, Low::DOUBLE AS low, Close::DOUBLE AS close,
     Volume::BIGINT AS volume
-  FROM read_csv('1min/*/*.csv', union_by_name=true, header=true)
+  FROM read_csv('1min/**/*.csv', union_by_name=true, header=true)
   ORDER BY Epoch
 ) TO 'parquet/NIFTY50_01min.parquet' (FORMAT parquet, COMPRESSION zstd);
 
