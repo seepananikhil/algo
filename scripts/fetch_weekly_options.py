@@ -229,7 +229,7 @@ def get_expiry_contracts(client, exch_seg: str, symbol_name: str, session: date,
     return contracts
 
 
-def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retries: int = 5) -> pd.DataFrame:
+def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retries: int = 6) -> pd.DataFrame:
     """Fetch candles with rate limit handling and exponential backoff."""
     for attempt in range(max_retries):
         try:
@@ -239,21 +239,24 @@ def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retri
                 from_date=session_str,
                 to_date=session_str,
             )
-            if isinstance(res, dict) and res.get("code") == 429:
-                time.sleep(2.0 + attempt * 1.5)
-                continue
+            if isinstance(res, dict):
+                code = res.get("code") or res.get("status_code")
+                msg = str(res.get("message") or res.get("error") or "").lower()
+                if code in (429, 503) or "circuit" in msg or "rate limit" in msg or "too many" in msg:
+                    wait_sec = 4.0 + attempt * 2.5
+                    time.sleep(wait_sec)
+                    continue
             df = parse_neo_candles(res)
             if not df.empty:
                 return df
         except Exception as exc:
-            if "too many" in str(exc).lower():
-                time.sleep(2.0 + attempt * 1.5)
+            err = str(exc).lower()
+            if "too many" in err or "circuit" in err or "503" in err or "429" in err:
+                time.sleep(4.0 + attempt * 2.5)
             else:
                 break
-        time.sleep(0.5)
+        time.sleep(1.0)
     return pd.DataFrame()
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--index", choices=["NIFTY", "SENSEX"], required=True)
@@ -345,7 +348,7 @@ def main() -> None:
             "DuplicateCount": 1,
         })
         records.append(opt_out)
-        time.sleep(0.6)  # Rate limit respect
+        time.sleep(1.1)  # Rate limit respect
 
     df_out = pd.concat(records, ignore_index=True)
     df_out.to_csv(out_csv, index=False)

@@ -1,0 +1,2 @@
+date,side,entry_time,entry_price,exit_time,exit_price,exit_reason,points,lots,rupees
+2026-10-15,CALL,09:22,22699.9,09:26,22732.75,trail_stop,32.85,2,4270.5

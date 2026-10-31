@@ -1,0 +1,6 @@
+{
+  "date": "2026-10-27",
+  "status": "backed_off_incomplete_strangle",
+  "trading_mode": "PAPER",
+  "reason": "Could not find both CE and PE legs within target price band"
+}
