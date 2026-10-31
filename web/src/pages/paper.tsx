@@ -179,7 +179,19 @@ function CapitalDayPanel({ date, trades, onClose, strategy = "all" }: {
                     <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
                     {trade.option}
                   </div>
-                  <div className="text-xs text-muted-foreground">{(trade.mode || "").includes("TREND") ? "Trend Catcher" : (trade.mode || "").includes("HEROZERO") ? "HeroZero" : (trade.mode || "").includes("KEYLEVEL") ? "Key Levels" : (trade.mode || "").includes("SCALP") ? "Micro Scalp (Sniper)" : "Midpoint"} · {trade.qty} qty</div>
+                  <div className="text-xs text-muted-foreground">
+                    {(trade.mode || "").includes("SENSEX")
+                      ? "Sensex Trend Runner"
+                      : (trade.mode || "").includes("TREND") || (trade.mode || "").includes("RUNNER")
+                      ? "Nifty Trend Runner"
+                      : (trade.mode || "").includes("HEROZERO")
+                      ? "HeroZero"
+                      : (trade.mode || "").includes("KEYLEVEL")
+                      ? "Key Levels"
+                      : (trade.mode || "").includes("SCALP")
+                      ? "Micro Scalp (Sniper)"
+                      : "Midpoint"} · {trade.qty} qty
+                  </div>
                 </TableCell>
                 <TableCell className="tabular-nums">
                   <div>{trade.entry}</div>
