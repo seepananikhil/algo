@@ -1,0 +1,5 @@
+date,trade_id,strategy,event,time,side,level,break_time,confirm_time,symbol,expiry,qty,spot_price,option_price,capital_used,spot_stop,spot_target,option_target,exit_spot,exit_option,pnl_rs,return_pct,reason,details,source
+2026-10-12,key_levels|2026-10-12|10:10|22500|CALL|historical_option_replay,key_levels,ENTRY,10:10:00,CALL,22500,09:55,10:05,NSE:NIFTY26O1322600CE,2026-10-13,65,22502.2,54.1,3516.5,22490,22552.2,70.33,,,,,,,historical_option_replay
+2026-10-12,key_levels|2026-10-12|10:10|22500|CALL|historical_option_replay,key_levels,EXIT,10:11:00,CALL,22500,,,NSE:NIFTY26O1322600CE,2026-10-13,65,,,,,,,22490,50.9,-208.0,-5.91,spot_stop_zone,,historical_option_replay
+2026-10-12,key_levels|2026-10-12|10:40|22500|PUT|historical_option_replay,key_levels,ENTRY,10:40:00,PUT,22500,10:25,10:35,NSE:NIFTY26O1322400PE,2026-10-13,65,22482.5,60.3,3919.5,22510,22432.5,78.39,,,,,,,historical_option_replay
+2026-10-12,key_levels|2026-10-12|10:40|22500|PUT|historical_option_replay,key_levels,EXIT,10:53:00,PUT,22500,,,NSE:NIFTY26O1322400PE,2026-10-13,65,,,,,,,22434.45,78.39,1175.85,30.0,premium_return_30pct,,historical_option_replay

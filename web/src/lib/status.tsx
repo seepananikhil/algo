@@ -1,9 +1,9 @@
 import { createContext, useContext, type ReactNode } from "react"
 import { usePoll, type Status } from "@/lib/api"
 
-type Ctx = { status: Status | null; error: string | null; reload: () => Promise<void> }
+type Ctx = { status: Status | null; error: string | null; reload: () => Promise<boolean> }
 
-const StatusContext = createContext<Ctx>({ status: null, error: null, reload: async () => {} })
+const StatusContext = createContext<Ctx>({ status: null, error: null, reload: async () => false })
 
 export function StatusProvider({ children }: { children: ReactNode }) {
   const { data, error, reload } = usePoll<Status>("/api/status", 3000)

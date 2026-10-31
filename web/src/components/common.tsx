@@ -30,26 +30,24 @@ export function RuleTradesTable({ trades, empty = "No trades." }: { trades: Rule
       <TableHeader>
         <TableRow>
           <TableHead>Side</TableHead>
-          <TableHead>Entry</TableHead>
-          <TableHead className="text-right">Price</TableHead>
-          <TableHead className="text-right">SL</TableHead>
-          <TableHead className="text-right">Target</TableHead>
-          <TableHead>Exit</TableHead>
-          <TableHead className="text-right">Price</TableHead>
+          <TableHead>In</TableHead>
+          <TableHead>Out</TableHead>
           <TableHead>Reason</TableHead>
           <TableHead className="text-right">Points</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {trades.map((t, i) => (
-          <TableRow key={i}>
+          <TableRow key={i} className="bg-transparent hover:bg-muted/20">
             <TableCell><SideBadge side={t.side} /></TableCell>
-            <TableCell className="tabular-nums">{t.entry}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(t.entry_price)}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(t.sl)}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(t.target)}</TableCell>
-            <TableCell className="tabular-nums">{t.exit || "—"}</TableCell>
-            <TableCell className="text-right tabular-nums">{fmtNum(t.exit_price)}</TableCell>
+            <TableCell className="tabular-nums">
+              <div>{t.entry}</div>
+              <div className="text-xs text-muted-foreground">{fmtNum(t.entry_price)} · SL {fmtNum(t.sl)}</div>
+            </TableCell>
+            <TableCell className="tabular-nums">
+              <div>{t.exit || "—"}</div>
+              <div className="text-xs text-muted-foreground">{fmtNum(t.exit_price)} · TGT {fmtNum(t.target)}</div>
+            </TableCell>
             <TableCell className="text-xs text-muted-foreground">
               {t.reason === "open" ? <Badge variant="outline">OPEN</Badge> : prettyReason(t.reason)}
             </TableCell>

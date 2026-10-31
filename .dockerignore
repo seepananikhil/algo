@@ -1,0 +1,10 @@
+__pycache__/
+*.pyc
+.git/
+.vscode/
+web/node_modules/
+web/dist/
+*.log
+captured_data/**/*.csv
+captured_data/**/*.json
+captured_data/**/*.log

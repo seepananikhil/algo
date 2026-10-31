@@ -4,7 +4,7 @@ export type Status = {
   now: string
   token: { valid: boolean; generated_at_utc: string | null }
   capture_running: boolean
-  auto_start_capture?: boolean
+  market_open_day?: boolean
   mode: "PAPER" | "LIVE"
   lots: number
   daily_loss_limit: number | null
@@ -34,6 +34,8 @@ export type Setup = {
   mid?: number
   buffer?: number
   range_fixed_at?: string
+  key_levels?: { price: number; distance: number; nearby: boolean }[]
+  key_breaks?: { time: string; price: number; side: "CALL" | "PUT"; confirmed: boolean; distance: number }[]
   armed?: { side: "CALL" | "PUT"; candle: string; level: number; stop: number }
 }
 
@@ -43,6 +45,11 @@ export type DayData = {
   forming: Partial<Candle>
   setup: Setup
   trades: RuleTrade[]
+  signals?: Signal[]
+  paper_trades?: PaperTrade[]
+  option_trades?: OptionTrade[]
+  first_paper_date?: string | null
+  execution_mode?: "PAPER" | "LIVE"
 }
 
 export type Signal = Record<string, string>
@@ -90,6 +97,8 @@ export type OptionTrade = {
   sell_price: number
   sell_value_rs: number
   pnl_rs: number
+  charges_rs?: number
+  net_rs?: number
   nifty_points: number
   exit_reason: string
   mode: string
@@ -149,6 +158,158 @@ export type PaperReport = {
   daily: { date: string; trades: number; gross_rs: number; net_rs: number; points: number }[]
 }
 
+export type KeyLevelTrade = {
+  date: string
+  side: "CALL" | "PUT"
+  level: number
+  break_time: string
+  confirm_time: string
+  entry_time: string
+  entry_price: number
+  stop: number
+  target: number
+  exit_time: string
+  exit_price: number | null
+  pnl_points: number
+  exit_reason: string
+  status: "open" | "closed"
+  source?: string
+}
+
+export type KeyLevelBook = {
+  summary: {
+    trades: number
+    open_trades: number
+    wins: number
+    losses: number
+    win_rate_pct: number
+    net_points: number
+    avg_points: number
+    max_drawdown_points: number
+  }
+  trades: KeyLevelTrade[]
+  daily: { date: string; trades: number; open_trades: number; net_points: number }[]
+}
+
+export type OptionPaperTrade = {
+  date: string
+  strategy: "midpoint" | "key_levels"
+  side: "CALL" | "PUT"
+  level: number | null
+  break_time: string
+  confirm_time: string
+  entry_time: string
+  symbol: string
+  expiry: string
+  qty: number
+  spot_entry: number
+  option_entry: number
+  capital_used: number
+  spot_target: number
+  option_target: number
+  exit_time: string
+  exit_spot: number | null
+  exit_option: number | null
+  pnl_rs: number
+  return_pct: number
+  charges_rs?: number
+  net_pnl_rs?: number
+  net_return_pct?: number
+  source?: string
+  reason: string
+  status: "open" | "closed"
+}
+
+export type OptionPaperBook = {
+  summary: {
+    trades: number
+    open_trades: number
+    wins: number
+    losses: number
+    win_rate_pct: number
+    gross_pnl_rs: number
+    estimated_charges_rs: number
+    net_pnl_rs: number
+    avg_return_pct: number
+    max_drawdown_rs: number
+  }
+  trades: OptionPaperTrade[]
+}
+
+export function optionPaperTradeToFill(trade: OptionPaperTrade): OptionTrade {
+  const exitOption = trade.exit_option ?? trade.option_entry
+  const exitSpot = trade.exit_spot ?? trade.spot_entry
+  return {
+    date: trade.date,
+    side: trade.side,
+    option: trade.symbol,
+    qty: trade.qty,
+    entry: trade.entry_time.slice(0, 5),
+    nifty_in: trade.spot_entry,
+    buy_price: trade.option_entry,
+    buy_value_rs: trade.capital_used,
+    exit: trade.exit_time.slice(0, 5),
+    nifty_out: exitSpot,
+    sell_price: exitOption,
+    sell_value_rs: exitOption * trade.qty,
+    pnl_rs: trade.pnl_rs,
+    charges_rs: trade.charges_rs,
+    net_rs: trade.net_pnl_rs,
+    nifty_points: trade.side === "CALL" ? exitSpot - trade.spot_entry : trade.spot_entry - exitSpot,
+    exit_reason: trade.status === "open" ? "open" : trade.reason,
+    mode: `KEYLEVEL ${trade.source === "historical_option_replay" ? "HISTORICAL PAPER REPLAY" : trade.source === "key_levels_live" ? "LIVE" : "PAPER"}`,
+    level: trade.level ?? undefined,
+    trigger_label: `Key Levels · ${trade.source ?? "paper"}`,
+  }
+}
+
+export type KeyLevelReport = {
+  today: string
+  capture_running: boolean
+  settings: {
+    key_level_step: number
+    key_level_break_buffer: number
+    key_level_confirm_candles: number
+    key_level_target_points: number
+  }
+  paper: KeyLevelBook
+  today_replay: KeyLevelBook
+  today_paper: KeyLevelBook
+  option_paper: OptionPaperBook
+  today_option_paper: OptionPaperBook
+  backtest: KeyLevelBook
+}
+
+export type KeyLevelDay = {
+  date: string
+  timeframe_minutes: 5
+  candles: Candle[]
+  trades: RuleTrade[]
+  key_level_zone: { level: number; buffer: number } | null
+}
+
+export type CapitalSummary = {
+  starting_capital: number
+  ending_capital: number
+  net_rs: number
+  return_pct: number
+  max_drawdown_rs: number
+  peak_deployed_rs: number
+  skipped_trades: number
+}
+
+export type CapitalReport = {
+  summary: CapitalSummary
+  trades: PaperReport["trades"]
+  daily: { date: string; trades: number; net_rs: number }[]
+  curve: {
+    timestamp: string
+    label: string
+    equity: number
+    drawdown: number
+  }[]
+}
+
 export type Backtest = {
   summary: {
     from: string
@@ -176,11 +337,18 @@ export type Settings = {
   daily_loss_limit: number
   strike_offset: number
   option_target_pct: number
-  auto_start_capture: boolean
+  minimum_live_funds: number
+  key_levels_lots: number
+  hero_zero_lots: number
+  key_levels_live_trading: boolean
+  midpoint_live_trading: boolean
+  hero_zero_live_trading: boolean
   live_trading: boolean
   capture_running: boolean
   restart_required?: boolean
 }
+
+export type FundsStatus = { ok: true; available_equity_funds: number } | { ok: false; error: string }
 
 export async function getJSON<T>(url: string): Promise<T> {
   const r = await fetch(url, { cache: "no-store" })
@@ -207,30 +375,50 @@ export function usePoll<T>(url: string | null, intervalMs = 0) {
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const urlRef = useRef(url)
+  const requestId = useRef(0)
   urlRef.current = url
 
   const reload = useCallback(async () => {
     const u = urlRef.current
-    if (!u) return
+    if (!u) return false
+    const id = ++requestId.current
     try {
       const d = await getJSON<T>(u)
-      if (urlRef.current === u) {
+      if (urlRef.current === u && requestId.current === id) {
         setData(d)
         setError(null)
+        return true
       }
+      return false
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      if (urlRef.current === u && requestId.current === id) {
+        setError(e instanceof Error ? e.message : String(e))
+      }
+      return false
     } finally {
-      setLoading(false)
+      if (urlRef.current === u && requestId.current === id) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
-    setLoading(true)
-    reload()
-    if (!url || !intervalMs) return
-    const id = setInterval(reload, intervalMs)
-    return () => clearInterval(id)
+    requestId.current += 1
+    setData(null)
+    setError(null)
+    setLoading(Boolean(url))
+    if (!url) return
+    let active = true
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      const succeeded = await reload()
+      if (!active || (succeeded && !intervalMs)) return
+      timer = setTimeout(poll, succeeded ? intervalMs : 3000)
+    }
+    void poll()
+    return () => {
+      active = false
+      if (timer) clearTimeout(timer)
+      requestId.current += 1
+    }
   }, [url, intervalMs, reload])
 
   return { data, error, loading, reload }

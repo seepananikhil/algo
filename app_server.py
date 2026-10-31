@@ -24,7 +24,21 @@ from urllib.parse import parse_qs, urlparse
 
 import pandas as pd
 
-from midpoint_strategy import MIDPOINT_BUFFER_POINTS, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
+from midpoint_strategy import MIDPOINT_BUFFER_POINTS, PAPER_LOTS, PAPER_STARTING_CAPITAL, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
+from key_level_strategy import aggregate_five_minute, backtest_key_levels, read_paper_events, settings_from_config as key_level_settings, summarize_key_level_trades
+from option_paper import read_option_paper_trades
+
+
+def available_equity_funds(response: dict | None) -> float:
+    if not isinstance(response, dict):
+        return 0.0
+    fund_limit = response.get("fund_limit", [])
+    if isinstance(fund_limit, list):
+        for item in fund_limit:
+            if item.get("title") == "Available Balance":
+                return float(item.get("equityAmount", 0.0))
+    return float(response.get("available_balance", 0.0))
+
 
 ROOT = Path(__file__).resolve().parent
 LIVE_DIR = ROOT / "paper" / "midpoint"
@@ -35,17 +49,22 @@ UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
 MASTER_CSV = ROOT / "historical_data" / "nifty50" / "daily" / "NIFTY50_daily.csv"
 ARCHIVE_CSV = ROOT / "historical_data" / "sensex" / "daily" / "SENSEX_daily.csv"
+PAPER_TRADES_CSV = LIVE_DIR / "paper_trades.csv"
 HERO_ZERO_DIR = ROOT / "paper" / "hero_zero"
-HOST, PORT = "127.0.0.1", 8090
+KEY_LEVEL_DIR = ROOT / "paper" / "key_levels"
+KEY_LEVEL_EVENT_FILE = KEY_LEVEL_DIR / "key_level_paper_events.csv"
+OPTION_PAPER_EVENT_FILE = KEY_LEVEL_DIR / "2026" / "10" / "09" / "key_level_option_paper_events.csv"
+HOST, PORT = os.environ.get("HOST", "127.0.0.1"), int(os.environ.get("PORT", "8090"))
 IST = timezone(timedelta(hours=5, minutes=30))
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _token_cache = {"at": 0.0, "mtime": None, "value": None}
 _master_cache = {"mtime": None, "df": None}
 _backtest_cache = {"mtime": None, "value": None}
+_key_level_backtest_cache = {"key": None, "value": None}
 _cache_lock = threading.Lock()
 _login_proc = {"proc": None}
 _capture = {"auto_started": None, "stopped_by_user": None}
-AUTO_START_WINDOW = ("09:00", "09:55")
+AUTO_START_WINDOW = ("09:00", "15:29")
 SENSEX_COLLECTOR_START = (16, 5)
 SENSEX_COLLECTOR_END_HOUR = 20
 SENSEX_COLLECTOR_RETRY_SECONDS = 15 * 60
@@ -54,16 +73,24 @@ HERO_ZERO_END = (15, 31)
 
 # Only these config keys are exposed/editable from the UI (never app_id/secret_key).
 EDITABLE_SETTINGS = {
-    "lots": (int, 1, 20),
+    "lots": (int, 1, PAPER_LOTS),
     "daily_loss_limit": (int, 100, 100000),
     "strike_offset": (int, 0, 500),
     "option_target_pct": (int, 0, 200),
-    "auto_start_capture": (bool, None, None),
+    "hero_zero_live_trading": (bool, None, None),
+    "minimum_live_funds": (int, 10000, 10000000),
+    "key_levels_live_trading": (bool, None, None),
+    "key_levels_lots": (int, 1, PAPER_LOTS),
+    "hero_zero_lots": (int, 1, PAPER_LOTS),
 }
 
 
 def today() -> str:
     return datetime.now(IST).strftime("%Y-%m-%d")
+
+
+def is_market_weekday(now: datetime | None = None) -> bool:
+    return (now or datetime.now(IST)).weekday() < 5
 
 
 def read_csv_rows(path: Path) -> list:
@@ -85,7 +112,12 @@ def token_status() -> dict:
         try:
             from fyers_apiv3 import fyersModel
 
-            r = fyersModel.FyersModel(client_id=tok["app_id"], token=tok["access_token"], is_async=False, log_path="/tmp").get_profile()
+            r = fyersModel.FyersModel(
+                client_id=tok["app_id"],
+                token=tok["access_token"],
+                is_async=False,
+                log_path=str(TMP_DIR),
+            ).get_profile()
             value["valid"] = r.get("s") == "ok"
         except Exception:
             pass
@@ -93,11 +125,40 @@ def token_status() -> dict:
     return value
 
 
+def _process_pids_by_pattern(pattern: str) -> list[int]:
+    """Return PIDs matching a command pattern, cross-platform."""
+    if os.name == "nt":
+        escaped = pattern.replace("'", "''")
+        python_name = Path(sys.executable).name.replace("'", "''")
+        ps = (
+            "Get-CimInstance Win32_Process | "
+            "Where-Object { $_.Name -eq '%s' -and $_.CommandLine -match [regex]::Escape('%s') } | "
+            "Select-Object -ExpandProperty ProcessId"
+        ) % (python_name, escaped)
+        result = subprocess.run(["powershell", "-NoProfile", "-Command", ps], capture_output=True, text=True, check=False)
+        pids = []
+        for line in result.stdout.splitlines():
+            text = line.strip()
+            if text and text.isdigit():
+                pids.append(int(text))
+        return pids
+
+    result = subprocess.run(["pgrep", "-f", pattern], capture_output=True, text=True, check=False)
+    pids = []
+    for line in result.stdout.splitlines():
+        text = line.strip()
+        if text and text.isdigit():
+            pids.append(int(text))
+    return pids
+
+
 def capture_running() -> bool:
-    return subprocess.run(["pgrep", "-f", "fyers_nifty_capture"], capture_output=True).returncode == 0
+    return bool(_process_pids_by_pattern("fyers_nifty_capture"))
 
 
 def start_capture() -> dict:
+    if not is_market_weekday():
+        return {"capture_running": capture_running(), "started": False, "market_closed": True}
     if capture_running():
         return {"capture_running": True, "started": False}
     LIVE_DIR.mkdir(parents=True, exist_ok=True)
@@ -105,31 +166,33 @@ def start_capture() -> dict:
     if log_path.exists() and datetime.fromtimestamp(log_path.stat().st_mtime, IST).strftime("%Y-%m-%d") != today():
         log_path.replace(LIVE_DIR / "capture.prev.log")
     log = log_path.open("a", encoding="utf-8")
-    subprocess.Popen(
-        [sys.executable, "-u", str(ROOT / "fyers_nifty_capture.py")],
-        cwd=ROOT,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        start_new_session=True,  # keeps running if the dashboard restarts
-        # Restore Ctrl+C so stop_capture can shut it down cleanly (the server may have inherited SIG_IGN).
-        preexec_fn=lambda: signal.signal(signal.SIGINT, signal.SIG_DFL),
-    )
+    kwargs = {
+        "cwd": ROOT,
+        "stdout": log,
+        "stderr": subprocess.STDOUT,
+        "start_new_session": True,
+    }
+    if os.name != "nt":
+        kwargs["preexec_fn"] = lambda: signal.signal(signal.SIGINT, signal.SIG_DFL)
+    subprocess.Popen([sys.executable, "-u", str(ROOT / "fyers_nifty_capture.py")], **kwargs)
     _capture["stopped_by_user"] = None
     return {"capture_running": True, "started": True}
 
 
 def stop_capture() -> dict:
-    out = subprocess.run(["pgrep", "-f", "fyers_nifty_capture"], capture_output=True, text=True).stdout.split()
-    pids = [int(p) for p in out if p.isdigit()]
+    pids = _process_pids_by_pattern("fyers_nifty_capture")
     for pid in pids:
-        os.kill(pid, signal.SIGINT)  # graceful: exits open position, writes the day's summary
+        try:
+            os.kill(pid, signal.SIGINT)
+        except (ProcessLookupError, OSError):
+            pass
 
     def force_later() -> None:
         time.sleep(15)
         for pid in pids:
             try:
                 os.kill(pid, signal.SIGTERM)
-            except ProcessLookupError:
+            except (ProcessLookupError, OSError):
                 pass
 
     threading.Thread(target=force_later, daemon=True).start()
@@ -138,14 +201,20 @@ def stop_capture() -> dict:
 
 
 def auto_start_loop() -> None:
-    """Start the capture on weekdays inside AUTO_START_WINDOW unless disabled or stopped by the user today."""
+    """Start on weekdays in the configured window and stop any capture carried into weekends."""
     while True:
         try:
             now = datetime.now(IST)
             day = now.strftime("%Y-%m-%d")
-            in_window = now.weekday() < 5 and AUTO_START_WINDOW[0] <= now.strftime("%H:%M") <= AUTO_START_WINDOW[1]
-            enabled = read_config().get("auto_start_capture", True)
-            if in_window and enabled and _capture["stopped_by_user"] != day and _capture["auto_started"] != day:
+            if not is_market_weekday(now):
+                if capture_running() and _capture.get("weekend_stop_requested") != day:
+                    stop_capture()
+                    _capture["weekend_stop_requested"] = day
+                    print(f"[{now:%H:%M:%S}] stopped capture for weekend")
+                time.sleep(30)
+                continue
+            in_window = AUTO_START_WINDOW[0] <= now.strftime("%H:%M") <= AUTO_START_WINDOW[1]
+            if in_window and _capture["stopped_by_user"] != day and _capture["auto_started"] != day:
                 if not capture_running():
                     start_capture()
                     print(f"[{now:%H:%M:%S}] auto-started capture")
@@ -209,9 +278,7 @@ def hero_zero_capture_loop() -> None:
         due = now.weekday() < 5 and (now.hour, now.minute) >= HERO_ZERO_START and (now.hour, now.minute) < HERO_ZERO_END
         status_path = output_dir / f"hero_zero_status_{session}.json"
         try:
-            process = subprocess.run(
-                ["pgrep", "-f", "[f]yers_hero_zero_capture.py"], capture_output=True, text=True
-            ).stdout.strip()
+            process = bool(_process_pids_by_pattern("fyers_hero_zero_capture.py"))
             retry_due = last_attempt_date != session or time.time() - last_attempt_at >= 120
             if due and not status_path.exists() and not process and retry_due:
                 output_dir.mkdir(parents=True, exist_ok=True)
@@ -350,21 +417,62 @@ def read_config() -> dict:
 def public_settings() -> dict:
     cfg = read_config()
     out = {k: cfg.get(k) for k in EDITABLE_SETTINGS}
-    out["auto_start_capture"] = bool(cfg.get("auto_start_capture", True))
-    out["live_trading"] = bool(cfg.get("live_trading"))
+    out["lots"] = int(cfg.get("lots", PAPER_LOTS))
+    out["daily_loss_limit"] = cfg.get("daily_loss_limit") if cfg.get("daily_loss_limit") is not None else 1000
+    out["strike_offset"] = cfg.get("strike_offset") if cfg.get("strike_offset") is not None else 100
+    out["option_target_pct"] = cfg.get("option_target_pct") if cfg.get("option_target_pct") is not None else 10
+    out["minimum_live_funds"] = int(cfg.get("minimum_live_funds") or 25000)
+    out["midpoint_live_trading"] = bool(cfg.get("midpoint_live_trading", cfg.get("live_trading", False)))
+    out["hero_zero_live_trading"] = bool(cfg.get("hero_zero_live_trading", False))
+    out["key_levels_live_trading"] = bool(cfg.get("key_levels_live_trading", False))
+    out["key_levels_lots"] = int(cfg.get("key_levels_lots", 1))
+    out["hero_zero_lots"] = int(cfg.get("hero_zero_lots", 1))
+    out.update(key_level_settings(cfg))
+    out["live_trading"] = out["midpoint_live_trading"]
     out["capture_running"] = capture_running()
     return out
+
+
+def broker_funds() -> dict:
+    if not TOKEN_FILE.exists():
+        return {"ok": False, "error": "Fyers token is missing; log in first."}
+    try:
+        from fyers_apiv3 import fyersModel
+
+        tok = json.loads(TOKEN_FILE.read_text(encoding="utf-8"))
+        client = fyersModel.FyersModel(
+            client_id=tok["app_id"],
+            token=tok["access_token"],
+            is_async=False,
+            log_path=str(TMP_DIR),
+        )
+        response = client.funds()
+        available = available_equity_funds(response)
+        if available is None:
+            message = response.get("message") or "Fyers did not return an available equity balance."
+            return {"ok": False, "error": message}
+        return {"ok": True, "available_equity_funds": round(available, 2)}
+    except Exception as exc:
+        return {"ok": False, "error": f"Unable to fetch Fyers funds: {exc}"}
 
 
 def update_settings(body: dict) -> tuple:
     cfg = read_config()
     for key, value in body.items():
-        if key == "live_trading":
+        if key in ("live_trading", "midpoint_live_trading"):
             if not isinstance(value, bool):
-                return {"error": "live_trading must be true/false"}, 400
+                return {"error": f"{key} must be true/false"}, 400
             if value and body.get("confirm") != "LIVE":
-                return {"error": "type LIVE to confirm real-money trading"}, 400
+                return {"error": "type LIVE to confirm Midpoint real-money trading"}, 400
+            cfg["midpoint_live_trading"] = value
             cfg["live_trading"] = value
+        elif key in ("hero_zero_live_trading", "key_levels_live_trading"):
+            label = "HeroZero" if key == "hero_zero_live_trading" else "Key Levels"
+            if not isinstance(value, bool):
+                return {"error": f"{key} must be true/false"}, 400
+            if value and body.get("confirm") != "LIVE":
+                return {"error": f"type LIVE to confirm {label} real-money trading"}, 400
+            cfg[key] = value
         elif key in EDITABLE_SETTINGS:
             kind, lo, hi = EDITABLE_SETTINGS[key]
             if kind is bool:
@@ -381,7 +489,7 @@ def update_settings(body: dict) -> tuple:
     tmp.chmod(0o600)
     tmp.replace(CONFIG_FILE)
     out = public_settings()
-    out["restart_required"] = out["capture_running"]
+    out["restart_required"] = out["capture_running"] or bool(_process_pids_by_pattern("fyers_hero_zero_capture.py"))
     return out, 200
 
 
@@ -454,6 +562,41 @@ def setup_info(df: pd.DataFrame) -> dict:
         return {}
     s = day_setup(df, list(df.index))
     out = {"so_far_high": float(df["high"].max()), "so_far_low": float(df["low"].min())}
+    session_low = float(df["low"].min())
+    session_high = float(df["high"].max())
+    first_open = float(df["open"].iloc[0])
+    first_high = float(df["high"].iloc[0])
+    first_low = float(df["low"].iloc[0])
+    level_start = int((first_low - 10) // 500) * 500
+    level_end = int((first_high + 10) // 500) * 500
+    level_prices = list(range(level_start, level_end + 500, 500))
+    level_distances = {
+        level: max(first_low - level, 0.0, level - first_high)
+        for level in level_prices
+    }
+    out["key_levels"] = [
+        {"price": level, "distance": round(level_distances[level], 2), "nearby": level_distances[level] <= 10}
+        for level in level_prices
+    ]
+    nearby_levels = [level for level in level_prices if level_distances[level] <= 10]
+    breaks = []
+    for idx in range(min(len(df), 3)):
+        row = df.iloc[idx]
+        previous_close = float(df["close"].iloc[idx - 1]) if idx else first_open
+        close = float(row["close"])
+        for level in nearby_levels:
+            side = "CALL" if previous_close <= level < close else "PUT" if previous_close >= level > close else None
+            if side:
+                next_close = float(df["close"].iloc[idx + 1]) if idx + 1 < len(df) else None
+                confirmed = next_close is not None and (next_close >= level if side == "CALL" else next_close <= level)
+                breaks.append({
+                    "time": row["timestamp"].strftime("%H:%M"),
+                    "price": level,
+                    "side": side,
+                    "confirmed": confirmed,
+                    "distance": round(level_distances[level], 2),
+                })
+    out["key_breaks"] = breaks
     if s:
         out.update({
             "range_high": s["ref_high"],
@@ -475,6 +618,8 @@ def setup_info(df: pd.DataFrame) -> dict:
 
 def status() -> dict:
     cfg = read_config()
+    live_orders = read_csv_rows(LIVE_DIR / f"live_orders_{today()}.csv")
+    auto_live_started = any(row.get("mode") == "LIVE" for row in live_orders)
     secs = LIVE_DIR / f"nifty_1s_{today()}.csv"
     last_tick = None
     if secs.exists():
@@ -484,21 +629,24 @@ def status() -> dict:
             last_tick = {"time": ts[11:], "ltp": float(ltp)}
     return {
         "now": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        "market_open_day": is_market_weekday(),
         "token": token_status(),
         "capture_running": capture_running(),
-        "auto_start_capture": bool(cfg.get("auto_start_capture", True)),
-        "mode": "LIVE" if cfg.get("live_trading") else "PAPER",
-        "lots": cfg.get("lots", 1),
+        "mode": "LIVE" if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or cfg.get("hero_zero_live_trading") or cfg.get("key_levels_live_trading") or auto_live_started else "PAPER",
+        "lots": int(cfg.get("lots", PAPER_LOTS)) if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or auto_live_started else PAPER_LOTS,
         "daily_loss_limit": cfg.get("daily_loss_limit"),
         "kill_switch": STOP_FILE.exists(),
         "last_tick": last_tick,
     }
 
 
-def option_trades() -> list:
-    """One row per option trade (BUY paired with the next SELL), all days."""
+def option_trades(date: str | None = None) -> list:
+    """One row per option trade (BUY paired with the next SELL), optionally for one date."""
     out = []
-    for path in sorted(LIVE_DIR.glob("live_orders_*.csv")):
+    paths = [LIVE_DIR / f"live_orders_{date}.csv"] if date else sorted(LIVE_DIR.glob("live_orders_*.csv"))
+    for path in paths:
+        if not path.exists():
+            continue
         date = path.stem.replace("live_orders_", "")
         open_buy = None
         for r in read_csv_rows(path):
@@ -533,6 +681,77 @@ def option_trades() -> list:
     return out
 
 
+def option_paper_fill(trade: dict, strategy: str) -> dict:
+    side = trade["side"]
+    spot_points = trade["exit_spot"] - trade["spot_entry"] if side == "CALL" else trade["spot_entry"] - trade["exit_spot"]
+    if strategy == "key_levels":
+        mode = "KEYLEVEL HISTORICAL PAPER REPLAY" if trade.get("source") == "historical_option_replay" else "KEYLEVEL PAPER"
+        label = "Key Levels"
+    else:
+        mode = "MIDPOINT PAPER SIMULATION"
+        label = "Midpoint"
+    return {
+        "date": trade["date"],
+        "side": side,
+        "option": trade["symbol"],
+        "qty": trade["qty"],
+        "entry": trade["entry_time"][:5],
+        "nifty_in": trade["spot_entry"],
+        "buy_price": trade["option_entry"],
+        "buy_value_rs": round(trade["capital_used"], 2),
+        "exit": trade["exit_time"][:5],
+        "nifty_out": trade["exit_spot"],
+        "sell_price": trade["exit_option"],
+        "sell_value_rs": round(trade["exit_option"] * trade["qty"], 2),
+        "pnl_rs": trade["pnl_rs"],
+        "nifty_points": round(spot_points, 2),
+        "exit_reason": trade["reason"],
+        "mode": mode,
+        "spot_at_entry": trade["spot_entry"],
+        "level": trade["level"] if strategy == "key_levels" else None,
+        "trigger_label": f"{label} · {trade.get('source') or 'paper'}",
+    }
+
+
+def midpoint_option_trades(date: str | None = None) -> list:
+    """Use actual Midpoint fills where available; otherwise include closed quote simulations."""
+    actual = option_trades(date)
+    actual_keys = {(trade["date"], trade["side"], trade["entry"]) for trade in actual}
+    paper = [
+        trade for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+        if trade["strategy"] == "midpoint" and trade["status"] == "closed"
+        and (date is None or trade["date"] == date)
+    ]
+    fallback = [
+        option_paper_fill(trade, "midpoint") for trade in paper
+        if (trade["date"], trade["side"], trade["entry_time"][:5]) not in actual_keys
+    ]
+    return actual + fallback
+
+
+def key_level_option_trades(date: str | None = None) -> list:
+    """Closed Key Levels paper/replay entries in the shared option-fill shape."""
+    out = []
+    for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE):
+        if trade["strategy"] != "key_levels" or trade["status"] != "closed" or (date and trade["date"] != date):
+            continue
+        out.append(option_paper_fill(trade, "key_levels"))
+    return out
+
+
+def key_level_option_paper_rows(date: str | None = None) -> list:
+    trades = [trade for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE) if trade["strategy"] == "key_levels"]
+    if date:
+        trades = [trade for trade in trades if trade["date"] == date]
+    return _option_paper_book(trades)["trades"]
+
+
+def paper_trades_for_day(date: str) -> tuple[list, str | None]:
+    rows = read_csv_rows(PAPER_TRADES_CSV)
+    first_date = min((row.get("date", "") for row in rows if row.get("date")), default=None)
+    return [row for row in rows if row.get("date") == date], first_date
+
+
 def est_charges(buy_value: float, sell_value: float) -> float:
     """Approximate Fyers/NSE option-buy round-trip costs (rates may change; treat as an estimate)."""
     brokerage = 40.0  # Rs 20 per executed order
@@ -546,7 +765,7 @@ def est_charges(buy_value: float, sell_value: float) -> float:
 
 def paper_report() -> dict:
     """Paper/live option trades with estimated charges, net equity curve and drawdown."""
-    return build_paper_report(option_trades())
+    return build_paper_report(midpoint_option_trades())
 
 
 def hero_zero_option_trades() -> list:
@@ -580,7 +799,8 @@ def hero_zero_option_trades() -> list:
                 "nifty_points": 0.0,
                 "exit_reason": row["exit_reason"],
                 "mode": (
-                    "HEROZERO REPLAY · SPOT UNVERIFIED" if "spot_stale" in row.get("source", "")
+                    "HEROZERO LIVE" if row.get("source") == "hero_zero_live"
+                    else "HEROZERO REPLAY · SPOT UNVERIFIED" if "spot_stale" in row.get("source", "")
                     else "HEROZERO 1M REPLAY" if "historical_1m_replay" in row.get("source", "")
                     else "HEROZERO PAPER"
                 ),
@@ -590,6 +810,90 @@ def hero_zero_option_trades() -> list:
 
 def hero_zero_report() -> dict:
     return build_paper_report(hero_zero_option_trades())
+
+
+def _key_level_book(trades: list[dict]) -> dict:
+    daily: dict = {}
+    for trade in trades:
+        day = daily.setdefault(trade["date"], {"date": trade["date"], "trades": 0, "open_trades": 0, "net_points": 0.0})
+        if trade["status"] == "closed":
+            day["trades"] += 1
+            day["net_points"] += float(trade["pnl_points"])
+        else:
+            day["open_trades"] += 1
+    return {
+        "summary": summarize_key_level_trades(trades),
+        "trades": trades,
+        "daily": [{**row, "net_points": round(row["net_points"], 2)} for row in sorted(daily.values(), key=lambda item: item["date"])],
+    }
+
+
+def _option_paper_book(trades: list[dict]) -> dict:
+    closed = [trade for trade in trades if trade["status"] == "closed"]
+    net_pnl = []
+    for trade in closed:
+        buy_value = float(trade["option_entry"]) * int(trade["qty"])
+        sell_value = float(trade["exit_option"]) * int(trade["qty"])
+        charges = est_charges(buy_value, sell_value)
+        net = round(float(trade["pnl_rs"]) - charges, 2)
+        trade["charges_rs"] = charges
+        trade["net_pnl_rs"] = net
+        trade["net_return_pct"] = round(net / float(trade["capital_used"]) * 100, 2) if trade["capital_used"] else 0.0
+        net_pnl.append(net)
+    wins = sum(value > 0 for value in net_pnl)
+    equity = peak = max_drawdown = 0.0
+    for value in net_pnl:
+        equity += value
+        peak = max(peak, equity)
+        max_drawdown = min(max_drawdown, equity - peak)
+    return {
+        "summary": {
+            "trades": len(closed),
+            "open_trades": len(trades) - len(closed),
+            "wins": wins,
+            "losses": len(closed) - wins,
+            "win_rate_pct": round(wins * 100 / len(closed), 2) if closed else 0.0,
+            "gross_pnl_rs": round(sum(float(trade["pnl_rs"]) for trade in closed), 2),
+            "estimated_charges_rs": round(sum(float(trade["charges_rs"]) for trade in closed), 2),
+            "net_pnl_rs": round(sum(net_pnl), 2),
+            "avg_return_pct": round(sum(float(trade["net_return_pct"]) for trade in closed) / len(closed), 2) if closed else 0.0,
+            "max_drawdown_rs": round(max_drawdown, 2),
+        },
+        "trades": trades,
+    }
+
+
+def key_level_report() -> dict:
+    settings = key_level_settings(read_config())
+    paper_trades = read_paper_events(KEY_LEVEL_EVENT_FILE)
+    option_trades = [
+        trade for trade in read_option_paper_trades(OPTION_PAPER_EVENT_FILE)
+        if trade["strategy"] == "key_levels"
+    ]
+    today_date = today()
+    today_candles = candles(today_date)
+    today_replay_trades = backtest_key_levels(today_candles, settings) if not today_candles.empty else []
+    today_paper_trades = [trade for trade in paper_trades if trade["date"] == today_date]
+    cache_key = (history_mtime(), tuple(sorted(settings.items())))
+    with _cache_lock:
+        replay = _key_level_backtest_cache["value"] if _key_level_backtest_cache["key"] == cache_key else None
+    if replay is None:
+        history = master()
+        replay_trades = backtest_key_levels(history, settings) if not history.empty else []
+        replay = _key_level_book([{**trade, "source": "historical_replay"} for trade in replay_trades])
+        with _cache_lock:
+            _key_level_backtest_cache.update(key=cache_key, value=replay)
+    return {
+        "settings": settings,
+        "today": today_date,
+        "capture_running": capture_running(),
+        "paper": _key_level_book(paper_trades),
+        "today_replay": _key_level_book([{**trade, "source": "today_replay"} for trade in today_replay_trades]),
+        "today_paper": _key_level_book(today_paper_trades),
+        "option_paper": _option_paper_book(option_trades),
+        "today_option_paper": _option_paper_book([trade for trade in option_trades if trade["date"] == today_date]),
+        "backtest": replay,
+    }
 
 
 def build_paper_report(source_trades: list) -> dict:
@@ -629,6 +933,78 @@ def build_paper_report(source_trades: list) -> dict:
         "trades": trades,
         "daily": sorted(daily.values(), key=lambda d: d["date"]),
     }
+
+
+def capital_projection(source_trades: list) -> dict:
+    ordered = sorted(source_trades, key=lambda trade: (trade["date"], trade["entry"], trade["exit"]))
+    active = []
+    curve = [{"timestamp": "", "label": "Start", "equity": PAPER_STARTING_CAPITAL, "drawdown": 0.0}]
+    equity = float(PAPER_STARTING_CAPITAL)
+    equity_peak = equity
+    reserved_capital = 0.0
+    peak_deployed = 0.0
+    skipped_trades = 0
+    daily = {}
+    accepted_trades = []
+
+    def realize_through(timestamp: str) -> None:
+        nonlocal equity, equity_peak, reserved_capital
+        active.sort(key=lambda position: position["exit_at"])
+        while active and active[0]["exit_at"] <= timestamp:
+            position = active.pop(0)
+            equity += position["net_rs"]
+            reserved_capital -= position["reserved"]
+            equity_peak = max(equity_peak, equity)
+            curve.append({
+                "timestamp": position["exit_at"],
+                "label": position["exit_at"],
+                "equity": round(equity, 2),
+                "drawdown": round(equity - equity_peak, 2),
+            })
+
+    for trade in ordered:
+        entry_at = f"{trade['date']} {trade['entry']}"
+        exit_at = f"{trade['date']} {trade['exit']}"
+        realize_through(entry_at)
+        reserved = round(trade["buy_value_rs"] + trade["charges_rs"], 2)
+        if reserved > equity - reserved_capital + 1e-8:
+            skipped_trades += 1
+            continue
+        active.append({"exit_at": exit_at, "reserved": reserved, "net_rs": trade["net_rs"]})
+        reserved_capital += reserved
+        peak_deployed = max(peak_deployed, reserved_capital)
+        accepted_trades.append(trade)
+        day = daily.setdefault(trade["date"], {"date": trade["date"], "trades": 0, "net_rs": 0.0})
+        day["trades"] += 1
+        day["net_rs"] += trade["net_rs"]
+
+    while active:
+        active.sort(key=lambda position: position["exit_at"])
+        realize_through(active[0]["exit_at"])
+
+    max_drawdown = min((point["drawdown"] for point in curve), default=0.0)
+    return {
+        "curve": curve,
+        "trades": accepted_trades,
+        "daily": [
+            {"date": day["date"], "trades": day["trades"], "net_rs": round(day["net_rs"], 2)}
+            for day in sorted(daily.values(), key=lambda item: item["date"])
+        ],
+        "summary": {
+            "starting_capital": PAPER_STARTING_CAPITAL,
+            "ending_capital": round(equity, 2),
+            "net_rs": round(equity - PAPER_STARTING_CAPITAL, 2),
+            "return_pct": round((equity - PAPER_STARTING_CAPITAL) / PAPER_STARTING_CAPITAL * 100, 2),
+            "max_drawdown_rs": round(max_drawdown, 2),
+            "peak_deployed_rs": round(peak_deployed, 2),
+            "skipped_trades": skipped_trades,
+        },
+    }
+
+
+def capital_report() -> dict:
+    trades = paper_report()["trades"] + hero_zero_report()["trades"] + build_paper_report(key_level_option_trades())["trades"]
+    return capital_projection(trades)
 
 
 def tail(path: Path, lines: int) -> list:
@@ -679,7 +1055,8 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/day":
             df = candles(date)
             cutoff = ""
-            if not df.empty:
+            full_session = q.get("full", ["0"])[0] == "1"
+            if not df.empty and not full_session:
                 end = df["timestamp"].iloc[0] + pd.Timedelta(minutes=TRADE_WINDOW_MINUTES)
                 df = df[df["timestamp"] <= end].reset_index(drop=True)
                 cutoff = end.strftime("%H:%M")
@@ -690,6 +1067,8 @@ class Handler(BaseHTTPRequestHandler):
             forming = forming_candle(date, rows[-1]["time"] if rows else "")
             if cutoff and forming.get("time", "") > cutoff:
                 forming = {}
+            paper_trades, first_paper_date = paper_trades_for_day(date)
+            option_fills = build_paper_report(midpoint_option_trades(date) + key_level_option_trades(date))["trades"]
             self._json({
                 "date": date,
                 "cutoff": cutoff,
@@ -697,6 +1076,41 @@ class Handler(BaseHTTPRequestHandler):
                 "forming": forming,
                 "setup": setup_info(df),
                 "trades": current_rule_trades(df),
+                "signals": read_csv_rows(LIVE_DIR / f"signals_{date}.csv"),
+                "paper_trades": paper_trades,
+                "option_trades": option_fills,
+                "first_paper_date": first_paper_date,
+                "execution_mode": "LIVE" if read_config().get("midpoint_live_trading", read_config().get("live_trading")) else "PAPER",
+            })
+        elif url.path == "/api/key-level-day":
+            minute_candles = candles(date)
+            bars = aggregate_five_minute(minute_candles)
+            settings = key_level_settings(read_config())
+            replay_trades = backtest_key_levels(minute_candles, settings)
+            rows = [] if bars.empty else [
+                {"time": row.timestamp.strftime("%H:%M"), "open": row.open, "high": row.high, "low": row.low, "close": row.close}
+                for row in bars.itertuples()
+            ]
+            chart_trades = [
+                {
+                    "side": trade["side"],
+                    "entry": trade["entry_time"],
+                    "entry_price": trade["entry_price"],
+                    "sl": trade["stop"],
+                    "target": trade["target"],
+                    "exit": trade["exit_time"],
+                    "exit_price": trade["exit_price"],
+                    "reason": trade["exit_reason"],
+                    "pnl_points": trade["pnl_points"],
+                }
+                for trade in replay_trades
+            ]
+            self._json({
+                "date": date,
+                "timeframe_minutes": 5,
+                "candles": rows,
+                "trades": chart_trades,
+                "key_level_zone": {"level": replay_trades[0]["level"], "buffer": settings["key_level_break_buffer"]} if replay_trades else None,
             })
         elif url.path == "/api/signals":
             self._json(read_csv_rows(LIVE_DIR / f"signals_{date}.csv"))
@@ -704,12 +1118,19 @@ class Handler(BaseHTTPRequestHandler):
             self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
             self._json(option_trades())
+        elif url.path == "/api/key-level-option-trades":
+            self._json(build_paper_report(key_level_option_trades(date))["trades"])
+        elif url.path == "/api/key-level-option-paper":
+            self._json(key_level_option_paper_rows(date))
         elif url.path == "/api/paper-report":
             strategy = q.get("strategy", [""])[0]
             if strategy not in ("", "midpoint", "hero_zero"):
                 return self._json({"error": "unknown strategy"}, 404)
-            report = hero_zero_report() if strategy == "hero_zero" else paper_report()
-            self._json(report)
+            else:
+                report = hero_zero_report() if strategy == "hero_zero" else paper_report()
+                self._json(report)
+        elif url.path == "/api/capital-report":
+            self._json(capital_report())
         elif url.path == "/api/paper-trades":
             self._json(read_csv_rows(LIVE_DIR / "paper_trades.csv"))
         elif url.path == "/api/log":
@@ -719,11 +1140,17 @@ class Handler(BaseHTTPRequestHandler):
             self._json(available_days())
         elif url.path == "/api/backtest":
             strategy = q.get("strategy", [""])[0]
-            if strategy not in ("", "midpoint"):
+            if strategy == "key_levels":
+                self._json(key_level_report())
+            elif strategy not in ("", "midpoint"):
                 return self._json({"error": "unknown strategy"}, 404)
-            self._json(backtest_report())
+            else:
+                self._json(backtest_report())
         elif url.path == "/api/settings":
             self._json(public_settings())
+        elif url.path == "/api/funds":
+            funds = broker_funds()
+            self._json(funds, 200 if funds["ok"] else 502)
         else:
             self._json({"error": "not found"}, 404)
 

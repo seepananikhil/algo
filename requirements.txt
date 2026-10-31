@@ -1,4 +1,7 @@
 pandas
+numpy
+python-dateutil
+pytz
 requests
 pyotp
 kotakneoapi
