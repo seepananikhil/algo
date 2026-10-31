@@ -16,8 +16,8 @@ import pandas as pd
 from backtest_midpoint_strategy import add_ist_time_columns, load_data
 from midpoint_strategy import backtest_midpoint_strategy
 
-LIVE_DIR = Path(__file__).resolve().parent / "captured_data" / "live"
-MASTER_CSV = Path(__file__).resolve().parent / "captured_data" / "spot_1min_extended.csv"
+LIVE_DIR = Path(__file__).resolve().parent / "paper" / "midpoint"
+MASTER_CSV = Path(__file__).resolve().parent / "historical_data" / "nifty50" / "daily" / "NIFTY50_daily.csv"
 IST = timezone(timedelta(hours=5, minutes=30))
 
 

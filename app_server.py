@@ -27,15 +27,15 @@ import pandas as pd
 from midpoint_strategy import MIDPOINT_BUFFER_POINTS, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
 
 ROOT = Path(__file__).resolve().parent
-LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
-TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
-CONFIG_FILE = ROOT / "fyers_config.json"
+LIVE_DIR = ROOT / "paper" / "midpoint"
+TOKEN_FILE = ROOT / "neo_config.json"
+CONFIG_FILE = ROOT / "neo_config.json"
 STOP_FILE = ROOT / "STOP_TRADING"
 UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
-MASTER_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_extended.csv"
-ARCHIVE_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_3y_archive.csv"
-HERO_ZERO_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
+MASTER_CSV = ROOT / "historical_data" / "nifty50" / "daily" / "NIFTY50_daily.csv"
+ARCHIVE_CSV = ROOT / "historical_data" / "sensex" / "daily" / "SENSEX_daily.csv"
+HERO_ZERO_DIR = ROOT / "paper" / "hero_zero"
 HOST, PORT = "127.0.0.1", 8090
 IST = timezone(timedelta(hours=5, minutes=30))
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
@@ -160,7 +160,7 @@ def sensex_expiry_collector_loop() -> None:
     last_attempt_date = None
     last_attempt_at = 0.0
     script = ROOT / "fyers_fetch_sensex_expiry.py"
-    output_dir = ROOT / "captured_data" / "fyers" / "sensex_expiry"
+    output_dir = ROOT / "options_data" / "sensex"
     log_path = output_dir / "collector.log"
     while True:
         now = datetime.now(IST)
@@ -199,7 +199,7 @@ def sensex_expiry_collector_loop() -> None:
 def hero_zero_capture_loop() -> None:
     """Launch the paper-only expiry option capture before the 15:20 premium snapshot."""
     script = ROOT / "fyers_hero_zero_capture.py"
-    output_dir = ROOT / "captured_data" / "fyers" / "hero_zero"
+    output_dir = ROOT / "paper" / "hero_zero"
     log_path = output_dir / "collector.log"
     last_attempt_date = None
     last_attempt_at = 0.0

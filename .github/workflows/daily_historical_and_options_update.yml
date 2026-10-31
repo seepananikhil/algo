@@ -74,4 +74,4 @@ jobs:
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(data): automated daily update of spot & options OHLC data"
-          file_pattern: "historical_data/* options_data/* captured_data/*"
+          file_pattern: "historical_data/* options_data/* paper/* performance/*"
