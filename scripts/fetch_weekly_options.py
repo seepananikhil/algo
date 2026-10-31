@@ -272,6 +272,32 @@ def main() -> None:
     df_out.to_csv(out_csv, index=False)
     print(f"Saved {len(df_out):,} rows to {out_csv}")
 
+    # Partition into strike-based folders: YYYY/MM/YYYY-MM-DD/{strike}/{CE,PE}.csv
+    date_dir = out_dir / session.isoformat()
+    date_dir.mkdir(parents=True, exist_ok=True)
+
+    # Save spot.csv
+    spot_df = df_out[df_out["InstrumentType"] == "INDEX"].copy()
+    if not spot_df.empty:
+        spot_cols = ["Epoch", "Timestamp", "Open", "High", "Low", "Close", "Volume", "Symbol"]
+        spot_cols = [col for col in spot_cols if col in spot_df.columns]
+        spot_df[spot_cols].to_csv(date_dir / "spot.csv", index=False)
+
+    # Save each strike's CE.csv and PE.csv
+    opt_df = df_out[df_out["InstrumentType"] == "OPTION"].copy()
+    opt_cols = ["Epoch", "Timestamp", "Open", "High", "Low", "Close", "Volume", "Symbol", "Expiry", "Strike", "OptionType", "IndexClose"]
+    for strike in sorted(opt_df["Strike"].dropna().unique()):
+        strike_val = int(strike) if float(strike).is_integer() else strike
+        st_dir = date_dir / str(strike_val)
+        st_dir.mkdir(parents=True, exist_ok=True)
+        for opt_type in ["CE", "PE"]:
+            sub = opt_df[(opt_df["Strike"] == strike) & (opt_df["OptionType"] == opt_type)].copy()
+            if not sub.empty:
+                sub_cols = [c for c in opt_cols if c in sub.columns]
+                sub[sub_cols].to_csv(st_dir / f"{opt_type}.csv", index=False)
+
+    print(f"Partitioned into strike folders under: {date_dir}")
+
 
 if __name__ == "__main__":
     main()
