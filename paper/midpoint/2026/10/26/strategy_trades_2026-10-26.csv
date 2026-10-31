@@ -1,0 +1,2 @@
+date,symbol,side,entry_time,entry,exit_time,exit,points,pnl,reason,lots,qty,spot_entry,spot_exit
+2026-10-26,NIFTY26N0322450CE,LONG,2026-10-26 09:32:00,289.25,2026-10-26 09:32:00,289.25,0.0,0.0,stop,1,25,22470.5,22446.175000000003

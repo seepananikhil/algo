@@ -1,0 +1,2 @@
+date,trade_num,stage,side,option,option_symbol,option_entry_price,option_exit_price,option_pnl_points,option_pnl_rupees,entry_time,entry_price,sl,final_sl,target,exit_time,exit_price,exit_reason,pnl_points,pnl_rupees,futures_pnl_rupees,diff_rupees,max_fav,max_adv,rr,lots,qty,vix_chg,initial_sl,base_lots,total_lots,pyramided,weighted_pnl_points
+2026-10-27,1,STAGE1_TREND,LONG,NIFTY 22600 CE (ITM-150),NIFTY26N0322600CE,350.95,326.0,-24.95,-623.75,09:43,22766.1,22736.1,22736.1,,09:47,22736.1,STOP_LOSS,-30.0,-623.75,-750.0,126.25,30.0,0.0,-1.0,1,25,0.0,22736.1,1,1,False,-30.0
