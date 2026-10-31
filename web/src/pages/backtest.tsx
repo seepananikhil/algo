@@ -691,206 +691,74 @@ export function BacktestPage() {
 
 
   return (
-
-
-
-
-
-
-
     <div className="flex flex-col gap-4">
-
-
-
-
-
-
-
-      <div className="flex flex-wrap items-end justify-between gap-2">
-
-
-
-
-
-
-
+      {/* Top Header & Page Actions */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
         <div>
-
-
-
-
-
-
-
-          <h1 className="text-xl font-semibold">
-
+          <h1 className="text-xl font-bold tracking-tight">
             {strategy === "trend_runner"
-
               ? "Nifty Trend Runner · Historical Backtest Performance"
-
               : strategy === "sensex_runner"
-
               ? "Sensex Trend Runner · Historical Backtest Performance"
-
               : strategy === "sensex_key_levels"
-
               ? "Sensex Key Levels S&R · Historical Backtest Performance"
-
               : strategy === "nifty_key_levels"
-
               ? "Nifty Key Levels S&R · Historical Backtest Performance"
-
               : "Midpoint Strategy · Historical Backtest Performance"}
-
           </h1>
-
-          <p className="text-sm text-muted-foreground">
-
+          <p className="text-sm text-muted-foreground mt-0.5">
             {strategy === "trend_runner"
-
               ? `Full continuous 1-minute backtest across ${s.days} days (${s.from} → ${s.to}) from technovusin/nifty50-historical-data. 30 pt SL, 6-tier ratchets (+20, +60, +110, +165, +220, +270), symmetric T2 re-entries with 30-min cool-off. ₹ ≈ points × ${s.lot_size} (1 lot, 25 qty).`
-
               : strategy === "sensex_runner"
-
               ? `Sensex continuous 1-minute backtest across ${s.days} days (${s.from} → ${s.to}). ₹ ≈ points × ${s.lot_size} (1 lot, 10 qty).`
-
               : strategy === "sensex_key_levels"
-
               ? `Sensex Key Levels (Fade + Reverse) 1-minute backtest across ${s.days} days (${s.from} → ${s.to}). Fixed 25 pt SL, Fade TP 120 pts, Reverse Retry TP 180 pts at 500-pt strikes. ₹ ≈ points × ${s.lot_size} (1 lot, 10 qty).`
-
               : strategy === "nifty_key_levels"
-
               ? `Nifty Key Levels (Fade + Reverse) 1-minute backtest across ${s.days} days (${s.from} → ${s.to}). Fixed 10 pt SL, Fade TP 50 pts, Reverse Retry TP 80 pts at 500-pt & 1,000-pt strikes with Mother Bar Inside-Day filter (skips chop fakeouts). ₹ ≈ points × ${s.lot_size} (1 lot, 25 qty).`
-
               : `Full continuous 1-minute backtest across ${s.days} days (${s.from} → ${s.to}) from technovusin/nifty50-historical-data. Midpoint Equilibrium rules, 20 pt SL, 50 pt target, trailing stop at +40 pts. ₹ ≈ points × ${s.lot_size} (1 lot, 25 qty).`}
-
-
-
-
-
-
-
           </p>
-
-
-
-
-
-
-
         </div>
 
-
-
-
-
-
-
-        <div className="flex flex-wrap items-center gap-2">
-
-
-
-
-
-
-
-          {strategyTabs}
-
-
-
-
-
-
-
-
-
-
-
-
-
+        {/* Global Action: Sync & Update Data */}
+        <div className="flex items-center gap-2 self-start sm:self-center shrink-0">
           <button
             onClick={handleSyncBacktest}
             disabled={isSyncing}
             className={cn(
-              "flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md border border-border transition-colors",
-              isSyncing ? "opacity-60 cursor-not-allowed bg-muted/40" : "hover:bg-muted/50 cursor-pointer"
+              "inline-flex items-center gap-2 px-3.5 py-2 text-xs font-semibold rounded-lg border transition-all cursor-pointer shadow-xs",
+              isSyncing
+                ? "bg-muted/60 text-muted-foreground border-border cursor-not-allowed opacity-70"
+                : "bg-primary/10 text-primary border-primary/25 hover:bg-primary/20 active:scale-98"
             )}
-            title="Pull latest historical data and recalculate 10-year master backtests"
+            title="Pull latest historical data and run fast incremental backtest"
           >
             <RefreshCw className={cn("h-3.5 w-3.5", isSyncing && "animate-spin text-primary")} />
             <span>{isSyncing ? "Updating Backtest..." : "Sync & Update Data"}</span>
           </button>
-
-
-
-
-
-
-
-          <Tabs value={year} onValueChange={(v) => { setYear(v as string); setPicked(null) }}>
-
-
-
-
-
-
-
-            <TabsList><TabsTrigger value="all">All</TabsTrigger>{years.map((y) => <TabsTrigger key={y} value={y}>{y}</TabsTrigger>)}</TabsList>
-
-
-
-
-
-
-
-          </Tabs>
-
-
-
-
-
-
-
         </div>
-
-
-
-
-
-
-
       </div>
 
+      {/* Controls Row: Strategy Selector (Left) & Period Tabs (Right) */}
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        {strategyTabs}
 
-
-
-
-
-
-
-
-
-
-
-
-
+        <div className="flex flex-col sm:items-end gap-1.5 self-start sm:self-auto">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
+            Period:
+          </span>
+          <Tabs value={year} onValueChange={(v) => { setYear(v as string); setPicked(null) }}>
+            <TabsList className="bg-muted/60 p-1 rounded-lg">
+              <TabsTrigger value="all" className="text-xs font-medium">All</TabsTrigger>
+              {years.map((y) => (
+                <TabsTrigger key={y} value={y} className="text-xs font-medium">{y}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+      </div>
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-
-
-
-
-
-
-
         <StatCard
-
-
-
-
-
-
-
           label={strategy === "trend_runner" && s.dynamic_points ? "Total points (1-Lot)" : "Total points"}
 
 
