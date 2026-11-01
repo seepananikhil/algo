@@ -171,7 +171,7 @@ def notify_trade_entry(
     contract_line = f"<b>{clean_opt}</b>{opt_px} ({lots}L/{qty}q)"
     spot_line = f"Spot: <code>{spot_entry:,.1f}</code> · SL: <code>{initial_sl:,.1f}</code> (-{sl_pts:.0f} pts)"
 
-    text = f"{dot} <b>{action} · {symbol} · {strat_name}</b>\n{contract_line}\n{spot_line}"
+    text = f"{dot} <b>{strat_name} · {symbol} · {action}</b>\n{contract_line}\n{spot_line}"
     send_telegram_message(text)
 
 
@@ -190,7 +190,7 @@ def notify_ratchet(
     strat_name = format_strategy_name(strategy)
     pyr = f"\n🔥 {pyramid_info}" if pyramided and pyramid_info else ""
     text = (
-        f"🎯 <b>{symbol} · {strat_name} · Lock +{locked_pts:.0f} pts</b>\n"
+        f"🎯 <b>{strat_name} · {symbol} · Lock +{locked_pts:.0f} pts</b>\n"
         f"SL: <code>{new_sl:,.1f}</code> (Run: +{max_fav:.0f} pts){pyr}"
     )
     send_telegram_message(text)
@@ -220,7 +220,7 @@ def notify_trade_exit(
     clean_opt = clean_option_name(option_str)
     clean_reason = exit_reason.replace("_", " ").title()
     text = (
-        f"🏁 <b>{symbol} · {strat_name}</b> · {badge}\n"
+        f"🏁 <b>{strat_name} · {symbol} · {badge}</b>\n"
         f"{clean_opt} ({total_lots}L)\n"
         f"{clean_reason} @ {exit_time} · Spot: {pnl_pts:+.1f} pts"
     )
