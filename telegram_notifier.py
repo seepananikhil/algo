@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import re
 import logging
 import os
 import sys
@@ -123,6 +124,27 @@ def send_telegram_message(text: str, parse_mode: str = "HTML", async_send: bool 
 # High-Level Trading Alert Formatters (Compact & Clean)
 # =====================================================================
 
+def format_strategy_name(strategy: Optional[str]) -> str:
+    s = (strategy or "").upper()
+    if "REENTRY" in s or "STAGE2" in s:
+        return "Trend Runner (Re-Entry)"
+    elif "TREND" in s or "RUNNER" in s or "MORNING" in s or "STAGE1" in s:
+        return "Trend Runner"
+    elif "KEY_LEVEL" in s or "FADE" in s or "REVERSE" in s:
+        return "Key Levels"
+    elif "MIDPOINT" in s:
+        return "Midpoint Scalp"
+    return strategy.replace("_", " ").title() if strategy else "Trend Runner"
+
+
+def clean_option_name(option_str: str) -> str:
+    """Strips out (ITM-150), (ATM), (OTM-...) etc. keeping just NIFTY 24200 CE."""
+    if not option_str:
+        return ""
+    return re.sub(r"\s*\([^)]*\)", "", option_str).strip()
+
+
+
 def notify_trade_entry(
     symbol: str,
     stage: str,
@@ -137,16 +159,19 @@ def notify_trade_entry(
     option_symbol: Optional[str] = None,
     option_entry_price: Optional[float] = None,
     vix_chg: Optional[float] = None,
+    strategy: Optional[str] = None,
 ) -> None:
     """Sends a compact, 3-line trade entry alert."""
     action = "BUY CALL" if side.upper() == "LONG" else "BUY PUT"
     dot = "🟢" if side.upper() == "LONG" else "🔴"
+    strat_name = format_strategy_name(strategy or stage)
 
+    clean_opt = clean_option_name(option_str)
     opt_px = f" @ ₹{option_entry_price:.1f}" if option_entry_price else ""
-    contract_line = f"<b>{option_str}</b>{opt_px} ({lots}L/{qty}q)"
+    contract_line = f"<b>{clean_opt}</b>{opt_px} ({lots}L/{qty}q)"
     spot_line = f"Spot: <code>{spot_entry:,.1f}</code> · SL: <code>{initial_sl:,.1f}</code> (-{sl_pts:.0f} pts)"
 
-    text = f"{dot} <b>{action} · {symbol}</b>\n{contract_line}\n{spot_line}"
+    text = f"{dot} <b>{action} · {symbol} · {strat_name}</b>\n{contract_line}\n{spot_line}"
     send_telegram_message(text)
 
 
@@ -159,11 +184,13 @@ def notify_ratchet(
     locked_pts: float,
     pyramided: bool = False,
     pyramid_info: str = "",
+    strategy: Optional[str] = "Trend Runner",
 ) -> None:
     """Sends a compact 2-line profit ratchet / lock alert."""
+    strat_name = format_strategy_name(strategy)
     pyr = f"\n🔥 {pyramid_info}" if pyramided and pyramid_info else ""
     text = (
-        f"🎯 <b>{symbol} · Lock +{locked_pts:.0f} pts</b>\n"
+        f"🎯 <b>{symbol} · {strat_name} · Lock +{locked_pts:.0f} pts</b>\n"
         f"SL: <code>{new_sl:,.1f}</code> (Run: +{max_fav:.0f} pts){pyr}"
     )
     send_telegram_message(text)
@@ -181,6 +208,7 @@ def notify_trade_exit(
     exit_time: str,
     total_lots: int,
     qty: int,
+    strategy: Optional[str] = "Trend Runner",
 ) -> None:
     """Sends a compact 3-line trade exit & PnL alert."""
     if pnl_rupees >= 0:
@@ -188,10 +216,12 @@ def notify_trade_exit(
     else:
         badge = f"🔴 <b>-₹{abs(pnl_rupees):,.0f}</b>"
 
+    strat_name = format_strategy_name(strategy)
+    clean_opt = clean_option_name(option_str)
     clean_reason = exit_reason.replace("_", " ").title()
     text = (
-        f"🏁 <b>{symbol} · Closed</b> · {badge}\n"
-        f"{option_str} ({total_lots}L)\n"
+        f"🏁 <b>{symbol} · {strat_name}</b> · {badge}\n"
+        f"{clean_opt} ({total_lots}L)\n"
         f"{clean_reason} @ {exit_time} · Spot: {pnl_pts:+.1f} pts"
     )
     send_telegram_message(text)
