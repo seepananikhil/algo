@@ -106,51 +106,44 @@
       "problemMatcher": []
     },
     {
-      "label": "🔄 Fetch Today's Weekly Options (Nifty & Sensex)",
+      "label": "🎯 Run Sensex Key Levels Paper",
       "type": "shell",
-      "command": "powershell",
-      "args": [
-        "-Command",
-        "python scripts/fetch_weekly_options.py --index NIFTY; python scripts/fetch_weekly_options.py --index SENSEX"
-      ],
+      "command": "python",
+      "args": ["-u", "sensex_key_levels_paper.py", "--poll", "5"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
+      "isBackground": true,
       "presentation": {
         "reveal": "always",
-        "panel": "shared",
+        "panel": "dedicated",
         "clear": true,
         "focus": false
       },
       "problemMatcher": []
     },
     {
-      "label": "📊 Re-run 10-Year Master Backtests",
+      "label": "🎯 Run Nifty Key Levels Paper",
       "type": "shell",
-      "command": "powershell",
-      "args": [
-        "-Command",
-        "python run_10y_backtest.py; python run_sensex_multiyear_trend_backtest.py; python run_10y_midpoint_backtest.py"
-      ],
+      "command": "python",
+      "args": ["-u", "nifty_key_levels_paper.py", "--poll", "5"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
+      "isBackground": true,
       "presentation": {
         "reveal": "always",
-        "panel": "shared",
+        "panel": "dedicated",
         "clear": true,
         "focus": false
       },
       "problemMatcher": []
     },
     {
-      "label": "📦 Rebuild Options Parquet Catalogs (DuckDB)",
+      "label": "📥 Pull Latest EOD Data from GitHub Actions",
       "type": "shell",
-      "command": "powershell",
-      "args": [
-        "-Command",
-        "cd options_data/nifty; python -c 'import duckdb; con=duckdb.connect(); con.execute(open(\"scripts/build_parquet.sql\").read())'; cd ../sensex; python -c 'import duckdb; con=duckdb.connect(); con.execute(open(\"scripts/build_parquet.sql\").read())'"
-      ],
+      "command": "git",
+      "args": ["pull", "origin", "master"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
