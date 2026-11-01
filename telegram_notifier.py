@@ -120,7 +120,7 @@ def send_telegram_message(text: str, parse_mode: str = "HTML", async_send: bool 
 
 
 # =====================================================================
-# High-Level Trading Alert Formatters
+# High-Level Trading Alert Formatters (Compact & Clean)
 # =====================================================================
 
 def notify_trade_entry(
@@ -138,30 +138,15 @@ def notify_trade_entry(
     option_entry_price: Optional[float] = None,
     vix_chg: Optional[float] = None,
 ) -> None:
-    """Sends a formatted trade entry alert."""
-    side_icon = "🟢 <b>BUY CALL (LONG)</b>" if side.upper() == "LONG" else "🔴 <b>BUY PUT (SHORT)</b>"
-    tgt_str = f"<b>+{target_pts:.1f} pts</b> ({spot_entry + (target_pts if side.upper() == 'LONG' else -target_pts):.1f})" if target_pts else "<i>Uncapped (Ride Trend)</i>"
-    vix_str = f" | ΔVIX: <code>{vix_chg:+.2f}%</code>" if vix_chg is not None else ""
+    """Sends a compact, 3-line trade entry alert."""
+    action = "BUY CALL" if side.upper() == "LONG" else "BUY PUT"
+    dot = "🟢" if side.upper() == "LONG" else "🔴"
 
-    lines = [
-        f"⚡ <b>NEW TRADE TRIGGERED: {symbol}</b>",
-        f"━━━━━━━━━━━━━━━━━━━",
-        f"Action: {side_icon}",
-        f"Strategy: <code>{stage}</code>{vix_str}",
-        f"Contract: <b>{option_str}</b>",
-    ]
+    opt_px = f" @ ₹{option_entry_price:.1f}" if option_entry_price else ""
+    contract_line = f"<b>{option_str}</b>{opt_px} ({lots}L/{qty}q)"
+    spot_line = f"Spot: <code>{spot_entry:,.1f}</code> · SL: <code>{initial_sl:,.1f}</code> (-{sl_pts:.0f} pts)"
 
-    if option_symbol and option_entry_price:
-        lines.append(f"Option LTP: <code>₹{option_entry_price:.2f}</code> (<code>{option_symbol}</code>)")
-
-    lines.extend([
-        f"Position Size: <b>{lots} Lot(s)</b> (<code>{qty} Qty</code>)",
-        f"Spot Entry: <code>{spot_entry:.2f}</code>",
-        f"Initial SL: <code>{initial_sl:.2f}</code> (Risk: <b>{sl_pts:.1f} pts</b>)",
-        f"Target: {tgt_str}",
-    ])
-
-    text = "\n".join(lines)
+    text = f"{dot} <b>{action} · {symbol}</b>\n{contract_line}\n{spot_line}"
     send_telegram_message(text)
 
 
@@ -175,20 +160,12 @@ def notify_ratchet(
     pyramided: bool = False,
     pyramid_info: str = "",
 ) -> None:
-    """Sends a profit ratchet / stop moved alert."""
-    icon = "🛡️" if "BREAKEVEN" in tier_name.upper() else "🎯"
-    lines = [
-        f"{icon} <b>PROFIT RATCHET: {symbol}</b>",
-        f"━━━━━━━━━━━━━━━━━━━",
-        f"Tier: <b>{tier_name}</b>",
-        f"Max Run: <b>+{max_fav:.1f} pts</b> in favor",
-        f"New Trailing SL: <code>{new_sl:.2f}</code>",
-        f"Profit Locked: <b>+{locked_pts:.1f} pts</b>",
-    ]
-    if pyramided:
-        lines.append(f"🔥 <b>Risk-Free Pyramid Added:</b> {pyramid_info}")
-
-    text = "\n".join(lines)
+    """Sends a compact 2-line profit ratchet / lock alert."""
+    pyr = f"\n🔥 {pyramid_info}" if pyramided and pyramid_info else ""
+    text = (
+        f"🎯 <b>{symbol} · Lock +{locked_pts:.0f} pts</b>\n"
+        f"SL: <code>{new_sl:,.1f}</code> (Run: +{max_fav:.0f} pts){pyr}"
+    )
     send_telegram_message(text)
 
 
@@ -205,39 +182,26 @@ def notify_trade_exit(
     total_lots: int,
     qty: int,
 ) -> None:
-    """Sends a trade exit & PnL alert."""
+    """Sends a compact 3-line trade exit & PnL alert."""
     if pnl_rupees >= 0:
-        result_icon = "💰 <b>PROFITABLE EXIT</b>"
-        pnl_badge = f"🟢 <b>+₹{pnl_rupees:,.2f}</b>"
+        badge = f"🟢 <b>+₹{pnl_rupees:,.0f}</b>"
     else:
-        result_icon = "🛑 <b>STOP LOSS HIT</b>"
-        pnl_badge = f"🔴 <b>-₹{abs(pnl_rupees):,.2f}</b>"
+        badge = f"🔴 <b>-₹{abs(pnl_rupees):,.0f}</b>"
 
-    lines = [
-        f"{result_icon} — <b>{symbol}</b>",
-        f"━━━━━━━━━━━━━━━━━━━",
-        f"Contract: <code>{option_str}</code>",
-        f"Exit Reason: <b>{exit_reason}</b> @ <code>{exit_time}</code>",
-        f"Exit Spot: <code>{exit_price:.2f}</code>",
-        f"Spot PnL: <b>{pnl_pts:+.1f} pts</b>",
-        f"Option PnL: <b>{option_pnl_pts:+.2f} pts</b>",
-        f"Net PnL: {pnl_badge} (<code>{total_lots} Lots / {qty} Qty</code>)",
-    ]
-
-    text = "\n".join(lines)
+    clean_reason = exit_reason.replace("_", " ").title()
+    text = (
+        f"🏁 <b>{symbol} · Closed</b> · {badge}\n"
+        f"{option_str} ({total_lots}L)\n"
+        f"{clean_reason} @ {exit_time} · Spot: {pnl_pts:+.1f} pts"
+    )
     send_telegram_message(text)
 
 
 def notify_system(title: str, details: str, level: str = "INFO") -> None:
-    """Sends a system alert (feed status, errors, warnings)."""
-    icons = {
-        "INFO": "ℹ️",
-        "WARNING": "⚠️",
-        "ERROR": "🚨",
-        "SUCCESS": "✅",
-    }
+    """Sends a compact system alert."""
+    icons = {"INFO": "ℹ️", "WARNING": "⚠️", "ERROR": "🚨", "SUCCESS": "✅"}
     icon = icons.get(level.upper(), "ℹ️")
-    text = f"{icon} <b>[{level.upper()}] {title}</b>\n\n{details}"
+    text = f"{icon} <b>{title}</b>\n{details}"
     send_telegram_message(text)
 
 
