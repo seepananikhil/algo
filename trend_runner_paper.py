@@ -37,6 +37,11 @@ from typing import Optional, Dict, Any, List
 import numpy as np
 import pandas as pd
 
+try:
+    from telegram_notifier import notify_trade_entry, notify_ratchet, notify_trade_exit
+except ImportError:
+    notify_trade_entry = notify_ratchet = notify_trade_exit = None
+
 IST = timezone(timedelta(hours=5, minutes=30))
 ROOT = Path(__file__).resolve().parent
 LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
@@ -371,6 +376,11 @@ class TrendRunnerPaperEngine:
                     curr_sl = r1_level
                     if self.log_trades:
                         print(f"  [RATCHET TIER 1 LOCKED] Reached +{pos['max_fav']:.1f} pts! Stop moved to {curr_sl:.2f} (Locking +{self.r1_lock:.1f} pts profit)")
+                    if pos.get("last_ratchet") != "Tier 1":
+                        pos["last_ratchet"] = "Tier 1"
+                        if notify_ratchet:
+                            pyr_txt = f"Added Lot 2 at {pyr_e:.2f} (Risk: Zero)" if pos.get("pyramided") else ""
+                            notify_ratchet(self.symbol, sig, f"Tier 1 (+{self.r1_trigger:.0f} pts)", pos["max_fav"], curr_sl, self.r1_lock, pyramided=pos.get("pyramided", False), pyramid_info=pyr_txt)
                     
                     # Risk-Free Pyramiding: Add Lot 2 with stop offset by locked profit
                     if self.pyramid and not pos.get("pyramided", False):
@@ -393,6 +403,10 @@ class TrendRunnerPaperEngine:
                         pos["pyramid_sl"] = pyr_e + 10.0 if sig == "LONG" else pyr_e - 10.0
                     if self.log_trades:
                         print(f"  [RATCHET TIER 2 LOCKED] Reached +{pos['max_fav']:.1f} pts! Stop moved to {curr_sl:.2f} (Locking +{self.r2_lock:.1f} pts profit)")
+                    if pos.get("last_ratchet") != "Tier 2":
+                        pos["last_ratchet"] = "Tier 2"
+                        if notify_ratchet:
+                            notify_ratchet(self.symbol, sig, f"Tier 2 (+{self.r2_trigger:.0f} pts)", pos["max_fav"], curr_sl, self.r2_lock)
 
             # Tier 3: +180 pts -> Lock +110 pts
             if self.r3_trigger is not None and pos["max_fav"] >= self.r3_trigger:
@@ -405,6 +419,10 @@ class TrendRunnerPaperEngine:
                         pos["pyramid_sl"] = pyr_e + 50.0 if sig == "LONG" else pyr_e - 50.0
                     if self.log_trades:
                         print(f"  [RATCHET TIER 3 LOCKED] Reached +{pos['max_fav']:.1f} pts! Stop moved to {curr_sl:.2f} (Locking +{self.r3_lock:.1f} pts profit)")
+                    if pos.get("last_ratchet") != "Tier 3":
+                        pos["last_ratchet"] = "Tier 3"
+                        if notify_ratchet:
+                            notify_ratchet(self.symbol, sig, f"Tier 3 (+{self.r3_trigger:.0f} pts)", pos["max_fav"], curr_sl, self.r3_lock)
 
             # Tier 4: +230 pts -> Lock +165 pts
             if self.r4_trigger is not None and pos["max_fav"] >= self.r4_trigger:
@@ -563,6 +581,23 @@ class TrendRunnerPaperEngine:
                 if self.log_trades:
                     self._print_exit(trade_result)
                     self._log_trade(trade_result)
+                if notify_trade_exit:
+                    try:
+                        notify_trade_exit(
+                            symbol=self.symbol,
+                            side=trade_result["side"],
+                            option_str=trade_result["option"],
+                            pnl_pts=trade_result["pnl_points"],
+                            option_pnl_pts=trade_result["option_pnl_points"],
+                            pnl_rupees=trade_result["pnl_rupees"],
+                            exit_reason=trade_result["exit_reason"],
+                            exit_price=trade_result["exit_price"],
+                            exit_time=trade_result["exit_time"],
+                            total_lots=trade_result["total_lots"],
+                            qty=trade_result["total_lots"] * self.lot_size,
+                        )
+                    except Exception:
+                        pass
                 self.active_position = None
                 self.trades_today += 1
                 return trade_result
@@ -743,6 +778,25 @@ class TrendRunnerPaperEngine:
         print(f"  Confluence Check      : {or_desc} (Range: {or_range:.1f} pts) | VIX Chg: {vix:+.2f}%")
         print("=" * 70 + "\n")
         self._log_signal(pos, sl_pts, vix)
+        if notify_trade_entry:
+            try:
+                notify_trade_entry(
+                    symbol=self.symbol,
+                    stage=stage_tag,
+                    side=pos["side"],
+                    option_str=pos["option"],
+                    spot_entry=pos["entry_price"],
+                    sl_pts=sl_pts,
+                    initial_sl=pos["initial_sl"],
+                    lots=lots,
+                    qty=lots * self.lot_size,
+                    target_pts=self.target_pts,
+                    option_symbol=pos.get("option_symbol"),
+                    option_entry_price=pos.get("option_entry_price"),
+                    vix_chg=vix,
+                )
+            except Exception:
+                pass
 
     def _log_signal(self, pos: dict, sl_pts: float, vix: float) -> None:
         signal_cols = [

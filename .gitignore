@@ -5,3 +5,5 @@ STOP_TRADING
 *.log
 __pycache__/
 *.pyc
+telegram_config.json
+.env
