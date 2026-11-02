@@ -8,6 +8,7 @@ Updates both daily 1-minute session CSVs and consolidated master daily OHLC CSVs
 """
 
 from __future__ import annotations
+import time
 
 import argparse
 import subprocess
@@ -96,16 +97,28 @@ def update_index_for_date(client, index_name: str, session: date) -> None:
     from_date = session.strftime("%Y-%m-%d")
     to_date = session.strftime("%Y-%m-%d")
 
-    try:
-        response = client.historical_data(
-            neosymbol=cfg["neosymbol"],
-            interval="1min",
-            from_date=from_date,
-            to_date=to_date,
-        )
-    except Exception as exc:
-        print(f"Error fetching {index_name} from Kotak Neo: {exc}")
-        return
+    response = None
+    for attempt in range(4):
+        try:
+            time.sleep(2.0)
+            response = client.historical_data(
+                neosymbol=cfg["neosymbol"],
+                interval="1min",
+                from_date=from_date,
+                to_date=to_date,
+            )
+            if isinstance(response, dict):
+                code = response.get("code") or response.get("status_code")
+                if code in (429, 503):
+                    time.sleep(3.0 * (attempt + 1))
+                    continue
+            break
+        except Exception as exc:
+            if "too many" in str(exc).lower() or "429" in str(exc):
+                time.sleep(3.0 * (attempt + 1))
+            else:
+                print(f"Error fetching {index_name} from Kotak Neo: {exc}")
+                return
 
     new_df = parse_neo_candles(response)
     if new_df.empty:

@@ -2,8 +2,10 @@ name: Daily Historical & Options Data Update
 
 on:
   schedule:
-    # 16:30 IST (11:00 UTC) Monday through Friday
-    - cron: '0 11 * * 1-5'
+    # Primary: 16:15 IST (10:45 UTC) Monday through Friday (offset from :00 to avoid GitHub queue delays)
+    - cron: '45 10 * * 1-5'
+    # Backup: 17:00 IST (11:30 UTC) Monday through Friday
+    - cron: '30 11 * * 1-5'
   workflow_dispatch:
     inputs:
       target_date:
@@ -81,8 +83,12 @@ jobs:
           python run_sensex_multiyear_trend_backtest.py || echo "Sensex backtest completed with warnings"
           python run_10y_midpoint_backtest.py || echo "Midpoint backtest completed with warnings"
 
+      - name: Inspect Changed Data Files
+        run: |
+          git status --short historical_data/ options_data/
+
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(data): automated daily update of spot & options OHLC data"
-          file_pattern: "historical_data/* options_data/* paper/* performance/*"
+          file_pattern: "historical_data/** options_data/** paper/** performance/**"
