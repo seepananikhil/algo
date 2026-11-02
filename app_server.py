@@ -46,7 +46,7 @@ HERO_ZERO_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
 KEY_LEVEL_DIR = ROOT / "captured_data" / "fyers" / "key_levels"
 KEY_LEVEL_EVENT_FILE = KEY_LEVEL_DIR / "key_level_paper_events.csv"
 OPTION_PAPER_EVENT_FILE = KEY_LEVEL_DIR / "key_level_option_paper_events.csv"
-HOST, PORT = os.environ.get("HOST", "127.0.0.1"), int(os.environ.get("PORT", "8090"))
+HOST, PORT = os.environ.get("HOST", "0.0.0.0"), int(os.environ.get("PORT", "8090"))
 IST = timezone(timedelta(hours=5, minutes=30))
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 _token_cache = {"at": 0.0, "mtime": None, "value": None}
