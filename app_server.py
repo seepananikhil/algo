@@ -66,9 +66,9 @@ def available_equity_funds(response: dict | None) -> float:
 
 
 ROOT = Path(__file__).resolve().parent
-LIVE_DIR = ROOT / "paper" / "midpoint"
-TOKEN_FILE = ROOT / "neo_config.json"
-CONFIG_FILE = ROOT / "neo_config.json"
+LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
+CONFIG_FILE = ROOT / "fyers_config.json"
+TOKEN_FILE = ROOT / "captured_data" / "kotak" / "kotak_token.json"
 STOP_FILE = ROOT / "STOP_TRADING"
 UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
@@ -1394,12 +1394,39 @@ def submit_scalp_order(body: dict) -> dict:
     except (ValueError, TypeError):
         tgt_pts = 0.0
 
+    st = status()
+    if "SENSEX" in symbol:
+        lot_size = 20
+        spot_step = 100
+        spot = float((st.get("sensex_last_tick") or {}).get("ltp") or 75000.0)
+    else:
+        lot_size = 65
+        spot_step = 50
+        spot = float((st.get("last_tick") or {}).get("ltp") or 23250.0)
+
+    req_strike = body.get("strike")
+    atm_strike = int(req_strike) if req_strike else int(round(spot / spot_step) * spot_step)
+
+    # Resolve nearest expiry if not explicitly passed
+    req_expiry = body.get("expiry")
+    if not req_expiry:
+        try:
+            options = current_sensex_options() if "SENSEX" in symbol else current_nifty_options()
+            current_date = datetime.now(IST).date()
+            upcoming = sorted([d for d in options["expiry"].unique() if d >= current_date])
+            if upcoming:
+                req_expiry = upcoming[0].isoformat()
+        except Exception as exc:
+            print(f"Error resolving nearest expiry: {exc}")
+
     # Action BUY
     if is_live:
         body["confirm"] = "CONFIRM"
         body["order_type"] = "MARKET"
         body["lots"] = lots
         body["index_symbol"] = symbol
+        body["strike"] = atm_strike
+        body["expiry"] = req_expiry
         if sl_pts > 0:
             body["sl_pts"] = sl_pts
         if tgt_pts > 0:
@@ -1407,18 +1434,6 @@ def submit_scalp_order(body: dict) -> dict:
         return submit_manual_order(body)
 
     # Paper Scalp Execution
-    st = status()
-    if "SENSEX" in symbol:
-        lot_size = 20
-        spot_step = 100
-        spot = float((st.get("sensex_last_tick") or {}).get("ltp") or 74385.0)
-    else:
-        lot_size = 65
-        spot_step = 50
-        spot = float((st.get("last_tick") or {}).get("ltp") or 24540.0)
-
-    req_strike = body.get("strike")
-    atm_strike = int(req_strike) if req_strike else int(round(spot / spot_step) * spot_step)
     opt_name = f"{symbol} {atm_strike} {option_type}"
     qty = lots * lot_size
     buy_px = 135.0 if "NIFTY" in symbol else 295.0
