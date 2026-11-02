@@ -501,22 +501,34 @@ export type ManualOptionQuote = {
 }
 
 export async function getJSON<T>(url: string): Promise<T> {
-  const res = await fetch(url, { cache: "no-store" })
+  const token = typeof window !== "undefined" ? localStorage.getItem("algo_auth") : null
+  const headers: Record<string, string> = {}
+  if (token) headers["Authorization"] = `Bearer ${token}`
+  const res = await fetch(url, { cache: "no-store", headers })
   const data = await res.json()
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("algo_auth")
+    }
     throw new Error(data?.error ?? `HTTP ${res.status}`)
   }
   return data as T
 }
 
 export async function postJSON<T>(url: string, body?: unknown): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("algo_auth") : null
+  const headers: Record<string, string> = { "Content-Type": "application/json", "X-Dashboard": "1" }
+  if (token) headers["Authorization"] = `Bearer ${token}`
   const res = await fetch(url, {
     method: "POST",
-    headers: { "Content-Type": "application/json", "X-Dashboard": "1" },
+    headers,
     body: body === undefined ? undefined : JSON.stringify(body),
   })
   const data = await res.json()
   if (!res.ok) {
+    if (res.status === 401 && typeof window !== "undefined") {
+      localStorage.removeItem("algo_auth")
+    }
     throw new Error(data?.error ?? `HTTP ${res.status}`)
   }
   return data as T

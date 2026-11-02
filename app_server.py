@@ -8,6 +8,8 @@ from __future__ import annotations
 
 import csv
 import gzip
+import hashlib
+import hmac
 import json
 import math
 import mimetypes
@@ -4196,6 +4198,26 @@ def kotak_live_trades() -> list:
         return []
 
 
+DEFAULT_APP_PIN = "642539"
+AUTH_SECRET = "algoneo_auth_secret_token_key_2026"
+
+def get_master_pin() -> str:
+    try:
+        cfg = read_config()
+        return str(cfg.get("app_pin") or cfg.get("kotak_mpin") or DEFAULT_APP_PIN).strip()
+    except Exception:
+        return DEFAULT_APP_PIN
+
+def generate_session_token(pin: str) -> str:
+    return hmac.new(AUTH_SECRET.encode(), pin.encode(), hashlib.sha256).hexdigest()
+
+def verify_session_token(token: str) -> bool:
+    if not token:
+        return False
+    expected = generate_session_token(get_master_pin())
+    return hmac.compare_digest(token, expected)
+
+
 class Handler(BaseHTTPRequestHandler):
     def _json(self, data, code: int = 200) -> None:
         body = json.dumps(data, default=str).encode("utf-8")
@@ -4208,8 +4230,32 @@ class Handler(BaseHTTPRequestHandler):
         except (ConnectionError, BrokenPipeError):
             pass
 
+    def _is_authenticated(self) -> bool:
+        # Check Authorization header: Bearer <token>
+        auth_hdr = self.headers.get("Authorization", "")
+        if auth_hdr.startswith("Bearer "):
+            tok = auth_hdr.split("Bearer ", 1)[1].strip()
+            if verify_session_token(tok):
+                return True
+
+        # Check Cookie: algo_auth=<token>
+        cookie_hdr = self.headers.get("Cookie", "")
+        if "algo_auth=" in cookie_hdr:
+            for part in cookie_hdr.split(";"):
+                part = part.strip()
+                if part.startswith("algo_auth="):
+                    tok = part.split("algo_auth=", 1)[1].strip()
+                    if verify_session_token(tok):
+                        return True
+
+        # Check direct PIN header
+        if self.headers.get("X-App-Pin") == get_master_pin():
+            return True
+
+        return False
+
     def _is_local_client(self) -> bool:
-        return self.client_address[0] in ("127.0.0.1", "::1")
+        return self._is_authenticated() or (self.client_address[0] in ("127.0.0.1", "::1"))
 
     def do_HEAD(self):  # noqa: N802
         self.send_response(200)
@@ -4225,7 +4271,15 @@ class Handler(BaseHTTPRequestHandler):
 
         if not url.path.startswith("/api/"):
             self._static(url.path)
-        elif url.path == "/api/status":
+            return
+
+        if url.path == "/api/auth/status":
+            return self._json({"authenticated": self._is_authenticated()})
+
+        if not self._is_authenticated():
+            return self._json({"error": "unauthorized", "auth_required": True}, 401)
+
+        if url.path == "/api/status":
             self._json(status())
         elif url.path == "/api/day":
             symbol = q.get("symbol", ["NIFTY"])[0].upper()
@@ -4591,6 +4645,32 @@ class Handler(BaseHTTPRequestHandler):
         # Custom header forces a CORS preflight (which we never approve), so other sites can't post here.
         if self.headers.get("X-Dashboard") != "1":
             return self._json({"error": "forbidden"}, 403)
+
+        if url.path == "/api/auth/login":
+            body = self._body()
+            pin = str(body.get("pin", "")).strip()
+            if pin == get_master_pin():
+                token = generate_session_token(pin)
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Set-Cookie", f"algo_auth={token}; Path=/; Max-Age=2592000; SameSite=Lax")
+                self.end_headers()
+                self.wfile.write(json.dumps({"ok": True, "token": token}).encode())
+                return
+            else:
+                return self._json({"error": "Invalid PIN"}, 401)
+
+        if url.path == "/api/auth/logout":
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", "algo_auth=; Path=/; Max-Age=0; SameSite=Lax")
+            self.end_headers()
+            self.wfile.write(b'{"ok": true}')
+            return
+
+        if not self._is_authenticated():
+            return self._json({"error": "unauthorized", "auth_required": True}, 401)
+
         if url.path == "/api/scalp-order":
             if not self._is_local_client():
                 return self._json({"error": "manual orders are local-only"}, 403)

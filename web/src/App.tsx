@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/sonner"
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { Layout } from "@/components/layout"
 import { StatusProvider } from "@/lib/status"
+import { AuthProvider, AuthGate } from "@/lib/auth"
 import { LivePage } from "@/pages/live"
 
 const ManualTradingPage = lazy(() => import("@/pages/manual").then(m => ({ default: m.ManualTradingPage })))
@@ -25,25 +26,29 @@ function PageFallback() {
 export default function App() {
   return (
     <ThemeProvider attribute="class" defaultTheme="dark" enableSystem disableTransitionOnChange>
-      <StatusProvider>
-        <TooltipProvider>
-          <BrowserRouter>
-            <Routes>
-              <Route element={<Layout />}>
-                <Route index element={<LivePage />} />
-                <Route path="manual" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
-                <Route path="day" element={<Suspense fallback={<PageFallback />}><DayPage /></Suspense>} />
-                <Route path="paper" element={<Suspense fallback={<PageFallback />}><PaperPage /></Suspense>} />
-                <Route path="backtest" element={<Suspense fallback={<PageFallback />}><BacktestPage /></Suspense>} />
-                <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
-                <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
-                <Route path="*" element={<Navigate to="/" replace />} />
-              </Route>
-            </Routes>
-          </BrowserRouter>
-          <Toaster richColors position="bottom-right" />
-        </TooltipProvider>
-      </StatusProvider>
+      <AuthProvider>
+        <AuthGate>
+          <StatusProvider>
+            <TooltipProvider>
+              <BrowserRouter>
+                <Routes>
+                  <Route element={<Layout />}>
+                    <Route index element={<LivePage />} />
+                    <Route path="manual" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
+                    <Route path="day" element={<Suspense fallback={<PageFallback />}><DayPage /></Suspense>} />
+                    <Route path="paper" element={<Suspense fallback={<PageFallback />}><PaperPage /></Suspense>} />
+                    <Route path="backtest" element={<Suspense fallback={<PageFallback />}><BacktestPage /></Suspense>} />
+                    <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
+                    <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
+                  </Route>
+                </Routes>
+              </BrowserRouter>
+              <Toaster richColors position="bottom-right" />
+            </TooltipProvider>
+          </StatusProvider>
+        </AuthGate>
+      </AuthProvider>
     </ThemeProvider>
   )
 }

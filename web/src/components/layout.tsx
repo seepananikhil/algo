@@ -1,11 +1,12 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, CalendarDays, LineChart, Moon, Settings as SettingsIcon, ShieldAlert, Sun, Wallet } from "lucide-react"
+import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sun, Wallet } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useStatus } from "@/lib/status"
 import { postJSON } from "@/lib/api"
+import { useAuth } from "@/lib/auth"
 
 const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
@@ -21,6 +22,7 @@ function Dot({ ok }: { ok: boolean }) {
 
 export function Layout() {
   const { status, error, reload } = useStatus()
+  const { logout } = useAuth()
   const { resolvedTheme, setTheme } = useTheme()
   const dark = resolvedTheme !== "light"
   const location = useLocation()
@@ -123,6 +125,16 @@ export function Layout() {
               onClick={() => setTheme(dark ? "light" : "dark")}
             >
               {dark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="h-7 w-7 text-muted-foreground hover:text-foreground"
+              title="Lock terminal"
+              aria-label="Lock terminal"
+              onClick={() => logout()}
+            >
+              <Lock className="size-3.5" />
             </Button>
           </div>
         </header>
