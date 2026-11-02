@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useRef } from "react"
 import type { ReactNode } from "react"
 import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react"
 import { useTheme } from "next-themes"
@@ -56,14 +56,13 @@ type Props = {
   className?: string
   overlay?: ReactNode
   zoomable?: boolean
-  minimalToolbar?: boolean
   hideToolbar?: boolean
   fullDay?: boolean
   /** Changing this (e.g. the timeframe) drops any manual zoom and refits the session. */
   resetKey?: string
 }
 
-export function CandleChart({ date, candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, minimalToolbar = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
+export function CandleChart({ date, candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
@@ -74,8 +73,6 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
   const bars = useRef(0)
   const manualRange = useRef(false)
   const viewKey = useRef("")
-  const [from, setFrom] = useState("")
-  const [to, setTo] = useState("")
   const { resolvedTheme } = useTheme()
 
   useEffect(() => {
@@ -383,17 +380,6 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     if (chart.current) fitSession(chart.current, bars.current, fullDay)
   }, [fullDay])
 
-  function showWindow(fromTime: string, toTime_: string) {
-    const c = chart.current
-    if (!c || !candles.length) return
-    const first = candles.findIndex((k) => k.time >= fromTime)
-    let last = -1
-    candles.forEach((k, index) => { if (k.time <= toTime_) last = index })
-    if (first < 0 || last < first) return
-    manualRange.current = true
-    c.timeScale().setVisibleLogicalRange({ from: first - 4, to: last + 3 })
-  }
-
   function zoom(factor: number) {
     const timeScale = chart.current?.timeScale()
     const range = timeScale?.getVisibleLogicalRange()
@@ -406,66 +392,50 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
 
   function reset() {
     manualRange.current = false
-    setFrom("")
-    setTo("")
     if (chart.current) fitSession(chart.current, bars.current, fullDay)
   }
 
-  const chartArea = (
-    <div className="relative w-full flex-1 min-h-[300px]" style={{ minHeight: "300px", height: "100%" }}>
+  return (
+    <div className={cn("relative w-full flex-1 min-h-[300px]", className)} style={{ minHeight: "300px", height: "100%" }}>
       <div ref={el} className="w-full h-full min-h-[300px]" style={{ minHeight: "300px", height: "100%" }} />
       {overlay && <div className="pointer-events-none absolute left-2 top-2 z-10 sm:left-3 sm:top-3">{overlay}</div>}
-    </div>
-  )
 
-  if (hideToolbar || !zoomable) {
-    return (
-      <div className={cn("relative w-full flex-1 min-h-[300px]", className)} style={{ minHeight: "300px", height: "100%" }}>
-        <div ref={el} className="w-full h-full min-h-[300px]" style={{ minHeight: "300px", height: "100%" }} />
-        {overlay && <div className="pointer-events-none absolute left-2 top-2 z-10 sm:left-3 sm:top-3">{overlay}</div>}
-      </div>
-    )
-  }
-
-  if (minimalToolbar) {
-    return (
-      <div className={`flex flex-col gap-1 w-full h-full flex-1 min-h-0 ${className}`}>
-        <div className="flex items-center justify-between shrink-0 px-1 py-0.5">
-          <div className="flex items-center gap-1">
-            <Button variant="outline" size="icon-xs" aria-label="Zoom in" onClick={() => zoom(0.7)} className="h-6 w-6"><ZoomIn className="h-3 w-3" /></Button>
-            <Button variant="outline" size="icon-xs" aria-label="Zoom out" onClick={() => zoom(1.4)} className="h-6 w-6"><ZoomOut className="h-3 w-3" /></Button>
-            <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "09:50")} className="h-6 px-1.5 text-[11px] font-medium">09:15–09:50</Button>
-            <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "11:30")} className="h-6 px-1.5 text-[11px] font-medium">Morning</Button>
-            <Button variant="ghost" size="xs" onClick={reset} className="h-6 px-1.5 text-[11px] font-medium gap-1"><RotateCcw className="h-2.5 w-2.5" /> Full day</Button>
-          </div>
+      {/* Floating Layered Zoom Controls */}
+      {zoomable && !hideToolbar && (
+        <div className="absolute right-16 top-2 z-10 flex items-center bg-card/85 hover:bg-card backdrop-blur-md border border-border/80 rounded-md shadow-md p-0.5 gap-0.5 transition-all text-xs select-none">
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Zoom in"
+            onClick={() => zoom(0.7)}
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+            title="Zoom In"
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label="Zoom out"
+            onClick={() => zoom(1.4)}
+            className="h-6 w-6 text-muted-foreground hover:text-foreground"
+            title="Zoom Out"
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </Button>
+          <div className="w-[1px] h-3 bg-border mx-0.5" />
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={reset}
+            className="h-6 px-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground gap-1"
+            title="Reset Zoom to Full Day"
+          >
+            <RotateCcw className="h-2.5 w-2.5" />
+            <span>Reset</span>
+          </Button>
         </div>
-        {chartArea}
-      </div>
-    )
-  }
-
-  const applyCustom = (nextFrom: string, nextTo: string) => {
-    if (nextFrom && nextTo && nextFrom <= nextTo) showWindow(nextFrom, nextTo)
-  }
-  const timeInput = "h-6 rounded-md border bg-background px-1.5 text-xs text-foreground"
-
-  return (
-    <div className={`flex flex-col gap-1 w-full h-full flex-1 min-h-0 ${className}`}>
-      <div className="flex items-center justify-between gap-1 shrink-0 px-1 py-0.5">
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="icon-xs" aria-label="Zoom in" onClick={() => zoom(0.6)} className="h-6 w-6"><ZoomIn className="h-3 w-3" /></Button>
-          <Button variant="outline" size="icon-xs" aria-label="Zoom out" onClick={() => zoom(1.6)} className="h-6 w-6"><ZoomOut className="h-3 w-3" /></Button>
-          <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "09:50")} className="h-6 px-1.5 text-[11px] font-medium">09:15–09:50</Button>
-          <Button variant="ghost" size="xs" onClick={() => showWindow("09:15", "11:30")} className="h-6 px-1.5 text-[11px] font-medium">Morning</Button>
-          <Button variant="ghost" size="xs" onClick={reset} className="h-6 px-1.5 text-[11px] font-medium gap-1"><RotateCcw className="h-2.5 w-2.5" /> Full day</Button>
-        </div>
-        <div className="hidden lg:flex items-center gap-1 text-[11px] text-muted-foreground">
-          <input aria-label="From time" type="time" className={timeInput} value={from} onChange={(event) => { setFrom(event.target.value); applyCustom(event.target.value, to) }} />
-          <span>–</span>
-          <input aria-label="To time" type="time" className={timeInput} value={to} onChange={(event) => { setTo(event.target.value); applyCustom(from, event.target.value) }} />
-        </div>
-      </div>
-      {chartArea}
+      )}
     </div>
   )
 }

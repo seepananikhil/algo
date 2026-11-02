@@ -1,10 +1,1 @@
-date,side,entry_time,entry_price,exit_time,exit_price,exit_reason,points,lots,rupees
-2026-10-06,PUT,09:23,22589.85,09:24,22600.1,midpoint_close_exit,-10.25,2,-1332.5
-2026-10-06,CALL,09:27,22594.05,09:45,22620.35,reverse_after_sl_time_exit,26.3,2,3419.0
-2026-10-09,PUT,09:22,22331.95,09:27,22349.9,midpoint_close_exit,-17.95,2,-2333.5
-2026-10-14,PUT,09:27,22689.3,09:35,22709.3,stop,-20.0,2,-2600.0
-2026-10-15,CALL,09:22,22699.9,09:26,22732.75,trail_stop,32.85,2,4270.5
-2026-10-19,CALL,09:40,23136.1,09:42,23116.1,stop,-20.0,2,-2600.0
-2026-10-22,PUT,09:31,22614.9,09:34,22564.9,target,50.0,2,6500.0
-2026-10-26,CALL,09:32,22470.5,09:32,22455.1,midpoint_close_exit,-15.4,2,-2002.0
-2026-10-26,PUT,09:35,22437.15,09:43,22458.5,reverse_after_sl_stop,-21.35,2,-2775.5
+date,time,symbol,side,entry,exit,points,pnl,reason

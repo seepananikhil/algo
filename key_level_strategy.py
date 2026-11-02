@@ -18,7 +18,7 @@ DEFAULTS = {
     "key_level_trail_activate_points": 20,
     "key_level_trail_points": 20,
     "key_level_max_entry_distance": None,
-    "key_level_max_entry_time": None,
+    "key_level_max_entry_time": "14:30",
 }
 BAR_MINUTES = 5
 ZONE_TOUCH_TOLERANCE = 2.0

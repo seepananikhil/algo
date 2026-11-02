@@ -42,8 +42,9 @@ def get_live_option_ltp(
 
     if not scrip_info:
         try:
+            exch_seg = "bse_fo" if symbol_name.upper() == "SENSEX" else "nse_fo"
             res = client.search_scrip(
-                exchange_segment="nse_fo",
+                exchange_segment=exch_seg,
                 symbol=symbol_name,
                 strike_price=str(strike),
                 option_type=opt_type,
@@ -72,6 +73,7 @@ def get_live_option_ltp(
                         "token": token,
                         "symbol": trd_symbol,
                         "expiry": nearest_exp.strftime("%Y-%m-%d"),
+                        "exchange_segment": exch_seg,
                     }
                     _SCRIP_CACHE[cache_key] = scrip_info
         except Exception as e:
@@ -82,10 +84,11 @@ def get_live_option_ltp(
         return None
 
     # Fetch live quotes using quote_type='ltp' (sub-second response vs 30s timeout on 'all')
+    seg = scrip_info.get("exchange_segment", "nse_fo")
     for attempt in range(2):
         try:
             q = client.quotes(
-                [{"instrument_token": scrip_info["token"], "exchange_segment": "nse_fo"}],
+                [{"instrument_token": scrip_info["token"], "exchange_segment": seg}],
                 quote_type="ltp",
             )
             if q and isinstance(q, list) and len(q) > 0:

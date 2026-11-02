@@ -93,8 +93,9 @@ OPEN_TOLERANCE = 2.0  # the rejection candle may open up to this many points on 
 TARGET_POINTS = 50.0
 TRAIL_ACTIVATE_POINTS: Optional[float] = 40.0  # locks in profit once trade reaches +40 pts
 TRAIL_POINTS = 10.0
-HARD_STOP_POINTS: Optional[float] = 20.0  # hard-cap maximum stop loss to 20 pts from entry
-MAX_ENTRY_DISTANCE: Optional[float] = 25.0  # skip entries further than 25 pts from midpoint
+MIDPOINT_SL_OFFSET: float = 15.0  # SL anchored 15 pts beyond the midpoint so normal retests never shake out
+HARD_STOP_POINTS: Optional[float] = 25.0  # hard-cap maximum stop loss to 25 pts from entry
+MAX_ENTRY_DISTANCE: Optional[float] = 22.0  # keep entry close to buffer zone (skips late runaway candles)
 MIN_SETUP_MINUTES = 5
 MIN_FIRST_CANDLE_BODY_RATIO = 0.12
 MIN_OPENING_RANGE: Optional[float] = 50.0  # filter out chop days where opening swing range < 50 pts
@@ -214,13 +215,20 @@ def scan_entry(
 
 
 def entry_stop(setup: dict, side: str, entry: float) -> float:
-    """Range edge, tightened to HARD_STOP_POINTS from entry when that is set and closer."""
+    """Stop loss anchored beyond the midpoint to give retests breathing room,
+    capped to HARD_STOP_POINTS from entry."""
     edge = setup["ref_low"] if side == "LONG" else setup["ref_high"]
-    if HARD_STOP_POINTS is None:
-        return edge
+    mid = setup["mid"]
     if side == "LONG":
-        return max(edge, entry - HARD_STOP_POINTS)
-    return min(edge, entry + HARD_STOP_POINTS)
+        mid_sl = mid - MIDPOINT_SL_OFFSET
+        if HARD_STOP_POINTS is not None:
+            return max(edge, mid_sl, entry - HARD_STOP_POINTS)
+        return max(edge, mid_sl)
+    else:
+        mid_sl = mid + MIDPOINT_SL_OFFSET
+        if HARD_STOP_POINTS is not None:
+            return min(edge, mid_sl, entry + HARD_STOP_POINTS)
+        return min(edge, mid_sl)
 
 
 def entry_too_far(setup: dict, side: str, entry: float) -> bool:

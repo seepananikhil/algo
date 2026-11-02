@@ -1,4 +1,9 @@
-fyers_config.json
-captured_data/fyers/fyers_access_token.json
-captured_data/fyers/fyers_refresh.log
+neo_config.json
+*.token
+.kotak_neo/
 STOP_TRADING
+*.log
+__pycache__/
+*.pyc
+telegram_config.json
+.env

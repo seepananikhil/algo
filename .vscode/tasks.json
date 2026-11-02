@@ -1,27 +1,47 @@
-
 {
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "Frontend: Build static UI",
+      "label": "🚀 Start All Paper Trading & Live Feed",
       "type": "shell",
-      "command": "npm",
-      "args": ["run", "build"],
+      "command": "cmd.exe",
+      "args": ["/d", "/c", "start_all_paper.bat"],
       "options": {
-        "cwd": "${workspaceFolder}/web"
+        "cwd": "${workspaceFolder}"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
       },
       "problemMatcher": []
     },
     {
-      "label": "Backend: app server",
+      "label": "🛑 Stop All Paper Trading Services",
       "type": "shell",
-      "command": "/c/Users/hp/AppData/Local/Programs/Python/Python312/python.exe",
-      "args": [
-        "-u",
-        "app_server.py"
-      ],
-      "dependsOn": ["Frontend: Build static UI"],
-      "dependsOrder": "sequence",
+      "command": "cmd.exe",
+      "args": ["/d", "/c", "stop_all_paper.bat"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📊 Start Dashboard Server (Web UI)",
+      "type": "shell",
+      "command": "python",
+      "args": ["-u", "app_server.py"],
       "options": {
         "cwd": "${workspaceFolder}"
       },
@@ -35,19 +55,120 @@
       "problemMatcher": []
     },
     {
-      "label": "Open app in browser",
+      "label": "📡 Start Kotak Live Market Feed",
       "type": "shell",
-      "command": "cmd.exe",
-      "args": ["/c", "start", "http://127.0.0.1:8090/day"],
+      "command": "python",
+      "args": ["-u", "kotak_capture.py"],
       "options": {
         "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
       },
       "problemMatcher": []
     },
     {
-      "label": "Full stack: start app",
-      "dependsOn": ["Backend: app server"],
-      "dependsOrder": "sequence",
+      "label": "📈 Run Nifty Trend Runner Paper",
+      "type": "shell",
+      "command": "python",
+      "args": ["-u", "trend_runner_paper.py", "--symbol", "NIFTY", "--poll", "5"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📈 Run Sensex Trend Runner Paper",
+      "type": "shell",
+      "command": "python",
+      "args": ["-u", "trend_runner_paper.py", "--symbol", "SENSEX", "--poll", "5"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🎯 Run Sensex Key Levels Paper",
+      "type": "shell",
+      "command": "python",
+      "args": ["-u", "sensex_key_levels_paper.py", "--poll", "5"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🎯 Run Nifty Key Levels Paper",
+      "type": "shell",
+      "command": "python",
+      "args": ["-u", "nifty_key_levels_paper.py", "--poll", "5"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "isBackground": true,
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated",
+        "clear": true,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "📥 Pull Latest EOD Data from GitHub Actions",
+      "type": "shell",
+      "command": "git",
+      "args": ["pull", "origin", "master"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false,
+        "focus": false
+      },
+      "problemMatcher": []
+    },
+    {
+      "label": "🌐 Build Static UI (Frontend)",
+      "type": "shell",
+      "command": "npm.cmd",
+      "args": ["run", "build"],
+      "options": {
+        "cwd": "${workspaceFolder}/web"
+      },
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared",
+        "clear": false,
+        "focus": false
+      },
       "problemMatcher": []
     }
   ]

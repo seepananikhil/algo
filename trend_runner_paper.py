@@ -37,6 +37,11 @@ from typing import Optional, Dict, Any, List
 import numpy as np
 import pandas as pd
 
+try:
+    from telegram_notifier import notify_trade_entry, notify_ratchet, notify_trade_exit
+except ImportError:
+    notify_trade_entry = notify_ratchet = notify_trade_exit = None
+
 IST = timezone(timedelta(hours=5, minutes=30))
 ROOT = Path(__file__).resolve().parent
 LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
@@ -181,16 +186,18 @@ def compute_indicators(df1m: pd.DataFrame) -> tuple[pd.DataFrame, float, float, 
 class TrendRunnerPaperEngine:
     def __init__(
         self,
+        symbol: str = "NIFTY",
         sl_points: float = 30.0,
         reentry_sl_points: float = 30.0,
-        sl_mode: str = "fixed",
+        sl_mode: str = "adaptive",
         lots: int = 1,
-        sizing_mode: str = "fixed",
+        sizing_mode: str = "hybrid",
+        pyramid: bool = True,
         reentry: bool = False,
         max_trades_per_day: int = 2,
         vix_th: float = 2.5,
         vix_call_th: Optional[float] = None,
-        vix_put_th: Optional[float] = None,
+        vix_put_th: Optional[float] = 0.0,
         target_pts: Optional[float] = None,
         be_trigger: Optional[float] = None,
         be_lock: float = 10.0,
@@ -211,8 +218,10 @@ class TrendRunnerPaperEngine:
         reentry_be_trigger: Optional[float] = None,
         reentry_be_lock: float = 5.0,
         reentry_req_color: bool = False,
-        reentry_cooloff_bars: int = 30,
-        call_cutoff_time: str = "10:30",
+        body_conviction_th: float = 0.80,
+        body_standard_th: float = 0.70,
+        reentry_cooloff_bars: int = 15,
+        call_cutoff_time: str = "10:45",
         allow_call_reentry: bool = True,
         **kwargs,
     ) -> None:
@@ -221,17 +230,41 @@ class TrendRunnerPaperEngine:
         self.reentry_be_trigger = reentry_be_trigger
         self.reentry_be_lock = reentry_be_lock
         self.reentry_req_color = reentry_req_color
+        self.body_conviction_th = body_conviction_th
+        self.body_standard_th = body_standard_th
         self.reentry_cooloff_bars = reentry_cooloff_bars
         self.call_cutoff_time = call_cutoff_time
         self.allow_call_reentry = allow_call_reentry
+        self.symbol = symbol.upper()
+        self.lot_size = 20 if self.symbol == "SENSEX" else 25
+        if self.symbol == "SENSEX":
+            if sl_points == 30.0:
+                self.sl_points = 120.0
+                self.reentry_sl_points = 120.0
+            if r1_trigger == 70.0:
+                self.r1_trigger = 280.0
+                self.r1_lock = 80.0
+                self.r2_trigger = 520.0
+                self.r2_lock = 240.0
+                self.r3_trigger = 720.0
+                self.r3_lock = 440.0
+                self.r4_trigger = 920.0
+                self.r4_lock = 660.0
+                self.r5_trigger = 1120.0
+                self.r5_lock = 880.0
+                self.r6_trigger = 1320.0
+                self.r6_lock = 1080.0
+            self.call_cutoff_time = "10:45"
+            self.strike_mode = "atm"
         self.sl_mode = sl_mode
         self.lots = lots
         self.sizing_mode = sizing_mode
+        self.pyramid = pyramid
         self.reentry = reentry
         self.max_trades_per_day = max_trades_per_day if reentry else 1
         self.vix_th = vix_th
         self.vix_call_th = vix_call_th if vix_call_th is not None else vix_th
-        self.vix_put_th = vix_put_th if vix_put_th is not None else vix_th
+        self.vix_put_th = vix_put_th if vix_put_th is not None else 0.0
         self.target_pts = target_pts
         self.be_trigger = be_trigger
         self.be_lock = be_lock
@@ -250,6 +283,7 @@ class TrendRunnerPaperEngine:
         self.williams_fallback = williams_fallback
         self.strike_mode = strike_mode
         self.log_trades: bool = kwargs.get("log_trades", True)
+        self.notify_telegram: bool = kwargs.get("notify_telegram", False)
         self.fetch_live_quotes: bool = kwargs.get("fetch_live_quotes", False)
 
         self.active_position: Optional[Dict[str, Any]] = None
@@ -277,6 +311,7 @@ class TrendRunnerPaperEngine:
         or_range: float,
         vix_chg: float,
         next_bar_open: Optional[float] = None,
+        **kwargs,
     ) -> Optional[Dict[str, Any]]:
         """Evaluate a closed 1m/5m bar for entry signal or update an active position."""
         t_str = str(bar["time_str"])
@@ -287,19 +322,11 @@ class TrendRunnerPaperEngine:
         vwap = float(bar["vwap"])
         atr = float(bar["atr14"]) if "atr14" in bar and pd.notna(bar["atr14"]) else 30.0
 
-        # Initialize dynamic OR levels if first bar of the day
-        if self.dyn_or_high == 0.0 or self.dyn_or_low == 999999.0:
-            self.dyn_or_high = or_high
-            self.dyn_or_low = or_low
-
-        # Dynamic Range Expansion:
-        # Before Trade 1 is entered, any bar between 09:30 and 12:00 that wicks outside
-        # the Opening Range without closing outside expands the trading range boundary!
-        if self.trades_today == 0 and self.active_position is None and "09:30" <= t_str <= "12:00":
-            if c <= self.dyn_or_high and h > self.dyn_or_high:
-                self.dyn_or_high = h
-            if c >= self.dyn_or_low and l < self.dyn_or_low:
-                self.dyn_or_low = l
+        # Initialize day extremes with Opening Range baseline if first bar
+        if self.rolling_day_high == 0.0:
+            self.rolling_day_high = or_high
+        if self.rolling_day_low == 999999.0:
+            self.rolling_day_low = or_low
 
         # Rolling day extremes prior to this bar
         prev_dh = self.rolling_day_high
@@ -310,6 +337,10 @@ class TrendRunnerPaperEngine:
             self.rolling_day_high = h
         if l < self.rolling_day_low:
             self.rolling_day_low = l
+
+        # Simple, robust Rolling Day High/Low for both Nifty and Sensex
+        self.dyn_or_high = prev_dh
+        self.dyn_or_low = prev_dl
 
         # Update Midday Consolidation Box (09:45 to 12:00) for Williams Afternoon Fallback
         if "09:45" <= t_str <= "12:00":
@@ -338,7 +369,7 @@ class TrendRunnerPaperEngine:
                 pos["max_fav"] = fav
 
             # --- 3-Tier Progressive Ratchet Lock ---
-            # Tier 1: +70 pts -> Lock +20 pts
+            # Tier 1: +70 pts -> Lock +20 pts & Risk-Free Pyramiding
             if self.r1_trigger is not None and pos["max_fav"] >= self.r1_trigger:
                 r1_level = entry_px + self.r1_lock if sig == "LONG" else entry_px - self.r1_lock
                 if (sig == "LONG" and r1_level > curr_sl) or (sig == "SHORT" and r1_level < curr_sl):
@@ -346,6 +377,21 @@ class TrendRunnerPaperEngine:
                     curr_sl = r1_level
                     if self.log_trades:
                         print(f"  [RATCHET TIER 1 LOCKED] Reached +{pos['max_fav']:.1f} pts! Stop moved to {curr_sl:.2f} (Locking +{self.r1_lock:.1f} pts profit)")
+                    if pos.get("last_ratchet") != "Tier 1":
+                        pos["last_ratchet"] = "Tier 1"
+                        if self.notify_telegram and notify_ratchet:
+                            pyr_txt = f"Added Lot 2 at {pyr_e:.2f} (Risk: Zero)" if pos.get("pyramided") else ""
+                            notify_ratchet(self.symbol, sig, f"Tier 1 (+{self.r1_trigger:.0f} pts)", pos["max_fav"], curr_sl, self.r1_lock, pyramided=pos.get("pyramided", False), pyramid_info=pyr_txt)
+                    
+                    # Risk-Free Pyramiding: Add Lot 2 with stop offset by locked profit
+                    if self.pyramid and not pos.get("pyramided", False):
+                        pyr_e = entry_px + 70.0 if sig == "LONG" else entry_px - 70.0
+                        pyr_sl = pyr_e - 20.0 if sig == "LONG" else pyr_e + 20.0
+                        pos["pyramided"] = True
+                        pos["pyramid_entry_px"] = pyr_e
+                        pos["pyramid_sl"] = pyr_sl
+                        if self.log_trades:
+                            print(f"  [RISK-FREE PYRAMID ADDED] Added Lot 2 at {pyr_e:.2f} with SL at {pyr_sl:.2f} (Net Combined Risk: ZERO)")
 
             # Tier 2: +130 pts -> Lock +60 pts
             if self.r2_trigger is not None and pos["max_fav"] >= self.r2_trigger:
@@ -353,8 +399,15 @@ class TrendRunnerPaperEngine:
                 if (sig == "LONG" and r2_level > curr_sl) or (sig == "SHORT" and r2_level < curr_sl):
                     pos["current_sl"] = r2_level
                     curr_sl = r2_level
+                    if pos.get("pyramided"):
+                        pyr_e = pos["pyramid_entry_px"]
+                        pos["pyramid_sl"] = pyr_e + 10.0 if sig == "LONG" else pyr_e - 10.0
                     if self.log_trades:
                         print(f"  [RATCHET TIER 2 LOCKED] Reached +{pos['max_fav']:.1f} pts! Stop moved to {curr_sl:.2f} (Locking +{self.r2_lock:.1f} pts profit)")
+                    if pos.get("last_ratchet") != "Tier 2":
+                        pos["last_ratchet"] = "Tier 2"
+                        if self.notify_telegram and notify_ratchet:
+                            notify_ratchet(self.symbol, sig, f"Tier 2 (+{self.r2_trigger:.0f} pts)", pos["max_fav"], curr_sl, self.r2_lock)
 
             # Tier 3: +180 pts -> Lock +110 pts
             if self.r3_trigger is not None and pos["max_fav"] >= self.r3_trigger:
@@ -362,8 +415,15 @@ class TrendRunnerPaperEngine:
                 if (sig == "LONG" and r3_level > curr_sl) or (sig == "SHORT" and r3_level < curr_sl):
                     pos["current_sl"] = r3_level
                     curr_sl = r3_level
+                    if pos.get("pyramided"):
+                        pyr_e = pos["pyramid_entry_px"]
+                        pos["pyramid_sl"] = pyr_e + 50.0 if sig == "LONG" else pyr_e - 50.0
                     if self.log_trades:
                         print(f"  [RATCHET TIER 3 LOCKED] Reached +{pos['max_fav']:.1f} pts! Stop moved to {curr_sl:.2f} (Locking +{self.r3_lock:.1f} pts profit)")
+                    if pos.get("last_ratchet") != "Tier 3":
+                        pos["last_ratchet"] = "Tier 3"
+                        if self.notify_telegram and notify_ratchet:
+                            notify_ratchet(self.symbol, sig, f"Tier 3 (+{self.r3_trigger:.0f} pts)", pos["max_fav"], curr_sl, self.r3_lock)
 
             # Tier 4: +230 pts -> Lock +165 pts
             if self.r4_trigger is not None and pos["max_fav"] >= self.r4_trigger:
@@ -444,8 +504,17 @@ class TrendRunnerPaperEngine:
 
             if closed:
                 pnl_pts = (exit_px - entry_px) if sig == "LONG" else (entry_px - exit_px)
-                total_lots = pos.get("base_lots", self.lots)
-                futures_pnl_rs = pnl_pts * total_lots * LOT_SIZE
+                base_lots = pos.get("base_lots", self.lots)
+                pyr_pnl_pts = 0.0
+                if pos.get("pyramided"):
+                    pyr_e = pos["pyramid_entry_px"]
+                    pyr_sl = pos.get("pyramid_sl", pyr_e)
+                    pyr_exit = pyr_sl if (sig == "LONG" and exit_px <= pyr_sl) or (sig == "SHORT" and exit_px >= pyr_sl) else exit_px
+                    pyr_pnl_pts = (pyr_exit - pyr_e) if sig == "LONG" else (pyr_e - pyr_exit)
+                
+                total_lots = base_lots + (1 if pos.get("pyramided") else 0)
+                weighted_pnl_pts = (pnl_pts * base_lots) + (pyr_pnl_pts * 1)
+                futures_pnl_rs = weighted_pnl_pts * self.lot_size
 
                 opt_symbol = pos.get("option_symbol", "")
                 opt_entry_px = float(pos.get("option_entry_price") or 0.0)
@@ -456,7 +525,7 @@ class TrendRunnerPaperEngine:
                 if self.fetch_live_quotes and strike > 0:
                     try:
                         from live_option_pricing import get_live_option_ltp
-                        q = get_live_option_ltp("NIFTY", strike, opt_type)
+                        q = get_live_option_ltp(self.symbol, strike, opt_type)
                         if q and q.get("ltp"):
                             opt_exit_px = float(q.get("bid") or q.get("ltp"))
                             if not opt_symbol:
@@ -466,10 +535,10 @@ class TrendRunnerPaperEngine:
 
                 if opt_entry_px > 0 and opt_exit_px > 0:
                     opt_pnl_pts = opt_exit_px - opt_entry_px
-                    opt_pnl_rs = opt_pnl_pts * total_lots * LOT_SIZE
+                    opt_pnl_rs = opt_pnl_pts * total_lots * self.lot_size
                 else:
                     opt_pnl_pts = round(pnl_pts * 0.75, 2)
-                    opt_pnl_rs = opt_pnl_pts * total_lots * LOT_SIZE
+                    opt_pnl_rs = opt_pnl_pts * total_lots * self.lot_size
 
                 diff_rs = futures_pnl_rs - opt_pnl_rs
 
@@ -495,12 +564,13 @@ class TrendRunnerPaperEngine:
                     "futures_pnl_rupees": round(futures_pnl_rs, 2),
                     "diff_rupees": round(diff_rs, 2),
                     "max_fav": round(pos["max_fav"], 2),
-                    "rr": round(pnl_pts / pos["sl_pts"], 2),
+                    "rr": round(weighted_pnl_pts / (base_lots * pos["sl_pts"]), 2),
                     "exit_reason": exit_reason,
                     "vix_chg": round(vix_chg, 2),
-                    "base_lots": total_lots,
-                    "pyramided": False,
+                    "base_lots": base_lots,
+                    "pyramided": pos.get("pyramided", False),
                     "total_lots": total_lots,
+                    "weighted_pnl_points": round(weighted_pnl_pts, 2),
                 }
 
                 self.last_trade_sig = sig
@@ -512,6 +582,23 @@ class TrendRunnerPaperEngine:
                 if self.log_trades:
                     self._print_exit(trade_result)
                     self._log_trade(trade_result)
+                if self.notify_telegram and notify_trade_exit:
+                    try:
+                        notify_trade_exit(
+                            symbol=self.symbol,
+                            side=trade_result["side"],
+                            option_str=trade_result["option"],
+                            pnl_pts=trade_result["pnl_points"],
+                            option_pnl_pts=trade_result["option_pnl_points"],
+                            pnl_rupees=trade_result["pnl_rupees"],
+                            exit_reason=trade_result["exit_reason"],
+                            exit_price=trade_result["exit_price"],
+                            exit_time=trade_result["exit_time"],
+                            total_lots=trade_result["total_lots"],
+                            qty=trade_result["total_lots"] * self.lot_size,
+                        )
+                    except Exception:
+                        pass
                 self.active_position = None
                 self.trades_today += 1
                 return trade_result
@@ -536,31 +623,39 @@ class TrendRunnerPaperEngine:
             # MANDATORY: Must break Dynamic Expanded Range (OR High / Low expanded by pre-breakout wicks)
             if "09:30" <= t_str <= "13:00":
                 if or_range >= 30.0:
-                    # Solid Breakout Candle Filter (Conviction Body >= 60% of candle range)
+                    # Solid Breakout Candle Filter (Conviction Body >= 70% of candle range, Rejection Wick <= 20%)
                     candle_rng = h - l
                     candle_body = abs(c - o)
                     body_ratio = candle_body / candle_rng if candle_rng > 0 else 0.0
+                    upper_wick_pct = (h - max(o, c)) / candle_rng if candle_rng > 0 else 0.0
+                    lower_wick_pct = (min(o, c) - l) / candle_rng if candle_rng > 0 else 0.0
+
+                    # Rejection Wick check:
+                    # For LONG (CALL): upper wick represents overhead rejection selling -> must be <= 20%
+                    # For SHORT (PUT): lower wick represents bottom absorption buying -> must be <= 20%
+                    long_conviction = (upper_wick_pct <= 0.20)
+                    short_conviction = (lower_wick_pct <= 0.20)
 
                     # 1. High-Conviction Breakout (Body >= 80% with Directional VIX confirmation <= 0.0% / >= 0.0%)
                     # Captures major trends where VIX cools mildly while blocking counter-trend traps
-                    if body_ratio >= 0.80:
-                        if (c > self.dyn_or_high) and (c > o) and (c > vwap) and (vix_chg <= 0.0):
+                    if body_ratio >= self.body_conviction_th:
+                        if (c > self.dyn_or_high) and (c > o) and (c > vwap) and (vix_chg <= 0.0) and long_conviction:
                             if t_str <= self.call_cutoff_time:
                                 sig = "LONG"
                                 stage_name = "STAGE1_TREND"
-                        elif (c < self.dyn_or_low) and (c < o) and (c < vwap) and (vix_chg >= 0.0):
+                        elif (c < self.dyn_or_low) and (c < o) and (c < vwap) and (vix_chg >= 0.0) and short_conviction:
                             sig = "SHORT"
                             stage_name = "STAGE1_TREND"
 
-                    # 2. Standard Breakout (Body >= 60% with Strict VIX confirmation <= -vix_call_th / >= +vix_put_th)
-                    if not sig and body_ratio >= 0.60:
-                        raw_long = (c > self.dyn_or_high) and (c > o) and (c > vwap)
+                    # 2. Standard Breakout (Body >= 70% with Strict VIX confirmation <= -vix_call_th / >= +vix_put_th)
+                    if not sig and body_ratio >= self.body_standard_th:
+                        raw_long = (c > self.dyn_or_high) and (c > o) and (c > vwap) and long_conviction
                         vix_long = (vix_chg <= -self.vix_call_th)
                         if raw_long and vix_long and (t_str <= self.call_cutoff_time):
                             sig = "LONG"
                             stage_name = "STAGE1_TREND"
 
-                        raw_short = (c < self.dyn_or_low) and (c < o) and (c < vwap)
+                        raw_short = (c < self.dyn_or_low) and (c < o) and (c < vwap) and short_conviction
                         vix_short = (vix_chg >= self.vix_put_th)
                         if raw_short and vix_short:
                             sig = "SHORT"
@@ -584,37 +679,54 @@ class TrendRunnerPaperEngine:
             # Both CALL and PUT re-entries are enabled symmetrically with 30-min cool-off and Day High/Low expansion.
             if "09:30" <= t_str <= "13:00":
                 # Dynamic Expansion Re-entry (Breakout continuation after 30-min cool-off)
-                if self.last_trade_sig:
-                    if self.last_trade_sig == "LONG" and self.allow_call_reentry and c >= prev_dh and c > o and c > vwap:
+                candle_rng = h - l
+                candle_body = abs(c - o)
+                body_ratio = candle_body / candle_rng if candle_rng > 0 else 0.0
+                upper_wick_pct = (h - max(o, c)) / candle_rng if candle_rng > 0 else 0.0
+                lower_wick_pct = (min(o, c) - l) / candle_rng if candle_rng > 0 else 0.0
+
+                if body_ratio >= 0.70 and self.last_trade_sig:
+                    if self.last_trade_sig == "LONG" and self.allow_call_reentry and c >= prev_dh and c > o and c > vwap and (upper_wick_pct <= 0.20):
                         sig = "LONG"
                         stage_name = "REENTRY_EXPANSION"
-                    elif self.last_trade_sig == "SHORT" and c <= prev_dl and c < o and c < vwap:
+                    elif self.last_trade_sig == "SHORT" and c <= prev_dl and c < o and c < vwap and (lower_wick_pct <= 0.20):
                         sig = "SHORT"
                         stage_name = "REENTRY_EXPANSION"
 
         if sig in ("LONG", "SHORT"):
             entry_px = next_bar_open if next_bar_open is not None else c
-            effective_sl_pts = self.sl_points if trade_num == 1 else self.reentry_sl_points
+            if self.sl_mode == "adaptive":
+                effective_sl_pts = max(30.0, min(45.0, round(atr * 0.95, 1)))
+            else:
+                effective_sl_pts = self.sl_points if trade_num == 1 else self.reentry_sl_points
 
             sl_px = entry_px - effective_sl_pts if sig == "LONG" else entry_px + effective_sl_pts
             opt_type = "CE" if sig == "LONG" else "PE"
 
-            # Strike Selection: ITM-150 (Deep Synthetic Delta ~0.70) vs ATM
-            if self.strike_mode == "itm150":
+            # Strike Selection: ITM-150 vs ATM
+            if self.symbol == "SENSEX":
+                strike = int(round(entry_px / 100.0) * 100)
+                opt_str = f"SENSEX {strike} {opt_type} (ATM)"
+            elif self.strike_mode == "itm150":
                 strike = int(round((entry_px - 150 if sig == "LONG" else entry_px + 150) / 50.0) * 50)
                 opt_str = f"NIFTY {strike} {opt_type} (ITM-150)"
             else:
                 strike = int(round(entry_px / 50.0) * 50)
                 opt_str = f"NIFTY {strike} {opt_type} (ATM)"
 
-            base_lots = self.lots
+            # Dynamic Confluence Sizing (1 vs 2 Lots)
+            if self.sizing_mode in ("hybrid", "dynamic"):
+                is_high_conviction = (body_ratio >= 0.85) or (abs(vix_chg) >= 2.0 and body_ratio >= 0.80)
+                base_lots = 2 if is_high_conviction else 1
+            else:
+                base_lots = self.lots
 
             opt_symbol = ""
             opt_entry_px = 0.0
             if self.fetch_live_quotes:
                 try:
                     from live_option_pricing import get_live_option_ltp
-                    q = get_live_option_ltp("NIFTY", strike, opt_type)
+                    q = get_live_option_ltp(self.symbol, strike, opt_type)
                     if q and q.get("ltp"):
                         opt_symbol = q["symbol"]
                         opt_entry_px = float(q.get("ask") or q.get("ltp"))
@@ -656,7 +768,7 @@ class TrendRunnerPaperEngine:
         print(f" [{stage_tag} TRIGGERED]  Side: {pos['side']}  Time: {pos['entry_time']}")
         print("=" * 70)
         print(f"  Underlying Spot Entry : {pos['entry_price']:.2f}")
-        print(f"  Option Contract       : {pos['option']} ({lots} Lot(s) / {lots * LOT_SIZE} qty)")
+        print(f"  Option Contract       : {pos['option']} ({lots} Lot(s) / {lots * self.lot_size} qty)")
         if pos.get("option_entry_price"):
             print(f"  Live Option Quote     : {pos.get('option_symbol')} @ Rs {pos['option_entry_price']:.2f}")
         print(f"  VIX Conviction Sizing : {vix_tier} (|Delta VIX|: {abs(vix):.2f}%)")
@@ -667,6 +779,25 @@ class TrendRunnerPaperEngine:
         print(f"  Confluence Check      : {or_desc} (Range: {or_range:.1f} pts) | VIX Chg: {vix:+.2f}%")
         print("=" * 70 + "\n")
         self._log_signal(pos, sl_pts, vix)
+        if self.notify_telegram and notify_trade_entry:
+            try:
+                notify_trade_entry(
+                    symbol=self.symbol,
+                    stage=stage_tag,
+                    side=pos["side"],
+                    option_str=pos["option"],
+                    spot_entry=pos["entry_price"],
+                    sl_pts=sl_pts,
+                    initial_sl=pos["initial_sl"],
+                    lots=lots,
+                    qty=lots * self.lot_size,
+                    target_pts=self.target_pts,
+                    option_symbol=pos.get("option_symbol"),
+                    option_entry_price=pos.get("option_entry_price"),
+                    vix_chg=vix,
+                )
+            except Exception:
+                pass
 
     def _log_signal(self, pos: dict, sl_pts: float, vix: float) -> None:
         signal_cols = [
@@ -687,7 +818,7 @@ class TrendRunnerPaperEngine:
             "target": target_val,
             "vix_chg": round(vix, 2),
             "lots": pos.get("base_lots", self.lots),
-            "qty": pos.get("base_lots", self.lots) * LOT_SIZE,
+            "qty": pos.get("base_lots", self.lots) * self.lot_size,
         }
         for fpath in [SIGNALS_LOG_CSV, LIVE_SIGNALS_CSV]:
             exists = fpath.exists() and (fpath.stat().st_size > 0)
@@ -715,7 +846,7 @@ class TrendRunnerPaperEngine:
         print("\n" + "#" * 70)
         print(f" [POSITION CLOSED]  {res['side']}  Exit Time: {res['exit_time']}  Reason: {res['exit_reason']}")
         print("#" * 70)
-        fut_pnl = res.get('futures_pnl_rupees', res['pnl_points'] * res['total_lots'] * LOT_SIZE)
+        fut_pnl = res.get('futures_pnl_rupees', res['pnl_points'] * res['total_lots'] * self.lot_size)
         fut_sign = "+" if fut_pnl > 0 else ""
         print(f"  Futures (1.0 Delta)  : Entry {res['entry_price']:.2f} -> Exit {res['exit_price']:.2f} | PnL: {fut_sign}Rs {fut_pnl:,.2f} ({res['pnl_points']:+.2f} pts)")
         if res.get("option_entry_price") and res.get("option_exit_price"):
@@ -736,7 +867,23 @@ class TrendRunnerPaperEngine:
             "max_fav", "max_adv", "rr", "lots", "qty", "vix_chg", "initial_sl", "base_lots", "total_lots", "pyramided"
         ]
 
-        for fpath in [PAPER_LOG_CSV, LIVE_PAPER_CSV]:
+        if self.symbol == "SENSEX":
+            perf_csv = PERF_DIR / "trend_runner_sensex_paper_trades.csv"
+            live_csv = LIVE_DIR / "trend_runner_sensex_live_paper.csv"
+            parts = str(res.get("date", "")).split("-")
+            sess_dir = ROOT / "paper" / "trend_runner_sensex" / parts[0] / parts[1] / parts[2] if len(parts) == 3 else None
+        else:
+            perf_csv = PERF_DIR / "trend_runner_paper_trades.csv"
+            live_csv = LIVE_DIR / "trend_runner_live_paper.csv"
+            parts = str(res.get("date", "")).split("-")
+            sess_dir = ROOT / "paper" / "trend_runner" / parts[0] / parts[1] / parts[2] if len(parts) == 3 else None
+
+        fpaths = [perf_csv, live_csv]
+        if sess_dir:
+            sess_dir.mkdir(parents=True, exist_ok=True)
+            fpaths.append(sess_dir / f"trend_runner_trades_{res.get('date')}.csv")
+
+        for fpath in fpaths:
             exists = fpath.exists() and (fpath.stat().st_size > 0)
             if exists:
                 try:
@@ -831,6 +978,7 @@ def run_replay(
             print(f"  -> Morning OR Range ({or_range:.2f} pts) < 30.0 pts. Morning setup skipped; standing down to Midday Williams Fallback.")
 
     engine = TrendRunnerPaperEngine(
+        symbol=symbol,
         sl_points=sl_pts,
         sl_mode=sl_mode,
         lots=lots,
@@ -875,6 +1023,7 @@ def run_replay(
 
 
 def run_live_monitor(
+    symbol: str = "NIFTY",
     poll_interval: int = 5,
     sl_pts: float = 30.0,
     sl_mode: str = "fixed",
@@ -896,9 +1045,10 @@ def run_live_monitor(
     print("=" * 75)
 
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
-    live_1m_csv = LIVE_DIR / f"nifty_1min_{today_str}.csv"
+    live_1m_csv = LIVE_DIR / f"{symbol.lower()}_1min_{today_str}.csv"
 
     engine = TrendRunnerPaperEngine(
+        symbol=symbol,
         sl_points=sl_pts,
         sl_mode=sl_mode,
         lots=lots,
@@ -908,6 +1058,7 @@ def run_live_monitor(
         williams_fallback=williams_fallback,
         strike_mode=strike_mode,
         fetch_live_quotes=True,
+        notify_telegram=True,
     )
     engine.current_day_str = today_str
 
@@ -975,12 +1126,13 @@ if __name__ == "__main__":
             pass
 
     parser = argparse.ArgumentParser(description="Trend Catcher (VIX Runner) Live Paper & Replay Engine")
+    parser.add_argument("--symbol", choices=["NIFTY", "SENSEX"], default="NIFTY", help="Index to trade (default: NIFTY)")
     parser.add_argument("--replay", type=str, default="", help="Replay a specific date (YYYY-MM-DD), e.g. 2026-10-15")
     parser.add_argument("--lots", type=int, default=1, help="Number of lots to trade (default: 1)")
     parser.add_argument("--sl", type=float, default=30.0, help="Stop loss in spot points (default: 30.0)")
     parser.add_argument("--sl-mode", choices=["fixed", "adaptive"], default="fixed", help="SL mode (default: fixed)")
     parser.add_argument("--sizing", choices=["hybrid", "fixed"], default="fixed", help="Position sizing mode (default: fixed)")
-    parser.add_argument("--vix-chg", type=float, default=None, help="Override India VIX % change for testing")
+    parser.add_argument("--vix-chg", type=float, default=None, help="Override India VIX %% change for testing")
     parser.add_argument("--poll", type=int, default=5, help="Live monitor polling interval in seconds (default: 5)")
     parser.add_argument("--reentry", action="store_true", default=True, help="Enable smart re-entry after morning stopout (default: True)")
     parser.add_argument("--no-reentry", action="store_false", dest="reentry", help="Disable smart re-entry")
@@ -1005,6 +1157,7 @@ if __name__ == "__main__":
         )
     else:
         run_live_monitor(
+            symbol=args.symbol,
             poll_interval=args.poll,
             sl_pts=args.sl,
             sl_mode=args.sl_mode,

@@ -30,15 +30,18 @@ export function DayDetail({
   allowTimeframeSwitch?: boolean
   headerLeading?: ReactNode
 }) {
+  const isSensexStrategy = Boolean(strategy && (strategy === "sensex_runner" || strategy.includes("sensex")))
   const [timeframe, setTimeframe] = useState<"1m" | "5m">("1m")
-  const [chartLayout, setChartLayout] = useState<"both" | "nifty" | "sensex">("both")
-  const [niftyResetKey, setNiftyResetKey] = useState(0)
-  const [sensexResetKey, setSensexResetKey] = useState(0)
+  const [chartLayout, setChartLayout] = useState<"both" | "primary" | "secondary">(isSensexStrategy ? "primary" : "both")
+  const [primaryResetKey, setPrimaryResetKey] = useState(0)
+  const [secondaryResetKey, setSecondaryResetKey] = useState(0)
   const useFiveMinute = allowTimeframeSwitch && timeframe === "5m"
-  const day = usePoll<DayData>(date && `/api/day?date=${date}&symbol=NIFTY${strategy ? `&strategy=${strategy}` : ""}${allowTimeframeSwitch ? "&full=1" : ""}`)
-  const sensexDay = usePoll<DayData>(date && `/api/day?date=${date}&symbol=SENSEX${allowTimeframeSwitch ? "&full=1" : ""}`)
+  const primarySymbol = isSensexStrategy ? "SENSEX" : "NIFTY"
+  const secondarySymbol = isSensexStrategy ? "NIFTY" : "SENSEX"
+  const day = usePoll<DayData>(date && `/api/day?date=${date}&symbol=${primarySymbol}${strategy ? `&strategy=${strategy}` : ""}${allowTimeframeSwitch ? "&full=1" : ""}`)
+  const secondaryDay = usePoll<DayData>(date && `/api/day?date=${date}&symbol=${secondarySymbol}${allowTimeframeSwitch ? "&full=1" : ""}`)
   const currentIstDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Kolkata" }).format(new Date())
-  const keyLevelDay = usePoll<KeyLevelDay>(date && useFiveMinute ? `/api/key-level-day?date=${date}` : null, useFiveMinute && date === currentIstDate ? 1000 : 0)
+  const keyLevelDay = usePoll<KeyLevelDay>(date && useFiveMinute && !isSensexStrategy ? `/api/key-level-day?date=${date}` : null, useFiveMinute && date === currentIstDate ? 1000 : 0)
   const signals = day.data?.signals ?? []
   const paperTrades = day.data?.paper_trades ?? []
   const allFills = day.data?.option_trades ?? []
@@ -49,13 +52,16 @@ export function DayDetail({
         if (strategy === "trend_runner" || strategy === "trend_runner_10y" || strategy === "10y" || strategy === "trend" || strategy === "vix_runner" || strategy === "vix_trend" || strategy === "trend_expansion") {
           return m.includes("TREND")
         }
+        if (strategy === "sensex_runner" || strategy === "sensex" || strategy === "sensex_trend") {
+          return m.includes("TREND") || m.includes("SENSEX")
+        }
         if (strategy === "compression_scalp" || strategy === "scalper" || strategy === "sniper" || strategy === "scalp" || strategy === "micro_scalp") {
           return m.includes("SCALP")
         }
         if (strategy === "midpoint") {
           return m.includes("MIDPOINT") || (!m.includes("TREND") && !m.includes("SCALP") && !m.includes("KEYLEVEL") && !m.includes("HEROZERO"))
         }
-        if (strategy === "key_levels" || strategy === "key_level") {
+        if (strategy === "key_levels" || strategy === "key_level" || strategy === "sensex_key_levels" || strategy === "nifty_key_levels") {
           return m.includes("KEYLEVEL")
         }
         if (strategy === "hero_zero") {
@@ -85,25 +91,25 @@ export function DayDetail({
   const chartCandles = useFiveMinute ? keyLevelDay.data?.candles : day.data?.candles
   const chartLoading = useFiveMinute ? keyLevelDay.loading : day.loading
 
-  // Nifty price metrics
-  const niftyLastCandle = chartCandles && chartCandles.length > 0 ? chartCandles[chartCandles.length - 1] : undefined
-  const niftyPrice = niftyLastCandle?.close
-  const niftyFirstCandle = chartCandles && chartCandles.length > 0 ? chartCandles[0] : undefined
-  const niftyChangePts = niftyLastCandle && niftyFirstCandle ? niftyLastCandle.close - niftyFirstCandle.open : 0
-  const niftyChangePct = niftyFirstCandle && niftyFirstCandle.open ? (niftyChangePts / niftyFirstCandle.open) * 100 : 0
+  // Primary price metrics
+  const primaryLastCandle = chartCandles && chartCandles.length > 0 ? chartCandles[chartCandles.length - 1] : undefined
+  const primaryPrice = primaryLastCandle?.close
+  const primaryFirstCandle = chartCandles && chartCandles.length > 0 ? chartCandles[0] : undefined
+  const primaryChangePts = primaryLastCandle && primaryFirstCandle ? primaryLastCandle.close - primaryFirstCandle.open : 0
+  const primaryChangePct = primaryFirstCandle && primaryFirstCandle.open ? (primaryChangePts / primaryFirstCandle.open) * 100 : 0
 
-  // Sensex price metrics
-  const sensexCandles = sensexDay.data?.candles ?? []
-  const sensexSetup = sensexDay.data?.setup
-  const hasSensex = sensexCandles.length > 0
-  const sensexLastCandle = hasSensex ? sensexCandles[sensexCandles.length - 1] : undefined
-  const sensexPrice = sensexLastCandle?.close
-  const sensexFirstCandle = hasSensex ? sensexCandles[0] : undefined
-  const sensexChangePts = sensexLastCandle && sensexFirstCandle ? sensexLastCandle.close - sensexFirstCandle.open : 0
-  const sensexChangePct = sensexFirstCandle && sensexFirstCandle.open ? (sensexChangePts / sensexFirstCandle.open) * 100 : 0
+  // Secondary price metrics
+  const secondaryCandles = secondaryDay.data?.candles ?? []
+  const secondarySetup = secondaryDay.data?.setup
+  const hasSecondary = secondaryCandles.length > 0
+  const secondaryLastCandle = hasSecondary ? secondaryCandles[secondaryCandles.length - 1] : undefined
+  const secondaryPrice = secondaryLastCandle?.close
+  const secondaryFirstCandle = hasSecondary ? secondaryCandles[0] : undefined
+  const secondaryChangePts = secondaryLastCandle && secondaryFirstCandle ? secondaryLastCandle.close - secondaryFirstCandle.open : 0
+  const secondaryChangePct = secondaryFirstCandle && secondaryFirstCandle.open ? (secondaryChangePts / secondaryFirstCandle.open) * 100 : 0
 
-  const spotPoints = spotTrades.reduce((sum, trade) => sum + trade.pnl_points, 0)
-  const fillsPnl = fills.reduce((sum, fill) => sum + (fill.net_rs ?? fill.pnl_rs), 0)
+  const spotPoints = spotTrades.reduce((sum: number, trade: any) => sum + trade.pnl_points, 0)
+  const fillsPnl = fills.reduce((sum: number, fill: any) => sum + (fill.net_rs ?? fill.pnl_rs), 0)
   const pnlText = fills.length && !isBacktest ? fmtRs(fillsPnl) : `${fmtPts(spotPoints)} pts`
   const pnlValue = fills.length && !isBacktest ? fillsPnl : spotPoints
 
@@ -121,22 +127,24 @@ export function DayDetail({
   const renderCharts = (isCompactView: boolean) => (
     <div className={cn(
       "w-full",
-      (chartLayout === "both" && hasSensex) ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "flex flex-col gap-3"
+      (chartLayout === "both" && hasSecondary) ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "flex flex-col gap-3"
     )}>
-      {/* NIFTY 50 CHART CARD */}
-      {(chartLayout === "both" || chartLayout === "nifty" || !hasSensex) && (
+      {/* PRIMARY CHART CARD (SENSEX for Sensex strategy, NIFTY 50 otherwise) */}
+      {(chartLayout === "both" || chartLayout === "primary" || !hasSecondary) && (
         <div className="rounded-xl border border-border/50 bg-card shadow-2xs flex flex-col overflow-hidden">
           <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 shrink-0 bg-muted/15 gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-xs font-bold tracking-tight text-foreground whitespace-nowrap">NIFTY 50</span>
+              <span className="text-xs font-bold tracking-tight text-foreground whitespace-nowrap">
+                {primarySymbol === "SENSEX" ? "SENSEX" : "NIFTY 50"}
+              </span>
               <span className="text-[10px] font-semibold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">
                 {useFiveMinute ? "5m" : "1m"}
               </span>
-              {niftyLastCandle && (
+              {primaryLastCandle && (
                 <div className="flex items-baseline gap-1.5 font-mono">
-                  <span className="font-bold text-xs text-foreground">{fmtNum(niftyPrice ?? 0)}</span>
-                  <span className={`text-[11px] font-semibold ${pnlClass(niftyChangePts)}`}>
-                    {niftyChangePts >= 0 ? "+" : ""}{niftyChangePts.toFixed(1)} ({niftyChangePct >= 0 ? "+" : ""}{niftyChangePct.toFixed(2)}%)
+                  <span className="font-bold text-xs text-foreground">{fmtNum(primaryPrice ?? 0)}</span>
+                  <span className={`text-[11px] font-semibold ${pnlClass(primaryChangePts)}`}>
+                    {primaryChangePts >= 0 ? "+" : ""}{primaryChangePts.toFixed(1)} ({primaryChangePct >= 0 ? "+" : ""}{primaryChangePct.toFixed(2)}%)
                   </span>
                 </div>
               )}
@@ -157,20 +165,20 @@ export function DayDetail({
               )}
               <button
                 type="button"
-                onClick={() => setNiftyResetKey((k) => k + 1)}
+                onClick={() => setPrimaryResetKey((k) => k + 1)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/60 transition-colors"
-                title="Reset Nifty zoom to full day"
+                title={`Reset ${primarySymbol} zoom to full day`}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
-              {hasSensex && (
+              {hasSecondary && (
                 <button
                   type="button"
-                  onClick={() => setChartLayout(chartLayout === "nifty" ? "both" : "nifty")}
+                  onClick={() => setChartLayout(chartLayout === "primary" ? "both" : "primary")}
                   className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/60 transition-colors"
-                  title={chartLayout === "nifty" ? "Restore side-by-side view" : "Maximize Nifty chart"}
+                  title={chartLayout === "primary" ? "Restore side-by-side view" : `Maximize ${primarySymbol} chart`}
                 >
-                  {chartLayout === "nifty" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                  {chartLayout === "primary" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
                 </button>
               )}
             </div>
@@ -197,79 +205,81 @@ export function DayDetail({
                 zoomable
                 hideToolbar={true}
                 fullDay={true}
-                resetKey={`${chartLayout}|${niftyResetKey}`}
+                resetKey={`${chartLayout}|${primaryResetKey}`}
               />
             ) : (
-              <p className="py-24 text-center text-sm text-muted-foreground">No NIFTY candles for this day.</p>
+              <p className="py-24 text-center text-sm text-muted-foreground">No {primarySymbol} candles for this day.</p>
             )}
           </div>
         </div>
       )}
 
-      {/* SENSEX CHART CARD */}
-      {hasSensex && (chartLayout === "both" || chartLayout === "sensex") && (
+      {/* SECONDARY CHART CARD */}
+      {hasSecondary && (chartLayout === "both" || chartLayout === "secondary") && (
         <div className="rounded-xl border border-border/50 bg-card shadow-2xs flex flex-col overflow-hidden">
           <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 shrink-0 bg-muted/15 gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <span className="text-xs font-bold tracking-tight text-foreground whitespace-nowrap">SENSEX</span>
+              <span className="text-xs font-bold tracking-tight text-foreground whitespace-nowrap">
+                {secondarySymbol === "SENSEX" ? "SENSEX" : "NIFTY 50"}
+              </span>
               <span className="text-[10px] font-semibold text-muted-foreground bg-muted/60 px-1.5 py-0.5 rounded">1m</span>
-              {sensexLastCandle && (
+              {secondaryLastCandle && (
                 <div className="flex items-baseline gap-1.5 font-mono">
-                  <span className="font-bold text-xs text-foreground">{fmtNum(sensexPrice ?? 0)}</span>
-                  <span className={`text-[11px] font-semibold ${pnlClass(sensexChangePts)}`}>
-                    {sensexChangePts >= 0 ? "+" : ""}{sensexChangePts.toFixed(1)} ({sensexChangePct >= 0 ? "+" : ""}{sensexChangePct.toFixed(2)}%)
+                  <span className="font-bold text-xs text-foreground">{fmtNum(secondaryPrice ?? 0)}</span>
+                  <span className={`text-[11px] font-semibold ${pnlClass(secondaryChangePts)}`}>
+                    {secondaryChangePts >= 0 ? "+" : ""}{secondaryChangePts.toFixed(1)} ({secondaryChangePct >= 0 ? "+" : ""}{secondaryChangePct.toFixed(2)}%)
                   </span>
                 </div>
               )}
             </div>
             <div className="flex items-center gap-2">
-              {sensexSetup?.mid != null && (
+              {secondarySetup?.mid != null && (
                 <span className="text-[10px] font-mono text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
-                  MID {fmtNum(sensexSetup.mid)}
+                  MID {fmtNum(secondarySetup.mid)}
                 </span>
               )}
               <button
                 type="button"
-                onClick={() => setSensexResetKey((k) => k + 1)}
+                onClick={() => setSecondaryResetKey((k) => k + 1)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/60 transition-colors"
-                title="Reset Sensex zoom to full day"
+                title={`Reset ${secondarySymbol} zoom to full day`}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
               <button
                 type="button"
-                onClick={() => setChartLayout(chartLayout === "sensex" ? "both" : "sensex")}
+                onClick={() => setChartLayout(chartLayout === "secondary" ? "both" : "secondary")}
                 className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/60 transition-colors"
-                title={chartLayout === "sensex" ? "Restore side-by-side view" : "Maximize Sensex chart"}
+                title={chartLayout === "secondary" ? "Restore side-by-side view" : `Maximize ${secondarySymbol} chart`}
               >
-                {chartLayout === "sensex" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+                {chartLayout === "secondary" ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </button>
             </div>
           </div>
           <div className="p-1 min-h-[320px] h-[320px] flex-1 flex flex-col">
-            {sensexDay.loading && !sensexCandles.length ? (
+            {secondaryDay.loading && !secondaryCandles.length ? (
               <div className="w-full h-[320px]">
                 <Skeleton className="h-[320px] w-full" />
               </div>
-            ) : sensexCandles.length ? (
+            ) : secondaryCandles.length ? (
               <CandleChart
-                date={date ?? sensexDay.data?.date ?? ""}
-                candles={sensexCandles}
-                forming={sensexDay.data?.forming}
-                currentPrice={sensexPrice}
-                setup={sensexSetup}
+                date={date ?? secondaryDay.data?.date ?? ""}
+                candles={secondaryCandles}
+                forming={secondaryDay.data?.forming}
+                currentPrice={secondaryPrice}
+                setup={secondarySetup}
                 trades={[]}
-                keyLevelZone={sensexSetup?.key_level_zone ?? null}
+                keyLevelZone={secondarySetup?.key_level_zone ?? null}
                 showKeyLevels={true}
                 showTradeLevels={false}
                 className={isCompactView ? "h-[310px]" : "h-[clamp(310px,44vh,350px)]"}
                 zoomable
                 hideToolbar={true}
                 fullDay={true}
-                resetKey={`${chartLayout}|${sensexResetKey}`}
+                resetKey={`${chartLayout}|${secondaryResetKey}`}
               />
             ) : (
-              <p className="py-24 text-center text-sm text-muted-foreground">No Sensex candles for this day.</p>
+              <p className="py-24 text-center text-sm text-muted-foreground">No {secondarySymbol} candles for this day.</p>
             )}
           </div>
         </div>
@@ -287,7 +297,7 @@ export function DayDetail({
             </span>
           </div>
           <div className="flex items-center gap-2">
-            {hasSensex && (
+            {hasSecondary && (
               <div className="flex items-center rounded-lg border bg-muted/30 p-0.5 text-xs">
                 <button
                   type="button"
@@ -301,23 +311,23 @@ export function DayDetail({
                 </button>
                 <button
                   type="button"
-                  onClick={() => setChartLayout("nifty")}
+                  onClick={() => setChartLayout("primary")}
                   className={cn(
                     "rounded-md px-2 py-0.5 font-medium transition-colors",
-                    chartLayout === "nifty" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                    chartLayout === "primary" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Nifty
+                  {primarySymbol === "SENSEX" ? "Sensex" : "Nifty"}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setChartLayout("sensex")}
+                  onClick={() => setChartLayout("secondary")}
                   className={cn(
                     "rounded-md px-2 py-0.5 font-medium transition-colors",
-                    chartLayout === "sensex" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                    chartLayout === "secondary" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  Sensex
+                  {secondarySymbol === "SENSEX" ? "Sensex" : "Nifty"}
                 </button>
               </div>
             )}
@@ -345,9 +355,9 @@ export function DayDetail({
           ) : (
             <div className="flex items-center gap-2 min-w-0">
               <span className="font-bold text-sm tracking-tight text-foreground whitespace-nowrap">Day viewer</span>
-              {hasSensex && (
+              {hasSecondary && (
                 <span className="hidden sm:inline text-xs text-muted-foreground font-normal">
-                  (NIFTY 50 &amp; SENSEX)
+                  ({primarySymbol === "SENSEX" ? "SENSEX & NIFTY 50" : "NIFTY 50 & SENSEX"})
                 </span>
               )}
             </div>
@@ -363,7 +373,7 @@ export function DayDetail({
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {hasSensex && (
+          {hasSecondary && (
             <div className="inline-flex rounded-md border border-border/60 bg-muted/40 p-0.5 text-xs font-medium">
               <button
                 type="button"
@@ -377,23 +387,23 @@ export function DayDetail({
               </button>
               <button
                 type="button"
-                onClick={() => setChartLayout("nifty")}
+                onClick={() => setChartLayout("primary")}
                 className={cn(
                   "rounded px-2.5 py-0.5 transition-all",
-                  chartLayout === "nifty" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  chartLayout === "primary" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Nifty
+                {primarySymbol === "SENSEX" ? "Sensex" : "Nifty"}
               </button>
               <button
                 type="button"
-                onClick={() => setChartLayout("sensex")}
+                onClick={() => setChartLayout("secondary")}
                 className={cn(
                   "rounded px-2.5 py-0.5 transition-all",
-                  chartLayout === "sensex" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  chartLayout === "secondary" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Sensex
+                {secondarySymbol === "SENSEX" ? "Sensex" : "Nifty"}
               </button>
             </div>
           )}

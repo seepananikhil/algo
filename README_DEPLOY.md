@@ -12,6 +12,9 @@ python app_server.py
 Then open:
 http://127.0.0.1:8090
 
+In VS Code, run the default build task (`Ctrl+Shift+B`) to launch the paper-trading
+market feed, strategy runner, and dashboard together.
+
 ## Docker
 
 docker build -t algo-dashboard .

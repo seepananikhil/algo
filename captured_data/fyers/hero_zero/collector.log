@@ -168,3 +168,18 @@ RuntimeError: Fyers token is invalid or expired
 
 [2026-10-16 15:05:22 IST] Starting HeroZero expiry capture (Kotak/SENSEX).
 2026-10-16: no SENSEX or NIFTY expiry contracts today; HeroZero skipped
+
+[2026-10-26 15:05:06 IST] Starting HeroZero expiry capture (Kotak/SENSEX).
+2026-10-26: no SENSEX or NIFTY expiry contracts today; HeroZero skipped
+
+[2026-10-27 15:05:09 IST] Starting HeroZero expiry capture (Kotak/SENSEX).
+[15:05:24] HeroZero ready for NIFTY expiry 2026-10-27 (522 contracts)
+[15:05:24] Waiting 755s until 15:18:00 IST snapshot...
+[15:18:00] Key Level Filter: NIFTY key level check passed (dist=39.2)
+[15:18:00] NIFTY Spot: 22760.75 | ATM: 22750 | Scanning sweet-spot options around target Rs 20.0
+Warning: No NIFTY CE option found within safe price band (8.0, 35.0)
+Warning: No NIFTY PE option found within safe price band (8.0, 35.0)
+Candidate selection failed. Backing off.
+
+[2026-10-30 15:05:07 IST] Starting HeroZero expiry capture (Kotak/SENSEX).
+2026-10-30: no SENSEX or NIFTY expiry contracts today; HeroZero skipped
