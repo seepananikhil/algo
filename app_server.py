@@ -26,7 +26,30 @@ from urllib.parse import parse_qs, urlparse
 import pandas as pd
 
 from midpoint_strategy import MIDPOINT_BUFFER_POINTS, PAPER_LOTS, PAPER_STARTING_CAPITAL, TRADE_WINDOW_MINUTES, backtest_midpoint_strategy, day_setup, pending_entry
-from fyers_orders import available_equity_funds, load_nifty_options
+
+def load_nifty_options():
+    cache = ROOT / 'captured_data' / 'fyers' / 'nifty_options_cache.pkl'
+    today_date = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
+    if cache.exists():
+        try:
+            mtime = datetime.fromtimestamp(cache.stat().st_mtime, tz=timezone(timedelta(hours=5, minutes=30))).date()
+            if mtime == today_date:
+                return pd.read_pickle(cache)
+        except Exception:
+            pass
+    SYMBOL_MASTER_URL = 'https://public.fyers.in/sym_details/NSE_FO.csv'
+    try:
+        cols = {8: 'expiry_epoch', 9: 'symbol', 3: 'lot_size', 13: 'underlying', 15: 'strike', 16: 'opt_type'}
+        raw = pd.read_csv(SYMBOL_MASTER_URL, header=None, usecols=list(cols))
+        df = raw.rename(columns=cols)
+        df = df[(df['underlying'] == 'NIFTY') & (df['opt_type'].isin(['CE', 'PE']))].copy()
+        df['expiry'] = pd.to_datetime(df['expiry_epoch'], unit='s', utc=True).dt.tz_convert('Asia/Kolkata').dt.date
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df.to_pickle(cache)
+        return df
+    except Exception:
+        return pd.DataFrame(columns=['symbol', 'strike', 'opt_type', 'expiry', 'lot_size'])
+
 from key_level_strategy import aggregate_five_minute, backtest_key_levels, read_paper_events, settings_from_config as key_level_settings, summarize_key_level_trades
 from option_paper import read_option_paper_trades
 
