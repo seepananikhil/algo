@@ -1,0 +1,7 @@
+{
+  "consumer_key": "your-consumer-key-from-neo-trade-api",
+  "mobile_number": "+91XXXXXXXXXX",
+  "ucc": "YOUR_UCC",
+  "totp_key": "YOUR_32_CHAR_AUTHENTICATOR_TOTP_SECRET",
+  "mpin": "XXXX"
+}

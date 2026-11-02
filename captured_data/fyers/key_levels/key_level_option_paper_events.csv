@@ -1,1 +1,0 @@
-date,trade_id,strategy,event,time,side,level,break_time,confirm_time,symbol,expiry,qty,spot_price,option_price,capital_used,spot_stop,spot_target,option_target,exit_spot,exit_option,pnl_rs,return_pct,reason,details,source

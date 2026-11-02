@@ -293,6 +293,54 @@ export function PaperPage() {
     </Tabs>
   )
 
+  const paperTabs = (
+    <div className="flex flex-col gap-2.5">
+      <Tabs value={topStrategy} onValueChange={(val) => handleTopStrategyChange(val as any)}>
+        <TabsList className="flex flex-wrap gap-1 bg-muted/60 p-1 rounded-lg">
+          <TabsTrigger value="all" className="font-medium text-xs sm:text-sm">All</TabsTrigger>
+          <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">Trend Runner</TabsTrigger>
+          <TabsTrigger value="key_levels" className="font-medium text-xs sm:text-sm">Key Levels S&R</TabsTrigger>
+          <TabsTrigger value="hero_zero" className="font-medium text-xs sm:text-sm">HeroZero</TabsTrigger>
+          <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">Midpoint</TabsTrigger>
+        </TabsList>
+      </Tabs>
+
+      {(topStrategy === "trend_runner" || topStrategy === "key_levels") && (
+        <div className="flex items-center gap-2 pl-0.5">
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground mr-1">
+            Instrument:
+          </span>
+          <div className="inline-flex items-center rounded-lg bg-muted/50 p-0.5 border border-border/50">
+            <button
+              type="button"
+              onClick={() => handleSymbolChange("NIFTY")}
+              className={cn(
+                "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                symbolChoice === "NIFTY"
+                  ? "bg-background text-foreground shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              NIFTY 50
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSymbolChange("SENSEX")}
+              className={cn(
+                "px-3 py-1 text-xs font-semibold rounded-md transition-all cursor-pointer",
+                symbolChoice === "SENSEX"
+                  ? "bg-background text-foreground shadow-xs font-bold"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              SENSEX
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+
   if (strategy === "all") {
     if (capital.error) return <p className="text-sm text-red-500">Capital report failed: {capital.error}</p>
     if (capital.loading || !capital.data) return <Skeleton className="h-150 w-full" />

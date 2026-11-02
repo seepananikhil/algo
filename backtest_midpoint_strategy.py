@@ -84,7 +84,17 @@ def add_ist_time_columns(trades: pd.DataFrame, input_tz: str = "UTC") -> pd.Data
 
 
 def load_data(path: str) -> pd.DataFrame:
-    df = pd.read_csv(path)
+    p = Path(path)
+    if p.is_dir():
+        csv_files = sorted(p.glob("**/*.csv"))
+        if not csv_files:
+            raise FileNotFoundError(f"No CSV files found in {path}")
+        frames = [pd.read_csv(f) for f in csv_files]
+        df = pd.concat(frames, ignore_index=True)
+    else:
+        df = pd.read_csv(path)
+
+    df.columns = [col.lower() for col in df.columns]
     required = {"timestamp", "open", "high", "low", "close"}
     missing = required - set(df.columns)
     if missing:
@@ -92,7 +102,7 @@ def load_data(path: str) -> pd.DataFrame:
 
     df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
     df = df.dropna(subset=["timestamp", "open", "high", "low", "close"]).copy()
-    df = df.sort_values("timestamp").reset_index(drop=True)
+    df = df.drop_duplicates(subset=["timestamp"]).sort_values("timestamp").reset_index(drop=True)
     return df
 
 
@@ -224,7 +234,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Simple midpoint retrace strategy backtest")
     parser.add_argument(
         "--csv",
-        default="captured_data/fyers/fyers_spot_1min_extended.csv",
+        default="historical_data/nifty50/1min/2026/10",
         help="Path to OHLC CSV",
     )
     parser.add_argument("--rr", type=float, default=1.0, help="Risk-reward multiple for target")
@@ -236,7 +246,7 @@ def main() -> None:
     )
     parser.add_argument(
         "--out",
-        default="captured_data/fyers/midpoint_backtest_trades.csv",
+        default="performance/midpoint_backtest_trades.csv",
         help="Output CSV for trade list",
     )
     parser.add_argument(
@@ -302,3 +312,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+

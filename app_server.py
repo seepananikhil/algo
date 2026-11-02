@@ -30,20 +30,30 @@ from fyers_orders import available_equity_funds, load_nifty_options
 from key_level_strategy import aggregate_five_minute, backtest_key_levels, read_paper_events, settings_from_config as key_level_settings, summarize_key_level_trades
 from option_paper import read_option_paper_trades
 
+
+def available_equity_funds(response: dict | None) -> float:
+    if not isinstance(response, dict):
+        return 0.0
+    fund_limit = response.get("fund_limit", [])
+    if isinstance(fund_limit, list):
+        for item in fund_limit:
+            if item.get("title") == "Available Balance":
+                return float(item.get("equityAmount", 0.0))
+    return float(response.get("available_balance", 0.0))
+
+
 ROOT = Path(__file__).resolve().parent
-TMP_DIR = ROOT / ".tmp"
-TMP_DIR.mkdir(parents=True, exist_ok=True)
-LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
-TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
-CONFIG_FILE = ROOT / "fyers_config.json"
+LIVE_DIR = ROOT / "paper" / "midpoint"
+TOKEN_FILE = ROOT / "neo_config.json"
+CONFIG_FILE = ROOT / "neo_config.json"
 STOP_FILE = ROOT / "STOP_TRADING"
 UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
-MASTER_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_extended.csv"
-ARCHIVE_CSV = ROOT / "captured_data" / "fyers" / "fyers_spot_1min_3y_archive.csv"
+MASTER_CSV = ROOT / "historical_data" / "nifty50" / "daily" / "NIFTY50_daily.csv"
+ARCHIVE_CSV = ROOT / "historical_data" / "sensex" / "daily" / "SENSEX_daily.csv"
 PAPER_TRADES_CSV = LIVE_DIR / "paper_trades.csv"
-HERO_ZERO_DIR = ROOT / "captured_data" / "fyers" / "hero_zero"
-KEY_LEVEL_DIR = ROOT / "captured_data" / "fyers" / "key_levels"
+HERO_ZERO_DIR = ROOT / "paper" / "hero_zero"
+KEY_LEVEL_DIR = ROOT / "paper" / "key_levels"
 KEY_LEVEL_EVENT_FILE = KEY_LEVEL_DIR / "key_level_paper_events.csv"
 OPTION_PAPER_EVENT_FILE = KEY_LEVEL_DIR / "key_level_option_paper_events.csv"
 HOST, PORT = os.environ.get("HOST", "0.0.0.0"), int(os.environ.get("PORT", "8090"))
@@ -436,7 +446,7 @@ def sensex_expiry_collector_loop() -> None:
     last_attempt_date = None
     last_attempt_at = 0.0
     script = ROOT / "fyers_fetch_sensex_expiry.py"
-    output_dir = ROOT / "captured_data" / "fyers" / "sensex_expiry"
+    output_dir = ROOT / "options_data" / "sensex"
     log_path = output_dir / "collector.log"
     while True:
         now = datetime.now(IST)

@@ -7,10 +7,16 @@ import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
-from fyers_orders import STOP_FILE, available_equity_funds, place_live_order
+STOP_FILE = Path(__file__).resolve().parent / "STOP_TRADING"
+
+def available_equity_funds(rest) -> float:
+    return 0.0
+
+def place_live_order(rest, symbol: str, qty: int, side: str, tag: str = "key_level"):
+    return None, None
 
 ROOT = Path(__file__).resolve().parent
-ORDER_DIR = ROOT / "captured_data" / "fyers" / "key_levels"
+ORDER_DIR = ROOT / "paper" / "key_levels"
 IST = timezone(timedelta(hours=5, minutes=30))
 ORDER_HEADER = ["date", "time", "action", "symbol", "qty", "order_id", "fill_price", "reason", "status", "day_pnl_rs"]
 

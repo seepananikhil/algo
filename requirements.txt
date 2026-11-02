@@ -3,4 +3,6 @@ numpy
 python-dateutil
 pytz
 requests
-fyers-apiv3
+pyotp
+kotakneoapi
+duckdb
