@@ -69,6 +69,8 @@ ROOT = Path(__file__).resolve().parent
 LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
 CONFIG_FILE = ROOT / "fyers_config.json"
 TOKEN_FILE = ROOT / "captured_data" / "kotak" / "kotak_token.json"
+KOTAK_DIR = ROOT / "captured_data" / "kotak"
+SCALP_TARGETS_FILE = KOTAK_DIR / "scalp_targets.json"
 STOP_FILE = ROOT / "STOP_TRADING"
 UI_FILE = ROOT / "ui" / "dashboard.html"
 WEB_DIST = ROOT / "web" / "dist"
@@ -1347,6 +1349,146 @@ def manual_trading_snapshot() -> dict:
 
 
 
+def load_scalp_targets() -> dict:
+    if not SCALP_TARGETS_FILE.exists():
+        return {}
+    try:
+        return json.loads(SCALP_TARGETS_FILE.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+
+
+def save_scalp_targets(targets: dict) -> None:
+    SCALP_TARGETS_FILE.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        SCALP_TARGETS_FILE.write_text(json.dumps(targets, indent=2), encoding="utf-8")
+    except Exception as exc:
+        print(f"Error saving scalp targets: {exc}")
+
+
+def set_scalp_target(symbol: str, tp_pts: float, tl_pts: float, entry_price: float = 0.0, qty: int = 0) -> dict:
+    targets = load_scalp_targets()
+    clean_sym = clean_option_symbol(symbol)
+    raw_sym = symbol.replace("NSE:", "").replace("BSE:", "").strip()
+
+    if tp_pts <= 0 and tl_pts <= 0:
+        for k in (raw_sym, clean_sym, symbol):
+            targets.pop(k, None)
+        save_scalp_targets(targets)
+        return {"ok": True, "symbol": raw_sym, "removed": True}
+
+    tgt_px = round(entry_price + tp_pts, 2) if (entry_price > 0 and tp_pts > 0) else 0.0
+    sl_px = round(max(0.05, entry_price - tl_pts), 2) if (entry_price > 0 and tl_pts > 0) else 0.0
+
+    info = {
+        "symbol": raw_sym,
+        "clean_symbol": clean_sym,
+        "tp_pts": float(tp_pts),
+        "tl_pts": float(tl_pts),
+        "entry_price": float(entry_price),
+        "target_price": tgt_px,
+        "stop_price": sl_px,
+        "qty": int(qty),
+        "updated_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    targets[raw_sym] = info
+    targets[clean_sym] = info
+    save_scalp_targets(targets)
+    return {"ok": True, "symbol": raw_sym, "target": info}
+
+
+def clear_scalp_target(symbol: str) -> None:
+    targets = load_scalp_targets()
+    clean_sym = clean_option_symbol(symbol)
+    raw_sym = symbol.replace("NSE:", "").replace("BSE:", "").strip()
+    changed = False
+    for k in (raw_sym, clean_sym, symbol):
+        if k in targets:
+            targets.pop(k, None)
+            changed = True
+    if changed:
+        save_scalp_targets(targets)
+
+
+def update_tp_tl(body: dict) -> dict:
+    symbol = str(body.get("symbol", "")).strip()
+    if not symbol:
+        raise ValueError("Missing symbol")
+    try:
+        tp_pts = max(0.0, float(body.get("tp_pts", 0.0)))
+    except (ValueError, TypeError):
+        tp_pts = 0.0
+    try:
+        tl_pts = max(0.0, float(body.get("tl_pts", body.get("ts_pts", body.get("sl_pts", 0.0)))))
+    except (ValueError, TypeError):
+        tl_pts = 0.0
+    entry_price = float(body.get("entry_price") or 0.0)
+    qty = int(body.get("qty") or 0)
+    res = set_scalp_target(symbol, tp_pts=tp_pts, tl_pts=tl_pts, entry_price=entry_price, qty=qty)
+    return {"ok": True, "message": f"Updated TP (+{tp_pts} pts) and TL (-{tl_pts} pts) for {symbol}", **res}
+
+
+def scalp_tp_tl_sentinel_loop() -> None:
+    """Continuously monitor active Kotak Neo & paper positions with TP/TL targets and exit automatically when reached."""
+    while True:
+        try:
+            targets = load_scalp_targets()
+            if targets:
+                cfg = read_config()
+                is_live = bool(cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading"))
+                if is_live:
+                    from broker import get_positions
+                    pos_data = get_positions()
+                    if pos_data.get("ok"):
+                        open_positions = pos_data.get("open_positions", [])
+                        active_syms = set()
+                        for pos in open_positions:
+                            sym = str(pos.get("symbol", "")).strip()
+                            clean_sym = clean_option_symbol(sym)
+                            active_syms.add(sym)
+                            active_syms.add(clean_sym)
+
+                            t_info = targets.get(sym) or targets.get(clean_sym)
+                            if not t_info:
+                                continue
+
+                            tp_pts = float(t_info.get("tp_pts", 0.0))
+                            tl_pts = float(t_info.get("tl_pts", 0.0))
+                            if tp_pts <= 0 and tl_pts <= 0:
+                                continue
+
+                            cur_ltp = float(pos.get("ltp") or 0.0)
+                            buy_avg = float(pos.get("buy_avg") or t_info.get("entry_price") or 0.0)
+                            if buy_avg <= 0 or cur_ltp <= 0:
+                                continue
+                            qty = abs(int(pos.get("net_qty", 65)))
+                            pts = round(cur_ltp - buy_avg, 2)
+
+                            if tp_pts > 0 and pts >= tp_pts:
+                                print(f"[{datetime.now(IST):%H:%M:%S}] [TP HIT] {clean_sym}: +{pts:.1f} pts >= +{tp_pts} pts (LTP: ₹{cur_ltp:.1f}, Buy: ₹{buy_avg:.1f}). Auto-exiting...")
+                                try:
+                                    exit_position({"symbol": sym, "qty": qty})
+                                except Exception as exc:
+                                    print(f"Error auto-exiting on TP: {exc}")
+                                clear_scalp_target(sym)
+                                clear_scalp_target(clean_sym)
+                            elif tl_pts > 0 and pts <= -tl_pts:
+                                print(f"[{datetime.now(IST):%H:%M:%S}] [TL HIT] {clean_sym}: {pts:.1f} pts <= -{tl_pts} pts (LTP: ₹{cur_ltp:.1f}, Buy: ₹{buy_avg:.1f}). Auto-exiting...")
+                                try:
+                                    exit_position({"symbol": sym, "qty": qty})
+                                except Exception as exc:
+                                    print(f"Error auto-exiting on TL: {exc}")
+                                clear_scalp_target(sym)
+                                clear_scalp_target(clean_sym)
+
+                        for k in list(targets.keys()):
+                            if k not in active_syms:
+                                clear_scalp_target(k)
+        except Exception:
+            pass
+        time.sleep(1)
+
+
 def submit_scalp_order(body: dict) -> dict:
     symbol = str(body.get("symbol", "NIFTY")).upper()
     action = str(body.get("action", "BUY")).upper()
@@ -1444,7 +1586,13 @@ def submit_scalp_order(body: dict) -> dict:
             body["sl_pts"] = sl_pts
         if tgt_pts > 0:
             body["target_pts"] = tgt_pts
-        return submit_manual_order(body)
+        res = submit_manual_order(body)
+        if isinstance(res, dict) and res.get("ok"):
+            raw_sym = str(res.get("symbol", "")).strip()
+            fill_px = float(res.get("fill_price") or 0.0)
+            if sl_pts > 0 or tgt_pts > 0:
+                set_scalp_target(raw_sym, tp_pts=tgt_pts, tl_pts=sl_pts, entry_price=fill_px, qty=res.get("qty", lots * lot_size))
+        return res
 
     # Paper Scalp Execution
     opt_name = f"{symbol} {atm_strike} {option_type}"
@@ -1484,6 +1632,8 @@ def submit_scalp_order(body: dict) -> dict:
     else:
         new_df.to_csv(live_paper_file, index=False)
 
+    if sl_pts > 0 or tgt_pts > 0:
+        set_scalp_target(opt_name, tp_pts=tgt_pts, tl_pts=sl_pts, entry_price=buy_px, qty=qty)
     print(f"[{datetime.now(IST):%H:%M:%S}] [Manual Scalp Order] Placed {opt_name} @ {spot} ({lots} Lot/ {qty} Qty)")
     return {"ok": True, "message": f"Scalp order placed: {opt_name} ({lots} Lot)", "trade": trade_row}
 
@@ -1582,12 +1732,23 @@ def exit_position(body: dict) -> dict:
         matched_pos = None
         try:
             pos_resp = client.positions()
-            if isinstance(pos_resp, dict) and pos_resp.get("stat") == "ok":
+            if isinstance(pos_resp, dict) and str(pos_resp.get("stat", "")).lower() == "ok":
                 for r in pos_resp.get("data") or []:
                     trd_sym = str(r.get("trdSym", "")).strip()
-                    if trd_sym == clean_sym or trd_sym == symbol:
-                        matched_pos = r
-                        break
+                    r_clean = clean_option_symbol(trd_sym)
+                    if (
+                        trd_sym == clean_sym
+                        or trd_sym == symbol
+                        or r_clean == clean_sym
+                        or clean_sym in trd_sym
+                        or (clean_sym in ("NIFTY", "SENSEX") and clean_sym in trd_sym)
+                    ):
+                        b_q = int(r.get("flBuyQty", 0)) + int(r.get("cfBuyQty", 0))
+                        s_q = int(r.get("flSellQty", 0)) + int(r.get("cfSellQty", 0))
+                        if b_q != s_q:
+                            matched_pos = r
+                            clean_sym = trd_sym
+                            break
         except Exception:
             pass
 
@@ -1645,6 +1806,8 @@ def exit_position(body: dict) -> dict:
                             rej_rsn = ord_info.get("rejRsn") or ord_info.get("ordUsrMsg") or "Order rejected by broker/RMS"
                             raise ManualTradeError(f"Kotak exit rejected: {rej_rsn}")
                         if ord_st in ("complete", "trd", "traded", "filled", "open"):
+                            clear_scalp_target(clean_sym)
+                            clear_scalp_target(symbol)
                             return {"ok": True, "symbol": clean_sym, "qty": exit_qty, "order_id": order_id, "status": ord_st}
             except ManualTradeError:
                 raise
@@ -3842,6 +4005,7 @@ def kotak_live_trades() -> list:
         trades = []
         today_str = today()
 
+        targets = load_scalp_targets()
         for pos in pos_data.get("open_positions", []):
             sym = str(pos.get("symbol", ""))
             readable_name = clean_option_symbol(sym)
@@ -3853,6 +4017,12 @@ def kotak_live_trades() -> list:
             cur_val = float(pos.get("current_value", cur_ltp * qty))
             unrealized = float(pos.get("unrealized_pnl", cur_val - buy_val))
 
+            t_info = targets.get(sym) or targets.get(readable_name) or {}
+            tp_pts = float(t_info.get("tp_pts") or 0.0)
+            tl_pts = float(t_info.get("tl_pts") or 0.0)
+            sl_val = round(buy_px - tl_pts, 2) if (tl_pts > 0 and buy_px > 0) else 0.0
+            tgt_val = round(buy_px + tp_pts, 2) if (tp_pts > 0 and buy_px > 0) else 0.0
+
             ords = order_map.get(sym, [])
             entry_t = "LIVE"
             if ords:
@@ -3862,6 +4032,7 @@ def kotak_live_trades() -> list:
                 "date": today_str,
                 "side": side,
                 "option": readable_name,
+                "raw_symbol": sym,
                 "qty": qty,
                 "entry": entry_t,
                 "nifty_in": buy_px,
@@ -3878,8 +4049,10 @@ def kotak_live_trades() -> list:
                 "mode": "LIVE KOTAK",
                 "spot_at_entry": buy_px,
                 "trigger_label": "Kotak Neo Real Position",
-                "sl": 0.0,
-                "target": 0.0,
+                "sl": sl_val if sl_val > 0 else None,
+                "target": tgt_val if tgt_val > 0 else None,
+                "tp_pts": tp_pts,
+                "tl_pts": tl_pts,
                 "charges_rs": 0.0,
                 "net_rs": unrealized,
                 "strategy": "kotak_live",
@@ -4328,6 +4501,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(submit_scalp_order(self._body()))
             except Exception as exc:
                 self._json({"error": f"Scalp order failed: {exc}"}, 500)
+        elif url.path == "/api/update-tp-tl":
+            if not self._is_local_client():
+                return self._json({"error": "manual orders are local-only"}, 403)
+            try:
+                self._json(update_tp_tl(self._body()))
+            except Exception as exc:
+                self._json({"error": f"Failed to update TP/TL: {exc}"}, 500)
         elif url.path == "/api/manual-order":
             if not self._is_local_client():
                 return self._json({"error": "manual orders are local-only"}, 403)
@@ -4391,6 +4571,7 @@ if __name__ == "__main__":
     threading.Thread(target=auto_start_loop, daemon=True).start()
     threading.Thread(target=daily_backtest_sync_loop, daemon=True, name="daily-backtest-sync").start()
     threading.Thread(target=scalper_forward_loop, daemon=True, name="micro-scalper-forward").start()
+    threading.Thread(target=scalp_tp_tl_sentinel_loop, daemon=True, name="scalp-tp-tl-sentinel").start()
     threading.Thread(target=trend_runner_forward_loop, daemon=True, name="trend-runner-forward").start()
     threading.Thread(target=sensex_runner_forward_loop, daemon=True, name="sensex-runner-forward").start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)

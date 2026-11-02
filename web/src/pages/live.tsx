@@ -121,7 +121,7 @@ export function LivePage() {
     (e: MouseEvent) => {
       if (!isDraggingScalp) return
       const sidePanelW = isSidePanelOpen ? (window.innerWidth >= 1024 ? 384 : 320) : 0
-      const widgetW = isScalpMinimized ? 350 : 285
+      const widgetW = isScalpMinimized ? 440 : 285
       const widgetH = isScalpMinimized ? 42 : 280
 
       const minX = 70
@@ -141,7 +141,7 @@ export function LivePage() {
   useEffect(() => {
     setScalpPos((pos) => {
       const sidePanelW = isSidePanelOpen ? (window.innerWidth >= 1024 ? 384 : 320) : 0
-      const widgetW = isScalpMinimized ? 350 : 285
+      const widgetW = isScalpMinimized ? 440 : 285
       const rightLimit = window.innerWidth - sidePanelW - 75 - widgetW
       if (pos.x > rightLimit) {
         return { ...pos, x: Math.max(70, rightLimit) }
@@ -330,6 +330,28 @@ export function LivePage() {
       liveTradesPoll.reload()
     } catch (err) {
       toast.error(`Exit failed: ${err instanceof Error ? err.message : String(err)}`)
+    } finally {
+      setScalpBusy(false)
+    }
+  }
+
+  // Update TP/TL on active position
+  const handleUpdateActiveTpTl = async (tradeToUpdate = activeSpotTrade) => {
+    if (!tradeToUpdate) return
+    setScalpBusy(true)
+    try {
+      const sym = tradeToUpdate.raw_symbol || tradeToUpdate.option || tradeToUpdate.symbol
+      const res = await postJSON<{ ok: boolean; message?: string }>("/api/update-tp-tl", {
+        symbol: sym,
+        tp_pts: scalpTp,
+        tl_pts: scalpTs,
+        entry_price: tradeToUpdate.buy_price || tradeToUpdate.nifty_in || 0,
+        qty: tradeToUpdate.qty || 65,
+      })
+      toast.success(res.message || `Updated TP/TL for ${sym}`)
+      liveTradesPoll.reload()
+    } catch (err) {
+      toast.error(`Update TP/TL failed: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setScalpBusy(false)
     }
@@ -642,6 +664,57 @@ export function LivePage() {
               </span>
             )}
 
+            {/* Inline TP & TL Inputs */}
+            <div className="flex items-center gap-1 border-l border-border pl-1.5 ml-0.5">
+              <span className="text-[10px] font-bold text-emerald-500" title="Target Profit in Points">TP</span>
+              <input
+                type="number"
+                min={0}
+                max={500}
+                step={scalpSpot === "SENSEX" ? 10 : 5}
+                value={scalpTp === 0 ? "" : scalpTp}
+                placeholder="0"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation()
+                  setScalpTp(Math.max(0, parseFloat(e.target.value) || 0))
+                }}
+                className="w-9 px-1 py-0.5 rounded text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-muted/70 border border-border/80 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-muted-foreground/40"
+                title="Target Profit (TP in pts)"
+              />
+              <span className="text-[10px] font-bold text-rose-500 ml-0.5" title="Target / Stop Loss in Points">TL</span>
+              <input
+                type="number"
+                min={0}
+                max={500}
+                step={scalpSpot === "SENSEX" ? 10 : 5}
+                value={scalpTs === 0 ? "" : scalpTs}
+                placeholder="0"
+                onClick={(e) => e.stopPropagation()}
+                onMouseDown={(e) => e.stopPropagation()}
+                onChange={(e) => {
+                  e.stopPropagation()
+                  setScalpTs(Math.max(0, parseFloat(e.target.value) || 0))
+                }}
+                className="w-9 px-1 py-0.5 rounded text-center font-mono font-bold text-rose-600 dark:text-rose-400 bg-muted/70 border border-border/80 text-[11px] focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-muted-foreground/40"
+                title="Target Loss / Stop Loss (TL in pts)"
+              />
+              {activeSpotTrade && (scalpTp > 0 || scalpTs > 0) && (
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleUpdateActiveTpTl(activeSpotTrade)
+                  }}
+                  className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs ml-0.5"
+                  title="Apply TP/TL to Active Position"
+                >
+                  Set
+                </button>
+              )}
+            </div>
+
             <div className="flex items-center gap-1.5 border-l border-border pl-1.5 ml-0.5">
               <button
                 type="button"
@@ -876,13 +949,24 @@ export function LivePage() {
                   </div>
                 </div>
 
-                {/* TP (Target Pts) & TS (Trailing Stop Pts) */}
-                <div className="grid grid-cols-2 gap-1.5">
+                {/* TP (Target Profit Pts) & TL (Target Loss / Stop Loss Pts) */}
+                <div className="grid grid-cols-2 gap-2">
                   {/* TP Points */}
                   <div className="flex flex-col space-y-1">
-                    <span className="text-muted-foreground font-semibold text-[10px] text-center" title="Target Profit in Points (0 = optional)">
-                      TP (opt)
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-emerald-600 dark:text-emerald-400 font-bold text-[10px]" title="Take Profit (Target in Points)">
+                        TP (Target pts)
+                      </span>
+                      {scalpTp > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setScalpTp(0)}
+                          className="text-[9px] text-muted-foreground hover:text-rose-500 font-mono"
+                        >
+                          clear
+                        </button>
+                      )}
+                    </div>
                     <div className="flex items-center border border-border rounded-md bg-background h-7 px-1 shadow-2xs">
                       <input
                         type="number"
@@ -890,20 +974,47 @@ export function LivePage() {
                         max={1000}
                         step={scalpSpot === "SENSEX" ? 10 : 5}
                         value={scalpTp === 0 ? "" : scalpTp}
-                        placeholder="0"
+                        placeholder="0 (pts)"
                         onChange={(e) => setScalpTp(Math.max(0, parseFloat(e.target.value) || 0))}
                         className="w-full text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-transparent text-xs focus:outline-none placeholder:text-muted-foreground/50"
-                        title="Target Profit Points (0 = optional / off)"
+                        title="Target Profit Points (0 = off)"
                       />
+                    </div>
+                    {/* TP Presets */}
+                    <div className="flex items-center gap-1 pt-0.5">
+                      {[10, 15, 20, 30].map((pt) => (
+                        <button
+                          key={`tp-${pt}`}
+                          type="button"
+                          onClick={() => setScalpTp(pt)}
+                          className={`flex-1 py-0.5 text-[9px] font-mono font-bold rounded border transition-colors ${
+                            scalpTp === pt
+                              ? "bg-emerald-600 text-white border-emerald-600"
+                              : "bg-muted/50 border-border hover:bg-muted text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          +{pt}
+                        </button>
+                      ))}
                     </div>
                   </div>
 
-                  {/* TS Points */}
+                  {/* TL Points */}
                   <div className="flex flex-col space-y-1">
-                    <span className="text-muted-foreground font-semibold text-[10px] text-center" title="Stop Loss / Trailing Stop in Points (0 = optional)">
-
-                      TS (opt)
-                    </span>
+                    <div className="flex items-center justify-between">
+                      <span className="text-rose-600 dark:text-rose-400 font-bold text-[10px]" title="Target Loss / Stop Loss in Points">
+                        TL (Stop Loss pts)
+                      </span>
+                      {scalpTs > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setScalpTs(0)}
+                          className="text-[9px] text-muted-foreground hover:text-rose-500 font-mono"
+                        >
+                          clear
+                        </button>
+                      )}
+                    </div>
                     <div className="flex items-center border border-border rounded-md bg-background h-7 px-1 shadow-2xs">
                       <input
                         type="number"
@@ -911,11 +1022,28 @@ export function LivePage() {
                         max={1000}
                         step={scalpSpot === "SENSEX" ? 10 : 5}
                         value={scalpTs === 0 ? "" : scalpTs}
-                        placeholder="0"
+                        placeholder="0 (pts)"
                         onChange={(e) => setScalpTs(Math.max(0, parseFloat(e.target.value) || 0))}
                         className="w-full text-center font-mono font-bold text-rose-600 dark:text-rose-400 bg-transparent text-xs focus:outline-none placeholder:text-muted-foreground/50"
-                        title="Trailing Stop / Stop Loss Points (0 = optional / off)"
+                        title="Target Loss / Stop Loss Points (0 = off)"
                       />
+                    </div>
+                    {/* TL Presets */}
+                    <div className="flex items-center gap-1 pt-0.5">
+                      {[5, 10, 15, 20].map((pt) => (
+                        <button
+                          key={`tl-${pt}`}
+                          type="button"
+                          onClick={() => setScalpTs(pt)}
+                          className={`flex-1 py-0.5 text-[9px] font-mono font-bold rounded border transition-colors ${
+                            scalpTs === pt
+                              ? "bg-rose-600 text-white border-rose-600"
+                              : "bg-muted/50 border-border hover:bg-muted text-muted-foreground hover:text-foreground"
+                          }`}
+                        >
+                          -{pt}
+                        </button>
+                      ))}
                     </div>
                   </div>
                 </div>
@@ -964,16 +1092,30 @@ export function LivePage() {
                       {fmtRs(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}
                     </span>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="destructive"
-                    disabled={scalpBusy}
-                    onClick={handleScalpExit}
-                    className="h-6 text-[10px] px-2 font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center gap-1 shadow-2xs cursor-pointer"
-                  >
-                    {scalpBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
-                    <span>Square Off</span>
-                  </Button>
+                  <div className="flex items-center gap-1.5 flex-none">
+                    {(scalpTp > 0 || scalpTs > 0) && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={scalpBusy}
+                        onClick={() => handleUpdateActiveTpTl(activeSpotTrade)}
+                        className="h-6 text-[10px] px-2 font-bold border-emerald-500/50 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center gap-1 shadow-2xs cursor-pointer"
+                        title="Update TP/TL on this active position"
+                      >
+                        <span>Apply TP/TL</span>
+                      </Button>
+                    )}
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={scalpBusy}
+                      onClick={handleScalpExit}
+                      className="h-6 text-[10px] px-2 font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center gap-1 shadow-2xs cursor-pointer"
+                    >
+                      {scalpBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
+                      <span>Square Off</span>
+                    </Button>
+                  </div>
                 </div>
               )}
             </div>
@@ -1221,15 +1363,15 @@ export function LivePage() {
                               </span>
                             </div>
                             <div>
-                              <span className="text-muted-foreground block text-[9px] uppercase">SL</span>
+                              <span className="text-muted-foreground block text-[9px] uppercase">SL / TL</span>
                               <span className="font-bold text-rose-600 dark:text-rose-400">
-                                {trade.sl != null && !Number.isNaN(trade.sl) ? trade.sl.toFixed(1) : "-"}
+                                {trade.sl != null && !Number.isNaN(trade.sl) && trade.sl > 0 ? trade.sl.toFixed(1) : (trade.tl_pts ? `-${trade.tl_pts}pt` : "-")}
                               </span>
                             </div>
                             <div>
-                              <span className="text-muted-foreground block text-[9px] uppercase">Target</span>
+                              <span className="text-muted-foreground block text-[9px] uppercase">Target / TP</span>
                               <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                {trade.target != null && !Number.isNaN(trade.target) ? trade.target.toFixed(1) : "-"}
+                                {trade.target != null && !Number.isNaN(trade.target) && trade.target > 0 ? trade.target.toFixed(1) : (trade.tp_pts ? `+${trade.tp_pts}pt` : "-")}
                               </span>
                             </div>
                           </div>
@@ -1262,6 +1404,22 @@ export function LivePage() {
                                   Focus
                                 </Button>
                               )}
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-6 text-[10px] px-2 border-emerald-500/50 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (trade.tp_pts) setScalpTp(trade.tp_pts)
+                                  if (trade.tl_pts) setScalpTs(trade.tl_pts)
+                                  setShowScalpBar(true)
+                                  setIsScalpMinimized(false)
+                                  toast.info(`Loaded TP/TL settings for ${trade.option || trade.symbol}`)
+                                }}
+                                title="Adjust TP/TL in Scalper"
+                              >
+                                TP/TL
+                              </Button>
                               <Button
                                 variant="outline"
                                 size="sm"

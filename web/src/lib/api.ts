@@ -176,6 +176,9 @@ export type OptionTrade = {
   futures_pnl_rs?: number
   sl?: number
   target?: number
+  tp_pts?: number
+  tl_pts?: number
+  raw_symbol?: string
   trigger_label?: string
   charges_rs?: number
   net_rs?: number
