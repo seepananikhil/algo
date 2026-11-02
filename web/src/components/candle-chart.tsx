@@ -331,8 +331,13 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     if (setup?.armed) add(setup.armed.level, "#c084fc", LineStyle.Solid, true, "ARMED", 2)
     if (showTradeLevels) {
       for (const trade of trades) {
-        add(trade.sl, "#ef4444", LineStyle.Dashed, true, "SL")
-        add(trade.target, "#10b981", LineStyle.Dashed, true, "TGT")
+        // Only add SL / Target if it's within the candlestick price range (prevents scale distortion from option premiums)
+        if (trade.sl != null && !Number.isNaN(trade.sl) && trade.sl >= sessionLow * 0.9 && trade.sl <= sessionHigh * 1.1) {
+          add(trade.sl, "#ef4444", LineStyle.Dashed, true, "SL")
+        }
+        if (trade.target != null && !Number.isNaN(trade.target) && trade.target >= sessionLow * 0.9 && trade.target <= sessionHigh * 1.1) {
+          add(trade.target, "#10b981", LineStyle.Dashed, true, "TGT")
+        }
       }
     }
 
@@ -364,14 +369,10 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     } catch (e) {
       console.warn("CandleChart: failed to set markers", e)
     }
+    const isFirstBarFit = bars.current === 0 && data.length > 0
     bars.current = data.length
-    if (chart.current && !manualRange.current) {
+    if (chart.current && !manualRange.current && isFirstBarFit) {
       fitSession(chart.current, data.length, fullDay)
-      requestAnimationFrame(() => {
-        if (chart.current && !manualRange.current) {
-          fitSession(chart.current, data.length, fullDay)
-        }
-      })
     }
   }, [date, candles, forming, currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels, fullDay, resetKey])
 

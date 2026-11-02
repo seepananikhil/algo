@@ -263,20 +263,14 @@ export function LivePage() {
 
   // Map trades to chart markers
   const sensexChartTrades = useMemo(() => {
-    if (selectedTrade && (selectedTrade.symbol?.toUpperCase().includes("SENSEX") || selectedTrade.symbol?.includes("BSESN"))) {
-      return [toRuleTrade(selectedTrade)]
-    }
     const filtered = tradesList.filter((t) => t.symbol?.toUpperCase().includes("SENSEX") || t.symbol?.includes("BSESN"))
     return filtered.map(toRuleTrade)
-  }, [tradesList, selectedTrade])
+  }, [tradesList])
 
   const niftyChartTrades = useMemo(() => {
-    if (selectedTrade && (!selectedTrade.symbol || selectedTrade.symbol?.toUpperCase().includes("NIFTY") || selectedTrade.symbol?.includes("NSEI"))) {
-      return [toRuleTrade(selectedTrade)]
-    }
     const filtered = tradesList.filter((t) => !t.symbol || t.symbol?.toUpperCase().includes("NIFTY") || t.symbol?.includes("NSEI"))
     return filtered.map(toRuleTrade)
-  }, [tradesList, selectedTrade])
+  }, [tradesList])
 
   // Handle clicking a trade card / row -> immediately load respective chart & highlight
   const handleSelectTrade = useCallback((trade: OptionTrade) => {

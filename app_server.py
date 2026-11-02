@@ -3978,136 +3978,217 @@ def kotak_orders() -> list:
         return []
 
 
+def get_spot_at_time(idx_sym: str, hhmm: str) -> float:
+    try:
+        t_str = today()
+        prefix = "sensex" if "SENSEX" in idx_sym.upper() else "nifty"
+        p = LIVE_DIR / f"{prefix}_1min_{t_str}.csv"
+        if p.exists():
+            rows = read_csv_rows(p)
+            for r in rows:
+                t_val = str(r.get("time") or r.get("timestamp") or "")
+                if hhmm in t_val:
+                    return float(r.get("close") or r.get("open") or 0.0)
+            if rows:
+                return float(rows[-1].get("close") or 0.0)
+    except Exception:
+        pass
+    st = status()
+    if "SENSEX" in idx_sym.upper():
+        return float((st.get("sensex_last_tick") or {}).get("ltp") or 75000.0)
+    return float((st.get("last_tick") or {}).get("ltp") or 23300.0)
+
+
 def kotak_live_trades() -> list:
-    """Return active and closed Kotak Neo positions formatted as OptionTrade dicts for live tracking."""
+    """Return active and closed Kotak Neo positions formatted as OptionTrade dicts with stable, FIFO-paired timestamps."""
     try:
         from broker import get_positions
         from kotak_orders import get_kotak_client
         pos_data = get_positions()
-        if not pos_data.get("ok"):
-            return []
 
-        # Map order timestamps
-        order_map = {}
+        # Fetch and parse completed orders
+        completed_orders = []
         try:
             client = get_kotak_client()
             if client:
                 res = client.order_report()
                 if isinstance(res, dict) and str(res.get("stat", "")).lower() == "ok":
                     for o in res.get("data") or []:
-                        s = str(o.get("trdSym", ""))
-                        if s not in order_map:
-                            order_map[s] = []
-                        order_map[s].append(o)
-        except Exception:
-            pass
+                        if str(o.get("ordSt", "")).lower() in ("complete", "trd", "traded", "filled"):
+                            completed_orders.append(o)
+        except Exception as exc:
+            print(f"Error fetching Kotak Neo order_report: {exc}")
 
-        trades = []
+        def parse_ord_time(o: dict):
+            dt_str = str(o.get("ordDtTm", "")).strip()
+            try:
+                return datetime.strptime(dt_str, "%d-%b-%Y %H:%M:%S")
+            except Exception:
+                return datetime.min
+
+        completed_orders.sort(key=parse_ord_time)
+
+        # Group completed orders by trading symbol
+        by_symbol = {}
+        for o in completed_orders:
+            sym = str(o.get("trdSym", ""))
+            if sym not in by_symbol:
+                by_symbol[sym] = []
+            by_symbol[sym].append(o)
+
         today_str = today()
-
         targets = load_scalp_targets()
-        for pos in pos_data.get("open_positions", []):
-            sym = str(pos.get("symbol", ""))
+        trades = []
+
+        # Map live open positions by symbol for quick lookup of current MTM
+        open_pos_map = {}
+        if pos_data.get("ok"):
+            for pos in pos_data.get("open_positions", []):
+                s = str(pos.get("symbol", "")).strip()
+                open_pos_map[s] = pos
+
+        # Reconstruct distinct round-trip trades using FIFO matching
+        for sym, ords in by_symbol.items():
             readable_name = clean_option_symbol(sym)
-            side = str(pos.get("side", "CALL"))
-            qty = int(pos.get("net_qty", 65))
-            buy_px = float(pos.get("buy_avg", 0.0))
-            cur_ltp = float(pos.get("ltp", buy_px))
-            buy_val = float(pos.get("invested", buy_px * qty))
-            cur_val = float(pos.get("current_value", cur_ltp * qty))
-            unrealized = float(pos.get("unrealized_pnl", cur_val - buy_val))
-
-            t_info = targets.get(sym) or targets.get(readable_name) or {}
-            tp_pts = float(t_info.get("tp_pts") or 0.0)
-            tl_pts = float(t_info.get("tl_pts") or 0.0)
-            sl_val = round(buy_px - tl_pts, 2) if (tl_pts > 0 and buy_px > 0) else 0.0
-            tgt_val = round(buy_px + tp_pts, 2) if (tp_pts > 0 and buy_px > 0) else 0.0
-
-            ords = order_map.get(sym, [])
-            entry_t = "LIVE"
-            if ords:
-                entry_t = ords[0].get("ordDtTm", "").split()[1][:5] if len(ords[0].get("ordDtTm", "").split()) > 1 else "LIVE"
-
-            trades.append({
-                "date": today_str,
-                "side": side,
-                "option": readable_name,
-                "raw_symbol": sym,
-                "qty": qty,
-                "entry": entry_t,
-                "nifty_in": buy_px,
-                "buy_price": buy_px,
-                "buy_value_rs": buy_val,
-                "exit": "",
-                "nifty_out": cur_ltp,
-                "sell_price": cur_ltp,
-                "sell_value_rs": cur_val,
-                "pnl_rs": unrealized,
-                "option_pnl_rs": unrealized,
-                "nifty_points": round(cur_ltp - buy_px, 2) if side == "CALL" else round(buy_px - cur_ltp, 2),
-                "exit_reason": "open",
-                "mode": "LIVE KOTAK",
-                "spot_at_entry": buy_px,
-                "trigger_label": "Kotak Neo Real Position",
-                "sl": sl_val if sl_val > 0 else None,
-                "target": tgt_val if tgt_val > 0 else None,
-                "tp_pts": tp_pts,
-                "tl_pts": tl_pts,
-                "charges_rs": 0.0,
-                "net_rs": unrealized,
-                "strategy": "kotak_live",
-                "symbol": "SENSEX" if "SENSEX" in sym.upper() else "NIFTY",
-                "is_open": True,
-            })
-
-        for pos in pos_data.get("closed_positions", []):
-            sym = str(pos.get("symbol", ""))
-            readable_name = clean_option_symbol(sym)
-            side = str(pos.get("side", "CALL"))
-            qty = int(pos.get("qty", 65))
-            buy_px = float(pos.get("buy_avg", 0.0))
-            sell_px = float(pos.get("sell_avg", 0.0))
-            buy_amt = float(pos.get("buy_amt", buy_px * qty))
-            sell_amt = float(pos.get("sell_amt", sell_px * qty))
-            realized = float(pos.get("realized_pnl", sell_amt - buy_amt))
-
-            ords = order_map.get(sym, [])
-            b_time = "09:15"
-            s_time = "09:30"
+            idx_sym = "SENSEX" if "SENSEX" in sym.upper() else "NIFTY"
+            side = "CALL" if "CE" in sym.upper() else "PUT"
+            buys = []
             for o in ords:
-                dt_tm = o.get("ordDtTm", "")
-                if o.get("trnsTp") == "B" and len(dt_tm.split()) > 1:
-                    b_time = dt_tm.split()[1][:5]
-                elif o.get("trnsTp") == "S" and len(dt_tm.split()) > 1:
-                    s_time = dt_tm.split()[1][:5]
+                tt = str(o.get("trnsTp", "")).upper()
+                qty = int(o.get("qty", 0))
+                prc = float(o.get("avgPrc", 0.0))
+                dt_parts = str(o.get("ordDtTm", "")).split()
+                dt = dt_parts[1][:5] if len(dt_parts) > 1 else "09:30"
+                if tt == "B":
+                    buys.append({"qty": qty, "price": prc, "time": dt, "order_id": o.get("nOrdNo")})
+                elif tt == "S":
+                    sell_qty = qty
+                    sell_prc = prc
+                    sell_dt = dt
+                    while sell_qty > 0 and buys:
+                        b = buys[0]
+                        matched_qty = min(sell_qty, b["qty"])
+                        pnl = round((sell_prc - b["price"]) * matched_qty, 2)
+                        pts = round(sell_prc - b["price"], 2)
+                        spot_in = get_spot_at_time(sym, b["time"])
+                        spot_out = get_spot_at_time(sym, sell_dt)
+                        trades.append({
+                            "date": today_str,
+                            "side": side,
+                            "option": readable_name,
+                            "raw_symbol": sym,
+                            "symbol": idx_sym,
+                            "qty": matched_qty,
+                            "entry": b["time"],
+                            "exit": sell_dt,
+                            "buy_price": b["price"],
+                            "sell_price": sell_prc,
+                            "buy_value_rs": round(b["price"] * matched_qty, 2),
+                            "sell_value_rs": round(sell_prc * matched_qty, 2),
+                            "spot_at_entry": spot_in,
+                            "nifty_in": spot_in,
+                            "nifty_out": spot_out,
+                            "nifty_points": pts,
+                            "pnl_points": pts,
+                            "pnl_rs": pnl,
+                            "option_pnl_rs": pnl,
+                            "net_rs": pnl,
+                            "charges_rs": 0.0,
+                            "exit_reason": "closed",
+                            "strategy": "kotak_live",
+                            "mode": "LIVE KOTAK",
+                            "trigger_label": "Kotak Neo Real Trade",
+                            "is_open": False,
+                        })
+                        b["qty"] -= matched_qty
+                        sell_qty -= matched_qty
+                        if b["qty"] <= 0:
+                            buys.pop(0)
 
-            trades.append({
-                "date": today_str,
-                "side": side,
-                "option": readable_name,
-                "qty": qty,
-                "entry": b_time,
-                "nifty_in": buy_px,
-                "buy_price": buy_px,
-                "buy_value_rs": buy_amt,
-                "exit": s_time,
-                "nifty_out": sell_px,
-                "sell_price": sell_px,
-                "sell_value_rs": sell_amt,
-                "pnl_rs": realized,
-                "option_pnl_rs": realized,
-                "nifty_points": round(sell_px - buy_px, 2) if side == "CALL" else round(buy_px - sell_px, 2),
-                "exit_reason": "closed",
-                "mode": "LIVE KOTAK",
-                "spot_at_entry": buy_px,
-                "trigger_label": "Kotak Neo Real Trade",
-                "charges_rs": 0.0,
-                "net_rs": realized,
-                "strategy": "kotak_live",
-                "symbol": "SENSEX" if "SENSEX" in sym.upper() else "NIFTY",
-                "is_open": False,
-            })
+            # Remaining unclosed buys are active open positions!
+            for b in buys:
+                if b["qty"] > 0:
+                    pos_info = open_pos_map.get(sym, {})
+                    cur_ltp = float(pos_info.get("ltp") or b["price"])
+                    unrealized = round((cur_ltp - b["price"]) * b["qty"], 2)
+                    pts = round(cur_ltp - b["price"], 2)
 
+                    t_info = targets.get(sym) or targets.get(readable_name) or {}
+                    tp_pts = float(t_info.get("tp_pts") or 0.0)
+                    tl_pts = float(t_info.get("tl_pts") or 0.0)
+                    sl_val = round(b["price"] - tl_pts, 2) if (tl_pts > 0 and b["price"] > 0) else None
+                    tgt_val = round(b["price"] + tp_pts, 2) if (tp_pts > 0 and b["price"] > 0) else None
+                    spot_in = get_spot_at_time(sym, b["time"])
+
+                    trades.append({
+                        "date": today_str,
+                        "side": side,
+                        "option": readable_name,
+                        "raw_symbol": sym,
+                        "symbol": idx_sym,
+                        "qty": b["qty"],
+                        "entry": b["time"],
+                        "exit": "",
+                        "buy_price": b["price"],
+                        "sell_price": cur_ltp,
+                        "buy_value_rs": round(b["price"] * b["qty"], 2),
+                        "sell_value_rs": round(cur_ltp * b["qty"], 2),
+                        "spot_at_entry": spot_in,
+                        "nifty_in": spot_in,
+                        "nifty_out": spot_in,
+                        "nifty_points": pts,
+                        "pnl_points": pts,
+                        "pnl_rs": unrealized,
+                        "option_pnl_rs": unrealized,
+                        "net_rs": unrealized,
+                        "charges_rs": 0.0,
+                        "sl": sl_val,
+                        "target": tgt_val,
+                        "tp_pts": tp_pts,
+                        "tl_pts": tl_pts,
+                        "exit_reason": "open",
+                        "strategy": "kotak_live",
+                        "mode": "LIVE KOTAK",
+                        "trigger_label": "Kotak Neo Real Position",
+                        "is_open": True,
+                    })
+
+        # If orders were empty but positions exist, fallback to raw positions
+        if not trades and pos_data.get("ok"):
+            for pos in pos_data.get("open_positions", []):
+                sym = str(pos.get("symbol", ""))
+                readable_name = clean_option_symbol(sym)
+                side = str(pos.get("side", "CALL"))
+                qty = int(pos.get("net_qty", 65))
+                buy_px = float(pos.get("buy_avg", 0.0))
+                cur_ltp = float(pos.get("ltp", buy_px))
+                spot_in = get_spot_at_time(sym, "09:30")
+                unrealized = float(pos.get("unrealized_pnl", (cur_ltp - buy_px) * qty))
+                trades.append({
+                    "date": today_str,
+                    "side": side,
+                    "option": readable_name,
+                    "raw_symbol": sym,
+                    "symbol": "SENSEX" if "SENSEX" in sym.upper() else "NIFTY",
+                    "qty": qty,
+                    "entry": "09:30",
+                    "exit": "",
+                    "buy_price": buy_px,
+                    "sell_price": cur_ltp,
+                    "spot_at_entry": spot_in,
+                    "nifty_in": spot_in,
+                    "nifty_out": spot_in,
+                    "pnl_rs": unrealized,
+                    "option_pnl_rs": unrealized,
+                    "nifty_points": round(cur_ltp - buy_px, 2),
+                    "exit_reason": "open",
+                    "mode": "LIVE KOTAK",
+                    "strategy": "kotak_live",
+                    "is_open": True,
+                })
+
+        # Stable sort by entry time
+        trades.sort(key=lambda x: str(x.get("entry", "09:15")))
         return trades
     except Exception as exc:
         print(f"Error in kotak_live_trades: {exc}")
