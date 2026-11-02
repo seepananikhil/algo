@@ -3769,19 +3769,82 @@ def today_log(path: Path, lines: int) -> list:
 
 
 
+def clean_option_symbol(sym: str) -> str:
+    """Format technical broker symbol (e.g. NIFTY26N0323300CE) into clean human-readable name."""
+    m = re.search(r'(NIFTY|SENSEX)\d{2}[A-Z0-9]{3}(\d+)(CE|PE)', sym)
+    if m:
+        return f"{m.group(1)} {m.group(2)} {m.group(3)}"
+    return sym
+
+
+def kotak_orders() -> list:
+    """Return today's real executed orders directly from Kotak Neo."""
+    try:
+        from kotak_orders import get_kotak_client
+        client = get_kotak_client()
+        if not client:
+            return []
+        res = client.order_report()
+        if not isinstance(res, dict) or str(res.get("stat", "")).lower() != "ok":
+            return []
+        orders = []
+        for o in res.get("data") or []:
+            sym = str(o.get("trdSym", ""))
+            side = "BUY" if o.get("trnsTp") == "B" else "SELL"
+            st = str(o.get("ordSt", "")).lower()
+            px = float(o.get("avgPrc") or o.get("prc") or 0.0)
+            qty = int(o.get("qty") or 0)
+            dt_tm = str(o.get("ordDtTm") or "")
+            t_str = dt_tm.split()[1][:5] if len(dt_tm.split()) > 1 else dt_tm[:5]
+            orders.append({
+                "order_id": str(o.get("nOrdNo", "")),
+                "symbol": clean_option_symbol(sym),
+                "raw_symbol": sym,
+                "side": side,
+                "status": st,
+                "price": px,
+                "qty": qty,
+                "time": t_str,
+                "order_type": str(o.get("ordTp", "MKT")),
+                "exchange": str(o.get("exSeg", "nse_fo")),
+                "product": str(o.get("prod", "MIS")),
+            })
+        return orders
+    except Exception as exc:
+        print(f"Error fetching Kotak orders: {exc}")
+        return []
+
+
 def kotak_live_trades() -> list:
     """Return active and closed Kotak Neo positions formatted as OptionTrade dicts for live tracking."""
     try:
         from broker import get_positions
+        from kotak_orders import get_kotak_client
         pos_data = get_positions()
         if not pos_data.get("ok"):
             return []
-        
+
+        # Map order timestamps
+        order_map = {}
+        try:
+            client = get_kotak_client()
+            if client:
+                res = client.order_report()
+                if isinstance(res, dict) and str(res.get("stat", "")).lower() == "ok":
+                    for o in res.get("data") or []:
+                        s = str(o.get("trdSym", ""))
+                        if s not in order_map:
+                            order_map[s] = []
+                        order_map[s].append(o)
+        except Exception:
+            pass
+
         trades = []
         today_str = today()
-        
+
         for pos in pos_data.get("open_positions", []):
             sym = str(pos.get("symbol", ""))
+            readable_name = clean_option_symbol(sym)
             side = str(pos.get("side", "CALL"))
             qty = int(pos.get("net_qty", 65))
             buy_px = float(pos.get("buy_avg", 0.0))
@@ -3789,13 +3852,18 @@ def kotak_live_trades() -> list:
             buy_val = float(pos.get("invested", buy_px * qty))
             cur_val = float(pos.get("current_value", cur_ltp * qty))
             unrealized = float(pos.get("unrealized_pnl", cur_val - buy_val))
-            
+
+            ords = order_map.get(sym, [])
+            entry_t = "LIVE"
+            if ords:
+                entry_t = ords[0].get("ordDtTm", "").split()[1][:5] if len(ords[0].get("ordDtTm", "").split()) > 1 else "LIVE"
+
             trades.append({
                 "date": today_str,
                 "side": side,
-                "option": sym,
+                "option": readable_name,
                 "qty": qty,
-                "entry": "LIVE",
+                "entry": entry_t,
                 "nifty_in": buy_px,
                 "buy_price": buy_px,
                 "buy_value_rs": buy_val,
@@ -3809,7 +3877,7 @@ def kotak_live_trades() -> list:
                 "exit_reason": "open",
                 "mode": "LIVE KOTAK",
                 "spot_at_entry": buy_px,
-                "trigger_label": "Kotak Live Position",
+                "trigger_label": "Kotak Neo Real Position",
                 "sl": 0.0,
                 "target": 0.0,
                 "charges_rs": 0.0,
@@ -3818,9 +3886,10 @@ def kotak_live_trades() -> list:
                 "symbol": "SENSEX" if "SENSEX" in sym.upper() else "NIFTY",
                 "is_open": True,
             })
-            
+
         for pos in pos_data.get("closed_positions", []):
             sym = str(pos.get("symbol", ""))
+            readable_name = clean_option_symbol(sym)
             side = str(pos.get("side", "CALL"))
             qty = int(pos.get("qty", 65))
             buy_px = float(pos.get("buy_avg", 0.0))
@@ -3828,17 +3897,27 @@ def kotak_live_trades() -> list:
             buy_amt = float(pos.get("buy_amt", buy_px * qty))
             sell_amt = float(pos.get("sell_amt", sell_px * qty))
             realized = float(pos.get("realized_pnl", sell_amt - buy_amt))
-            
+
+            ords = order_map.get(sym, [])
+            b_time = "09:15"
+            s_time = "09:30"
+            for o in ords:
+                dt_tm = o.get("ordDtTm", "")
+                if o.get("trnsTp") == "B" and len(dt_tm.split()) > 1:
+                    b_time = dt_tm.split()[1][:5]
+                elif o.get("trnsTp") == "S" and len(dt_tm.split()) > 1:
+                    s_time = dt_tm.split()[1][:5]
+
             trades.append({
                 "date": today_str,
                 "side": side,
-                "option": sym,
+                "option": readable_name,
                 "qty": qty,
-                "entry": "LIVE",
+                "entry": b_time,
                 "nifty_in": buy_px,
                 "buy_price": buy_px,
                 "buy_value_rs": buy_amt,
-                "exit": "CLOSED",
+                "exit": s_time,
                 "nifty_out": sell_px,
                 "sell_price": sell_px,
                 "sell_value_rs": sell_amt,
@@ -3848,14 +3927,14 @@ def kotak_live_trades() -> list:
                 "exit_reason": "closed",
                 "mode": "LIVE KOTAK",
                 "spot_at_entry": buy_px,
-                "trigger_label": "Kotak Realized",
+                "trigger_label": "Kotak Neo Real Trade",
                 "charges_rs": 0.0,
                 "net_rs": realized,
                 "strategy": "kotak_live",
                 "symbol": "SENSEX" if "SENSEX" in sym.upper() else "NIFTY",
                 "is_open": False,
             })
-            
+
         return trades
     except Exception as exc:
         print(f"Error in kotak_live_trades: {exc}")
@@ -4061,16 +4140,25 @@ class Handler(BaseHTTPRequestHandler):
                         })
             self._json(signals_list)
         elif url.path == "/api/orders":
-            self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
+            from broker import get_active_broker
+            if get_active_broker() == "KOTAK_NEO":
+                self._json(kotak_orders())
+            else:
+                self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
-            all_trades = list(kotak_live_trades())
-            all_trades.extend(midpoint_option_trades())
-            all_trades.extend(trend_runner_live_paper_trades(date))
-            all_trades.extend(sensex_runner_live_paper_trades(date))
-            all_trades.extend(sensex_key_levels_live_paper_trades(date))
-            all_trades.extend(nifty_key_levels_live_paper_trades(date))
-            all_trades.extend(compression_scalp_live_paper_trades(date))
-            self._json(all_trades)
+            cfg = read_config()
+            is_live = bool(cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading") or cfg.get("live_trading"))
+            kotak_trades = list(kotak_live_trades())
+            if is_live or kotak_trades:
+                self._json(kotak_trades)
+            else:
+                all_trades = list(midpoint_option_trades())
+                all_trades.extend(trend_runner_live_paper_trades(date))
+                all_trades.extend(sensex_runner_live_paper_trades(date))
+                all_trades.extend(sensex_key_levels_live_paper_trades(date))
+                all_trades.extend(nifty_key_levels_live_paper_trades(date))
+                all_trades.extend(compression_scalp_live_paper_trades(date))
+                self._json(all_trades)
         elif url.path == "/api/key-level-option-trades":
             self._json(build_paper_report(key_level_option_trades(date))["trades"])
         elif url.path == "/api/key-level-option-paper":
