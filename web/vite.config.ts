@@ -10,5 +10,19 @@ export default defineConfig({
     dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom'],
   },
   server: { proxy: { '/api': 'http://127.0.0.1:8090' } },
-  build: { sourcemap: true },
+  build: {
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules/lightweight-charts')) {
+            return 'vendor-charts'
+          }
+          if (id.includes('node_modules/lucide-react')) {
+            return 'vendor-icons'
+          }
+        },
+      },
+    },
+  },
 })

@@ -7,6 +7,7 @@ Run: python3 app_server.py  ->  http://127.0.0.1:8090
 from __future__ import annotations
 
 import csv
+import gzip
 import json
 import math
 import mimetypes
@@ -4544,14 +4545,29 @@ class Handler(BaseHTTPRequestHandler):
         else:
             root = WEB_DIST.resolve()
             target = (root / path.lstrip("/")).resolve()
+            is_spa_fallback = False
             if root not in target.parents or not target.is_file():
                 target = root / "index.html"
+                is_spa_fallback = True
             body = target.read_bytes()
             ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
+
+        accept_enc = self.headers.get("Accept-Encoding", "")
+        compress = "gzip" in accept_enc and len(body) > 512 and (
+            "javascript" in ctype or "css" in ctype or "html" in ctype or "json" in ctype or "svg" in ctype
+        )
+        if compress:
+            body = gzip.compress(body, compresslevel=6)
+
         try:
             self.send_response(200)
             self.send_header("Content-Type", ctype)
-            if "html" in ctype or "javascript" in ctype:
+            self.send_header("Content-Length", str(len(body)))
+            if compress:
+                self.send_header("Content-Encoding", "gzip")
+            if "/assets/" in path and not is_spa_fallback:
+                self.send_header("Cache-Control", "public, max-age=31536000, immutable")
+            else:
                 self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
                 self.send_header("Pragma", "no-cache")
                 self.send_header("Expires", "0")
