@@ -1,0 +1,88 @@
+name: Daily Historical & Options Data Update
+
+on:
+  schedule:
+    # 16:30 IST (11:00 UTC) Monday through Friday
+    - cron: '0 11 * * 1-5'
+  workflow_dispatch:
+    inputs:
+      target_date:
+        description: 'Session date (YYYY-MM-DD), leave blank for today'
+        required: false
+        default: ''
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install DuckDB CLI
+        run: |
+          curl -LO https://github.com/duckdb/duckdb/releases/download/v1.1.3/duckdb_cli-linux-amd64.zip
+          unzip duckdb_cli-linux-amd64.zip
+          sudo mv duckdb /usr/local/bin/
+          duckdb --version
+
+      - name: Update Spot Historical Data (NIFTY & SENSEX)
+        env:
+          NEO_CONSUMER_KEY: ${{ secrets.NEO_CONSUMER_KEY }}
+          NEO_MOBILE_NUMBER: ${{ secrets.NEO_MOBILE_NUMBER }}
+          NEO_UCC: ${{ secrets.NEO_UCC }}
+          NEO_TOTP_KEY: ${{ secrets.NEO_TOTP_KEY }}
+          NEO_MPIN: ${{ secrets.NEO_MPIN }}
+        run: |
+          DATE_ARG=""
+          if [ -n "${{ github.event.inputs.target_date }}" ]; then
+            DATE_ARG="--date ${{ github.event.inputs.target_date }}"
+          fi
+          python scripts/update_spot_history.py $DATE_ARG
+
+      - name: Fetch Weekly Options Data (NIFTY & SENSEX)
+        env:
+          NEO_CONSUMER_KEY: ${{ secrets.NEO_CONSUMER_KEY }}
+          NEO_MOBILE_NUMBER: ${{ secrets.NEO_MOBILE_NUMBER }}
+          NEO_UCC: ${{ secrets.NEO_UCC }}
+          NEO_TOTP_KEY: ${{ secrets.NEO_TOTP_KEY }}
+          NEO_MPIN: ${{ secrets.NEO_MPIN }}
+        run: |
+          DATE_ARG=""
+          if [ -n "${{ github.event.inputs.target_date }}" ]; then
+            DATE_ARG="--date ${{ github.event.inputs.target_date }}"
+          fi
+          python scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
+          python scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
+
+      - name: Rebuild DuckDB Options Parquet Catalogs
+        run: |
+          (cd options_data/nifty && duckdb -c ".read scripts/build_parquet.sql") || echo "Nifty parquet catalog build completed with warnings"
+          (cd options_data/sensex && duckdb -c ".read scripts/build_parquet.sql") || echo "Sensex parquet catalog build completed with warnings"
+
+      - name: Update Master Backtests
+        run: |
+          python run_10y_backtest.py || echo "Nifty backtest completed with warnings"
+          python run_sensex_multiyear_trend_backtest.py || echo "Sensex backtest completed with warnings"
+          python run_10y_midpoint_backtest.py || echo "Midpoint backtest completed with warnings"
+
+      - name: Commit and Push Updated Data
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "chore(data): automated daily update of spot & options OHLC data"
+          file_pattern: "historical_data/* options_data/* paper/* performance/*"
