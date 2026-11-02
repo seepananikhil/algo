@@ -28,14 +28,23 @@ export type Status = {
   lots: number
   daily_loss_limit: number | null
   kill_switch: boolean
-  last_tick: { time: string; ltp: number; change?: number | null; per_change?: number | null; prev_close?: number | null } | null
-  sensex_last_tick?: { time: string; ltp: number; change?: number | null; per_change?: number | null; prev_close?: number | null } | null
+  last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
+  sensex_last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
+  scalper?: {
+    enabled: boolean
+    mode: "PAPER" | "LIVE"
+    sl_pts: number
+    target_pts: number
+    max_trades: number
+    trades_today_count: number
+    today_trades?: any[]
+  }
 }
 
 export type Candle = { time: string; open: number; high: number; low: number; close: number }
 
 export type RuleTrade = {
-  side: "CALL" | "PUT"
+  side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})
   entry: string
   entry_price: number
   sl: number
@@ -44,6 +53,7 @@ export type RuleTrade = {
   exit_price: number
   reason: string
   pnl_points: number
+  setup?: string
 }
 
 export type Setup = {
@@ -108,7 +118,7 @@ export function tradesFromSignals(signals: Signal[]): RuleTrade[] {
 
 export type PositionRow = {
   symbol: string
-  side: "CALL" | "PUT" | "EQUITY"
+  side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {}) | "EQUITY"
   net_qty?: number
   qty?: number
   lot_size?: number
@@ -147,7 +157,7 @@ export type PositionsResponse = {
 
 export type OptionTrade = {
   date: string
-  side: "CALL" | "PUT"
+  side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})
   option: string
   qty: number
   entry: string
@@ -158,24 +168,40 @@ export type OptionTrade = {
   nifty_out: number
   sell_price: number
   sell_value_rs: number
+  exit_reason: string
+  nifty_points: number
+  pnl_points: number
   pnl_rs: number
+  option_pnl_rs?: number
+  futures_pnl_rs?: number
+  sl?: number
+  target?: number
+  trigger_label?: string
   charges_rs?: number
   net_rs?: number
-  nifty_points: number
-  exit_reason: string
-  mode: string
-  spot_at_entry?: number | null
-  distance_from_spot?: number | null
+  mode?: string
+  spot_at_entry?: number
   level?: number | null
-  trigger_label?: string
-  sl?: number | null
-  target?: number | null
+  strategy?: string
+  symbol?: string
+  is_open?: boolean
 }
 
+export function formatTimeAgo(epochMs: number): string {
+  const diffSec = Math.floor((Date.now() - epochMs) / 1000)
+  if (diffSec < 5) return "just now"
+  if (diffSec < 60) return `${diffSec}s ago`
+  const diffMin = Math.floor(diffSec / 60)
+  if (diffMin < 60) return `${diffMin}m ago`
+  const diffHr = Math.floor(diffMin / 60)
+  return `${diffHr}h ${diffMin % 60}m ago`
+}
+
+/** Drop synthetic midpoint EXIT signals that fire at/after the time of an actual filled trade. */
 export function withoutSupersededExitSignals(signals: Signal[], fills: OptionTrade[]): Signal[] {
   return signals.filter((signal) => {
     if (signal.event !== "EXIT") return true
-    const actual = fills.find((fill) => fill.side === signal.side && fill.entry === signal.entry_time.slice(0, 5))
+    const actual = fills.find((fill) => fill.side === signal.side && fill.entry === (signal.entry_time ?? "").slice(0, 5))
     return !actual?.exit || actual.exit >= (signal.candle_time ?? "").slice(0, 5)
   })
 }
@@ -185,17 +211,17 @@ export function chartTradesFromOptionFills(fills: OptionTrade[]): RuleTrade[] {
   return fills.map((fill) => ({
     side: fill.side,
     entry: fill.entry,
-    entry_price: fill.nifty_in,
+    entry_price: fill.nifty_in || fill.spot_at_entry || 0,
     sl: fill.sl != null && !Number.isNaN(fill.sl) ? fill.sl : Number.NaN,
     target: fill.target != null && !Number.isNaN(fill.target) ? fill.target : Number.NaN,
     exit: fill.exit,
-    exit_price: fill.nifty_out,
+    exit_price: fill.nifty_out || 0,
     reason: fill.exit_reason,
-    pnl_points: fill.nifty_points,
+    pnl_points: fill.nifty_points ?? fill.pnl_points ?? 0,
   }))
 }
 
-export type BacktestTrade = RuleTrade & { date: string; equity: number; drawdown: number }
+export type BacktestTrade = RuleTrade & { date: string; equity: number; drawdown: number; bars_held?: number; setup?: string }
 
 export type PaperReport = {
   summary: {
@@ -219,12 +245,14 @@ export type PaperReport = {
     equity: number
     drawdown: number
   })[]
-  daily: { date: string; trades: number; gross_rs: number; net_rs: number; points: number }[]
+  daily: { date: string; trades: number; gross_rs: number; charges_rs: number; net_rs: number; points: number }[]
+  monthly: { month: string; trades: number; gross_rs: number; charges_rs: number; net_rs: number; win_rate_pct: number }[]
+  exit_reasons: { reason: string; count: number; points: number; pnl_rs: number }[]
 }
 
 export type KeyLevelTrade = {
   date: string
-  side: "CALL" | "PUT"
+  side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})
   level: number
   break_time: string
   confirm_time: string
@@ -235,6 +263,7 @@ export type KeyLevelTrade = {
   exit_time: string
   exit_price: number | null
   pnl_points: number
+  setup?: string
   exit_reason: string
   status: "open" | "closed"
   source?: string
@@ -258,122 +287,126 @@ export type KeyLevelBook = {
 export type OptionPaperTrade = {
   date: string
   strategy: "midpoint" | "key_levels"
-  side: "CALL" | "PUT"
+  side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})
   level: number | null
   break_time: string
   confirm_time: string
   entry_time: string
-  symbol: string
-  expiry: string
-  qty: number
-  spot_entry: number
-  option_entry: number
-  capital_used: number
-  spot_target: number
-  option_target: number
-  exit_time: string
+  entry_spot: number
+  entry_option_price: number
+  exit_time: string | null
   exit_spot: number | null
-  exit_option: number | null
-  pnl_rs: number
-  return_pct: number
-  charges_rs?: number
-  net_pnl_rs?: number
-  net_return_pct?: number
-  source?: string
-  reason: string
+  exit_option_price: number | null
+  exit_reason: string | null
+  sl_spot: number
+  target_spot: number
+  points: number | null
+  pnl_rs: number | null
   status: "open" | "closed"
+  source: string
 }
 
-export type OptionPaperBook = {
-  summary: {
-    trades: number
-    open_trades: number
-    wins: number
-    losses: number
-    win_rate_pct: number
-    gross_pnl_rs: number
-    estimated_charges_rs: number
-    net_pnl_rs: number
-    avg_return_pct: number
-    max_drawdown_rs: number
-  }
-  trades: OptionPaperTrade[]
-}
-
-export function optionPaperTradeToFill(trade: OptionPaperTrade): OptionTrade {
-  const exitOption = trade.exit_option ?? trade.option_entry
-  const exitSpot = trade.exit_spot ?? trade.spot_entry
+export function optionPaperTradeToFill(opt: OptionPaperTrade): OptionTrade {
+  const pnl = opt.pnl_rs ?? 0
+  const charges = Math.round((opt.entry_option_price + (opt.exit_option_price ?? opt.entry_option_price)) * 65 * 0.0006 + 40)
   return {
-    date: trade.date,
-    side: trade.side,
-    option: trade.symbol,
-    qty: trade.qty,
-    entry: trade.entry_time.slice(0, 5),
-    nifty_in: trade.spot_entry,
-    buy_price: trade.option_entry,
-    buy_value_rs: trade.capital_used,
-    exit: trade.exit_time.slice(0, 5),
-    nifty_out: exitSpot,
-    sell_price: exitOption,
-    sell_value_rs: exitOption * trade.qty,
-    pnl_rs: trade.pnl_rs,
-    charges_rs: trade.charges_rs,
-    net_rs: trade.net_pnl_rs,
-    nifty_points: trade.side === "CALL" ? exitSpot - trade.spot_entry : trade.spot_entry - exitSpot,
-    exit_reason: trade.status === "open" ? "open" : trade.reason,
-    mode: `KEYLEVEL ${trade.source === "historical_option_replay" ? "HISTORICAL PAPER REPLAY" : trade.source === "key_levels_live" ? "LIVE" : "PAPER"}`,
-    level: trade.level ?? undefined,
-    trigger_label: `Key Levels · ${trade.source ?? "paper"}`,
+    date: opt.date,
+    side: opt.side,
+    option: `${opt.strategy === "key_levels" ? "KL" : "MP"} · ${opt.level ? opt.level : ""}`,
+    qty: 65,
+    entry: opt.entry_time,
+    nifty_in: opt.entry_spot,
+    buy_price: opt.entry_option_price,
+    buy_value_rs: opt.entry_option_price * 65,
+    exit: opt.exit_time ?? "",
+    nifty_out: opt.exit_spot ?? 0,
+    sell_price: opt.exit_option_price ?? 0,
+    sell_value_rs: (opt.exit_option_price ?? 0) * 65,
+    exit_reason: opt.exit_reason ?? (opt.status === "open" ? "open" : ""),
+    nifty_points: opt.points ?? 0,
+    pnl_points: opt.points ?? 0,
+    pnl_rs: pnl,
+    sl: opt.sl_spot,
+    target: opt.target_spot,
+    trigger_label: opt.source || (opt.strategy === "key_levels" ? "Key Level Paper" : "Midpoint Paper"),
+    charges_rs: charges,
+    net_rs: pnl - charges,
+    mode: "PAPER",
+    spot_at_entry: opt.entry_spot,
   }
 }
 
-export type KeyLevelReport = {
-  today: string
-  capture_running: boolean
-  settings: {
-    key_level_step: number
-    key_level_break_buffer: number
-    key_level_confirm_candles: number
-    key_level_target_points: number
-  }
-  paper: KeyLevelBook
-  today_replay: KeyLevelBook
-  today_paper: KeyLevelBook
-  option_paper: OptionPaperBook
-  today_option_paper: OptionPaperBook
-  backtest: KeyLevelBook
-}
-
-export type KeyLevelDay = {
+export type CapitalTrade = {
   date: string
-  timeframe_minutes: 5
-  candles: Candle[]
-  forming?: Partial<Candle> | null
-  current_price?: number | null
-  trades: RuleTrade[]
-  key_level_zone: { level: number; buffer: number } | null
+  trade_num: number
+  stage: string
+  side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})
+  option: string
+  entry_time: string
+  entry_price: number
+  sl: number
+  target: number
+  exit_time: string
+  exit_price: number
+  exit_reason: string
+  pnl_points: number
+  pnl_rupees: number
+  futures_pnl_rupees: number
+  diff_rupees: number
+  max_fav: number
+  max_adv: number
+  rr: number
+  lots: number
+  qty: number
+  vix_chg: number
+  initial_sl: number
+  charges_rupees: number
+  net_rupees: number
+  equity: number
+  drawdown: number
 }
 
-export type CapitalSummary = {
-  starting_capital: number
-  ending_capital: number
+export type CapitalDaily = {
+  date: string
+  trades: number
+  pnl_rupees: number
+  charges_rupees: number
+  net_rupees: number
+  pnl_points: number
+  futures_pnl_rupees: number
+  diff_rupees: number
+  win_rate_pct: number
   net_rs: number
-  return_pct: number
-  max_drawdown_rs: number
-  peak_deployed_rs: number
-  skipped_trades: number
 }
 
 export type CapitalReport = {
-  summary: CapitalSummary
-  trades: PaperReport["trades"]
-  daily: { date: string; trades: number; net_rs: number }[]
-  curve: {
-    timestamp: string
-    label: string
-    equity: number
-    drawdown: number
-  }[]
+  summary: {
+    trades: number
+    days: number
+    wins: number
+    losses: number
+    win_rate_pct: number
+    gross_rs: number
+    charges_rs: number
+    net_rs: number
+    points: number
+    avg_win_rs: number
+    avg_loss_rs: number
+    max_drawdown_rs: number
+    winning_days: number
+    futures_gross_rs: number
+    futures_net_rs: number
+    diff_total_rs: number
+    starting_capital?: number
+    ending_capital?: number
+  }
+  trades: CapitalTrade[]
+  daily: CapitalDaily[]
+  monthly: { month: string; trades: number; gross_rs: number; charges_rs: number; net_rs: number; win_rate_pct: number }[]
+  exit_reasons: { reason: string; count: number; points: number; pnl_rs: number }[]
+  stages: { stage: string; count: number; points: number; pnl_rs: number; win_rate_pct: number }[]
+  sides: { side: string; count: number; points: number; pnl_rs: number; win_rate_pct: number }[]
+  curve?: any[]
 }
 
 export type Backtest = {
@@ -386,118 +419,103 @@ export type Backtest = {
     losses: number
     win_rate_pct: number
     total_points: number
+    dynamic_points?: number
+    dynamic_rupees?: number
     avg_points: number
     max_drawdown: number
     best: number
     worst: number
     lot_size: number
+    option_delta?: number
   }
   trades: BacktestTrade[]
-  monthly: { month: string; points: number }[]
-  daily: { date: string; points: number; trades: number }[]
-  exit_reasons: { reason: string; count: number }[]
+  monthly: { month: string; trades: number; points: number; win_rate_pct: number }[]
+  daily: { date: string; trades: number; net_rs: number; points: number }[]
+  exit_reasons: { reason: string; count: number; points?: number }[]
 }
 
-export type Settings = {
+export type FundsStatus = {
+  ok: boolean
   broker?: "FYERS" | "KOTAK_NEO"
-  lots: number
-  daily_loss_limit: number
-  strike_offset: number
-  option_target_pct: number
-  minimum_live_funds: number
-  key_levels_lots: number
-  hero_zero_lots: number
-  key_levels_live_trading: boolean
-  scalper_paper_trading?: boolean
-  scalper_live_trading?: boolean
-  scalper_lots?: number
-  scalper_sl_pts?: number
-  scalper_target_pts?: number
-  scalper_max_trades?: number
-  hourly_trend_paper_trading?: boolean
-  hourly_trend_live_trading?: boolean
-  hourly_trend_lots?: number
-  midpoint_live_trading: boolean
-  hero_zero_live_trading: boolean
-  live_trading: boolean
-  capture_running: boolean
-  restart_required?: boolean
-  kotak_mobile_number?: string
-  kotak_ucc?: string
-  kotak_consumer_key_set?: boolean
-  kotak_mpin_set?: boolean
-  kotak_totp_secret_set?: boolean
+  error?: string
+  total_balance?: number
+  available_balance?: number
+  used_margin?: number
+  realized_pnl?: number
+  unrealized_pnl?: number
+  updated_at?: string
+  available_equity_funds?: any
 }
 
-export type FundsStatus = { ok: true; available_equity_funds: number; broker?: string } | { ok: false; error: string; broker?: string }
+export type ManualOptionContract = {
+  strike: number
+  option_type: "CE" | "PE"
+  symbol: string
+  expiry: string
+  token: string
+  lot_size: number
+  tick_size: number
+}
+
+export type ManualExpiryGroup = {
+  expiry: string
+  label: string
+  days_to_expiry: number
+  lot_size: number
+  strikes: number[]
+  contracts: ManualOptionContract[]
+}
 
 export type ManualOptionChoices = {
+  ok: boolean
+  symbol: string
   spot: number
   atm: number
-  max_lots: number
-  expiries: { expiry: string; lot_size: number; strikes: number[] }[]
-  symbol?: string
+  expiries: ManualExpiryGroup[]
+  max_lots?: number
+  error?: string
 }
 
-export type ManualPosition = {
+export type ManualOptionQuote = {
+  ok: boolean
   symbol: string
-  net_qty: number
+  token: string
+  expiry: string
+  strike: number
+  option_type: "CE" | "PE"
+  last_price: number
+  change: number
+  pChange: number
+  bid: number
+  ask: number
+  high: number
+  low: number
+  prev_close: number
+  volume: number
   lot_size: number
-  average_price: number
-  pnl: number
-  realized_pnl: number
-  unrealized_pnl: number
-}
-
-export type ManualOrder = {
-  id: string
-  symbol: string
-  qty: number
-  side: number
-  type: number
-  status: number
-  limit_price: number
-  traded_price: number
-  filled_qty: number
-  time: string
-}
-
-export type ManualTradingSnapshot = {
   updated_at: string
-  order_window_open: boolean
-  kill_switch: boolean
-  account_pnl: { realized: number; unrealized: number; total: number }
-  positions: ManualPosition[]
-  orders: ManualOrder[]
+  error?: string
 }
-
-export type ManualOrderResult = {
-  ok: true
-  order_id: string
-  symbol: string
-  qty: number
-  action: "BUY" | "SELL"
-  order_type: "MARKET" | "LIMIT"
-}
-
-export type ManualOptionQuote = { symbol: string; lot_size: number; last_price: number }
 
 export async function getJSON<T>(url: string): Promise<T> {
-  const r = await fetch(url, { cache: "no-store" })
-  const data = await r.json()
-  if (!r.ok) throw new Error(data?.error ?? `HTTP ${r.status}`)
+  const res = await fetch(url, { cache: "no-store" })
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data?.error ?? `HTTP ${res.status}`)
+  }
   return data as T
 }
 
 export async function postJSON<T>(url: string, body?: unknown): Promise<T> {
-  const r = await fetch(url, {
+  const res = await fetch(url, {
     method: "POST",
-    // X-Dashboard is required by the backend (blocks cross-site posts).
     headers: { "Content-Type": "application/json", "X-Dashboard": "1" },
     body: body === undefined ? undefined : JSON.stringify(body),
   })
-  const data = await r.json()
-  if (!r.ok) throw new Error(data?.error ?? `HTTP ${r.status}`)
+  const data = await res.json()
+  if (!res.ok) {
+    throw new Error(data?.error ?? `HTTP ${res.status}`)
+  }
   return data as T
 }
 
@@ -559,25 +577,116 @@ export function usePoll<T>(url: string | null, intervalMs = 0) {
 const rs = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })
 const num = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 })
 
-export const fmtRs = (v: number) => rs.format(v)
-export const fmtNum = (v: number | undefined | null) => (v == null || Number.isNaN(v) ? "—" : num.format(v))
-export const fmtPts = (v: number) => `${v > 0 ? "+" : ""}${num.format(v)}`
-export const pnlClass = (v: number) => (v > 0 ? "text-emerald-500" : v < 0 ? "text-red-500" : "text-muted-foreground")
+export const fmtRs = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "—" : rs.format(n))
+export const fmtPts = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "—" : `${n >= 0 ? "+" : ""}${num.format(n)}`)
+export const fmtNum = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "—" : num.format(n))
+
+export const pnlClass = (n: number | null | undefined) => {
+  if (n == null || Number.isNaN(n) || n === 0) return "text-muted-foreground"
+  return n > 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-rose-600 dark:text-rose-400 font-semibold"
+}
+
 export const prettyReason = (r: string) =>
   r
-    .replace(/^reverse_after_sl_/, "2nd trade (after loss) · ")
-    .replace(/^third_after_2sl_/, "3rd trade (after 2 losses) · ")
+    .replace(/^entry_window_close$/, "No trade (range uncrossed)")
+    .replace(/^target$/, "Target hit")
+    .replace(/^stop$/, "Stop hit")
+    .replace(/^reverse_sl$/, "Reverse SL hit")
+    .replace(/^reverse_target$/, "Reverse Target hit")
+    .replace(/^reverse_timeout$/, "Reverse Timeout")
+    .replace(/^timeout$/, "Window timed out")
+    .replace(/^kill_switch$/, "Kill switch")
+    .replace(/^manual$/, "Manual exit")
+    .replace(/^open$/, "Active")
     .replace(/^reverse_after_void_/, "2nd trade (after void) · ")
     .replace(/_/g, " ")
 
 export type PaperTrade = {
   date: string
-  side: "CALL" | "PUT"
+  side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})
   entry_time: string
   entry_price: string
   exit_time: string
   exit_price: string
-  exit_reason: string
+  reason: string
   points: string
   rupees_1_lot: string
+}
+
+export type KeyLevelDay = any
+export type KeyLevelReport = any
+export type Settings = any
+export type ManualOrderResult = any
+export type ManualTradingSnapshot = any
+
+export type CompressionBox = {
+  box_id: string
+  timeframe: string
+  start_time: string
+  end_time: string
+  start_dt: string
+  end_dt: string
+  ceiling: number
+  floor: number
+  midpoint: number
+  range_pts: number
+  duration_bars: number
+  status: 'coiling' | 'breakout_up' | 'breakout_down' | 'exhausted' | (string & {})
+  break_time?: string | null
+  break_price?: number | null
+  ceil_touches?: number
+  floor_touches?: number
+}
+
+export type RaiseStep = {
+  time: string
+  datetime: string
+  price: number
+  reason: string
+}
+
+export type HoldAndRaiseTrade = {
+  trade_id: string
+  box_id: string
+  timeframe: string
+  side: 'BUY' | 'SELL'
+  entry_time: string
+  entry_datetime: string
+  entry_price: number
+  initial_sl: number
+  current_sl: number
+  exit_time?: string | null
+  exit_datetime?: string | null
+  exit_price?: number | null
+  exit_reason?: string | null
+  pnl_points: number
+  r_multiple: number
+  raise_steps: RaiseStep[]
+  pyramid_lots: Array<{ time: string; datetime: string; price: number; lot_num: number; note: string }>
+}
+
+export type HoldAndRaiseData = {
+  date: string
+  timeframe: '1m' | '5m' | '15m' | '1h'
+  candles: Array<{
+    time: string
+    datetime: string
+    open: number
+    high: number
+    low: number
+    close: number
+    volume: number
+    date: string
+    atr: number
+  }>
+  boxes: CompressionBox[]
+  trades: HoldAndRaiseTrade[]
+  metrics: {
+    total_boxes: number
+    total_trades: number
+    win_trades: number
+    win_rate: number
+    total_points: number
+    avg_points_per_trade: number
+  }
 }

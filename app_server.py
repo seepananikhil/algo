@@ -58,6 +58,75 @@ _sensex_option_master_lock = threading.Lock()
 _backtest_cache = {"mtime": None, "value": None}
 _key_level_backtest_cache = {"key": None, "value": None}
 _cache_lock = threading.Lock()
+_sync_state = {
+    "status": "idle",
+    "message": "Ready",
+    "started_at": None,
+    "completed_at": None,
+    "last_sync_date": None,
+}
+_sync_lock = threading.Lock()
+
+def trigger_backtest_sync(reason: str = "manual") -> dict:
+    with _sync_lock:
+        if _sync_state["status"] == "running":
+            return {"ok": True, "running": True, "message": "Backtest sync already in progress..."}
+        _sync_state["status"] = "running"
+        _sync_state["message"] = f"Updating historical data & running backtests ({reason})..."
+        _sync_state["started_at"] = datetime.now(IST).isoformat()
+
+    def _worker():
+        try:
+            import subprocess, sys, shutil
+            print(f"[{datetime.now(IST)}] Starting backtest sync ({reason})...")
+            # If update_historical_data.py exists, run it
+            script = ROOT / "update_historical_data.py"
+            if script.exists():
+                res = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+                if res.returncode == 0:
+                    nifty_10y = ROOT / "performance" / "nifty_10y_backtest_trades.csv"
+                    vix_file = ROOT / "performance" / "vix_trend_runner_trades.csv"
+                    if nifty_10y.exists():
+                        shutil.copy2(nifty_10y, vix_file)
+                    with _cache_lock:
+                        _backtest_cache.update(mtime=None, value=None)
+                    with _sync_lock:
+                        _sync_state["status"] = "completed"
+                        _sync_state["message"] = "Backtests updated successfully with latest data."
+                        _sync_state["completed_at"] = datetime.now(IST).isoformat()
+                        _sync_state["last_sync_date"] = datetime.now(IST).strftime("%Y-%m-%d")
+                    print(f"[{datetime.now(IST)}] Backtest sync completed successfully.")
+                    return
+                else:
+                    err = res.stderr[-300:] if res.stderr else "Update script failed"
+                    with _sync_lock:
+                        _sync_state["status"] = "failed"
+                        _sync_state["message"] = f"Backtest update failed: {err}"
+                        _sync_state["completed_at"] = datetime.now(IST).isoformat()
+                    return
+        except Exception as exc:
+            with _sync_lock:
+                _sync_state["status"] = "failed"
+                _sync_state["message"] = f"Backtest exception: {exc}"
+                _sync_state["completed_at"] = datetime.now(IST).isoformat()
+            print(f"[{datetime.now(IST)}] Backtest sync error: {exc}")
+
+    threading.Thread(target=_worker, daemon=True).start()
+    return {"ok": True, "running": True, "message": _sync_state["message"]}
+
+def daily_backtest_sync_loop() -> None:
+    """Trigger daily backtest sync after market close (16:35 IST on weekdays)."""
+    while True:
+        try:
+            now = datetime.now(IST)
+            if now.weekday() < 5 and now.hour == 16 and now.minute == 35:
+                today_str = now.strftime("%Y-%m-%d")
+                if _sync_state.get("last_sync_date") != today_str:
+                    trigger_backtest_sync(reason="daily_schedule_1635")
+        except Exception as e:
+            pass
+        time.sleep(30)
+
 _login_proc = {"proc": None}
 _capture = {"auto_started": None, "stopped_by_user": None}
 AUTO_START_WINDOW = ("09:00", "15:29")
@@ -90,6 +159,12 @@ EDITABLE_SETTINGS = {
     "hourly_trend_paper_trading": (bool, None, None),
     "hourly_trend_live_trading": (bool, None, None),
     "hourly_trend_lots": (int, 1, PAPER_LOTS),
+    "trend_runner_paper_trading": (bool, None, None),
+    "trend_runner_live_trading": (bool, None, None),
+    "trend_runner_lots": (int, 1, PAPER_LOTS),
+    "sensex_runner_paper_trading": (bool, None, None),
+    "sensex_runner_live_trading": (bool, None, None),
+    "sensex_runner_lots": (int, 1, PAPER_LOTS),
 }
 
 
@@ -202,7 +277,7 @@ def read_csv_rows(path: Path) -> list:
 
 def fyers_token_status() -> dict:
     mtime = TOKEN_FILE.stat().st_mtime if TOKEN_FILE.exists() else None
-    if time.time() - _token_cache["at"] < 30 and _token_cache["value"] and _token_cache["mtime"] == mtime:
+    if time.time() - _token_cache["at"] < 120 and _token_cache["value"] and _token_cache["mtime"] == mtime:
         return _token_cache["value"]
     value = {"broker": "FYERS", "valid": False, "generated_at_utc": None}
     if TOKEN_FILE.exists():
@@ -406,6 +481,10 @@ def hero_zero_capture_loop() -> None:
     last_attempt_at = 0.0
     while True:
         now = datetime.now(IST)
+        cfg = read_config()
+        if not (cfg.get("hero_zero_paper_trading", False) or cfg.get("hero_zero_live_trading", False)):
+            time.sleep(30)
+            continue
         session = now.date().isoformat()
         due = now.weekday() < 5 and (now.hour, now.minute) >= HERO_ZERO_START and (now.hour, now.minute) < HERO_ZERO_END
         status_path = output_dir / f"hero_zero_status_{session}.json"
@@ -445,7 +524,7 @@ def scalper_status() -> dict:
             if r.get("date") == today_str:
                 today_trades.append(r)
     return {
-        "enabled": bool(cfg.get("scalper_paper_trading", True) or cfg.get("scalper_live_trading", False)),
+        "enabled": bool(cfg.get("scalper_paper_trading", False) or cfg.get("scalper_live_trading", False)),
         "mode": "LIVE" if cfg.get("scalper_live_trading") else "PAPER",
         "sl_pts": float(cfg.get("scalper_sl_pts", 18.0)),
         "target_pts": float(cfg.get("scalper_target_pts", 35.0)),
@@ -463,7 +542,7 @@ def scalper_forward_loop() -> None:
     while True:
         try:
             cfg = read_config()
-            paper_on = cfg.get("scalper_paper_trading", True)
+            paper_on = cfg.get("scalper_paper_trading", False)
             live_on = cfg.get("scalper_live_trading", False)
             if not paper_on and not live_on:
                 time.sleep(5)
@@ -636,6 +715,70 @@ def trend_runner_forward_loop() -> None:
         time.sleep(5)
 
 
+def sensex_runner_forward_loop() -> None:
+    """Continuously monitor today's live Sensex 1-min stream for Sensex Trend Runner setups."""
+    today_str = today()
+    live_file = LIVE_DIR / f"sensex_1min_{today_str}.csv"
+    engine = None
+    last_processed_5m = ""
+
+    while True:
+        try:
+            cfg = read_config()
+            if not cfg.get("sensex_runner_paper_trading", True):
+                time.sleep(5)
+                continue
+
+            current_today = today()
+            if current_today != today_str:
+                today_str = current_today
+                live_file = LIVE_DIR / f"sensex_1min_{today_str}.csv"
+                engine = None
+                last_processed_5m = ""
+
+            if not live_file.exists():
+                time.sleep(5)
+                continue
+
+            df1 = pd.read_csv(live_file)
+            if df1.empty or len(df1) < 15:
+                time.sleep(5)
+                continue
+
+            from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
+            if engine is None:
+                lots_cfg = int(cfg.get("sensex_runner_lots", 1))
+                engine = TrendRunnerPaperEngine(
+                    symbol="SENSEX",
+                    sl_points=120.0,
+                    sl_mode="fixed",
+                    lots=lots_cfg,
+                    sizing_mode="fixed",
+                    reentry=True,
+                )
+                engine.current_day_str = today_str
+
+            df5, or_high, or_low, or_range = compute_indicators(df1)
+            if df5.empty:
+                time.sleep(5)
+                continue
+
+            latest_bar = df5.iloc[-1]
+            curr_5m_time = str(latest_bar.get("time_str", ""))
+
+            if curr_5m_time != last_processed_5m:
+                vix_chg = get_vix_change_pct(today_str)
+                res = engine.evaluate_bar(latest_bar, or_high, or_low, or_range, vix_chg)
+                last_processed_5m = curr_5m_time
+                if res:
+                    print(f"[{datetime.now(IST):%H:%M:%S}] [Sensex Trend Runner LIVE PAPER] Position Event: {res}")
+
+        except Exception:
+            pass
+        time.sleep(5)
+
+
+
 
 def history_mtime() -> tuple:
     return tuple(p.stat().st_mtime if p.exists() else None for p in (ARCHIVE_CSV, MASTER_CSV))
@@ -659,22 +802,25 @@ def master() -> pd.DataFrame:
         return _master_cache["df"]
 
 
-def load_technovusin_day(date_str: str) -> pd.DataFrame:
-    """Load 1-minute NIFTY candles for a specific day from technovusin repository."""
+def load_technovusin_day(date_str: str, symbol: str = "NIFTY") -> pd.DataFrame:
+    """Load 1-minute candles for a specific day from technovusin repository."""
     year = date_str[:4]
     month = date_str[:7]
-    base = ROOT / "captured_data" / "technovusin_nifty50" / "1min" / year
+    sym = str(symbol or "NIFTY").strip().upper()
+    repo_name = "technovusin_sensex" if sym == "SENSEX" else "technovusin_nifty50"
+    prefix = "SENSEX" if sym == "SENSEX" else "NIFTY50"
+    base = ROOT / "captured_data" / repo_name / "1min" / year
     if not base.exists():
         return pd.DataFrame()
 
-    yearly_file = base / f"NIFTY50_1min_{year}.csv"
+    yearly_file = base / f"{prefix}_1min_{year}.csv"
     if yearly_file.exists():
         try:
             df = pd.read_csv(yearly_file)
         except Exception:
             return pd.DataFrame()
     else:
-        monthly_file = base / f"NIFTY50_1min_{month}.csv"
+        monthly_file = base / f"{prefix}_1min_{month}.csv"
         if monthly_file.exists():
             try:
                 df = pd.read_csv(monthly_file)
@@ -710,6 +856,7 @@ def load_technovusin_day(date_str: str) -> pd.DataFrame:
 def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
     sym = str(symbol or "NIFTY").strip().upper()
     if sym == "SENSEX":
+        # 1. Live captured file
         path = LIVE_DIR / f"sensex_1min_{date}.csv"
         if path.exists():
             try:
@@ -720,6 +867,25 @@ def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
                     return df
             except Exception:
                 pass
+
+        # 2. Technovusin Sensex archive (2023 - 2026)
+        tech_df = load_technovusin_day(date, symbol="SENSEX")
+        if not tech_df.empty:
+            return tech_df
+
+        # 3. Fallback Yahoo 2m / 5m
+        for yf in ["sensex_yahoo_2m.csv", "sensex_yahoo_5m.csv"]:
+            yp = ROOT / "captured_data" / yf
+            if yp.exists():
+                try:
+                    ydf = pd.read_csv(yp)
+                    ydf["timestamp"] = pd.to_datetime(ydf["timestamp"], errors="coerce")
+                    ysub = ydf[ydf["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+                    if not ysub.empty:
+                        return ysub
+                except Exception:
+                    pass
+
         return pd.DataFrame()
 
     # 1. Check live capture file (today's active trading)
@@ -774,7 +940,7 @@ def backtest_report() -> dict:
     """Current-rule backtest over the master history (cached until the CSV changes)."""
     m = master()
     if m.empty:
-        return {"summary": {}, "trades": [], "monthly": [], "exit_reasons": []}
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
     mtime = history_mtime()
     with _cache_lock:
         if _backtest_cache["mtime"] == mtime:
@@ -853,16 +1019,22 @@ def public_settings() -> dict:
     out["key_levels_live_trading"] = bool(cfg.get("key_levels_live_trading", False))
     out["key_levels_lots"] = int(cfg.get("key_levels_lots", 1))
     out["hero_zero_lots"] = int(cfg.get("hero_zero_lots", 1))
-    out["scalper_paper_trading"] = bool(cfg.get("scalper_paper_trading", True))
+    out["scalper_paper_trading"] = bool(cfg.get("scalper_paper_trading", False))
     out["scalper_live_trading"] = bool(cfg.get("scalper_live_trading", False))
     out["scalper_lots"] = int(cfg.get("scalper_lots", 1))
     out["scalper_sl_pts"] = float(cfg.get("scalper_sl_pts", 18.0))
     out["scalper_target_pts"] = float(cfg.get("scalper_target_pts", 35.0))
     out["scalper_max_trades"] = int(cfg.get("scalper_max_trades", 2))
     out["scalper_stop_on_loss"] = bool(cfg.get("scalper_stop_on_loss", True))
-    out["hourly_trend_paper_trading"] = bool(cfg.get("hourly_trend_paper_trading", True))
+    out["hourly_trend_paper_trading"] = bool(cfg.get("hourly_trend_paper_trading", False))
     out["hourly_trend_live_trading"] = bool(cfg.get("hourly_trend_live_trading", False))
     out["hourly_trend_lots"] = int(cfg.get("hourly_trend_lots", 1))
+    out["trend_runner_paper_trading"] = bool(cfg.get("trend_runner_paper_trading", True))
+    out["trend_runner_live_trading"] = bool(cfg.get("trend_runner_live_trading", False))
+    out["trend_runner_lots"] = int(cfg.get("trend_runner_lots", 3))
+    out["sensex_runner_paper_trading"] = bool(cfg.get("sensex_runner_paper_trading", True))
+    out["sensex_runner_live_trading"] = bool(cfg.get("sensex_runner_live_trading", False))
+    out["sensex_runner_lots"] = int(cfg.get("sensex_runner_lots", 1))
     out.update(key_level_settings(cfg))
     out["live_trading"] = out["midpoint_live_trading"]
     out["capture_running"] = capture_running()
@@ -1127,6 +1299,132 @@ def manual_trading_snapshot() -> dict:
         "orders": orders,
     }
 
+
+
+def submit_scalp_order(body: dict) -> dict:
+    symbol = str(body.get("symbol", "NIFTY")).upper()
+    action = str(body.get("action", "BUY")).upper()
+    option_type = str(body.get("option_type", "CE")).upper()
+    lots = max(1, int(body.get("lots", 1)))
+
+    cfg = read_config()
+    is_live = bool(cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading"))
+
+    today_str = today()
+    now_time = datetime.now(IST).strftime("%H:%M")
+    live_paper_file = LIVE_DIR / "scalper_live_paper.csv"
+
+    # Action EXIT or SELL
+    if action in ("EXIT", "CLOSE", "SELL"):
+        target_opt = str(body.get("target_option", "")).strip()
+        if is_live:
+            return exit_position(body)
+
+        closed = False
+        target_files = [
+            live_paper_file,
+            ROOT / "performance" / "nifty_key_levels_paper_trades.csv",
+            ROOT / "performance" / "trend_runner_sensex_paper_trades.csv",
+        ]
+        for pfile in target_files:
+            if not pfile.exists():
+                continue
+            rows = read_csv_rows(pfile)
+            changed = False
+            for r in rows:
+                r_opt = str(r.get("option", ""))
+                r_sym = str(r.get("symbol", ""))
+                match = (target_opt and target_opt in r_opt) or (not target_opt and symbol in (r_sym or r_opt))
+                if match and (not r.get("exit_time") or str(r.get("exit_time")).strip() in ("", "open")):
+                    r["exit_time"] = now_time
+                    r["exit_reason"] = "manual_scalp_exit"
+                    r["exit_price"] = r.get("entry_price", 0)
+                    changed = True
+                    closed = True
+            if changed and rows:
+                import csv
+                with pfile.open("w", newline="", encoding="utf-8") as f:
+                    writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+                    writer.writeheader()
+                    writer.writerows(rows)
+
+        return {"ok": True, "message": f"{target_opt or symbol} position squared off successfully", "closed": closed}
+
+    req_tp = body.get("tp") if body.get("tp") is not None else body.get("tgt_pts")
+    req_ts = body.get("ts") if body.get("ts") is not None else body.get("sl_pts")
+    try:
+        sl_pts = float(req_ts) if req_ts is not None else 0.0
+    except (ValueError, TypeError):
+        sl_pts = 0.0
+    try:
+        tgt_pts = float(req_tp) if req_tp is not None else 0.0
+    except (ValueError, TypeError):
+        tgt_pts = 0.0
+
+    # Action BUY
+    if is_live:
+        body["confirm"] = "CONFIRM"
+        body["order_type"] = "MARKET"
+        body["lots"] = lots
+        body["index_symbol"] = symbol
+        if sl_pts > 0:
+            body["sl_pts"] = sl_pts
+        if tgt_pts > 0:
+            body["target_pts"] = tgt_pts
+        return submit_manual_order(body)
+
+    # Paper Scalp Execution
+    st = status()
+    if "SENSEX" in symbol:
+        lot_size = 20
+        spot_step = 100
+        spot = float((st.get("sensex_last_tick") or {}).get("ltp") or 74385.0)
+    else:
+        lot_size = 65
+        spot_step = 50
+        spot = float((st.get("last_tick") or {}).get("ltp") or 24540.0)
+
+    req_strike = body.get("strike")
+    atm_strike = int(req_strike) if req_strike else int(round(spot / spot_step) * spot_step)
+    opt_name = f"{symbol} {atm_strike} {option_type}"
+    qty = lots * lot_size
+    buy_px = 135.0 if "NIFTY" in symbol else 295.0
+    buy_val = round(buy_px * qty, 2)
+
+    side_dir = "CALL" if option_type == "CE" else "PUT"
+    sl_spot = round(spot - sl_pts if side_dir == "CALL" else spot + sl_pts, 2) if sl_pts > 0 else ""
+    tgt_spot = round(spot + tgt_pts if side_dir == "CALL" else spot - tgt_pts, 2) if tgt_pts > 0 else ""
+
+    trade_row = {
+        "date": today_str,
+        "entry_time": now_time,
+        "side": side_dir,
+        "entry_price": spot,
+        "option": opt_name,
+        "qty": qty,
+        "buy_price": buy_px,
+        "buy_value_rs": buy_val,
+        "exit_time": "",
+        "exit_price": 0.0,
+        "sell_price": 0.0,
+        "sell_value_rs": 0.0,
+        "pnl_rs": 0.0,
+        "pnl_points": 0.0,
+        "charges_rs": 0.0,
+        "net_rs": 0.0,
+        "exit_reason": "open",
+        "bars_held": 0,
+        "sl": sl_spot,
+        "target": tgt_spot,
+    }
+    new_df = pd.DataFrame([trade_row])
+    if live_paper_file.exists():
+        new_df.to_csv(live_paper_file, mode="a", header=False, index=False)
+    else:
+        new_df.to_csv(live_paper_file, index=False)
+
+    print(f"[{datetime.now(IST):%H:%M:%S}] [Manual Scalp Order] Placed {opt_name} @ {spot} ({lots} Lot/ {qty} Qty)")
+    return {"ok": True, "message": f"Scalp order placed: {opt_name} ({lots} Lot)", "trade": trade_row}
 
 def submit_manual_order(body: dict) -> dict:
     if body.get("confirm") not in ("PLACE LIVE ORDER", "CONFIRM", "YES"):
@@ -1881,6 +2179,8 @@ def compression_scalp_live_paper_trades(date: str | None = None) -> list:
             tgt_pts = float(cfg.get("scalper_target_pts", 35.0))
             sl_spot = float(row.get("sl") or round(entry_spot - sl_pts if side == "CALL" else entry_spot + sl_pts, 2))
             tgt_spot = float(row.get("target") or round(entry_spot + tgt_pts if side == "CALL" else entry_spot - tgt_pts, 2))
+            is_open = not bool(row.get("exit_time") and str(row.get("exit_time")).strip() not in ("", "open"))
+            sym_name = "SENSEX" if "SENSEX" in str(opt_name).upper() else "NIFTY"
 
             out.append({
                 "date": r_date,
@@ -1905,6 +2205,9 @@ def compression_scalp_live_paper_trades(date: str | None = None) -> list:
                 "target": tgt_spot,
                 "charges_rs": charges,
                 "net_rs": net_rs,
+                "strategy": f"scalp_{sym_name.lower()}",
+                "symbol": sym_name,
+                "is_open": is_open,
             })
         except Exception:
             continue
@@ -1950,22 +2253,25 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
             opt_entry_px = float(row.get("option_entry_price") or 0.0)
             opt_exit_px = float(row.get("option_exit_price") or 0.0)
 
-            if opt_entry_px > 0 and opt_exit_px > 0:
+            is_open = str(row.get("exit_reason", "")).lower() == "open" or not row.get("exit_time")
+            if is_open:
+                buy_px = round(opt_entry_px, 2) if opt_entry_px > 0 else round(entry_spot, 2)
+                sell_px = 0.0
+                buy_val = round(buy_px * qty, 2)
+                sell_val = 0.0
+                pnl_rs = 0.0
+                charges = 0.0
+                net_rs = 0.0
+            elif opt_entry_px > 0 and opt_exit_px > 0:
                 buy_px = round(opt_entry_px, 2)
                 sell_px = round(opt_exit_px, 2)
+                buy_val = round(buy_px * qty, 2)
+                sell_val = round(sell_px * qty, 2)
                 pnl_rs = float(row.get("pnl_rupees") or round((sell_px - buy_px) * qty, 2))
+                charges = est_charges(buy_val, sell_val)
+                net_rs = round(pnl_rs - charges, 2)
             else:
-                intrinsic = max(0.0, (entry_spot - strike) if opt_type == "CE" else (strike - entry_spot))
-                time_val = 90.0
-                buy_px = round(intrinsic + time_val, 2)
-                pnl_rs = float(row.get("pnl_rupees") or (pnl_pts * qty))
-                sell_px = round(max(1.0, buy_px + (pnl_rs / qty)), 2)
-
-            buy_val = round(buy_px * qty, 2)
-            sell_val = round(sell_px * qty, 2)
-            pnl_rs = float(row.get("pnl_rupees") or round((sell_val - buy_val), 2))
-            charges = est_charges(buy_val, sell_val)
-            net_rs = round(pnl_rs - charges, 2)
+                continue
             init_sl = float(row.get("initial_sl") or (entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0))
             tgt_spot = round(entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0, 2)
 
@@ -1999,6 +2305,9 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
                 "target": tgt_spot,
                 "charges_rs": charges,
                 "net_rs": net_rs,
+                "strategy": "trend_runner_nifty",
+                "symbol": "NIFTY",
+                "is_open": is_open,
             })
         except Exception:
             continue
@@ -2007,6 +2316,360 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
 
 def trend_runner_paper_report() -> dict:
     return build_paper_report(trend_runner_live_paper_trades())
+
+
+def sensex_runner_live_paper_trades(date: str | None = None) -> list:
+    """Read logged Sensex Trend Runner paper trades and format as OptionTrade dicts."""
+    csv_paths = [
+        ROOT / "captured_data" / "fyers" / "live" / "trend_runner_sensex_live_paper.csv",
+        ROOT / "performance" / "trend_runner_sensex_paper_trades.csv",
+    ]
+    raw_rows = []
+    seen = set()
+    for cp in csv_paths:
+        if cp.exists():
+            for r in read_csv_rows(cp):
+                k = (r.get("date"), r.get("entry_time"), r.get("side"))
+                if k not in seen:
+                    seen.add(k)
+                    raw_rows.append(r)
+
+    out = []
+    for row in raw_rows:
+        try:
+            r_date = str(row.get("date") or "")
+            if date and r_date != date:
+                continue
+
+            side_raw = str(row.get("side") or "").upper()
+            side = "CALL" if side_raw in ("LONG", "CALL", "CE") else "PUT"
+            entry_spot = round(float(row.get("entry_price") or 0.0), 2)
+            exit_spot = round(float(row.get("exit_price") or 0.0), 2)
+            pnl_pts = round(float(row.get("pnl_points") or 0.0), 2)
+            qty = int(row.get("qty") or (int(row.get("total_lots") or 1) * 20))
+
+            opt_name = str(row.get("option") or "")
+            opt_symbol = str(row.get("option_symbol") or "")
+            m = re.search(r"SENSEX\s+(\d+)\s+(CE|PE)", opt_name, re.IGNORECASE)
+            if m:
+                strike = int(m.group(1))
+                opt_type = m.group(2).upper()
+            else:
+                opt_type = "CE" if side == "CALL" else "PE"
+                strike = int(round(entry_spot / 100.0) * 100)
+                if not opt_name:
+                    opt_name = f"SENSEX {strike} {opt_type} (ATM)"
+
+            opt_entry_px = float(row.get("option_entry_price") or 0.0)
+            opt_exit_px = float(row.get("option_exit_price") or 0.0)
+
+            is_open = str(row.get("exit_reason", "")).lower() == "open" or not row.get("exit_time")
+            if is_open:
+                buy_px = round(opt_entry_px, 2) if opt_entry_px > 0 else round(entry_spot, 2)
+                sell_px = 0.0
+                buy_val = round(buy_px * qty, 2)
+                sell_val = 0.0
+                pnl_rs = 0.0
+                charges = 0.0
+                net_rs = 0.0
+            elif opt_entry_px > 0 and opt_exit_px > 0:
+                buy_px = round(opt_entry_px, 2)
+                sell_px = round(opt_exit_px, 2)
+                buy_val = round(buy_px * qty, 2)
+                sell_val = round(sell_px * qty, 2)
+                pnl_rs = float(row.get("pnl_rupees") or round((sell_val - buy_val), 2))
+                charges = est_charges(buy_val, sell_val)
+                net_rs = round(pnl_rs - charges, 2)
+            else:
+                continue
+            init_sl = float(row.get("initial_sl") or (entry_spot - 120.0 if side == "CALL" else entry_spot + 120.0))
+            tgt_spot = round(entry_spot + 700.0 if side == "CALL" else entry_spot - 700.0, 2)
+
+            futures_pnl = round(pnl_pts * qty, 2)
+            opt_pnl = float(row.get("option_pnl_rupees") or pnl_rs)
+            diff = round(futures_pnl - opt_pnl, 2)
+
+            out.append({
+                "date": r_date,
+                "side": side,
+                "option": opt_name,
+                "qty": qty,
+                "entry": str(row.get("entry_time") or "")[:5],
+                "nifty_in": entry_spot,
+                "buy_price": buy_px,
+                "buy_value_rs": buy_val,
+                "exit": str(row.get("exit_time") or "")[:5],
+                "nifty_out": exit_spot,
+                "sell_price": sell_px,
+                "sell_value_rs": sell_val,
+                "pnl_rs": pnl_rs,
+                "futures_pnl_rs": futures_pnl,
+                "option_pnl_rs": opt_pnl,
+                "diff_rs": diff,
+                "nifty_points": pnl_pts,
+                "exit_reason": row.get("exit_reason", ""),
+                "mode": "SENSEX RUNNER PAPER",
+                "spot_at_entry": entry_spot,
+                "trigger_label": "Sensex Runner · Paper",
+                "sl": init_sl,
+                "target": tgt_spot,
+                "charges_rs": charges,
+                "net_rs": net_rs,
+                "strategy": "trend_runner_sensex",
+                "symbol": "SENSEX",
+                "is_open": is_open,
+            })
+        except Exception:
+            continue
+    return out
+
+
+def sensex_runner_paper_report() -> dict:
+    return build_paper_report(sensex_runner_live_paper_trades())
+
+
+def sensex_runner_backtest_report() -> dict:
+    """Backtest performance for Sensex Trend Runner."""
+    csv_path = ROOT / "performance" / "sensex_backtest_trades.csv"
+    return vix_trend_runner_backtest_report(csv_path, lot_size=20, option_delta=0.60)
+
+
+def sensex_key_levels_backtest_report() -> dict:
+    """Backtest performance for Sensex Key Levels S&R + Reverse Retry."""
+    csv_path = ROOT / "performance" / "sensex_key_levels_trades.csv"
+    return vix_trend_runner_backtest_report(csv_path, lot_size=20, option_delta=0.50)
+
+
+def sensex_key_levels_live_paper_trades(date: str | None = None) -> list:
+    """Read logged Sensex Key Levels paper trades and format as OptionTrade dicts."""
+    csv_paths = [
+        ROOT / "captured_data" / "fyers" / "live" / "sensex_key_levels_live_paper.csv",
+        ROOT / "performance" / "sensex_key_levels_paper_trades.csv",
+    ]
+    raw_rows = []
+    seen = set()
+    for cp in csv_paths:
+        if cp.exists():
+            for r in read_csv_rows(cp):
+                k = (r.get("date"), r.get("entry_time"), r.get("side"), r.get("level"))
+                if k not in seen:
+                    seen.add(k)
+                    raw_rows.append(r)
+
+    out = []
+    qty = 10
+    for row in raw_rows:
+        try:
+            r_date = str(row.get("date") or "")
+            if date and r_date != date:
+                continue
+
+            side_raw = str(row.get("side") or "").upper()
+            side = "CALL" if side_raw in ("LONG", "CALL", "CE") else "PUT"
+            entry_spot = round(float(row.get("entry_price") or 0.0), 2)
+            exit_spot = round(float(row.get("exit_price") or 0.0), 2)
+            pnl_pts = round(float(row.get("pnl_points") or 0.0), 2)
+            lvl = float(row.get("level") or 0.0)
+            ttype = str(row.get("type") or "")
+
+            strike = int(round(lvl / 100.0) * 100) if lvl > 0 else int(round(entry_spot / 100.0) * 100)
+            opt_type = "CE" if side == "CALL" else "PE"
+            opt_name = str(row.get("option") or f"SENSEX {strike} {opt_type}")
+
+            opt_entry_px = float(row.get("option_entry_price") or 350.0)
+            opt_exit_px = float(row.get("option_exit_price") or 0.0)
+            if opt_exit_px <= 0:
+                delta = 0.55
+                opt_pts = round(pnl_pts * delta, 2)
+                opt_exit_px = max(5.0, opt_entry_px + opt_pts)
+
+            buy_px = round(opt_entry_px, 2)
+            sell_px = round(opt_exit_px, 2)
+            buy_val = round(buy_px * qty, 2)
+            sell_val = round(sell_px * qty, 2)
+
+            pnl_rs = float(row.get("pnl_rupees") or round((sell_val - buy_val), 2))
+            charges = est_charges(buy_val, sell_val)
+            net_rs = round(pnl_rs - charges, 2)
+            init_sl = float(row.get("sl") or 0.0)
+            tgt_spot = float(row.get("target") or 0.0)
+
+            futures_pnl = round(pnl_pts * qty, 2)
+            opt_pnl = pnl_rs
+            diff = round(futures_pnl - opt_pnl, 2)
+
+            out.append({
+                "date": r_date,
+                "side": side,
+                "option": opt_name,
+                "qty": qty,
+                "entry": str(row.get("entry_time") or "")[:5],
+                "nifty_in": entry_spot,
+                "buy_price": buy_px,
+                "buy_value_rs": buy_val,
+                "exit": str(row.get("exit_time") or "")[:5],
+                "nifty_out": exit_spot,
+                "sell_price": sell_px,
+                "sell_value_rs": sell_val,
+                "pnl_rs": pnl_rs,
+                "futures_pnl_rs": futures_pnl,
+                "option_pnl_rs": opt_pnl,
+                "diff_rs": diff,
+                "nifty_points": pnl_pts,
+                "exit_reason": row.get("exit_reason", ""),
+                "mode": "SENSEX KEY LEVELS PAPER",
+                "spot_at_entry": entry_spot,
+                "trigger_label": f"Key Level {int(lvl)} · {ttype}",
+                "sl": init_sl,
+                "target": tgt_spot,
+                "charges_rs": charges,
+                "net_rs": net_rs,
+                "strategy": "sensex_key_levels",
+                "symbol": "SENSEX",
+                "is_open": (str(row.get("exit_reason", "")).lower() == "open" or not row.get("exit_time")),
+            })
+        except Exception:
+            continue
+    return out
+
+
+def sensex_key_levels_paper_report() -> dict:
+    return build_paper_report(sensex_key_levels_live_paper_trades())
+
+
+def nifty_key_levels_backtest_report() -> dict:
+    """Backtest performance for Nifty Key Levels S&R + Reverse Retry."""
+    csv_path = ROOT / "performance" / "nifty_key_levels_trades.csv"
+    return vix_trend_runner_backtest_report(csv_path, lot_size=25, option_delta=0.50)
+
+
+def nifty_key_levels_live_paper_trades(date: str | None = None) -> list:
+    """Read logged Nifty Key Levels paper trades and format as OptionTrade dicts."""
+    csv_paths = [
+        ROOT / "captured_data" / "fyers" / "live" / "nifty_key_levels_live_paper.csv",
+        ROOT / "performance" / "nifty_key_levels_paper_trades.csv",
+    ]
+    raw_rows = []
+    seen = set()
+    for cp in csv_paths:
+        if cp.exists():
+            for r in read_csv_rows(cp):
+                k = (r.get("date"), r.get("entry_time"), r.get("side"), r.get("level"))
+                if k not in seen:
+                    seen.add(k)
+                    raw_rows.append(r)
+
+    out = []
+    qty = 25
+    for row in raw_rows:
+        try:
+            r_date = str(row.get("date") or "")
+            if date and r_date != date:
+                continue
+
+            side_raw = str(row.get("side") or "").upper()
+            side = "CALL" if side_raw in ("LONG", "CALL", "CE") else "PUT"
+            entry_spot = round(float(row.get("entry_price") or 0.0), 2)
+            exit_spot = round(float(row.get("exit_price") or 0.0), 2)
+            pnl_pts = round(float(row.get("pnl_points") or 0.0), 2)
+            lvl = float(row.get("level") or 0.0)
+            ttype = str(row.get("type") or "")
+
+            strike = int(round(lvl / 50.0) * 50) if lvl > 0 else int(round(entry_spot / 50.0) * 50)
+            opt_type = "CE" if side == "CALL" else "PE"
+            opt_name = str(row.get("option") or f"NIFTY {strike} {opt_type}")
+
+            opt_entry_px = float(row.get("option_entry_price") or 120.0)
+            opt_exit_px = float(row.get("option_exit_price") or 0.0)
+            if opt_exit_px <= 0:
+                delta = 0.50
+                opt_pts = round(pnl_pts * delta, 2)
+                opt_exit_px = max(2.0, opt_entry_px + opt_pts)
+
+            buy_px = round(opt_entry_px, 2)
+            sell_px = round(opt_exit_px, 2)
+            buy_val = round(buy_px * qty, 2)
+            sell_val = round(sell_px * qty, 2)
+
+            pnl_rs = float(row.get("pnl_rupees") or round((sell_val - buy_val), 2))
+            charges = est_charges(buy_val, sell_val)
+            net_rs = round(pnl_rs - charges, 2)
+            init_sl = float(row.get("sl") or 0.0)
+            tgt_spot = float(row.get("target") or 0.0)
+
+            futures_pnl = round(pnl_pts * qty, 2)
+            opt_pnl = pnl_rs
+            diff = round(futures_pnl - opt_pnl, 2)
+
+            out.append({
+                "date": r_date,
+                "side": side,
+                "option": opt_name,
+                "qty": qty,
+                "entry": str(row.get("entry_time") or "")[:5],
+                "nifty_in": entry_spot,
+                "buy_price": buy_px,
+                "buy_value_rs": buy_val,
+                "exit": str(row.get("exit_time") or "")[:5],
+                "nifty_out": exit_spot,
+                "sell_price": sell_px,
+                "sell_value_rs": sell_val,
+                "pnl_rs": pnl_rs,
+                "futures_pnl_rs": futures_pnl,
+                "option_pnl_rs": opt_pnl,
+                "diff_rs": diff,
+                "nifty_points": pnl_pts,
+                "exit_reason": row.get("exit_reason", ""),
+                "mode": "NIFTY KEY LEVELS PAPER",
+                "spot_at_entry": entry_spot,
+                "trigger_label": f"Key Level {int(lvl)} · {ttype}",
+                "sl": init_sl,
+                "target": tgt_spot,
+                "charges_rs": charges,
+                "net_rs": net_rs,
+                "strategy": "nifty_key_levels",
+                "symbol": "NIFTY",
+                "is_open": (str(row.get("exit_reason", "")).lower() == "open" or not row.get("exit_time")),
+            })
+        except Exception:
+            continue
+    return out
+
+
+def nifty_key_levels_paper_report() -> dict:
+    return build_paper_report(nifty_key_levels_live_paper_trades())
+
+
+def nifty_key_levels_spot_trades_for_day(date: str) -> list:
+    """Historical spot trades for Nifty Key Levels on date."""
+    for fname in ["nifty_key_levels_trades.csv", "nifty_key_levels_paper_trades.csv"]:
+        csv_path = ROOT / "performance" / fname
+        if not csv_path.exists():
+            continue
+        out = []
+        for r in read_csv_rows(csv_path):
+            if r.get("date") == date:
+                side = str(r.get("side", "CALL"))
+                entry_spot = float(r.get("entry_price") or 0.0)
+                exit_spot = float(r.get("exit_price") or 0.0)
+                sl_spot = float(r.get("sl") or 0.0)
+                tgt_spot = float(r.get("target") or 0.0)
+                out.append({
+                    "side": side,
+                    "entry": str(r.get("entry_time", ""))[:5],
+                    "entry_price": entry_spot,
+                    "sl": sl_spot,
+                    "target": tgt_spot,
+                    "exit": str(r.get("exit_time", ""))[:5],
+                    "exit_price": exit_spot,
+                    "reason": str(r.get("exit_reason", "")),
+                    "pnl_points": float(r.get("pnl_points") or 0.0),
+                    "setup": str(r.get("setup") or r.get("type", "")),
+                    "level": float(r.get("level") or 0.0),
+                })
+        if out:
+            return out
+    return []
 
 
 def compression_scalp_spot_trades_for_day(date: str) -> list:
@@ -2117,6 +2780,7 @@ def compression_scalp_backtest_report() -> dict:
             "best": max((x["pnl_points"] for x in trades), default=0.0),
             "worst": min((x["pnl_points"] for x in trades), default=0.0),
             "lot_size": lot_size,
+            "option_delta": option_delta,
         },
         "trades": trades,
         "daily": sorted_daily,
@@ -2208,6 +2872,7 @@ def aggressive_midpoint_scalp_report(key_level_only: bool = False) -> dict:
             "best": max((x["pnl_points"] for x in trades), default=0.0),
             "worst": min((x["pnl_points"] for x in trades), default=0.0),
             "lot_size": lot_size,
+            "option_delta": option_delta,
         },
         "trades": trades,
         "daily": sorted_daily,
@@ -2295,6 +2960,7 @@ def c1_pdc_retest_report() -> dict:
             "best": max((x["pnl_points"] for x in trades), default=0.0),
             "worst": min((x["pnl_points"] for x in trades), default=0.0),
             "lot_size": lot_size,
+            "option_delta": option_delta,
         },
         "trades": trades,
         "daily": sorted_daily,
@@ -2377,6 +3043,7 @@ def mtf_orb_5y_backtest_report() -> dict:
             "best": max((x["pnl_points"] for x in trades), default=0.0),
             "worst": min((x["pnl_points"] for x in trades), default=0.0),
             "lot_size": lot_size,
+            "option_delta": option_delta,
         },
         "trades": trades,
         "daily": sorted_daily,
@@ -2414,7 +3081,7 @@ def sr_breakout_spot_trades_for_day(date: str) -> list:
 
 def vix_trend_runner_spot_trades_for_day(date: str) -> list:
     """Historical spot trades for Nifty Trend Expansion Runner on date."""
-    for fname in ["nifty_10y_backtest_trades.csv", "vix_trend_runner_trades.csv"]:
+    for fname in ["trend_runner_paper_trades.csv", "nifty_10y_backtest_trades.csv", "vix_trend_runner_trades.csv"]:
         csv_path = ROOT / "performance" / fname
         if not csv_path.exists():
             continue
@@ -2436,6 +3103,68 @@ def vix_trend_runner_spot_trades_for_day(date: str) -> list:
                     "exit_price": exit_spot,
                     "reason": str(r.get("exit_reason", "")),
                     "pnl_points": float(r.get("pnl_points") or 0.0),
+                })
+        if out:
+            return out
+    return []
+
+
+def sensex_trend_runner_spot_trades_for_day(date: str) -> list:
+    """Historical spot trades for Sensex Trend Runner on date."""
+    for fname in ["sensex_backtest_trades.csv", "trend_runner_sensex_paper_trades.csv"]:
+        csv_path = ROOT / "performance" / fname
+        if not csv_path.exists():
+            continue
+        out = []
+        for r in read_csv_rows(csv_path):
+            if r.get("date") == date:
+                side = str(r.get("side", "CALL"))
+                entry_spot = float(r.get("entry_price") or 0.0)
+                exit_spot = float(r.get("exit_price") or 0.0)
+                sl_spot = float(r.get("initial_sl") or r.get("sl") or (entry_spot - 80.0 if side == "CALL" else entry_spot + 80.0))
+                tgt_spot = float(r.get("target") or (entry_spot + 600.0 if side == "CALL" else entry_spot - 600.0))
+                out.append({
+                    "side": side,
+                    "entry": str(r.get("entry_time", ""))[:5],
+                    "entry_price": entry_spot,
+                    "sl": sl_spot,
+                    "target": tgt_spot,
+                    "exit": str(r.get("exit_time", ""))[:5],
+                    "exit_price": exit_spot,
+                    "reason": str(r.get("exit_reason", "")),
+                    "pnl_points": float(r.get("pnl_points") or 0.0),
+                })
+        if out:
+            return out
+    return []
+
+
+def sensex_key_levels_spot_trades_for_day(date: str) -> list:
+    """Historical spot trades for Sensex Key Levels on date."""
+    for fname in ["sensex_key_levels_trades.csv", "sensex_key_levels_paper_trades.csv"]:
+        csv_path = ROOT / "performance" / fname
+        if not csv_path.exists():
+            continue
+        out = []
+        for r in read_csv_rows(csv_path):
+            if r.get("date") == date:
+                side = str(r.get("side", "CALL"))
+                entry_spot = float(r.get("entry_price") or 0.0)
+                exit_spot = float(r.get("exit_price") or 0.0)
+                sl_spot = float(r.get("sl") or 0.0)
+                tgt_spot = float(r.get("target") or 0.0)
+                out.append({
+                    "side": side,
+                    "entry": str(r.get("entry_time", ""))[:5],
+                    "entry_price": entry_spot,
+                    "sl": sl_spot,
+                    "target": tgt_spot,
+                    "exit": str(r.get("exit_time", ""))[:5],
+                    "exit_price": exit_spot,
+                    "reason": str(r.get("exit_reason", "")),
+                    "pnl_points": float(r.get("pnl_points") or 0.0),
+                    "setup": str(r.get("setup") or r.get("type", "")),
+                    "level": float(r.get("level") or 0.0),
                 })
         if out:
             return out
@@ -2465,14 +3194,12 @@ def _legacy_vix_trades_unused(date: str) -> list:
     return out
 
 
-def vix_trend_runner_backtest_report(csv_path: Path | None = None) -> dict:
-    """Historical backtest performance for Nifty Trend Expansion Runner (with India VIX confluence)."""
+def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int = 25, option_delta: float = 0.60) -> dict:
+    """Historical backtest performance for Nifty/Sensex Trend Expansion Runner (with India VIX confluence)."""
     if csv_path is None:
         csv_path = ROOT / "performance" / "vix_trend_runner_trades.csv"
     if not csv_path.exists():
         return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
-
-    lot_size = 25  # Nifty lot size is 25
 
     raw_trades = read_csv_rows(csv_path)
     trades, equity, peak = [], 0.0, 0.0
@@ -2542,6 +3269,7 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None) -> dict:
             "best": max((x["pnl_points"] for x in trades), default=0.0),
             "worst": min((x["pnl_points"] for x in trades), default=0.0),
             "lot_size": lot_size,
+            "option_delta": option_delta,
         },
         "trades": trades,
         "daily": sorted_daily,
@@ -2624,6 +3352,7 @@ def sr_breakout_backtest_report() -> dict:
             "best": max((x["pnl_points"] for x in trades), default=0.0),
             "worst": min((x["pnl_points"] for x in trades), default=0.0),
             "lot_size": lot_size,
+            "option_delta": option_delta,
         },
         "trades": trades,
         "daily": sorted_daily,
@@ -2936,16 +3665,18 @@ def capital_projection(source_trades: list) -> dict:
 def capital_report() -> dict:
     cfg = read_config()
     trades = []
-    if cfg.get("midpoint_paper_trading", True):
+    if cfg.get("midpoint_paper_trading", False):
         trades.extend(paper_report()["trades"])
-    if cfg.get("hero_zero_paper_trading", True):
+    if cfg.get("hero_zero_paper_trading", False):
         trades.extend(hero_zero_report()["trades"])
-    if cfg.get("key_levels_paper_trading", True):
+    if cfg.get("key_levels_paper_trading", False):
         trades.extend(build_paper_report(key_level_option_trades())["trades"])
-    if cfg.get("scalper_paper_trading", True):
+    if cfg.get("scalper_paper_trading", False):
         trades.extend(compression_scalp_report()["trades"])
     if cfg.get("trend_runner_paper_trading", True):
         trades.extend(trend_runner_paper_report()["trades"])
+    if cfg.get("sensex_runner_paper_trading", True):
+        trades.extend(sensex_runner_paper_report()["trades"])
     if cfg.get("hourly_trend_paper_trading", False):
         trades.extend(hourly_trend_report()["trades"])
     return capital_projection(trades)
@@ -2991,6 +3722,11 @@ class Handler(BaseHTTPRequestHandler):
     def _is_local_client(self) -> bool:
         return self.client_address[0] in ("127.0.0.1", "::1")
 
+    def do_HEAD(self):  # noqa: N802
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html")
+        self.end_headers()
+
     def do_GET(self):  # noqa: N802
         url = urlparse(self.path)
         q = parse_qs(url.query)
@@ -3028,6 +3764,15 @@ class Handler(BaseHTTPRequestHandler):
             if strategy_param in ("trend_runner", "trend_runner_10y", "10y", "trend", "vix_runner", "vix_trend", "trend_expansion"):
                 selected_option_trades = live_trend_fills
                 selected_paper_trades = []
+            elif strategy_param in ("sensex_runner", "sensex", "sensex_trend"):
+                selected_option_trades = sensex_runner_live_paper_trades(date)
+                selected_paper_trades = []
+            elif strategy_param in ("sensex_key_levels", "sensex_levels", "key_levels_sensex"):
+                selected_option_trades = sensex_key_levels_live_paper_trades(date)
+                selected_paper_trades = []
+            elif strategy_param in ("nifty_key_levels", "nifty_levels", "key_levels_nifty"):
+                selected_option_trades = nifty_key_levels_live_paper_trades(date)
+                selected_paper_trades = []
             elif strategy_param in ("compression_scalp", "sniper", "scalp", "micro_scalp"):
                 selected_option_trades = live_scalp_fills
                 selected_paper_trades = []
@@ -3049,6 +3794,12 @@ class Handler(BaseHTTPRequestHandler):
             
             if strategy_param in ("compression_scalp", "sniper", "scalp"):
                 rule_trades = compression_scalp_spot_trades_for_day(date)
+            elif strategy_param in ("sensex_runner", "sensex", "sensex_trend"):
+                rule_trades = sensex_trend_runner_spot_trades_for_day(date)
+            elif strategy_param in ("sensex_key_levels", "sensex_levels", "key_levels_sensex"):
+                rule_trades = sensex_key_levels_spot_trades_for_day(date)
+            elif strategy_param in ("nifty_key_levels", "nifty_levels", "key_levels_nifty"):
+                rule_trades = nifty_key_levels_spot_trades_for_day(date)
             elif strategy_param in ("trend_runner", "trend_runner_10y", "10y", "vix_trend", "trend_expansion"):
                 rule_trades = vix_trend_runner_spot_trades_for_day(date)
             elif strategy_param in ("sr_breakout", "swing_sr", "breakout"):
@@ -3075,8 +3826,8 @@ class Handler(BaseHTTPRequestHandler):
                 "setup": setup_info(df),
                 "trades": rule_trades,
                 "signals": read_csv_rows(LIVE_DIR / f"signals_{symbol.lower()}_{date}.csv") if (LIVE_DIR / f"signals_{symbol.lower()}_{date}.csv").exists() else (read_csv_rows(LIVE_DIR / f"signals_{date}.csv") if symbol == "NIFTY" else []),
-                "paper_trades": selected_paper_trades if symbol == "NIFTY" else [],
-                "option_trades": option_fills if symbol == "NIFTY" else [],
+                "paper_trades": selected_paper_trades,
+                "option_trades": option_fills,
                 "first_paper_date": first_paper_date,
                 "execution_mode": "LIVE" if read_config().get("midpoint_live_trading", read_config().get("live_trading")) else "PAPER",
             })
@@ -3114,58 +3865,115 @@ class Handler(BaseHTTPRequestHandler):
                 "key_level_zone": active_key_level_zone(minute_candles, replay_trades, settings),
             })
         elif url.path == "/api/signals":
-            self._json(read_csv_rows(LIVE_DIR / f"signals_{date}.csv"))
+            signals_list = read_csv_rows(LIVE_DIR / f"signals_{date}.csv")
+            for sig_file in ("trend_runner_live_signals.csv", "trend_runner_sensex_live_signals.csv"):
+                tr_sig_path = LIVE_DIR / sig_file
+                if tr_sig_path.exists():
+                    for sr in read_csv_rows(tr_sig_path):
+                        if sr.get("date") == date or not date:
+                            signals_list.append({
+                                "event": "ENTRY",
+                                "side": "CALL" if sr.get("side") in ("LONG", "CALL", "CE") else "PUT",
+                                "entry_time": sr.get("entry_time"),
+                                "price": sr.get("entry_price"),
+                                "sl": sr.get("initial_sl") or sr.get("sl_pts"),
+                                "target": sr.get("target") if sr.get("target") != "UNCAPPED" else "",
+                                "candle_time": sr.get("entry_time"),
+                                "detected_at": sr.get("entry_time"),
+                                "option": sr.get("option", ""),
+                                "vix_chg": sr.get("vix_chg", ""),
+                                "date": sr.get("date", ""),
+                            })
+            # Also include Sensex Key Levels live paper signals
+            sk_paper_path = ROOT / "performance" / "sensex_key_levels_paper_trades.csv"
+            if sk_paper_path.exists():
+                for sr in read_csv_rows(sk_paper_path):
+                    if sr.get("date") == date or not date:
+                        signals_list.append({
+                            "event": "ENTRY",
+                            "strategy": "sensex_key_levels",
+                            "side": sr.get("side", ""),
+                            "entry_time": sr.get("entry_time"),
+                            "price": sr.get("entry_price"),
+                            "sl": sr.get("sl"),
+                            "target": sr.get("target"),
+                            "candle_time": sr.get("entry_time"),
+                            "detected_at": sr.get("entry_time"),
+                            "option": sr.get("option", ""),
+                            "pnl_points": sr.get("pnl_points"),
+                            "exit_reason": sr.get("exit_reason"),
+                            "date": sr.get("date", ""),
+                        })
+            self._json(signals_list)
         elif url.path == "/api/orders":
             self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
-            self._json(midpoint_option_trades())
+            all_trades = list(midpoint_option_trades())
+            all_trades.extend(trend_runner_live_paper_trades(date))
+            all_trades.extend(sensex_runner_live_paper_trades(date))
+            all_trades.extend(sensex_key_levels_live_paper_trades(date))
+            all_trades.extend(nifty_key_levels_live_paper_trades(date))
+            all_trades.extend(compression_scalp_live_paper_trades(date))
+            self._json(all_trades)
         elif url.path == "/api/key-level-option-trades":
             self._json(build_paper_report(key_level_option_trades(date))["trades"])
         elif url.path == "/api/key-level-option-paper":
             self._json(key_level_option_paper_rows(date))
         elif url.path == "/api/paper-report":
-            strategy = q.get("strategy", [""])[0]
-            if strategy in ("trend_runner", "trend", "vix_runner"):
+            strategy = q.get("strategy", ["trend_runner"])[0].strip().lower()
+            if not strategy or strategy in ("trend_runner", "trend", "vix_runner"):
                 self._json(trend_runner_paper_report())
+            elif strategy in ("sensex_runner", "sensex", "sensex_trend"):
+                self._json(sensex_runner_paper_report())
+            elif strategy in ("sensex_key_levels", "key_levels_sensex", "sensex_levels"):
+                self._json(sensex_key_levels_paper_report())
+            elif strategy in ("nifty_key_levels", "key_levels_nifty", "nifty_levels"):
+                self._json(nifty_key_levels_paper_report())
             elif strategy == "hero_zero":
                 self._json(hero_zero_report())
             elif strategy in ("compression_scalp", "scalp", "micro_scalp", "sniper"):
                 self._json(compression_scalp_report())
             elif strategy in ("hourly_trend", "hourly"):
                 self._json(hourly_trend_report())
-            elif strategy in ("", "midpoint"):
+            elif strategy == "midpoint":
                 self._json(paper_report())
             else:
                 self._json({"error": "unknown strategy"}, 404)
         elif url.path == "/api/capital-report":
             self._json(capital_report())
         elif url.path == "/api/paper-trades":
-            strategy = q.get("strategy", [""])[0]
-            if strategy in ("trend_runner", "trend", "vix_runner"):
+            strategy = q.get("strategy", ["trend_runner"])[0].strip().lower()
+            if not strategy or strategy in ("trend_runner", "trend", "vix_runner"):
                 self._json(trend_runner_live_paper_trades())
-            else:
+            elif strategy in ("sensex_runner", "sensex", "sensex_trend"):
+                self._json(sensex_runner_live_paper_trades())
+            elif strategy in ("sensex_key_levels", "key_levels_sensex", "sensex_levels"):
+                self._json(sensex_key_levels_live_paper_trades())
+            elif strategy in ("nifty_key_levels", "key_levels_nifty", "nifty_levels"):
+                self._json(nifty_key_levels_live_paper_trades())
+            elif strategy == "midpoint":
                 self._json(read_csv_rows(LIVE_DIR / "paper_trades.csv"))
+            else:
+                self._json(trend_runner_live_paper_trades())
         elif url.path == "/api/log":
             n = min(int(q.get("lines", ["200"])[0]), 2000)
             self._json(today_log(LIVE_DIR / "capture.log", n))
         elif url.path == "/api/days":
             self._json(available_days())
         elif url.path in ("/api/backtest/sync", "/api/backtest/update"):
-            def _run_sync_task():
-                try:
-                    import subprocess, sys
-                    subprocess.run([sys.executable, str(ROOT / "update_historical_data.py")], check=True)
-                except Exception as e:
-                    print(f"Sync error: {e}")
-            import threading
-            threading.Thread(target=_run_sync_task, daemon=True).start()
-            return self._json({"ok": True, "message": "Historical data sync & backtest update started in background."})
+            return self._json(trigger_backtest_sync(reason="manual"))
+        elif url.path == "/api/backtest/sync/status":
+            return self._json(_sync_state)
         elif url.path == "/api/backtest":
             strategy = q.get("strategy", ["trend_runner_10y"])[0].lower()
-            if strategy in ("", "trend_runner_10y", "10y", "10year", "trend_10y"):
+            if strategy in ("", "trend_runner_10y", "10y", "10year", "trend_10y", "trend_runner", "vix_trend", "trend_expansion"):
                 self._json(nifty_10y_backtest_report())
-            elif strategy in ("trend_runner", "vix_trend", "trend_expansion"):
-                self._json(vix_trend_runner_backtest_report())
+            elif strategy in ("sensex_runner", "sensex", "sensex_trend"):
+                self._json(sensex_runner_backtest_report())
+            elif strategy in ("sensex_key_levels", "sensex_levels", "key_levels_sensex"):
+                self._json(sensex_key_levels_backtest_report())
+            elif strategy in ("nifty_key_levels", "nifty_levels", "key_levels_nifty"):
+                self._json(nifty_key_levels_backtest_report())
             elif strategy == "key_levels":
                 self._json(key_level_report())
             elif strategy in ("compression_scalp", "scalp", "micro_scalp", "sniper"):
@@ -3182,19 +3990,29 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(aggressive_midpoint_scalp_report(key_level_only=True))
             elif strategy in ("sr_breakout", "swing_sr", "breakout"):
                 self._json(sr_breakout_backtest_report())
-            elif strategy not in ("", "midpoint"):
-                return self._json({"error": "unknown strategy"}, 404)
+            elif strategy in ("midpoint", "10y_midpoint"):
+                midpoint_file = ROOT / "performance" / "nifty_10y_midpoint_trades.csv"
+                if midpoint_file.exists():
+                    self._json(vix_trend_runner_backtest_report(midpoint_file))
+                else:
+                    self._json(backtest_report())
             else:
-                self._json(backtest_report())
+                return self._json({"error": "unknown strategy"}, 404)
 
         elif url.path == "/api/settings":
             self._json(public_settings())
         elif url.path == "/api/funds":
-            funds = broker_funds()
-            self._json(funds, 200 if funds["ok"] else 502)
+            try:
+                funds = broker_funds()
+                self._json(funds, 200 if funds.get("ok") else 502)
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 502)
         elif url.path == "/api/positions":
-            from broker import get_positions
-            self._json(get_positions())
+            try:
+                from broker import get_positions
+                self._json(get_positions())
+            except Exception as e:
+                self._json({"ok": False, "error": str(e), "open_positions": [], "closed_positions": [], "summary": {}}, 200)
         elif url.path in ("/api/manual-options", "/api/manual-trading", "/api/manual-quote"):
             if not self._is_local_client():
                 return self._json({"error": "manual trading endpoints are local-only"}, 403)
@@ -3259,7 +4077,14 @@ class Handler(BaseHTTPRequestHandler):
         # Custom header forces a CORS preflight (which we never approve), so other sites can't post here.
         if self.headers.get("X-Dashboard") != "1":
             return self._json({"error": "forbidden"}, 403)
-        if url.path == "/api/manual-order":
+        if url.path == "/api/scalp-order":
+            if not self._is_local_client():
+                return self._json({"error": "manual orders are local-only"}, 403)
+            try:
+                self._json(submit_scalp_order(self._body()))
+            except Exception as exc:
+                self._json({"error": f"Scalp order failed: {exc}"}, 500)
+        elif url.path == "/api/manual-order":
             if not self._is_local_client():
                 return self._json({"error": "manual orders are local-only"}, 403)
             try:
@@ -3320,8 +4145,10 @@ if __name__ == "__main__":
     threading.Thread(target=hero_zero_capture_loop, daemon=True, name="hero-zero-capture").start()
     threading.Thread(target=sensex_expiry_collector_loop, daemon=True, name="sensex-expiry-collector").start()
     threading.Thread(target=auto_start_loop, daemon=True).start()
+    threading.Thread(target=daily_backtest_sync_loop, daemon=True, name="daily-backtest-sync").start()
     threading.Thread(target=scalper_forward_loop, daemon=True, name="micro-scalper-forward").start()
     threading.Thread(target=trend_runner_forward_loop, daemon=True, name="trend-runner-forward").start()
+    threading.Thread(target=sensex_runner_forward_loop, daemon=True, name="sensex-runner-forward").start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Dashboard: http://{HOST}:{PORT}/  (Ctrl+C to stop)")
     while True:

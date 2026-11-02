@@ -111,10 +111,8 @@ export function DayPage() {
         <span className="text-[11px] text-muted-foreground mr-1 hidden md:inline">Strategy:</span>
         {([
           { id: "all", label: "All" },
-          { id: "trend_runner", label: "Trend Catcher" },
-          { id: "compression_scalp", label: "Micro Scalper" },
-          { id: "midpoint", label: "Midpoint" },
-          { id: "key_levels", label: "Key Levels" },
+          { id: "trend_runner", label: "Nifty Trend Runner" },
+          { id: "sensex_runner", label: "Sensex Trend Runner" },
         ] as const).map((s) => {
           const active = strategy === s.id
           return (

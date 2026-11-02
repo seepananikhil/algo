@@ -110,7 +110,7 @@ export function Layout() {
         <main
           className={cn(
             "flex-1 p-2 sm:p-2.5 flex flex-col",
-            isLive ? "min-h-0 overflow-hidden" : "min-h-0 overflow-y-auto"
+            isLive ? "min-h-0 overflow-hidden p-0" : "min-h-0 overflow-y-auto"
           )}
         >
           <Outlet />

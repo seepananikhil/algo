@@ -5,7 +5,10 @@ import { defineConfig } from 'vite'
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
-  resolve: { alias: { '@': path.resolve(import.meta.dirname, './src') } },
+  resolve: {
+    alias: { '@': path.resolve(import.meta.dirname, './src') },
+    dedupe: ['react', 'react-dom', 'react-router', 'react-router-dom'],
+  },
   server: { proxy: { '/api': 'http://127.0.0.1:8090' } },
   build: { sourcemap: true },
 })

@@ -20,7 +20,8 @@ export function StatCard({ label, value, hint, className }: { label: string; val
 }
 
 export function SideBadge({ side }: { side: string }) {
-  return <Badge className={side === "CALL" ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}>{side}</Badge>
+  const isBullish = side === "CALL" || side === "LONG" || side === "CE" || side === "BUY"
+  return <Badge className={isBullish ? "bg-emerald-600 text-white" : "bg-red-600 text-white"}>{side}</Badge>
 }
 
 export function RuleTradesTable({ trades, empty = "No trades." }: { trades: RuleTrade[]; empty?: string }) {

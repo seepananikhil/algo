@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
-import { ChevronLeft, ChevronRight, X } from "lucide-react"
-import { DayDetail, DayPanel, FillsTable } from "@/components/day-detail"
+import { X } from "lucide-react"
+import { DayDetail, FillsTable } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -19,79 +19,8 @@ const tooltip = {
   labelStyle: { color: "var(--muted-foreground)" },
 }
 
-function HeroZeroDayPanel({ date, days, data, onPick, onClose }: {
-  date: string
-  days: string[]
-  data: PaperReport
-  onPick: (date: string) => void
-  onClose: () => void
-}) {
-  const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => { ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }) }, [date])
-  const idx = days.indexOf(date)
-  const previous = idx > 0 ? days[idx - 1] : undefined
-  const next = idx >= 0 && idx < days.length - 1 ? days[idx + 1] : undefined
-  const trades = data.trades.filter((trade) => trade.date === date)
-  const total = trades.reduce((sum, trade) => sum + trade.net_rs, 0)
 
-  return (
-    <div ref={ref} className="scroll-mt-20">
-      <Card>
-        <CardHeader>
-          <CardTitle>HeroZero paper trades</CardTitle>
-          <CardDescription>
-            {trades.some((trade) => trade.mode.includes("UNVERIFIED"))
-              ? "Oct 8 is an unfiltered 1-minute replay: its 15:20 spot quote was stale, so the ±strike filter could not be verified. Entry uses the 15:20 candle open; exit uses the 15:29 candle close (15:30)."
-              : "One-lot simulated entries at 15:20, exited at 15:30 using the 15:29 candle close."}
-          </CardDescription>
-          <CardAction className="flex items-center gap-1">
-            <Button variant="outline" size="icon-sm" aria-label="Previous expiry day" disabled={!previous} onClick={() => previous && onPick(previous)}><ChevronLeft /></Button>
-            <span className="min-w-28 text-center text-sm font-medium tabular-nums">{date}</span>
-            <Button variant="outline" size="icon-sm" aria-label="Next expiry day" disabled={!next} onClick={() => next && onPick(next)}><ChevronRight /></Button>
-            <Button variant="ghost" size="icon-sm" aria-label="Close day" onClick={onClose}><X /></Button>
-          </CardAction>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <p className={cn("border-b pb-3 text-lg font-semibold tabular-nums", pnlClass(total))}>Day net: {fmtRs(total)}</p>
-          {trades.length ? (
-            <Table>
-              <TableHeader><TableRow>
-                <TableHead>Option</TableHead>
-                <TableHead>In</TableHead>
-                <TableHead>Out</TableHead>
-                <TableHead>Trigger → exit</TableHead>
-                <TableHead className="text-right">Net P&L</TableHead>
-              </TableRow></TableHeader>
-              <TableBody>{trades.map((trade) => (
-                <TableRow key={trade.option} className="bg-transparent hover:bg-muted/20">
-                  <TableCell>
-                    <div className="flex items-center gap-2"><span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", trade.side === "CALL" ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span> {trade.option}</div>
-                    <div className="text-xs text-muted-foreground">{trade.qty} qty · {trade.mode}</div>
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    <div>{trade.entry}</div>
-                    <div className="text-xs text-muted-foreground">Buy {fmtRs(trade.buy_price)} · {fmtRs(trade.buy_value_rs)}</div>
-                  </TableCell>
-                  <TableCell className="tabular-nums">
-                    <div>{trade.exit}</div>
-                    <div className="text-xs text-muted-foreground">Sell {fmtRs(trade.sell_price)} · {fmtRs(trade.sell_value_rs)}</div>
-                  </TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{trade.exit_reason}</TableCell>
-                  <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs))}>
-                    {fmtRs(trade.net_rs)}
-                    <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs)} · fees {fmtRs(trade.charges_rs)}</div>
-                  </TableCell>
-                </TableRow>
-              ))}</TableBody>
-            </Table>
-          ) : <p className="py-6 text-center text-sm text-muted-foreground">No completed HeroZero entries for this expiry.</p>}
-        </CardContent>
-      </Card>
-    </div>
-  )
-}
-
-function CapitalCurve({ report }: { report: CapitalReport }) {
+export function _CapitalCurve({ report }: { report: CapitalReport }) {
   return (
     <Card>
       <CardHeader>
@@ -144,7 +73,13 @@ function CapitalDayPanel({ date, trades, onClose, strategy = "all" }: {
         <CardHeader>
           <CardTitle>
             {strategy === "trend_runner"
-              ? "Trend Catcher paper trades"
+              ? "Nifty Trend Runner paper trades"
+              : strategy === "sensex_runner"
+              ? "Sensex Trend Runner paper trades"
+              : strategy === "sensex_key_levels"
+              ? "Sensex Key Levels S&R paper trades"
+              : strategy === "nifty_key_levels"
+              ? "Nifty Key Levels S&R paper trades"
               : strategy === "compression_scalp"
               ? "Micro Scalper paper trades"
               : "Combined paper trades"}
@@ -170,10 +105,22 @@ function CapitalDayPanel({ date, trades, onClose, strategy = "all" }: {
               <TableRow key={`${trade.mode}-${trade.option}-${trade.entry}-${index}`} className="bg-transparent hover:bg-muted/20">
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", trade.side === "CALL" ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
+                    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
                     {trade.option}
                   </div>
-                  <div className="text-xs text-muted-foreground">{trade.mode.includes("TREND") ? "Trend Catcher" : trade.mode.includes("HEROZERO") ? "HeroZero" : trade.mode.includes("KEYLEVEL") ? "Key Levels" : trade.mode.includes("SCALP") ? "Micro Scalp (Sniper)" : "Midpoint"} · {trade.qty} qty</div>
+                  <div className="text-xs text-muted-foreground">
+                    {(trade.mode || "").includes("SENSEX")
+                      ? "Sensex Trend Runner"
+                      : (trade.mode || "").includes("TREND") || (trade.mode || "").includes("RUNNER")
+                      ? "Nifty Trend Runner"
+                      : (trade.mode || "").includes("HEROZERO")
+                      ? "HeroZero"
+                      : (trade.mode || "").includes("KEYLEVEL")
+                      ? "Key Levels"
+                      : (trade.mode || "").includes("SCALP")
+                      ? "Micro Scalp (Sniper)"
+                      : "Midpoint"} · {trade.qty} qty
+                  </div>
                 </TableCell>
                 <TableCell className="tabular-nums">
                   <div>{trade.entry}</div>
@@ -197,12 +144,12 @@ function CapitalDayPanel({ date, trades, onClose, strategy = "all" }: {
   )
 }
 
-function StrategyTradesTable({ title, trades }: { title: string; trades: (OptionTrade & { charges_rs: number; net_rs: number })[] }) {
+function StrategyTradesTable({ title, trades, onPick }: { title: string; trades: (OptionTrade & { charges_rs: number; net_rs: number })[]; onPick?: (date: string) => void }) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{trades.length} paper trade(s) · net rupee P&amp;L after estimated charges.</CardDescription>
+        <CardDescription>{trades.length} paper trade(s) · net rupee P&amp;L after estimated charges · click row to open chart.</CardDescription>
       </CardHeader>
       <CardContent>
         {trades.length ? (
@@ -216,11 +163,11 @@ function StrategyTradesTable({ title, trades }: { title: string; trades: (Option
               <TableHead className="text-right">Net P&amp;L</TableHead>
             </TableRow></TableHeader>
             <TableBody>{trades.map((trade, index) => (
-              <TableRow key={`${trade.date}-${trade.entry}-${index}`} className="bg-transparent hover:bg-muted/20">
-                <TableCell className="font-medium tabular-nums">{trade.date}</TableCell>
+              <TableRow key={`${trade.date}-${trade.entry}-${index}`} className={cn("bg-transparent hover:bg-muted/20", onPick && "cursor-pointer")} onClick={() => onPick?.(trade.date)}>
+                <TableCell className={cn("font-medium tabular-nums", onPick && "text-primary underline-offset-4 hover:underline")}>{trade.date}</TableCell>
                 <TableCell>
                   <div className="flex items-center gap-2">
-                    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", trade.side === "CALL" ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
+                    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
                     {trade.option}
                   </div>
                   <div className="text-xs text-muted-foreground">{trade.mode} · {trade.qty} qty</div>
@@ -259,10 +206,10 @@ function PaperTradeLog({ title, trades }: { title: string; trades: OptionPaperTr
   )
 }
 
-function KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
+export function _KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
   const [picked, setPicked] = useState<string | null>(null)
   const trades = report.option_paper.trades
-  const closed = trades.filter((trade) => trade.status === "closed")
+  const closed = trades.filter((trade: any) => trade.status === "closed")
   const dailyMap = new Map<string, { date: string; trades: number; value: number }>()
   for (const trade of closed) {
     const day = dailyMap.get(trade.date) ?? { date: trade.date, trades: 0, value: 0 }
@@ -271,7 +218,7 @@ function KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
     dailyMap.set(trade.date, day)
   }
   const daily = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date))
-  const selected = picked ? trades.filter((trade) => trade.date === picked) : []
+  const selected = picked ? trades.filter((trade: any) => trade.date === picked) : []
   const summary = report.option_paper.summary
 
   return (
@@ -318,33 +265,33 @@ function KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
 }
 
 export function PaperPage() {
-  const [strategy, setStrategy] = useState<"all" | "trend_runner" | "midpoint" | "hero_zero" | "key_levels" | "compression_scalp">("all")
+  const [strategy, setStrategy] = useState<"trend_runner" | "sensex_runner" | "all">("trend_runner")
   const [picked, setPicked] = useState<string | null>(null)
   const trendRunner = usePoll<PaperReport>(strategy === "trend_runner" ? "/api/paper-report?strategy=trend_runner" : null, 30000)
-  const midpoint = usePoll<PaperReport>(strategy === "midpoint" ? "/api/paper-report" : null, 30000)
-  const heroZero = usePoll<PaperReport>(strategy === "hero_zero" ? "/api/paper-report?strategy=hero_zero" : null, 30000)
-  const scalp = usePoll<PaperReport>(strategy === "compression_scalp" ? "/api/paper-report?strategy=compression_scalp" : null, 30000)
+  const sensexRunner = usePoll<PaperReport>(strategy === "sensex_runner" ? "/api/paper-report?strategy=sensex_runner" : null, 30000)
   const capital = usePoll<CapitalReport>(strategy === "all" ? "/api/capital-report" : null, 30000)
-  const keyLevelPaper = usePoll<KeyLevelReport>(strategy === "key_levels" ? "/api/backtest?strategy=key_levels" : null, 30000)
 
-  if (strategy === "key_levels") {
-    if (keyLevelPaper.error) return <p className="text-sm text-red-500">Key Levels paper report failed: {keyLevelPaper.error}</p>
-    if (keyLevelPaper.loading || !keyLevelPaper.data) return <Skeleton className="h-150 w-full" />
-    return (
-      <div className="flex flex-col gap-4">
-        <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as any); setPicked(null) }}>
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="compression_scalp">Micro Scalper</TabsTrigger>
-            <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
-            <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
-            <TabsTrigger value="key_levels">Key Levels</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        <KeyLevelPaperPanel report={keyLevelPaper.data} />
-      </div>
-    )
-  }
+  const paperTabs = (
+    <Tabs
+      value={strategy}
+      onValueChange={(val) => {
+        setPicked(null)
+        setStrategy(val as "trend_runner" | "sensex_runner" | "all")
+      }}
+    >
+      <TabsList className="bg-muted/60 p-1 rounded-lg">
+        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
+          NIFTY 50
+        </TabsTrigger>
+        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
+          SENSEX
+        </TabsTrigger>
+        <TabsTrigger value="all" className="font-medium text-xs sm:text-sm">
+          Combined Portfolio
+        </TabsTrigger>
+      </TabsList>
+    </Tabs>
+  )
 
   if (strategy === "all") {
     if (capital.error) return <p className="text-sm text-red-500">Capital report failed: {capital.error}</p>
@@ -357,69 +304,60 @@ export function PaperPage() {
     return (
       <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-xl font-semibold">Paper P&amp;L</h1>
-          <p className="text-sm text-muted-foreground">Combined Midpoint, Trend Catcher, Micro Scalper, and HeroZero paper account balance.</p>
+          <h1 className="text-xl font-bold tracking-tight">Paper Trading</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">Combined Trend Runner portfolio equity.</p>
         </div>
-        <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as any); setPicked(null) }}>
-          <TabsList>
-            <TabsTrigger value="all">All</TabsTrigger>
-            <TabsTrigger value="trend_runner">Trend Catcher</TabsTrigger>
-            <TabsTrigger value="compression_scalp">Micro Scalper</TabsTrigger>
-            <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
-            <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
-          </TabsList>
-        </Tabs>
+        {paperTabs}
         <div className="grid max-w-lg grid-cols-2 gap-3">
           <StatCard label="Starting capital" value={fmtRs(summary.starting_capital)} />
           <StatCard label="Ending capital" value={fmtRs(summary.ending_capital)} className={pnlClass(summary.net_rs)} />
         </div>
         <StrategyStreakSummary
           title="Combined Portfolio Streaks & Recovery"
-          description="Aggregated consecutive winning/losing day streaks and drawdown recovery time across funded Midpoint, HeroZero, Key Levels, and Micro Scalper trades."
+          description="Aggregated consecutive winning/losing day streaks and drawdown recovery time across funded Midpoint and Trend Runner trades."
           daily={capital.data.daily.map((day) => ({ date: day.date, value: day.net_rs, trades: day.trades }))}
           unit="rs"
         />
-        <CapitalCurve report={capital.data} />
-        <div className="grid gap-4 xl:grid-cols-2">
-          <Card>
+        <div className="grid gap-4 xl:grid-cols-3">
+          <Card className="xl:col-span-2">
             <CardHeader>
-              <CardTitle>Daily net P&amp;L</CardTitle>
-              <CardDescription>Click a bar to open that day’s funded trades.</CardDescription>
+              <CardTitle>Daily capital P&amp;L</CardTitle>
+              <CardDescription>Daily net P&amp;L across strategies</CardDescription>
             </CardHeader>
             <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={capital.data.daily} onClick={(event) => event?.activeLabel && setPicked(String(event.activeLabel))}>
-                  <CartesianGrid stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="date" {...axis} tickFormatter={(date: string) => date.slice(5)} />
-                  <YAxis {...axis} width={82} tickFormatter={(value) => fmtRs(Number(value))} />
-                  <Tooltip {...tooltip} cursor={{ fill: "var(--muted)" }} formatter={(value) => [fmtRs(Number(value)), "Net"]} />
-                  <Bar dataKey="net_rs" radius={[4, 4, 0, 0]} className="cursor-pointer">
-                    {capital.data.daily.map((day) => <Cell key={day.date} fill={day.net_rs >= 0 ? "#10b981" : "#ef4444"} />)}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="h-70">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={capital.data.daily}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                    <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+                    <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                    <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(value: any) => [`${fmtRs(Number(value))}`, "Daily Net"]} />
+                    <Bar dataKey="net_rs" radius={[4, 4, 0, 0]}>
+                      {capital.data.daily.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.net_rs >= 0 ? "#10b981" : "#ef4444"} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
           <Card>
             <CardHeader>
-              <CardTitle>Calendar (daily net P&amp;L)</CardTitle>
-              <CardDescription>Only trades affordable from the starting capital are included.</CardDescription>
+              <CardTitle>Calendar</CardTitle>
+              <CardDescription>Click a day to view executed trades</CardDescription>
             </CardHeader>
             <CardContent>
-              <PnlCalendar
-                daily={capital.data.daily.map((day) => ({ date: day.date, trades: day.trades, value: day.net_rs }))}
-                format={fmtRs}
-                onPick={setPicked}
-              />
+              <PnlCalendar daily={capital.data.daily.map((day) => ({ ...day, value: day.net_rs }))} format={fmtRs} onPick={setPicked} />
             </CardContent>
           </Card>
         </div>
-        {selectedDay && <CapitalDayPanel date={selectedDay.date} trades={selectedTrades} onClose={() => setPicked(null)} strategy="all" />}
+        {selectedDay && <CapitalDayPanel date={selectedDay.date} trades={selectedTrades as any} onClose={() => setPicked(null)} strategy="all" />}
       </div>
     )
   }
 
-  const selectedReport = strategy === "trend_runner" ? trendRunner : strategy === "hero_zero" ? heroZero : strategy === "compression_scalp" ? scalp : midpoint
+  const selectedReport = strategy === "sensex_runner" ? sensexRunner : trendRunner
   const loading = selectedReport.loading
   const error = selectedReport.error
   const data = selectedReport.data
@@ -428,8 +366,7 @@ export function PaperPage() {
   if (loading || !data) return <Skeleton className="h-150 w-full" />
 
   const s = data.summary
-  const dates = data.daily.map((d) => d.date)
-  const curve = [
+    const curve = [
     { label: "start", equity: 0, drawdown: 0 },
     ...data.trades.map((trade) => ({ label: `${trade.date} ${trade.entry} ${trade.side}`, equity: trade.equity, drawdown: trade.drawdown })),
   ]
@@ -437,37 +374,21 @@ export function PaperPage() {
   return (
     <div className="flex flex-col gap-4">
       <div>
-        <h1 className="text-xl font-semibold">Paper P&L</h1>
-        <p className="text-sm text-muted-foreground">
-          {strategy === "trend_runner"
-            ? "Trend Catcher (VIX Runner) Live Paper: Forward paper execution capturing 100+ to 300+ point runs with VIX confluence, 28-pt fixed risk, 3-tier ratchet, and Chandelier trailing stop."
-            : strategy === "compression_scalp"
-            ? "Micro Scalper (Sniper) Live Paper: Forward paper execution during market hours with live prices and entries/exits. Historical backtest is available under Backtest → Sniper Scalp."
-            : strategy === "midpoint"
-            ? "Paper fills; estimated charges included. Paper fills use LTP and exclude spread/slippage."
-            : "One-lot simulated entries per contract; fresh 15:20 spot required, with an unfiltered stale-spot replay on Oct 8."}
+        <h1 className="text-xl font-bold tracking-tight">Paper Trading</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          {strategy === "sensex_runner"
+            ? "Sensex Trend Runner paper execution."
+            : "Nifty 50 Trend Runner paper execution."}
         </p>
       </div>
 
-      <Tabs value={strategy} onValueChange={(value) => { setStrategy(value as any); setPicked(null) }}>
-        <TabsList>
-          <TabsTrigger value="all">All</TabsTrigger>
-          <TabsTrigger value="trend_runner">Trend Catcher</TabsTrigger>
-          <TabsTrigger value="compression_scalp">Micro Scalper</TabsTrigger>
-          <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
-          <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
-        </TabsList>
-      </Tabs>
+      {paperTabs}
 
       {!s.trades ? (
         <Card><CardContent className="py-16 text-center text-sm text-muted-foreground">
-          {strategy === "trend_runner"
-            ? "No Trend Catcher paper trades recorded yet. Run `python trend_runner_paper.py` during market hours or in replay mode."
-            : strategy === "hero_zero"
-            ? "No completed HeroZero expiry paper trades yet."
-            : strategy === "compression_scalp"
-            ? "No live market paper trades recorded yet. Real-time paper entries and exits will log here during tomorrow's live market sessions (09:20–11:30 & 13:15–15:05 IST). Historical performance is available under Backtest → Sniper Scalp."
-            : "No midpoint paper option trades yet."}
+          {strategy === "sensex_runner"
+            ? "No Sensex Trend Runner paper trades recorded yet for today."
+            : "No Nifty Trend Runner paper trades recorded yet for today."}
         </CardContent></Card>
       ) : <>
 
@@ -481,15 +402,15 @@ export function PaperPage() {
       </div>
 
       <StrategyStreakSummary
-        title={strategy === "trend_runner" ? "Trend Catcher Paper Streaks & Recovery" : strategy === "compression_scalp" ? "Micro Scalper Paper Streaks & Recovery" : strategy === "midpoint" ? "Midpoint Paper Streaks & Recovery" : "HeroZero Paper Streaks & Recovery"}
+        title={
+          strategy === "sensex_runner"
+            ? "Sensex Trend Runner Paper Streaks & Recovery"
+            : "Nifty Trend Runner Paper Streaks & Recovery"
+        }
         description={
-          strategy === "trend_runner"
-            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Trend Catcher (VIX Runner) paper trading."
-            : strategy === "compression_scalp"
-            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Micro Scalper paper trading."
-            : strategy === "midpoint"
-            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Midpoint paper trading."
-            : "Consecutive winning/losing expiries and recovery time in days for HeroZero paper trading."
+          strategy === "sensex_runner"
+            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Sensex Trend Runner paper trading."
+            : "Consecutive winning/losing days, recovery time in days, and daily expectancy for Nifty Trend Runner paper trading."
         }
         daily={data.daily.map((d) => ({ date: d.date, value: d.net_rs, trades: d.trades }))}
         unit="rs"
@@ -498,87 +419,82 @@ export function PaperPage() {
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
-            <CardTitle>Equity curve (net ₹)</CardTitle>
-            <CardDescription>Cumulative net P&amp;L and drawdown, trade by trade</CardDescription>
+            <CardTitle>Equity curve</CardTitle>
+            <CardDescription>Cumulative net P&L (₹) and drawdown</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={240}>
-              <AreaChart data={curve} syncId="paper">
-                <defs>
-                  <linearGradient id="peq" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" hide />
-                <YAxis {...axis} width={60} />
-                <Tooltip {...tooltip} formatter={(v) => [fmtRs(Number(v)), "Equity"]} />
-                <Area type="linear" dataKey="equity" stroke="#10b981" strokeWidth={2} fill="url(#peq)" />
-              </AreaChart>
-            </ResponsiveContainer>
-            <ResponsiveContainer width="100%" height={110}>
-              <AreaChart data={curve} syncId="paper">
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="label" hide />
-                <YAxis {...axis} width={60} />
-                <Tooltip {...tooltip} formatter={(v) => [fmtRs(Number(v)), "Drawdown"]} />
-                <Area type="stepAfter" dataKey="drawdown" stroke="#ef4444" fill="#ef4444" fillOpacity={0.25} />
-              </AreaChart>
-            </ResponsiveContainer>
+            <div className="h-70">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={curve}>
+                  <defs>
+                    <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                    <linearGradient id="dd" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="label" hide />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}`} />
+                  <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: any, name: any) => [`${fmtRs(Number(v))}`, name === "equity" ? "Equity" : "Drawdown"]} />
+                  <Area type="monotone" dataKey="equity" stroke="#10b981" strokeWidth={2} fill="url(#eq)" />
+                  <Area type="monotone" dataKey="drawdown" stroke="#ef4444" strokeWidth={1} fill="url(#dd)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
 
         <Card>
           <CardHeader>
-            <CardTitle>Daily net P&L</CardTitle>
-            <CardDescription>Click a bar to open the day</CardDescription>
+            <CardTitle>Daily P&L</CardTitle>
+            <CardDescription>Session net results</CardDescription>
           </CardHeader>
           <CardContent>
-            <ResponsiveContainer width="100%" height={360}>
-              <BarChart data={data.daily} onClick={(e) => e?.activeLabel && setPicked(String(e.activeLabel))}>
-                <CartesianGrid stroke="var(--border)" vertical={false} />
-                <XAxis dataKey="date" {...axis} tickFormatter={(d: string) => d.slice(5)} />
-                <YAxis {...axis} width={55} />
-                <Tooltip {...tooltip} cursor={{ fill: "var(--muted)" }} formatter={(v) => [fmtRs(Number(v)), "Net"]} />
-                <Bar dataKey="net_rs" radius={[4, 4, 0, 0]} className="cursor-pointer">
-                  {data.daily.map((d) => (
-                    <Cell key={d.date} fill={d.net_rs >= 0 ? "#10b981" : "#ef4444"} />
-                  ))}
-                </Bar>
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="h-70">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={data.daily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                  <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+                  <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}`} />
+                  <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: any) => [`${fmtRs(Number(v))}`, "Net"]} />
+                  <Bar dataKey="net_rs" radius={[4, 4, 0, 0]}>
+                    {data.daily.map((m, i) => (
+                      <Cell key={i} fill={m.net_rs >= 0 ? "#10b981" : "#ef4444"} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Calendar (daily net P&L)</CardTitle>
-          <CardDescription>Green = profit day, red = loss day. Click a day to open it.</CardDescription>
+          <CardTitle>Calendar</CardTitle>
+          <CardDescription>Daily net P&L. Click a day to view trades.</CardDescription>
         </CardHeader>
         <CardContent>
           <PnlCalendar daily={data.daily.map((d) => ({ ...d, value: d.net_rs }))} format={fmtRs} onPick={setPicked} />
         </CardContent>
       </Card>
 
-      {strategy === "midpoint" ? (
-        <DayPanel date={picked} mode="paper" strategy="midpoint" days={dates} onPick={setPicked} onClose={() => setPicked(null)} allowTimeframeSwitch />
-      ) : strategy === "hero_zero" && picked ? (
-        <HeroZeroDayPanel date={picked} days={dates} data={data} onPick={setPicked} onClose={() => setPicked(null)} />
-      ) : (strategy === "compression_scalp" || strategy === "trend_runner") && picked ? (
+      {picked ? (
         <CapitalDayPanel date={picked} trades={data.trades.filter((t) => t.date === picked)} onClose={() => setPicked(null)} strategy={strategy} />
       ) : null}
 
       <StrategyTradesTable
         title={
-          strategy === "trend_runner"
-            ? (picked ? `Trend Catcher paper trades · ${picked}` : "Trend Catcher paper trade log")
-            : strategy === "compression_scalp"
-            ? (picked ? `Micro Scalper paper trades · ${picked}` : "Micro Scalper paper trade log")
-            : (picked ? `Paper trades · ${picked}` : "Paper trade log")
+          strategy === "sensex_runner"
+            ? (picked ? `Sensex Trend Runner paper trades · ${picked}` : "Sensex Trend Runner paper trade log")
+            : (picked ? `Nifty Trend Runner paper trades · ${picked}` : "Nifty Trend Runner paper trade log")
         }
         trades={picked ? data.trades.filter((t) => t.date === picked) : data.trades}
+        onPick={setPicked}
       />
       </>}
     </div>
