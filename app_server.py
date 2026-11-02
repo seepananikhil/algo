@@ -825,7 +825,20 @@ def master() -> pd.DataFrame:
     mtime = history_mtime()
     with _cache_lock:
         if _master_cache["mtime"] != mtime:
-            df = pd.concat([pd.read_csv(p) for p in paths], ignore_index=True)
+            dfs = []
+            for pth in paths:
+                try:
+                    d = pd.read_csv(pth)
+                    if "date" in d.columns and "timestamp" not in d.columns:
+                        d = d.rename(columns={"date": "timestamp"})
+                    dfs.append(d)
+                except Exception:
+                    pass
+            if not dfs:
+                return pd.DataFrame()
+            df = pd.concat(dfs, ignore_index=True)
+            if "timestamp" not in df.columns:
+                return pd.DataFrame()
             ts = pd.to_datetime(df["timestamp"], errors="coerce")
             df["timestamp"] = ts.dt.tz_localize("UTC").dt.tz_convert("Asia/Kolkata").dt.tz_localize(None)
             df = df.dropna(subset=["timestamp", "open", "high", "low", "close"])
@@ -3755,6 +3768,100 @@ def today_log(path: Path, lines: int) -> list:
     return keep[-lines:]
 
 
+
+def kotak_live_trades() -> list:
+    """Return active and closed Kotak Neo positions formatted as OptionTrade dicts for live tracking."""
+    try:
+        from broker import get_positions
+        pos_data = get_positions()
+        if not pos_data.get("ok"):
+            return []
+        
+        trades = []
+        today_str = today()
+        
+        for pos in pos_data.get("open_positions", []):
+            sym = str(pos.get("symbol", ""))
+            side = str(pos.get("side", "CALL"))
+            qty = int(pos.get("net_qty", 65))
+            buy_px = float(pos.get("buy_avg", 0.0))
+            cur_ltp = float(pos.get("ltp", buy_px))
+            buy_val = float(pos.get("invested", buy_px * qty))
+            cur_val = float(pos.get("current_value", cur_ltp * qty))
+            unrealized = float(pos.get("unrealized_pnl", cur_val - buy_val))
+            
+            trades.append({
+                "date": today_str,
+                "side": side,
+                "option": sym,
+                "qty": qty,
+                "entry": "LIVE",
+                "nifty_in": buy_px,
+                "buy_price": buy_px,
+                "buy_value_rs": buy_val,
+                "exit": "",
+                "nifty_out": cur_ltp,
+                "sell_price": cur_ltp,
+                "sell_value_rs": cur_val,
+                "pnl_rs": unrealized,
+                "option_pnl_rs": unrealized,
+                "nifty_points": round(cur_ltp - buy_px, 2) if side == "CALL" else round(buy_px - cur_ltp, 2),
+                "exit_reason": "open",
+                "mode": "LIVE KOTAK",
+                "spot_at_entry": buy_px,
+                "trigger_label": "Kotak Live Position",
+                "sl": 0.0,
+                "target": 0.0,
+                "charges_rs": 0.0,
+                "net_rs": unrealized,
+                "strategy": "kotak_live",
+                "symbol": "SENSEX" if "SENSEX" in sym.upper() else "NIFTY",
+                "is_open": True,
+            })
+            
+        for pos in pos_data.get("closed_positions", []):
+            sym = str(pos.get("symbol", ""))
+            side = str(pos.get("side", "CALL"))
+            qty = int(pos.get("qty", 65))
+            buy_px = float(pos.get("buy_avg", 0.0))
+            sell_px = float(pos.get("sell_avg", 0.0))
+            buy_amt = float(pos.get("buy_amt", buy_px * qty))
+            sell_amt = float(pos.get("sell_amt", sell_px * qty))
+            realized = float(pos.get("realized_pnl", sell_amt - buy_amt))
+            
+            trades.append({
+                "date": today_str,
+                "side": side,
+                "option": sym,
+                "qty": qty,
+                "entry": "LIVE",
+                "nifty_in": buy_px,
+                "buy_price": buy_px,
+                "buy_value_rs": buy_amt,
+                "exit": "CLOSED",
+                "nifty_out": sell_px,
+                "sell_price": sell_px,
+                "sell_value_rs": sell_amt,
+                "pnl_rs": realized,
+                "option_pnl_rs": realized,
+                "nifty_points": round(sell_px - buy_px, 2) if side == "CALL" else round(buy_px - sell_px, 2),
+                "exit_reason": "closed",
+                "mode": "LIVE KOTAK",
+                "spot_at_entry": buy_px,
+                "trigger_label": "Kotak Realized",
+                "charges_rs": 0.0,
+                "net_rs": realized,
+                "strategy": "kotak_live",
+                "symbol": "SENSEX" if "SENSEX" in sym.upper() else "NIFTY",
+                "is_open": False,
+            })
+            
+        return trades
+    except Exception as exc:
+        print(f"Error in kotak_live_trades: {exc}")
+        return []
+
+
 class Handler(BaseHTTPRequestHandler):
     def _json(self, data, code: int = 200) -> None:
         body = json.dumps(data, default=str).encode("utf-8")
@@ -3956,7 +4063,8 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/orders":
             self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
-            all_trades = list(midpoint_option_trades())
+            all_trades = list(kotak_live_trades())
+            all_trades.extend(midpoint_option_trades())
             all_trades.extend(trend_runner_live_paper_trades(date))
             all_trades.extend(sensex_runner_live_paper_trades(date))
             all_trades.extend(sensex_key_levels_live_paper_trades(date))
