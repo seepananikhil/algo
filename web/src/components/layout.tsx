@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useStatus } from "@/lib/status"
+import { postJSON } from "@/lib/api"
 
 const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
@@ -19,7 +20,7 @@ function Dot({ ok }: { ok: boolean }) {
 }
 
 export function Layout() {
-  const { status, error } = useStatus()
+  const { status, error, reload } = useStatus()
   const { resolvedTheme, setTheme } = useTheme()
   const dark = resolvedTheme !== "light"
   const location = useLocation()
@@ -78,9 +79,27 @@ export function Layout() {
                   <Dot ok={status.token.valid} />
                   {status.broker === "KOTAK_NEO" ? "Kotak" : "Fyers"}: {status.token.valid ? (status.token.greeting_name || "Connected") : "Expired"}
                 </Badge>
-                <Badge variant="outline" className="gap-1 py-0 text-[11px]">
-                  <Dot ok={status.capture_running} /> Capture {status.capture_running ? "running" : "stopped"}
-                </Badge>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const endpoint = status.capture_running ? "/api/capture/stop" : "/api/capture/start"
+                    await postJSON(endpoint, {})
+                    await reload()
+                  }}
+                  title={status.capture_running ? "Click to stop market capture" : "Click to start market capture"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all select-none cursor-pointer",
+                    status.capture_running
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 active:scale-95"
+                      : "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 active:scale-95"
+                  )}
+                >
+                  <Dot ok={status.capture_running} />
+                  <span>Capture {status.capture_running ? "running" : "stopped"}</span>
+                  <span className="text-[9px] underline opacity-75 font-normal">
+                    {status.capture_running ? "(stop)" : "(start)"}
+                  </span>
+                </button>
                 <Badge
                   className={cn(
                     "py-0 text-[11px]",
