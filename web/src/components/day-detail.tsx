@@ -91,12 +91,14 @@ export function DayDetail({
   const chartCandles = useFiveMinute ? keyLevelDay.data?.candles : day.data?.candles
   const chartLoading = useFiveMinute ? keyLevelDay.loading : day.loading
 
-  // Primary price metrics
+  // Primary price metrics (official exchange prev_close, fallback to today open)
   const primaryLastCandle = chartCandles && chartCandles.length > 0 ? chartCandles[chartCandles.length - 1] : undefined
   const primaryPrice = primaryLastCandle?.close
   const primaryFirstCandle = chartCandles && chartCandles.length > 0 ? chartCandles[0] : undefined
-  const primaryChangePts = primaryLastCandle && primaryFirstCandle ? primaryLastCandle.close - primaryFirstCandle.open : 0
-  const primaryChangePct = primaryFirstCandle && primaryFirstCandle.open ? (primaryChangePts / primaryFirstCandle.open) * 100 : 0
+  const primaryPrevClose = day.data?.prev_close
+  const primaryBase = (primaryPrevClose && primaryPrevClose > 0) ? primaryPrevClose : (primaryFirstCandle?.open || 0)
+  const primaryChangePts = primaryLastCandle && primaryBase ? primaryLastCandle.close - primaryBase : 0
+  const primaryChangePct = primaryBase ? (primaryChangePts / primaryBase) * 100 : 0
 
   // Secondary price metrics
   const secondaryCandles = secondaryDay.data?.candles ?? []
@@ -105,8 +107,10 @@ export function DayDetail({
   const secondaryLastCandle = hasSecondary ? secondaryCandles[secondaryCandles.length - 1] : undefined
   const secondaryPrice = secondaryLastCandle?.close
   const secondaryFirstCandle = hasSecondary ? secondaryCandles[0] : undefined
-  const secondaryChangePts = secondaryLastCandle && secondaryFirstCandle ? secondaryLastCandle.close - secondaryFirstCandle.open : 0
-  const secondaryChangePct = secondaryFirstCandle && secondaryFirstCandle.open ? (secondaryChangePts / secondaryFirstCandle.open) * 100 : 0
+  const secondaryPrevClose = secondaryDay.data?.prev_close
+  const secondaryBase = (secondaryPrevClose && secondaryPrevClose > 0) ? secondaryPrevClose : (secondaryFirstCandle?.open || 0)
+  const secondaryChangePts = secondaryLastCandle && secondaryBase ? secondaryLastCandle.close - secondaryBase : 0
+  const secondaryChangePct = secondaryBase ? (secondaryChangePts / secondaryBase) * 100 : 0
 
   const spotPoints = spotTrades.reduce((sum: number, trade: any) => sum + trade.pnl_points, 0)
   const fillsPnl = fills.reduce((sum: number, fill: any) => sum + (fill.net_rs ?? fill.pnl_rs), 0)

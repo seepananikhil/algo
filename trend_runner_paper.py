@@ -909,6 +909,7 @@ class TrendRunnerPaperEngine:
 
 def run_replay(
     target_date: str,
+    symbol: str = "NIFTY",
     sl_pts: float = 30.0,
     sl_mode: str = "fixed",
     lots: int = 1,
@@ -1145,6 +1146,7 @@ if __name__ == "__main__":
     if args.replay:
         run_replay(
             target_date=args.replay,
+            symbol=args.symbol,
             sl_pts=args.sl,
             sl_mode=args.sl_mode,
             lots=args.lots,
