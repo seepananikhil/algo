@@ -2,9 +2,6 @@ name: Daily Historical & Options Data Update
 
 on:
   schedule:
-    # Test cron: 22:47 IST (17:17 UTC) and 22:50 IST (17:20 UTC)
-    - cron: '17 17 * * *'
-    - cron: '20 17 * * *'
     # Primary: 16:15 IST (10:45 UTC) Monday through Friday
     - cron: '45 10 * * 1-5'
     # Backup: 17:00 IST (11:30 UTC) Monday through Friday
