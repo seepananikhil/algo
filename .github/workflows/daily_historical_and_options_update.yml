@@ -25,11 +25,11 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: 'pip'
+      - name: Verify Python & Pip
+        run: |
+          which python3 || echo "python3 not found in PATH"
+          python3 --version
+          python3 -m pip --version || (python3 -m ensurepip --default-pip || curl -sS https://bootstrap.pypa.io/get-pip.py | python3)
 
       - name: Install Dependencies
         run: |
@@ -64,7 +64,7 @@ jobs:
           if [ -n "${{ github.event.inputs.target_date }}" ]; then
             DATE_ARG="--date ${{ github.event.inputs.target_date }}"
           fi
-          python scripts/update_spot_history.py $DATE_ARG
+          python3 scripts/update_spot_history.py $DATE_ARG
 
       - name: Fetch Weekly Options Data (NIFTY, SENSEX & BANKNIFTY)
         env:
@@ -78,9 +78,9 @@ jobs:
           if [ -n "${{ github.event.inputs.target_date }}" ]; then
             DATE_ARG="--date ${{ github.event.inputs.target_date }}"
           fi
-          python scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
-          python scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
-          python scripts/fetch_weekly_options.py --index BANKNIFTY $DATE_ARG || echo "BankNifty options fetch completed or not an expiry session"
+          python3 scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
+          python3 scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
+          python3 scripts/fetch_weekly_options.py --index BANKNIFTY $DATE_ARG || echo "BankNifty options fetch completed or not an expiry session"
 
       - name: Rebuild DuckDB Options Parquet Catalogs
         run: |
@@ -89,9 +89,9 @@ jobs:
 
       - name: Update Master Backtests
         run: |
-          python run_10y_backtest.py || echo "Nifty backtest completed with warnings"
-          python run_sensex_multiyear_trend_backtest.py || echo "Sensex backtest completed with warnings"
-          python run_10y_midpoint_backtest.py || echo "Midpoint backtest completed with warnings"
+          python3 run_10y_backtest.py || echo "Nifty backtest completed with warnings"
+          python3 run_sensex_multiyear_trend_backtest.py || echo "Sensex backtest completed with warnings"
+          python3 run_10y_midpoint_backtest.py || echo "Midpoint backtest completed with warnings"
 
       - name: Inspect Changed Data Files
         run: |
