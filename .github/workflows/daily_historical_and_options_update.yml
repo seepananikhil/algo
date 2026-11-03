@@ -28,17 +28,17 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Verify Python & Pip
+      - name: Set up Virtual Environment & Install Dependencies
         run: |
           which python3 || echo "python3 not found in PATH"
           python3 --version
-          python3 -m pip --version || (python3 -m ensurepip --default-pip || curl -sS https://bootstrap.pypa.io/get-pip.py | python3)
-
-      - name: Install Dependencies
-        run: |
-          python -m pip install --upgrade pip
+          if [ ! -d "$HOME/algo_venv" ]; then
+            python3 -m venv "$HOME/algo_venv"
+          fi
+          echo "$HOME/algo_venv/bin" >> $GITHUB_PATH
+          export PATH="$HOME/algo_venv/bin:$PATH"
+          pip install --upgrade pip
           pip install -r requirements.txt
-
       - name: Install DuckDB CLI
         run: |
           ARCH=$(uname -m)
