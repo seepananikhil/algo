@@ -80,7 +80,23 @@ export function LivePage() {
   const [scalpSpot, setScalpSpot] = useState<"NIFTY" | "SENSEX">("NIFTY")
   const [scalpLots, setScalpLots] = useState(1)
   const [scalpOptionType, setScalpOptionType] = useState<"CE" | "PE">("CE")
-  const [scalpLiveMode, setScalpLiveMode] = useState<boolean>(true)
+  const [scalpLiveMode, setScalpLiveMode] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem("scalp_live_mode") !== "false"
+    } catch {
+      return true
+    }
+  })
+
+  const handleToggleScalpLiveMode = () => {
+    setScalpLiveMode((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem("scalp_live_mode", String(next))
+      } catch {}
+      return next
+    })
+  }
 
   useEffect(() => {
     if (status?.scalper?.mode) {
@@ -192,12 +208,44 @@ export function LivePage() {
   const niftyDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=NIFTY&full=1` : null, 2500)
   const sensexDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=SENSEX&full=1` : null, 2500)
 
+  // Trade mode filter: "LIVE" (Kotak Neo real trades), "ALL", or "PAPER"
+  const [tradeMode, setTradeMode] = useState<"LIVE" | "ALL" | "PAPER">(() => {
+    try {
+      return (localStorage.getItem("trade_mode_filter") as "LIVE" | "ALL" | "PAPER") || "LIVE"
+    } catch {
+      return "LIVE"
+    }
+  })
+
+  const handleSetTradeMode = (m: "LIVE" | "ALL" | "PAPER") => {
+    setTradeMode(m)
+    try {
+      localStorage.setItem("trade_mode_filter", m)
+    } catch {}
+  }
+
   // Polling feeds: All strategy paper trades & live broker positions
   const liveTradesPoll = usePoll<OptionTrade[]>("/api/trades", 2500)
 
-  const tradesList = useMemo(() => {
+  const rawTrades = useMemo(() => {
     return liveTradesPoll.data ?? []
   }, [liveTradesPoll.data])
+
+  const counts = useMemo(() => {
+    const liveCount = rawTrades.filter((t) => t.mode?.includes("LIVE") || t.strategy === "kotak_live").length
+    const paperCount = rawTrades.length - liveCount
+    return { live: liveCount, paper: paperCount, total: rawTrades.length }
+  }, [rawTrades])
+
+  const tradesList = useMemo(() => {
+    if (tradeMode === "LIVE") {
+      return rawTrades.filter((t) => t.mode?.includes("LIVE") || t.strategy === "kotak_live")
+    }
+    if (tradeMode === "PAPER") {
+      return rawTrades.filter((t) => !t.mode?.includes("LIVE") && t.strategy !== "kotak_live")
+    }
+    return rawTrades
+  }, [rawTrades, tradeMode])
 
   // Partition into Active and Closed
   const openTrades = useMemo(() => {
@@ -531,6 +579,35 @@ export function LivePage() {
                   </button>
                 </div>
 
+                {/* Mode Selector within Popover */}
+                <div className="flex items-center justify-between px-2.5 py-1 bg-muted/40 rounded-lg border border-border/60 text-[10px]">
+                  <span className="text-muted-foreground font-semibold uppercase tracking-wider">Source:</span>
+                  <div className="flex items-center gap-1 font-bold">
+                    <button
+                      type="button"
+                      onClick={() => handleSetTradeMode("LIVE")}
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${tradeMode === "LIVE" ? "bg-emerald-600 text-white" : "text-muted-foreground hover:text-foreground"}`}
+                      title="Kotak Neo Real Trades Only"
+                    >
+                      LIVE ({counts.live})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetTradeMode("ALL")}
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${tradeMode === "ALL" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      ALL ({counts.total})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleSetTradeMode("PAPER")}
+                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${tradeMode === "PAPER" ? "bg-amber-600 text-white" : "text-muted-foreground hover:text-foreground"}`}
+                    >
+                      PAPER ({counts.paper})
+                    </button>
+                  </div>
+                </div>
+
                 {/* Big Net P&L Display */}
                 <div className={`p-3 rounded-lg border text-center ${
                   summaryMetrics.totalPnl >= 0
@@ -829,15 +906,15 @@ export function LivePage() {
                 <span className="font-bold text-[11px] tracking-wider uppercase text-foreground">Scalper</span>
                 <button
                   type="button"
-                  onClick={() => setScalpLiveMode(!scalpLiveMode)}
+                  onClick={handleToggleScalpLiveMode}
                   className={`px-1.5 py-0.2 text-[9px] font-extrabold rounded border transition-colors cursor-pointer ${
                     scalpLiveMode
-                      ? "bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-400"
-                      : "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                      ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
+                      : "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400"
                   }`}
-                  title={scalpLiveMode ? "LIVE Mode: Orders sent directly to Kotak Neo broker. Click to switch to Paper." : "PAPER Mode: Simulated trades only. Click to switch to Live."}
+                  title={scalpLiveMode ? "LIVE Mode: Orders placed directly on Kotak Neo broker (Zero brokerage). Click to switch to Paper." : "PAPER Mode: Simulated trades only. Click to switch to Live."}
                 >
-                  {scalpLiveMode ? "LIVE" : "PAPER"}
+                  {scalpLiveMode ? "LIVE (Kotak)" : "PAPER"}
                 </button>
                 <span className="text-[10px] font-mono font-bold text-foreground bg-muted px-1.5 py-0.2 rounded border border-border">
                   {scalpSpot} {activeStrike} {scalpOptionType}
@@ -1405,6 +1482,49 @@ export function LivePage() {
               >
                 <PanelRightClose className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* Live vs Paper Feed Filter */}
+            <div className="flex-none px-2.5 py-1.5 bg-muted/20 border-b border-border/60 flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Feed:</span>
+              <div className="flex items-center bg-muted/60 p-0.5 rounded-md border border-border/60">
+                <button
+                  type="button"
+                  onClick={() => handleSetTradeMode("LIVE")}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                    tradeMode === "LIVE"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Show only real Kotak Neo broker trades (Zero brokerage)"
+                >
+                  LIVE ({counts.live})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetTradeMode("ALL")}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                    tradeMode === "ALL"
+                      ? "bg-background text-foreground shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Show both Live Kotak and Paper trades"
+                >
+                  ALL ({counts.total})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetTradeMode("PAPER")}
+                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
+                    tradeMode === "PAPER"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                  title="Show simulated strategy paper trades only"
+                >
+                  PAPER ({counts.paper})
+                </button>
+              </div>
             </div>
 
             {/* TAB CONTENTS */}

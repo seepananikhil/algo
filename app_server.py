@@ -583,8 +583,7 @@ def scalper_forward_loop() -> None:
         try:
             cfg = read_config()
             paper_on = cfg.get("scalper_paper_trading", False)
-            live_on = cfg.get("scalper_live_trading", False)
-            if not paper_on and not live_on:
+            if not paper_on:
                 time.sleep(5)
                 continue
 
@@ -1568,11 +1567,13 @@ def submit_scalp_order(body: dict) -> dict:
     lots = max(1, int(body.get("lots", 1)))
 
     cfg = read_config()
+    from broker import get_active_broker
+    active_broker = get_active_broker()
     req_live = body.get("is_live")
     if req_live is not None:
         is_live = bool(req_live)
     else:
-        is_live = bool(body.get("mode") == "LIVE" or cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading"))
+        is_live = bool(active_broker == "KOTAK_NEO" or cfg.get("scalper_live_trading", True) or cfg.get("mode") == "LIVE")
 
     today_str = today()
     now_time = datetime.now(IST).strftime("%H:%M")
@@ -3665,6 +3666,138 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
 
 
 
+
+def dynamic_box_backtest_report() -> dict:
+    """Historical backtest performance for Dynamic Volatility Box Breakout."""
+    csv_path = ROOT / "performance" / "dynamic_box_trades.csv"
+    if not csv_path.exists():
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+    lot_size = 25
+    option_delta = 0.60
+    raw_trades = read_csv_rows(csv_path)
+    trades, equity, peak = [], 0.0, 0.0
+    daily_map = {}
+    monthly_map = {}
+    reasons_map = {}
+
+    for r in raw_trades:
+        try:
+            r_date = str(r.get("date", ""))
+            side = str(r.get("side", "CALL"))
+            entry_spot = round(float(r.get("entry_price") or 0.0), 2)
+            exit_spot = round(float(r.get("exit_price") or 0.0), 2)
+            pnl_pts = round(float(r.get("pnl_points") or 0.0), 2)
+            equity += pnl_pts
+            peak = max(peak, equity)
+            reason = str(r.get("exit_reason", ""))
+            sl_spot = round(float(r.get("sl") or 0.0), 2)
+            tgt_spot = round(float(r.get("target") or 0.0), 2)
+            b_high = round(float(r.get("box_high") or 0.0), 2)
+            b_low = round(float(r.get("box_low") or 0.0), 2)
+            b_med = round(float(r.get("box_median") or 0.0), 2)
+
+            trades.append({
+                "date": r_date,
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": reason,
+                "pnl_points": pnl_pts,
+                "equity": round(equity, 2),
+                "drawdown": round(equity - peak, 2),
+                "box_high": b_high,
+                "box_low": b_low,
+                "box_median": b_med
+            })
+
+            d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0})
+            d["points"] = round(d["points"] + pnl_pts, 2)
+            d["trades"] += 1
+
+            m = r_date[:7]
+            monthly_map[m] = round(monthly_map.get(m, 0.0) + pnl_pts, 2)
+
+            reasons_map[reason] = reasons_map.get(reason, 0) + 1
+        except Exception:
+            continue
+
+    n = len(trades)
+    wins = sum(1 for x in trades if x["pnl_points"] > 0)
+    sorted_daily = sorted(daily_map.values(), key=lambda x: x["date"])
+    sorted_monthly = [{"month": m, "points": pts} for m, pts in sorted(monthly_map.items())]
+    sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+    return {
+        "summary": {
+            "from": sorted_daily[0]["date"] if sorted_daily else "",
+            "to": sorted_daily[-1]["date"] if sorted_daily else "",
+            "days": len(sorted_daily),
+            "trades": n,
+            "wins": wins,
+            "losses": sum(1 for x in trades if x["pnl_points"] < 0),
+            "win_rate": round(100.0 * wins / n, 2) if n else 0.0,
+            "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+            "total_points": round(equity, 2),
+            "avg_points": round(equity / n, 2) if n else 0.0,
+            "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
+            "best": max((x["pnl_points"] for x in trades), default=0.0),
+            "worst": min((x["pnl_points"] for x in trades), default=0.0),
+            "lot_size": lot_size,
+            "option_delta": option_delta,
+        },
+        "trades": trades,
+        "daily": sorted_daily,
+        "monthly": sorted_monthly,
+        "exit_reasons": sorted_reasons,
+    }
+
+
+def dynamic_box_spot_trades_for_day(date: str) -> list:
+    """Historical spot trades for Dynamic Box Breakout on date."""
+    csv_path = ROOT / "performance" / "dynamic_box_trades.csv"
+    if not csv_path.exists():
+        return []
+    out = []
+    for r in read_csv_rows(csv_path):
+        if r.get("date") == date:
+            side = str(r.get("side", "CALL"))
+            entry_spot = float(r.get("entry_price") or 0.0)
+            exit_spot = float(r.get("exit_price") or 0.0)
+            sl_spot = float(r.get("sl") or 0.0)
+            tgt_spot = float(r.get("target") or 0.0)
+            out.append({
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": str(r.get("exit_reason", "")),
+                "pnl_points": float(r.get("pnl_points") or 0.0),
+            })
+    return out
+
+
+def dynamic_box_boxes_for_day(date: str) -> list:
+    """Historical compression boxes for Dynamic Box Breakout on date."""
+    json_path = ROOT / "performance" / "dynamic_box_boxes.json"
+    if not json_path.exists():
+        return []
+    try:
+        with open(json_path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+            return data.get(date, [])
+    except Exception:
+        return []
+
+
+
 def sr_breakout_backtest_report() -> dict:
     """Historical backtest performance for Support & Resistance Breakout Run Strategy."""
     csv_path = ROOT / "performance" / "sr_breakout_trades.csv"
@@ -4516,6 +4649,8 @@ class Handler(BaseHTTPRequestHandler):
                 rule_trades = nifty_key_levels_spot_trades_for_day(date)
             elif strategy_param in ("trend_runner", "trend_runner_10y", "10y", "vix_trend", "trend_expansion"):
                 rule_trades = vix_trend_runner_spot_trades_for_day(date)
+            elif strategy_param in ("dynamic_box", "box_breakout", "volatility_box"):
+                rule_trades = dynamic_box_spot_trades_for_day(date)
             elif strategy_param in ("sr_breakout", "swing_sr", "breakout"):
                 rule_trades = sr_breakout_spot_trades_for_day(date)
             else:
@@ -4539,6 +4674,7 @@ class Handler(BaseHTTPRequestHandler):
                 "forming": forming,
                 "setup": setup_info(df),
                 "trades": rule_trades,
+                "boxes": dynamic_box_boxes_for_day(date) if strategy_param in ("dynamic_box", "box_breakout", "volatility_box") else [],
                 "signals": read_csv_rows(LIVE_DIR / f"signals_{symbol.lower()}_{date}.csv") if (LIVE_DIR / f"signals_{symbol.lower()}_{date}.csv").exists() else (read_csv_rows(LIVE_DIR / f"signals_{date}.csv") if symbol == "NIFTY" else []),
                 "paper_trades": selected_paper_trades,
                 "option_trades": option_fills,
@@ -4578,6 +4714,16 @@ class Handler(BaseHTTPRequestHandler):
                 "trades": chart_trades,
                 "key_level_zone": active_key_level_zone(minute_candles, replay_trades, settings),
             })
+        elif url.path == "/api/hold-and-raise":
+            try:
+                import hold_and_raise_strategy
+                tf = q.get("tf", ["5m"])[0]
+                pyramid = q.get("pyramid", ["1"])[0] == "1"
+                min_df = candles(date, symbol="NIFTY")
+                res = hold_and_raise_strategy.analyze_hold_and_raise(min_df, timeframe=tf, target_date=date, enable_pyramiding=pyramid)
+                self._json(res)
+            except Exception as e:
+                self._json({"error": str(e), "candles": [], "boxes": [], "trades": [], "metrics": {}})
         elif url.path == "/api/signals":
             signals_list = read_csv_rows(LIVE_DIR / f"signals_{date}.csv")
             for sig_file in ("trend_runner_live_signals.csv", "trend_runner_sensex_live_signals.csv"):
@@ -4626,20 +4772,35 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
+            trade_mode = q.get("mode", [""])[0].strip().upper()
             all_trades = []
+            kotak_trades = []
             try:
-                all_trades.extend(list(kotak_live_trades()))
+                kotak_trades = list(kotak_live_trades())
+                all_trades.extend(kotak_trades)
             except Exception as exc:
                 print(f"Error reading Kotak live trades: {exc}")
 
-            all_trades.extend(trend_runner_live_paper_trades(date))
-            all_trades.extend(sensex_runner_live_paper_trades(date))
-            all_trades.extend(sensex_key_levels_live_paper_trades(date))
-            all_trades.extend(nifty_key_levels_live_paper_trades(date))
-            all_trades.extend(compression_scalp_live_paper_trades(date))
-            all_trades.extend(list(midpoint_option_trades(date)))
+            from broker import get_active_broker
+            is_kotak_active = (get_active_broker() == "KOTAK_NEO")
 
-            self._json(all_trades)
+            paper_trades = []
+            paper_trades.extend(trend_runner_live_paper_trades(date))
+            paper_trades.extend(sensex_runner_live_paper_trades(date))
+            paper_trades.extend(sensex_key_levels_live_paper_trades(date))
+            paper_trades.extend(nifty_key_levels_live_paper_trades(date))
+            # Only include simulated scalper paper rows if Kotak is not active or has no trades
+            if not is_kotak_active or not kotak_trades:
+                paper_trades.extend(compression_scalp_live_paper_trades(date))
+            paper_trades.extend(list(midpoint_option_trades(date)))
+
+            if trade_mode == "LIVE":
+                self._json(kotak_trades)
+            elif trade_mode == "PAPER":
+                self._json(paper_trades)
+            else:
+                all_trades.extend(paper_trades)
+                self._json(all_trades)
         elif url.path == "/api/key-level-option-trades":
             self._json(build_paper_report(key_level_option_trades(date))["trades"])
         elif url.path == "/api/key-level-option-paper":
@@ -4693,6 +4854,8 @@ class Handler(BaseHTTPRequestHandler):
             strategy = q.get("strategy", ["trend_runner_10y"])[0].lower()
             if strategy in ("", "trend_runner_10y", "10y", "10year", "trend_10y", "trend_runner", "vix_trend", "trend_expansion"):
                 self._json(nifty_10y_backtest_report())
+            elif strategy in ("dynamic_box", "box_breakout", "volatility_box", "dynamic_volatility_box"):
+                self._json(dynamic_box_backtest_report())
             elif strategy in ("sensex_runner", "sensex", "sensex_trend"):
                 self._json(sensex_runner_backtest_report())
             elif strategy in ("sensex_key_levels", "sensex_levels", "key_levels_sensex"):
