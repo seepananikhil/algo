@@ -69,6 +69,8 @@ def available_equity_funds(response: dict | None) -> float:
 
 
 ROOT = Path(__file__).resolve().parent
+TMP_DIR = ROOT / ".tmp"
+TMP_DIR.mkdir(parents=True, exist_ok=True)
 LIVE_DIR = ROOT / "captured_data" / "fyers" / "live"
 CONFIG_FILE = ROOT / "fyers_config.json"
 TOKEN_FILE = ROOT / "captured_data" / "kotak" / "kotak_token.json"
@@ -1427,8 +1429,75 @@ def update_tp_tl(body: dict) -> dict:
         tl_pts = 0.0
     entry_price = float(body.get("entry_price") or 0.0)
     qty = int(body.get("qty") or 0)
+
+    clean_sym = clean_option_symbol(symbol)
+    raw_sym = symbol.replace("NSE:", "").replace("BSE:", "").strip()
+
+    # Save to local targets tracker
     res = set_scalp_target(symbol, tp_pts=tp_pts, tl_pts=tl_pts, entry_price=entry_price, qty=qty)
-    return {"ok": True, "message": f"Updated TP (+{tp_pts} pts) and TL (-{tl_pts} pts) for {symbol}", **res}
+
+    # If in LIVE mode with Kotak Neo, place or update existing Stop Loss order in Kotak Neo!
+    cfg = read_config()
+    is_live = bool(cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading"))
+    kotak_msg = ""
+    if is_live and tl_pts > 0:
+        try:
+            from kotak_orders import get_kotak_client, modify_kotak_order, place_kotak_sl_order, cancel_kotak_order
+            client = get_kotak_client()
+            if client:
+                from broker import get_positions
+                pos_data = get_positions()
+                matched_pos = None
+                for pos in pos_data.get("open_positions", []):
+                    p_sym = str(pos.get("symbol", "")).strip()
+                    if p_sym == raw_sym or p_sym == clean_sym or raw_sym in p_sym or clean_sym in p_sym:
+                        matched_pos = pos
+                        raw_sym = p_sym
+                        break
+
+                if matched_pos:
+                    pos_qty = abs(int(matched_pos.get("net_qty", qty or 1)))
+                    pos_entry = float(matched_pos.get("buy_avg", entry_price or 0.0))
+                    prod = str(matched_pos.get("product") or "NRML")
+                    ex_seg = str(matched_pos.get("exchange") or ("bse_fo" if "SENSEX" in raw_sym else "nse_fo"))
+
+                    sl_trg = round(max(0.05, pos_entry - tl_pts), 1)
+                    sl_limit = round(max(0.05, sl_trg - 2.0), 1)
+
+                    # Look for existing open pending SELL order in Kotak order book
+                    ord_rep = client.order_report()
+                    existing_sl_order = None
+                    if isinstance(ord_rep, dict) and ord_rep.get("data"):
+                        for o in ord_rep["data"]:
+                            o_sym = str(o.get("trdSym", ""))
+                            o_st = str(o.get("ordSt", "")).lower()
+                            o_side = str(o.get("trnsTp", "")).upper()
+                            if (o_sym == raw_sym or raw_sym in o_sym) and o_side == "S" and o_st in ("open", "trigger pending", "pending", "trig_pend"):
+                                existing_sl_order = o
+                                break
+
+                    if existing_sl_order:
+                        ord_id = str(existing_sl_order.get("nOrdNo"))
+                        modify_kotak_order(order_id=ord_id, price=sl_limit, trigger_price=sl_trg, qty=pos_qty, order_type="SL")
+                        kotak_msg = f" (Updated Kotak SL order #{ord_id} @ ₹{sl_trg})"
+                        set_scalp_target(raw_sym, tp_pts=tp_pts, tl_pts=tl_pts, entry_price=pos_entry, qty=pos_qty)
+                    else:
+                        ord_id, _ = place_kotak_sl_order(
+                            symbol=raw_sym,
+                            qty=pos_qty,
+                            side=-1,
+                            trigger_price=sl_trg,
+                            price=sl_limit,
+                            product=prod,
+                            exchange_segment=ex_seg,
+                        )
+                        kotak_msg = f" (Placed Kotak SL order #{ord_id} @ ₹{sl_trg})"
+                        set_scalp_target(raw_sym, tp_pts=tp_pts, tl_pts=tl_pts, entry_price=pos_entry, qty=pos_qty)
+        except Exception as exc:
+            print(f"Error updating Kotak SL order: {exc}")
+            kotak_msg = f" (Kotak SL: {exc})"
+
+    return {"ok": True, "message": f"Updated TP (+{tp_pts} pts) and TL (-{tl_pts} pts) for {symbol}{kotak_msg}", **res}
 
 
 def scalp_tp_tl_sentinel_loop() -> None:
@@ -1594,7 +1663,13 @@ def submit_scalp_order(body: dict) -> dict:
             raw_sym = str(res.get("symbol", "")).strip()
             fill_px = float(res.get("fill_price") or 0.0)
             if sl_pts > 0 or tgt_pts > 0:
-                set_scalp_target(raw_sym, tp_pts=tgt_pts, tl_pts=sl_pts, entry_price=fill_px, qty=res.get("qty", lots * lot_size))
+                update_tp_tl({
+                    "symbol": raw_sym,
+                    "tp_pts": tgt_pts,
+                    "tl_pts": sl_pts,
+                    "entry_price": fill_px,
+                    "qty": res.get("qty", lots * lot_size),
+                })
         return res
 
     # Paper Scalp Execution
@@ -1675,7 +1750,7 @@ def submit_manual_order(body: dict) -> dict:
         from kotak_orders import place_kotak_order
         raw_symbol = contract["symbol"].replace("NSE:", "").replace("BSE:", "").strip()
         side_val = 1 if action == "BUY" else -1
-        product = str(body.get("product", "MIS"))
+        product = str(body.get("product", "NRML"))
         ex_seg = "bse_fo" if ("SENSEX" in raw_symbol.upper() or contract.get("index_symbol") == "SENSEX") else "nse_fo"
         try:
             order_id, fill_price = place_kotak_order(symbol=raw_symbol, qty=quantity, side=side_val, product=product, exchange_segment=ex_seg)
@@ -1792,6 +1867,18 @@ def exit_position(body: dict) -> dict:
         order_id = str(resp.get("nOrdNo") or resp.get("order_id") or resp.get("result", ""))
         if not order_id:
             raise ManualTradeError("Kotak Neo did not return an order ID for the exit order.")
+
+        # Cancel any pending SL orders for this symbol so they don't trigger later
+        try:
+            ord_rep = client.order_report()
+            if isinstance(ord_rep, dict) and ord_rep.get("data"):
+                for o in ord_rep["data"]:
+                    o_sym = str(o.get("trdSym", ""))
+                    o_st = str(o.get("ordSt", "")).lower()
+                    if (o_sym == clean_sym or clean_sym in o_sym) and o_st in ("open", "trigger pending", "pending", "trig_pend"):
+                        client.cancel_order(order_id=str(o.get("nOrdNo")))
+        except Exception as exc:
+            print(f"Error cancelling pending SL orders on exit: {exc}")
 
         # Check order confirmation / rejection asynchronously with short polling (max ~2 seconds)
         for _ in range(5):
