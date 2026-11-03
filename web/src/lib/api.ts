@@ -592,13 +592,29 @@ export function usePoll<T>(url: string | null, intervalMs = 0) {
 const rs = new Intl.NumberFormat("en-IN", { style: "currency", currency: "INR", maximumFractionDigits: 0 })
 const num = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 2, minimumFractionDigits: 2 })
 
-export const fmtRs = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "—" : rs.format(n))
-export const fmtPts = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "—" : `${n >= 0 ? "+" : ""}${num.format(n)}`)
-export const fmtNum = (n: number | null | undefined) => (n == null || Number.isNaN(n) ? "—" : num.format(n))
+export const fmtRs = (n: number | string | null | undefined) => {
+  if (n == null) return "—"
+  const val = typeof n === "number" ? n : Number(n)
+  return Number.isNaN(val) || !Number.isFinite(val) ? "—" : rs.format(val)
+}
 
-export const pnlClass = (n: number | null | undefined) => {
-  if (n == null || Number.isNaN(n) || n === 0) return "text-muted-foreground"
-  return n > 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-rose-600 dark:text-rose-400 font-semibold"
+export const fmtPts = (n: number | string | null | undefined) => {
+  if (n == null) return "—"
+  const val = typeof n === "number" ? n : Number(n)
+  return Number.isNaN(val) || !Number.isFinite(val) ? "—" : `${val >= 0 ? "+" : ""}${num.format(val)}`
+}
+
+export const fmtNum = (n: number | string | null | undefined) => {
+  if (n == null) return "—"
+  const val = typeof n === "number" ? n : Number(n)
+  return Number.isNaN(val) || !Number.isFinite(val) ? "—" : num.format(val)
+}
+
+export const pnlClass = (n: number | string | null | undefined) => {
+  if (n == null) return "text-muted-foreground"
+  const val = typeof n === "number" ? n : Number(n)
+  if (Number.isNaN(val) || val === 0) return "text-muted-foreground"
+  return val > 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-rose-600 dark:text-rose-400 font-semibold"
 }
 
 export const prettyReason = (r: string) =>

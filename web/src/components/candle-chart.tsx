@@ -234,15 +234,21 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     lines.current.forEach((l) => s.removePriceLine(l))
     lines.current = []
     const add = (
-      price: number | undefined,
+      price: number | string | undefined | null,
       color: string,
       style = LineStyle.Dashed,
       axisLabel = true,
       title = "",
       lineWidth: 1 | 2 | 3 | 4 = 1,
     ) => {
-      if (price == null || Number.isNaN(price)) return
-      lines.current.push(s.createPriceLine({ price, color, title, lineWidth, lineStyle: style, axisLabelVisible: axisLabel }))
+      if (price == null) return
+      const p = typeof price === "number" ? price : Number(price)
+      if (Number.isNaN(p) || !Number.isFinite(p) || p <= 0) return
+      try {
+        lines.current.push(s.createPriceLine({ price: p, color, title, lineWidth, lineStyle: style, axisLabelVisible: axisLabel }))
+      } catch (err) {
+        console.warn("createPriceLine error:", err)
+      }
     }
 
     // Clean subtle reference lines without axis badge clutter
@@ -331,12 +337,14 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     if (setup?.armed) add(setup.armed.level, "#c084fc", LineStyle.Solid, true, "ARMED", 2)
     if (showTradeLevels) {
       for (const trade of trades) {
-        // Only add SL / Target if it's within the candlestick price range (prevents scale distortion from option premiums)
-        if (trade.sl != null && !Number.isNaN(trade.sl) && trade.sl >= sessionLow * 0.9 && trade.sl <= sessionHigh * 1.1) {
-          add(trade.sl, "#ef4444", LineStyle.Dashed, true, "SL")
+        if (!trade) continue
+        const slNum = Number(trade.sl)
+        const tgtNum = Number(trade.target)
+        if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 && slNum >= sessionLow * 0.9 && slNum <= sessionHigh * 1.1) {
+          add(slNum, "#ef4444", LineStyle.Dashed, true, "SL")
         }
-        if (trade.target != null && !Number.isNaN(trade.target) && trade.target >= sessionLow * 0.9 && trade.target <= sessionHigh * 1.1) {
-          add(trade.target, "#10b981", LineStyle.Dashed, true, "TGT")
+        if (!Number.isNaN(tgtNum) && Number.isFinite(tgtNum) && tgtNum > 0 && tgtNum >= sessionLow * 0.9 && tgtNum <= sessionHigh * 1.1) {
+          add(tgtNum, "#10b981", LineStyle.Dashed, true, "TGT")
         }
       }
     }

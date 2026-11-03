@@ -2467,8 +2467,7 @@ def compression_scalp_live_paper_trades(date: str | None = None) -> list:
 
     cfg = read_config()
     lots = max(1, int(cfg.get("scalper_lots", 1)))
-    lot_size = 65
-    qty = lots * lot_size
+    st = status()
 
     for row in read_csv_rows(live_paper_file):
         r_date = row.get("date", "")
@@ -2481,20 +2480,58 @@ def compression_scalp_live_paper_trades(date: str | None = None) -> list:
             pnl_pts = float(row.get("pnl_points") or row.get("nifty_points") or 0.0)
             strike = int(round(entry_spot / 50.0) * 50)
             opt_name = row.get("option") or f"NIFTY {strike} {'CE' if side == 'CALL' else 'PE'}"
-            buy_px = float(row.get("buy_price") or 105.0)
-            sell_px = float(row.get("sell_price") or (buy_px + pnl_pts * 0.5))
+            sym_name = "SENSEX" if "SENSEX" in str(opt_name).upper() else "NIFTY"
+            lot_size = 20 if sym_name == "SENSEX" else 65
+            try:
+                qty = int(float(row.get("qty") or (lots * lot_size)))
+            except (ValueError, TypeError):
+                qty = lots * lot_size
+
+            buy_px = float(row.get("buy_price") or (105.0 if sym_name == "NIFTY" else 295.0))
             buy_val = round(buy_px * qty, 2)
-            sell_val = round(sell_px * qty, 2)
-            pnl_rs = round(float(row.get("pnl_rs") or (sell_val - buy_val)), 2)
-            charges = float(row.get("charges_rs") or est_charges(buy_val, sell_val))
-            net_rs = float(row.get("net_rs") or (pnl_rs - charges))
+            exit_tm = str(row.get("exit_time") or "").strip()
+            is_open = not bool(exit_tm and exit_tm.lower() not in ("", "open", "none", "nan"))
+
+            if is_open and entry_spot > 0:
+                cur_spot = (st.get("sensex_last_tick") or {}).get("ltp") if sym_name == "SENSEX" else (st.get("last_tick") or {}).get("ltp")
+                if cur_spot and float(cur_spot) > 0:
+                    pts_diff = (float(cur_spot) - entry_spot) if side == "CALL" else (entry_spot - float(cur_spot))
+                    est_opt_px = max(1.0, buy_px + pts_diff * 0.5)
+                    sell_px = round(est_opt_px, 2)
+                    sell_val = round(sell_px * qty, 2)
+                    pnl_rs = round((sell_px - buy_px) * qty, 2)
+                    pnl_pts = round(pts_diff, 2)
+                    charges = 0.0
+                    net_rs = pnl_rs
+                else:
+                    sell_px = buy_px
+                    sell_val = buy_val
+                    pnl_rs = 0.0
+                    charges = 0.0
+                    net_rs = 0.0
+            else:
+                sell_px = float(row.get("sell_price") or (buy_px + pnl_pts * 0.5))
+                sell_val = round(sell_px * qty, 2)
+                pnl_rs = round(float(row.get("pnl_rs") or (sell_val - buy_val)), 2)
+                charges = float(row.get("charges_rs") or est_charges(buy_val, sell_val))
+                net_rs = float(row.get("net_rs") or (pnl_rs - charges))
 
             sl_pts = float(cfg.get("scalper_sl_pts", 18.0))
             tgt_pts = float(cfg.get("scalper_target_pts", 35.0))
-            sl_spot = float(row.get("sl") or round(entry_spot - sl_pts if side == "CALL" else entry_spot + sl_pts, 2))
-            tgt_spot = float(row.get("target") or round(entry_spot + tgt_pts if side == "CALL" else entry_spot - tgt_pts, 2))
-            is_open = not bool(row.get("exit_time") and str(row.get("exit_time")).strip() not in ("", "open"))
-            sym_name = "SENSEX" if "SENSEX" in str(opt_name).upper() else "NIFTY"
+
+            sl_val = row.get("sl")
+            try:
+                sl_f = float(sl_val) if sl_val not in (None, "", "nan", "null") else None
+                sl_spot = sl_f if (sl_f is not None and not math.isnan(sl_f) and not math.isinf(sl_f)) else (round(entry_spot - sl_pts if side == "CALL" else entry_spot + sl_pts, 2) if entry_spot > 0 else None)
+            except (ValueError, TypeError):
+                sl_spot = round(entry_spot - sl_pts if side == "CALL" else entry_spot + sl_pts, 2) if entry_spot > 0 else None
+
+            tgt_val = row.get("target")
+            try:
+                tgt_f = float(tgt_val) if tgt_val not in (None, "", "nan", "null") else None
+                tgt_spot = tgt_f if (tgt_f is not None and not math.isnan(tgt_f) and not math.isinf(tgt_f)) else (round(entry_spot + tgt_pts if side == "CALL" else entry_spot - tgt_pts, 2) if entry_spot > 0 else None)
+            except (ValueError, TypeError):
+                tgt_spot = round(entry_spot + tgt_pts if side == "CALL" else entry_spot - tgt_pts, 2) if entry_spot > 0 else None
 
             out.append({
                 "date": r_date,
@@ -2505,13 +2542,14 @@ def compression_scalp_live_paper_trades(date: str | None = None) -> list:
                 "nifty_in": entry_spot,
                 "buy_price": buy_px,
                 "buy_value_rs": buy_val,
-                "exit": str(row.get("exit_time") or row.get("exit", ""))[:5],
+                "exit": "" if is_open else str(row.get("exit_time") or row.get("exit", ""))[:5],
                 "nifty_out": exit_spot,
                 "sell_price": sell_px,
                 "sell_value_rs": sell_val,
                 "pnl_rs": pnl_rs,
+                "option_pnl_rs": pnl_rs,
                 "nifty_points": pnl_pts,
-                "exit_reason": row.get("exit_reason", ""),
+                "exit_reason": "open" if is_open else row.get("exit_reason", "closed"),
                 "mode": "MICRO SCALPER PAPER",
                 "spot_at_entry": entry_spot,
                 "trigger_label": "Micro Scalp · paper",
@@ -2523,7 +2561,8 @@ def compression_scalp_live_paper_trades(date: str | None = None) -> list:
                 "symbol": sym_name,
                 "is_open": is_open,
             })
-        except Exception:
+        except Exception as exc:
+            print(f"Error processing paper trade row: {exc}")
             continue
     return out
 
@@ -4305,9 +4344,21 @@ def verify_session_token(token: str) -> bool:
     return hmac.compare_digest(token, expected)
 
 
+def sanitize_json(obj):
+    if isinstance(obj, float):
+        if math.isnan(obj) or math.isinf(obj):
+            return None
+        return obj
+    elif isinstance(obj, dict):
+        return {k: sanitize_json(v) for k, v in obj.items()}
+    elif isinstance(obj, (list, tuple)):
+        return [sanitize_json(v) for v in obj]
+    return obj
+
+
 class Handler(BaseHTTPRequestHandler):
     def _json(self, data, code: int = 200) -> None:
-        body = json.dumps(data, default=str).encode("utf-8")
+        body = json.dumps(sanitize_json(data), default=str).encode("utf-8")
         try:
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
@@ -4554,12 +4605,6 @@ class Handler(BaseHTTPRequestHandler):
             all_trades.extend(nifty_key_levels_live_paper_trades(date))
             all_trades.extend(compression_scalp_live_paper_trades(date))
             all_trades.extend(list(midpoint_option_trades(date)))
-
-            p_scalp = LIVE_DIR / "scalper_live_paper.csv"
-            if p_scalp.exists():
-                for r in read_csv_rows(p_scalp):
-                    if not date or r.get("date") == date:
-                        all_trades.append(r)
 
             self._json(all_trades)
         elif url.path == "/api/key-level-option-trades":

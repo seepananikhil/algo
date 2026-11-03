@@ -42,16 +42,23 @@ import {
 import { useStatus } from "@/lib/status"
 
 function toRuleTrade(trade: OptionTrade): RuleTrade {
+  const slNum = Number(trade.sl)
+  const tgtNum = Number(trade.target)
+  const entryPx = Number(trade.spot_at_entry || trade.nifty_in || trade.buy_price) || 0
+  const exitPx = Number(trade.nifty_out || trade.sell_price) || 0
+  const pnlPts = Number(trade.nifty_points ?? trade.pnl_points ?? 0) || 0
+  const entryStr = String(trade.entry || (trade as any).entry_time || "09:15").slice(0, 5)
+  const exitStr = trade.exit ? String(trade.exit).slice(0, 5) : ""
   return {
     side: trade.side || "CALL",
-    entry: trade.entry ? trade.entry.slice(0, 5) : "09:15",
-    entry_price: trade.spot_at_entry || trade.nifty_in || trade.buy_price || 0,
-    sl: trade.sl != null && !Number.isNaN(trade.sl) ? trade.sl : Number.NaN,
-    target: trade.target != null && !Number.isNaN(trade.target) ? trade.target : Number.NaN,
-    exit: trade.exit ? trade.exit.slice(0, 5) : "",
-    exit_price: trade.nifty_out || trade.sell_price || 0,
+    entry: entryStr,
+    entry_price: entryPx,
+    sl: !Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 ? slNum : Number.NaN,
+    target: !Number.isNaN(tgtNum) && Number.isFinite(tgtNum) && tgtNum > 0 ? tgtNum : Number.NaN,
+    exit: exitStr,
+    exit_price: exitPx,
     reason: trade.exit_reason || (trade.is_open ? "open" : ""),
-    pnl_points: trade.nifty_points ?? trade.pnl_points ?? 0,
+    pnl_points: pnlPts,
     setup: trade.trigger_label || trade.strategy,
   }
 }
@@ -197,16 +204,19 @@ export function LivePage() {
     let runningPnl = 0
     let investedCapital = 0
     openTrades.forEach((t) => {
-      const pnl = t.option_pnl_rs ?? t.pnl_rs ?? (t.futures_pnl_rs ?? 0)
+      const pnl = Number(t.option_pnl_rs ?? t.pnl_rs ?? (t.futures_pnl_rs ?? 0)) || 0
       runningPnl += pnl
-      investedCapital += t.buy_value_rs || (t.buy_price ? t.buy_price * (t.qty || 1) : 0)
+      const buyVal = Number(t.buy_value_rs)
+      const buyPx = Number(t.buy_price)
+      const qty = Number(t.qty) || 1
+      investedCapital += !Number.isNaN(buyVal) && buyVal > 0 ? buyVal : (!Number.isNaN(buyPx) && buyPx > 0 ? buyPx * qty : 0)
     })
 
     let realizedPnl = 0
     let winners = 0
     let losers = 0
     closedTrades.forEach((t) => {
-      const pnl = t.net_rs ?? t.pnl_rs ?? 0
+      const pnl = Number(t.net_rs ?? t.pnl_rs ?? 0) || 0
       realizedPnl += pnl
       if (pnl > 0) winners++
       else if (pnl < 0) losers++
@@ -1102,7 +1112,7 @@ export function LivePage() {
                         {activeSpotTrade.option || activeSpotTrade.symbol}
                       </span>
                       <span className="text-[10px] text-muted-foreground font-mono">
-                        ₹{(activeSpotTrade.buy_price || activeSpotTrade.nifty_in || 0).toFixed(1)} ({activeSpotTrade.qty}Q)
+                        ₹{Number(activeSpotTrade.buy_price || activeSpotTrade.nifty_in || 0).toFixed(1)} ({activeSpotTrade.qty}Q)
                       </span>
                     </div>
                     <span className={`font-mono font-bold text-xs ${pnlClass(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}`}>
@@ -1378,19 +1388,19 @@ export function LivePage() {
                             <div>
                               <span className="text-muted-foreground block text-[9px] uppercase">Entry</span>
                               <span className="font-bold text-foreground">
-                                {(trade.spot_at_entry || trade.nifty_in || trade.buy_price)?.toFixed(1)}
+                                {Number(trade.spot_at_entry || trade.nifty_in || trade.buy_price || 0).toFixed(1)}
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block text-[9px] uppercase">SL / TL</span>
                               <span className="font-bold text-rose-600 dark:text-rose-400">
-                                {trade.sl != null && !Number.isNaN(trade.sl) && trade.sl > 0 ? trade.sl.toFixed(1) : (trade.tl_pts ? `-${trade.tl_pts}pt` : "-")}
+                                {trade.sl != null && !Number.isNaN(Number(trade.sl)) && Number(trade.sl) > 0 ? Number(trade.sl).toFixed(1) : (trade.tl_pts ? `-${trade.tl_pts}pt` : "-")}
                               </span>
                             </div>
                             <div>
                               <span className="text-muted-foreground block text-[9px] uppercase">Target / TP</span>
                               <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                {trade.target != null && !Number.isNaN(trade.target) && trade.target > 0 ? trade.target.toFixed(1) : (trade.tp_pts ? `+${trade.tp_pts}pt` : "-")}
+                                {trade.target != null && !Number.isNaN(Number(trade.target)) && Number(trade.target) > 0 ? Number(trade.target).toFixed(1) : (trade.tp_pts ? `+${trade.tp_pts}pt` : "-")}
                               </span>
                             </div>
                           </div>
@@ -1629,7 +1639,7 @@ export function LivePage() {
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-muted-foreground">Entry Price</span>
-                <span className="font-mono font-bold text-foreground">₹{exitTarget.buy_price?.toFixed(2) || "-"}</span>
+                <span className="font-mono font-bold text-foreground">₹{exitTarget.buy_price != null ? Number(exitTarget.buy_price).toFixed(2) : "-"}</span>
               </div>
               <div className="flex items-center justify-between border-t border-border pt-1.5">
                 <span className="text-muted-foreground">Current P&L</span>
