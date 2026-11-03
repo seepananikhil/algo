@@ -80,31 +80,7 @@ export function LivePage() {
   const [scalpSpot, setScalpSpot] = useState<"NIFTY" | "SENSEX">("NIFTY")
   const [scalpLots, setScalpLots] = useState(1)
   const [scalpOptionType, setScalpOptionType] = useState<"CE" | "PE">("CE")
-  const [scalpLiveMode, setScalpLiveMode] = useState<boolean>(() => {
-    try {
-      return localStorage.getItem("scalp_live_mode") !== "false"
-    } catch {
-      return true
-    }
-  })
 
-  const handleToggleScalpLiveMode = () => {
-    setScalpLiveMode((prev) => {
-      const next = !prev
-      try {
-        localStorage.setItem("scalp_live_mode", String(next))
-      } catch {}
-      return next
-    })
-  }
-
-  useEffect(() => {
-    if (status?.scalper?.mode) {
-      setScalpLiveMode(status.scalper.mode === "LIVE")
-    } else if (status?.broker === "KOTAK_NEO") {
-      setScalpLiveMode(true)
-    }
-  }, [status?.broker, status?.scalper?.mode])
   const [scalpTp, setScalpTp] = useState<number>(0)
   const [scalpTs, setScalpTs] = useState<number>(0)
   const [scalpBusy, setScalpBusy] = useState(false)
@@ -365,7 +341,7 @@ export function LivePage() {
         strike: activeStrike,
         tp: scalpTp,
         ts: scalpTs,
-        is_live: scalpLiveMode,
+        is_live: true,
       })
       toast.success(res.message || `${action} ${optionType} Scalp executed`)
       liveTradesPoll.reload()
@@ -904,18 +880,12 @@ export function LivePage() {
                 <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
                 <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                 <span className="font-bold text-[11px] tracking-wider uppercase text-foreground">Scalper</span>
-                <button
-                  type="button"
-                  onClick={handleToggleScalpLiveMode}
-                  className={`px-1.5 py-0.2 text-[9px] font-extrabold rounded border transition-colors cursor-pointer ${
-                    scalpLiveMode
-                      ? "bg-emerald-500/20 border-emerald-500/50 text-emerald-600 dark:text-emerald-400"
-                      : "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400"
-                  }`}
-                  title={scalpLiveMode ? "LIVE Mode: Orders placed directly on Kotak Neo broker (Zero brokerage). Click to switch to Paper." : "PAPER Mode: Simulated trades only. Click to switch to Live."}
+                <span
+                  className="px-1.5 py-0.2 text-[9px] font-extrabold rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 tracking-wide uppercase"
+                  title="All scalper orders are executed strictly as LIVE real orders on Kotak Neo (Zero Brokerage)."
                 >
-                  {scalpLiveMode ? "LIVE (Kotak)" : "PAPER"}
-                </button>
+                  LIVE (Kotak)
+                </span>
                 <span className="text-[10px] font-mono font-bold text-foreground bg-muted px-1.5 py-0.2 rounded border border-border">
                   {scalpSpot} {activeStrike} {scalpOptionType}
                 </span>
@@ -1227,7 +1197,7 @@ export function LivePage() {
                   <span>
                     {status?.risk_guardian?.is_locked
                       ? "BUY LOCKED"
-                      : `BUY ${scalpOptionType} ${scalpLiveMode ? "(LIVE)" : "(PAPER)"}`}
+                      : `BUY ${scalpOptionType} (LIVE)`}
                   </span>
                 </Button>
 
@@ -1245,7 +1215,7 @@ export function LivePage() {
                   title={activeSpotTrade ? "Square Off Active Position" : `Sell ${scalpSpot} ${activeStrike} ${scalpOptionType}`}
                 >
                   {scalpBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                  <span>{activeSpotTrade ? "EXIT" : `SELL ${scalpOptionType}`}</span>
+                  <span>{activeSpotTrade ? "EXIT (LIVE)" : `SELL ${scalpOptionType} (LIVE)`}</span>
                 </Button>
               </div>
 

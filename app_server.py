@@ -1561,59 +1561,15 @@ def scalp_tp_tl_sentinel_loop() -> None:
 
 
 def submit_scalp_order(body: dict) -> dict:
+    """Execute scalper orders strictly as LIVE market trades via broker (Kotak Neo - Zero Brokerage). Never paper."""
     symbol = str(body.get("symbol", "NIFTY")).upper()
     action = str(body.get("action", "BUY")).upper()
     option_type = str(body.get("option_type", "CE")).upper()
     lots = max(1, int(body.get("lots", 1)))
 
-    cfg = read_config()
-    from broker import get_active_broker
-    active_broker = get_active_broker()
-    req_live = body.get("is_live")
-    if req_live is not None:
-        is_live = bool(req_live)
-    else:
-        is_live = bool(active_broker == "KOTAK_NEO" or cfg.get("scalper_live_trading", True) or cfg.get("mode") == "LIVE")
-
-    today_str = today()
-    now_time = datetime.now(IST).strftime("%H:%M")
-    live_paper_file = LIVE_DIR / "scalper_live_paper.csv"
-
-    # Action EXIT or SELL
+    # Action EXIT or SELL -> Always execute real market exit directly on broker!
     if action in ("EXIT", "CLOSE", "SELL"):
-        target_opt = str(body.get("target_option", "")).strip()
-        if is_live:
-            return exit_position(body)
-
-        closed = False
-        target_files = [
-            live_paper_file,
-            ROOT / "performance" / "nifty_key_levels_paper_trades.csv",
-            ROOT / "performance" / "trend_runner_sensex_paper_trades.csv",
-        ]
-        for pfile in target_files:
-            if not pfile.exists():
-                continue
-            rows = read_csv_rows(pfile)
-            changed = False
-            for r in rows:
-                r_opt = str(r.get("option", ""))
-                r_sym = str(r.get("symbol", ""))
-                match = (target_opt and target_opt in r_opt) or (not target_opt and symbol in (r_sym or r_opt))
-                if match and (not r.get("exit_time") or str(r.get("exit_time")).strip() in ("", "open")):
-                    r["exit_time"] = now_time
-                    r["exit_reason"] = "manual_scalp_exit"
-                    r["exit_price"] = r.get("entry_price", 0)
-                    changed = True
-                    closed = True
-            if changed and rows:
-                import csv
-                with pfile.open("w", newline="", encoding="utf-8") as f:
-                    writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
-                    writer.writeheader()
-                    writer.writerows(rows)
-
-        return {"ok": True, "message": f"{target_opt or symbol} position squared off successfully", "closed": closed}
+        return exit_position(body)
 
     # Check Risk Guardian and Kill Switch before placing buy orders
     from risk_guardian import is_risk_locked
@@ -1664,79 +1620,37 @@ def submit_scalp_order(body: dict) -> dict:
         except Exception as exc:
             print(f"Error resolving nearest expiry: {exc}")
 
-    # Action BUY
-    if is_live:
-        body["confirm"] = "CONFIRM"
-        body["order_type"] = "MARKET"
-        body["lots"] = lots
-        body["index_symbol"] = symbol
-        body["strike"] = atm_strike
-        body["expiry"] = req_expiry
-        if sl_pts > 0:
-            body["sl_pts"] = sl_pts
-        if tgt_pts > 0:
-            body["target_pts"] = tgt_pts
-        res = submit_manual_order(body)
-        if not isinstance(res, dict) or not res.get("ok"):
-            raise ManualTradeError(f"Broker order was not successful: {res}")
+    # Action BUY -> ALWAYS strictly LIVE order on broker (Kotak Neo - Zero Brokerage)
+    body["confirm"] = "CONFIRM"
+    body["order_type"] = "MARKET"
+    body["lots"] = lots
+    body["index_symbol"] = symbol
+    body["strike"] = atm_strike
+    body["expiry"] = req_expiry
+    if sl_pts > 0:
+        body["sl_pts"] = sl_pts
+    if tgt_pts > 0:
+        body["target_pts"] = tgt_pts
 
-        raw_sym = str(res.get("symbol", "")).strip()
-        fill_px = float(res.get("fill_price") or 0.0)
-        if sl_pts > 0 or tgt_pts > 0:
-            try:
-                update_tp_tl({
-                    "symbol": raw_sym,
-                    "tp_pts": tgt_pts,
-                    "tl_pts": sl_pts,
-                    "entry_price": fill_px,
-                    "qty": res.get("qty", lots * lot_size),
-                })
-            except Exception as exc:
-                print(f"Warning: could not set initial Kotak SL/TP: {exc}")
-        return res
+    res = submit_manual_order(body)
+    if not isinstance(res, dict) or not res.get("ok"):
+        raise ManualTradeError(f"Broker live order failed: {res}")
 
-    # Paper Scalp Execution
-    opt_name = f"{symbol} {atm_strike} {option_type}"
-    qty = lots * lot_size
-    buy_px = 135.0 if "NIFTY" in symbol else 295.0
-    buy_val = round(buy_px * qty, 2)
-
-    side_dir = "CALL" if option_type == "CE" else "PUT"
-    sl_spot = round(spot - sl_pts if side_dir == "CALL" else spot + sl_pts, 2) if sl_pts > 0 else ""
-    tgt_spot = round(spot + tgt_pts if side_dir == "CALL" else spot - tgt_pts, 2) if tgt_pts > 0 else ""
-
-    trade_row = {
-        "date": today_str,
-        "entry_time": now_time,
-        "side": side_dir,
-        "entry_price": spot,
-        "option": opt_name,
-        "qty": qty,
-        "buy_price": buy_px,
-        "buy_value_rs": buy_val,
-        "exit_time": "",
-        "exit_price": 0.0,
-        "sell_price": 0.0,
-        "sell_value_rs": 0.0,
-        "pnl_rs": 0.0,
-        "pnl_points": 0.0,
-        "charges_rs": 0.0,
-        "net_rs": 0.0,
-        "exit_reason": "open",
-        "bars_held": 0,
-        "sl": sl_spot,
-        "target": tgt_spot,
-    }
-    new_df = pd.DataFrame([trade_row])
-    if live_paper_file.exists():
-        new_df.to_csv(live_paper_file, mode="a", header=False, index=False)
-    else:
-        new_df.to_csv(live_paper_file, index=False)
-
+    raw_sym = str(res.get("symbol", "")).strip()
+    fill_px = float(res.get("fill_price") or 0.0)
     if sl_pts > 0 or tgt_pts > 0:
-        set_scalp_target(opt_name, tp_pts=tgt_pts, tl_pts=sl_pts, entry_price=buy_px, qty=qty)
-    print(f"[{datetime.now(IST):%H:%M:%S}] [Manual Scalp Order] Placed {opt_name} @ {spot} ({lots} Lot/ {qty} Qty)")
-    return {"ok": True, "message": f"Scalp order placed: {opt_name} ({lots} Lot)", "trade": trade_row}
+        try:
+            update_tp_tl({
+                "symbol": raw_sym,
+                "tp_pts": tgt_pts,
+                "tl_pts": sl_pts,
+                "entry_price": fill_px,
+                "qty": res.get("qty", lots * lot_size),
+            })
+        except Exception as exc:
+            print(f"Warning: could not set initial Kotak SL/TP: {exc}")
+
+    return res
 
 def submit_manual_order(body: dict) -> dict:
     if body.get("confirm") not in ("PLACE LIVE ORDER", "CONFIRM", "YES"):
@@ -4789,9 +4703,6 @@ class Handler(BaseHTTPRequestHandler):
             paper_trades.extend(sensex_runner_live_paper_trades(date))
             paper_trades.extend(sensex_key_levels_live_paper_trades(date))
             paper_trades.extend(nifty_key_levels_live_paper_trades(date))
-            # Only include simulated scalper paper rows if Kotak is not active or has no trades
-            if not is_kotak_active or not kotak_trades:
-                paper_trades.extend(compression_scalp_live_paper_trades(date))
             paper_trades.extend(list(midpoint_option_trades(date)))
 
             if trade_mode == "LIVE":
