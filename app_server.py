@@ -4455,19 +4455,26 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
-            cfg = read_config()
-            is_live = bool(cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading") or cfg.get("live_trading"))
-            kotak_trades = list(kotak_live_trades())
-            if is_live or kotak_trades:
-                self._json(kotak_trades)
-            else:
-                all_trades = list(midpoint_option_trades())
-                all_trades.extend(trend_runner_live_paper_trades(date))
-                all_trades.extend(sensex_runner_live_paper_trades(date))
-                all_trades.extend(sensex_key_levels_live_paper_trades(date))
-                all_trades.extend(nifty_key_levels_live_paper_trades(date))
-                all_trades.extend(compression_scalp_live_paper_trades(date))
-                self._json(all_trades)
+            all_trades = []
+            try:
+                all_trades.extend(list(kotak_live_trades()))
+            except Exception as exc:
+                print(f"Error reading Kotak live trades: {exc}")
+
+            all_trades.extend(trend_runner_live_paper_trades(date))
+            all_trades.extend(sensex_runner_live_paper_trades(date))
+            all_trades.extend(sensex_key_levels_live_paper_trades(date))
+            all_trades.extend(nifty_key_levels_live_paper_trades(date))
+            all_trades.extend(compression_scalp_live_paper_trades(date))
+            all_trades.extend(list(midpoint_option_trades(date)))
+
+            p_scalp = LIVE_DIR / "scalper_live_paper.csv"
+            if p_scalp.exists():
+                for r in read_csv_rows(p_scalp):
+                    if not date or r.get("date") == date:
+                        all_trades.append(r)
+
+            self._json(all_trades)
         elif url.path == "/api/key-level-option-trades":
             self._json(build_paper_report(key_level_option_trades(date))["trades"])
         elif url.path == "/api/key-level-option-paper":
