@@ -30,7 +30,6 @@ export type Status = {
   kill_switch: boolean
   last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
   sensex_last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
-  banknifty_last_tick?: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
   scalper?: {
     enabled: boolean
     mode: "PAPER" | "LIVE"
