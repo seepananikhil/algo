@@ -78,6 +78,7 @@ engine = TrendRunnerPaperEngine(
     reentry_sl_points=30.0,
     reentry=True,
     max_trades_per_day=2,
+    be_trigger=40.0, be_lock=5.0,
     r1_trigger=70.0, r1_lock=20.0,
     r2_trigger=130.0, r2_lock=60.0,
     r3_trigger=180.0, r3_lock=110.0,

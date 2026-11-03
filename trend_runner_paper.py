@@ -256,6 +256,13 @@ class TrendRunnerPaperEngine:
                 self.r6_lock = 1080.0
             self.call_cutoff_time = "10:45"
             self.strike_mode = "atm"
+            if be_trigger is None:
+                be_trigger = 120.0
+                be_lock = 15.0
+        else:
+            if be_trigger is None:
+                be_trigger = 40.0
+                be_lock = 5.0
         self.sl_mode = sl_mode
         self.lots = lots
         self.sizing_mode = sizing_mode

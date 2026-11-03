@@ -69,7 +69,10 @@ print(f"Historical files to process: {len(all_files)}")
 
 # Sensex parameters scaled proportionally (~3.3x to 4x Nifty point scale)
 engine = TrendRunnerPaperEngine(
+    symbol="SENSEX",
     sl_points=120.0,
+    be_trigger=120.0,
+    be_lock=15.0,
     reentry_sl_points=120.0,
     sl_mode="fixed",
     reentry=True,
