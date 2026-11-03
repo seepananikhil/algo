@@ -30,10 +30,19 @@ jobs:
 
       - name: Set up Virtual Environment & Install Dependencies
         run: |
-          which python3 || echo "python3 not found in PATH"
-          python3 --version
+          PYTHON_CMD=$(which python3.12 || which python3.11 || which python3)
+          echo "Selected Python: $PYTHON_CMD"
+          $PYTHON_CMD --version
+          # Recreate venv if it doesn't exist or was built with old python 3.9
+          if [ -d "$HOME/algo_venv" ]; then
+            VENV_VER=$("$HOME/algo_venv/bin/python3" -c 'import sys; print(sys.version_info.major, sys.version_info.minor)' 2>/dev/null || echo "0 0")
+            if [ "$VENV_VER" = "3 9" ]; then
+              echo "Removing old Python 3.9 venv..."
+              rm -rf "$HOME/algo_venv"
+            fi
+          fi
           if [ ! -d "$HOME/algo_venv" ]; then
-            python3 -m venv "$HOME/algo_venv"
+            $PYTHON_CMD -m venv "$HOME/algo_venv"
           fi
           echo "$HOME/algo_venv/bin" >> $GITHUB_PATH
           export PATH="$HOME/algo_venv/bin:$PATH"
