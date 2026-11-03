@@ -40,6 +40,13 @@ CONFIG = {
         "output_dir": ROOT / "options_data" / "sensex" / "1min",
         "prefix": "SENSEX",
     },
+    "BANKNIFTY": {
+        "spot_neosymbol": "nse_cm|Nifty Bank",
+        "exch_seg": "nse_fo",
+        "symbol_name": "BANKNIFTY",
+        "output_dir": ROOT / "options_data" / "banknifty" / "1min",
+        "prefix": "BANKNIFTY",
+    },
 }
 
 MONTH_MAP = {
@@ -55,7 +62,7 @@ MONTH_MAP = {
 def parse_expiry_from_trdsymbol(symbol: str) -> date | None:
     """Parse expiry date from standard exchange trading symbol."""
     # Pattern 1: Weekly e.g. NIFTY26N0323000CE, SENSEX26N0675000PE
-    m = re.search(r"(?:NIFTY|SENSEX)(\d{2})([1-9OND])(\d{2})", symbol)
+    m = re.search(r"(?:BANKNIFTY|NIFTY|SENSEX)(\d{2})([1-9OND])(\d{2})", symbol)
     if m:
         yy, m_code, dd = m.groups()
         year = 2000 + int(yy)
@@ -67,7 +74,7 @@ def parse_expiry_from_trdsymbol(symbol: str) -> date | None:
                 pass
 
     # Pattern 2: Monthly e.g. NIFTY26NOV23000CE, SENSEX26DEC75000PE
-    m2 = re.search(r"(?:NIFTY|SENSEX)(\d{2})([A-Z]{3})(\d{4,6})(?:CE|PE)", symbol)
+    m2 = re.search(r"(?:BANKNIFTY|NIFTY|SENSEX)(\d{2})([A-Z]{3})(\d{4,6})(?:CE|PE)", symbol)
     if m2:
         yy, mon_str, _ = m2.groups()
         year = 2000 + int(yy)
@@ -259,7 +266,7 @@ def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retri
     return pd.DataFrame()
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--index", choices=["NIFTY", "SENSEX"], required=True)
+    parser.add_argument("--index", choices=["NIFTY", "SENSEX", "BANKNIFTY"], required=True)
     parser.add_argument("--date", help="Session date YYYY-MM-DD (defaults to today in IST)")
     parser.add_argument("--count", type=int, default=15, help="Strikes above and below open")
     parser.add_argument("--force", action="store_true", help="Overwrite existing output file")

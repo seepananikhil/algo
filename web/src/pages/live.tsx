@@ -60,7 +60,7 @@ export function LivePage() {
   const today = status?.now?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
 
   // Chart view: SENSEX, NIFTY, or DUAL split
-  const [activeChart, setActiveChart] = useState<"SENSEX" | "NIFTY" | "DUAL">("SENSEX")
+  const [activeChart, setActiveChart] = useState<"SENSEX" | "NIFTY" | "BANKNIFTY" | "DUAL">("SENSEX")
   const [selectedTrade, setSelectedTrade] = useState<OptionTrade | null>(null)
 
   // Side Panel state: open / collapsed, and active tab
@@ -69,7 +69,7 @@ export function LivePage() {
 
   // Scalp Widget State
   const [showScalpBar, setShowScalpBar] = useState(true)
-  const [scalpSpot, setScalpSpot] = useState<"NIFTY" | "SENSEX">("NIFTY")
+  const [scalpSpot, setScalpSpot] = useState<"NIFTY" | "SENSEX" | "BANKNIFTY">("NIFTY")
   const [scalpLots, setScalpLots] = useState(1)
   const [scalpOptionType, setScalpOptionType] = useState<"CE" | "PE">("CE")
   const [scalpTp, setScalpTp] = useState<number>(0)
@@ -174,6 +174,7 @@ export function LivePage() {
   // Polling feeds: Day candle data
   const niftyDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=NIFTY&full=1` : null, 2500)
   const sensexDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=SENSEX&full=1` : null, 2500)
+  const bankniftyDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=BANKNIFTY&full=1` : null, 2500)
 
   // Polling feeds: All strategy paper trades & live broker positions
   const liveTradesPoll = usePoll<OptionTrade[]>("/api/trades", 2500)
@@ -229,18 +230,22 @@ export function LivePage() {
   // Current market LTPs
   const niftyLtp = status?.last_tick?.ltp ?? (niftyDay.data?.candles?.at(-1)?.close ?? 24540)
   const sensexLtp = status?.sensex_last_tick?.ltp ?? (sensexDay.data?.candles?.at(-1)?.close ?? 74385)
+  const bankniftyLtp = status?.banknifty_last_tick?.ltp ?? (bankniftyDay.data?.candles?.at(-1)?.close ?? 55000)
 
   // Compute ATM strikes for scalp widget
   const currentAtmStrike = useMemo(() => {
     if (scalpSpot === "SENSEX") {
       return Math.round(sensexLtp / 100) * 100
     }
+    if (scalpSpot === "BANKNIFTY") {
+      return Math.round(bankniftyLtp / 100) * 100
+    }
     return Math.round(niftyLtp / 50) * 50
-  }, [scalpSpot, sensexLtp, niftyLtp])
+  }, [scalpSpot, sensexLtp, bankniftyLtp, niftyLtp])
 
   // Selectable Strike (default ATM, or +/- strikes)
   const [customStrike, setCustomStrike] = useState<number | null>(null)
-  const strikeStep = scalpSpot === "SENSEX" ? 100 : 50
+  const strikeStep = (scalpSpot === "SENSEX" || scalpSpot === "BANKNIFTY") ? 100 : 50
   const activeStrike = customStrike ?? currentAtmStrike
 
   const strikeChoices = useMemo(() => {
@@ -268,7 +273,12 @@ export function LivePage() {
   }, [tradesList])
 
   const niftyChartTrades = useMemo(() => {
-    const filtered = tradesList.filter((t) => !t.symbol || t.symbol?.toUpperCase().includes("NIFTY") || t.symbol?.includes("NSEI"))
+    const filtered = tradesList.filter((t) => (!t.symbol || t.symbol?.toUpperCase().includes("NIFTY") || t.symbol?.includes("NSEI")) && !t.symbol?.toUpperCase().includes("BANK") && !t.symbol?.toUpperCase().includes("BNF"))
+    return filtered.map(toRuleTrade)
+  }, [tradesList])
+
+  const bankniftyChartTrades = useMemo(() => {
+    const filtered = tradesList.filter((t) => t.symbol?.toUpperCase().includes("BANK") || t.symbol?.toUpperCase().includes("BNF"))
     return filtered.map(toRuleTrade)
   }, [tradesList])
 
@@ -279,6 +289,8 @@ export function LivePage() {
     if (activeChart !== "DUAL") {
       if (sym.includes("SENSEX") || sym.includes("BSESN")) {
         setActiveChart("SENSEX")
+      } else if (sym.includes("BANK") || sym.includes("BNF")) {
+        setActiveChart("BANKNIFTY")
       } else {
         setActiveChart("NIFTY")
       }
@@ -431,6 +443,12 @@ export function LivePage() {
               <span className="text-muted-foreground font-medium">SENSEX:</span>
               <span className="font-mono font-bold text-foreground">
                 {sensexLtp.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
+              </span>
+            </div>
+            <div className="flex items-center space-x-1.5 border-l border-border pl-3">
+              <span className="text-muted-foreground font-medium">BNF:</span>
+              <span className="font-mono font-bold text-foreground">
+                {bankniftyLtp.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
               </span>
             </div>
           </div>
@@ -592,6 +610,16 @@ export function LivePage() {
               NIFTY
             </button>
             <button
+              onClick={() => { setActiveChart("BANKNIFTY"); setScalpSpot("BANKNIFTY"); setSelectedTrade(null) }}
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+                activeChart === "BANKNIFTY"
+                  ? "bg-primary text-primary-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              BNF
+            </button>
+            <button
               onClick={() => { setActiveChart("DUAL"); setSelectedTrade(null) }}
               className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
                 activeChart === "DUAL"
@@ -612,6 +640,7 @@ export function LivePage() {
               liveTradesPoll.reload()
               niftyDay.reload()
               sensexDay.reload()
+              bankniftyDay.reload()
             }}
             title="Refresh feeds"
           >
@@ -634,7 +663,7 @@ export function LivePage() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                const nextSpot = scalpSpot === "NIFTY" ? "SENSEX" : "NIFTY"
+                const nextSpot = scalpSpot === "NIFTY" ? "SENSEX" : scalpSpot === "SENSEX" ? "BANKNIFTY" : "NIFTY"
                 setScalpSpot(nextSpot)
                 setCustomStrike(null)
                 if (activeChart !== "DUAL") setActiveChart(nextSpot)
@@ -820,7 +849,7 @@ export function LivePage() {
             {/* Widget Content */}
             <div className="p-3 space-y-2.5">
               {/* Row 1: Spot Selector (NIFTY vs SENSEX) */}
-              <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-muted/60 rounded-lg border border-border">
+              <div className="grid grid-cols-3 gap-1 p-0.5 bg-muted/60 rounded-lg border border-border">
                 <button
                   type="button"
                   onClick={() => {
@@ -828,7 +857,7 @@ export function LivePage() {
                     setCustomStrike(null)
                     if (activeChart !== "DUAL") setActiveChart("NIFTY")
                   }}
-                  className={`py-1 text-xs font-bold rounded-md transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-1 text-xs font-bold rounded-md transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
                     scalpSpot === "NIFTY"
                       ? "bg-primary text-primary-foreground shadow-2xs font-extrabold"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -841,11 +870,28 @@ export function LivePage() {
                 <button
                   type="button"
                   onClick={() => {
+                    setScalpSpot("BANKNIFTY")
+                    setCustomStrike(null)
+                    if (activeChart !== "DUAL") setActiveChart("BANKNIFTY")
+                  }}
+                  className={`py-1 text-xs font-bold rounded-md transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                    scalpSpot === "BANKNIFTY"
+                      ? "bg-primary text-primary-foreground shadow-2xs font-extrabold"
+                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
+                  }`}
+                  title="Select NSE BANK NIFTY"
+                >
+                  <span>BNF</span>
+                  <span className="font-mono text-[10px] opacity-85 font-normal">{Math.round(bankniftyLtp)}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
                     setScalpSpot("SENSEX")
                     setCustomStrike(null)
                     if (activeChart !== "DUAL") setActiveChart("SENSEX")
                   }}
-                  className={`py-1 text-xs font-bold rounded-md transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
+                  className={`py-1 text-xs font-bold rounded-md transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
                     scalpSpot === "SENSEX"
                       ? "bg-primary text-primary-foreground shadow-2xs font-extrabold"
                       : "text-muted-foreground hover:text-foreground hover:bg-muted"
@@ -1246,6 +1292,64 @@ export function LivePage() {
                     className="h-full w-full"
                     zoomable={true}
                     resetKey={`nifty-${activeChart}`}
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* BANK NIFTY CHART */}
+            {activeChart === "BANKNIFTY" && (
+              <div className="flex flex-col bg-card border border-border rounded-lg overflow-hidden shadow-xs relative">
+                <div className="flex-none px-3 py-1.5 bg-muted/40 border-b border-border flex items-center justify-between text-xs gap-2">
+                  <div className="flex items-center space-x-2 min-w-0">
+                    <span className="font-bold text-foreground tracking-wide shrink-0">NSE BANK NIFTY</span>
+                    <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-mono shrink-0">1m</span>
+                    <span className="text-muted-foreground font-mono text-[11px] shrink-0">
+                      Spot: <span className="font-bold text-foreground">{bankniftyLtp.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
+                    </span>
+
+                    {selectedTrade && (selectedTrade.symbol?.toUpperCase().includes("BANK") || selectedTrade.symbol?.toUpperCase().includes("BNF")) && (
+                      <span className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:border-blue-500/50 dark:text-blue-300 font-medium flex items-center gap-1.5 animate-fadeIn truncate">
+                        <Target className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
+                        <span className="truncate">Focused: {selectedTrade.option || selectedTrade.strategy} ({selectedTrade.side})</span>
+                        <button 
+                          onClick={() => setSelectedTrade(null)}
+                          className="ml-1 text-blue-600 hover:text-blue-900 dark:text-blue-300 dark:hover:text-white shrink-0"
+                          title="Clear Focus"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      </span>
+                    )}
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
+                    className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
+                      isSidePanelOpen
+                        ? "bg-primary text-primary-foreground border-primary"
+                        : "bg-background/80 hover:bg-muted text-muted-foreground hover:text-foreground border-border"
+                    }`}
+                    title={isSidePanelOpen ? "Collapse Trades Side Panel" : "Open Trades & Positions Panel"}
+                  >
+                    <PanelRightClose className={`w-3.5 h-3.5 transition-transform ${!isSidePanelOpen ? "rotate-180" : ""}`} />
+                    <span>Trades ({openTrades.length})</span>
+                  </button>
+                </div>
+                <div className="flex-1 min-h-0 relative">
+                  <CandleChart
+                    date={today}
+                    candles={bankniftyDay.data?.candles ?? []}
+                    forming={bankniftyDay.data?.forming}
+                    currentPrice={bankniftyLtp}
+                    setup={bankniftyDay.data?.setup}
+                    trades={bankniftyChartTrades}
+                    showKeyLevels={true}
+                    showTradeLevels={true}
+                    className="h-full w-full"
+                    zoomable={true}
+                    resetKey={`banknifty-${activeChart}`}
                   />
                 </div>
               </div>

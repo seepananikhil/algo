@@ -53,6 +53,30 @@ def load_nifty_options():
     except Exception:
         return pd.DataFrame(columns=['symbol', 'strike', 'opt_type', 'expiry', 'lot_size'])
 
+
+def load_banknifty_options():
+    cache = ROOT / 'captured_data' / 'fyers' / 'banknifty_options_cache.pkl'
+    today_date = datetime.now(timezone(timedelta(hours=5, minutes=30))).date()
+    if cache.exists():
+        try:
+            mtime = datetime.fromtimestamp(cache.stat().st_mtime, tz=timezone(timedelta(hours=5, minutes=30))).date()
+            if mtime == today_date:
+                return pd.read_pickle(cache)
+        except Exception:
+            pass
+    SYMBOL_MASTER_URL = 'https://public.fyers.in/sym_details/NSE_FO.csv'
+    try:
+        cols = {8: 'expiry_epoch', 9: 'symbol', 3: 'lot_size', 13: 'underlying', 15: 'strike', 16: 'opt_type'}
+        raw = pd.read_csv(SYMBOL_MASTER_URL, header=None, usecols=list(cols))
+        df = raw.rename(columns=cols)
+        df = df[(df['underlying'] == 'BANKNIFTY') & (df['opt_type'].isin(['CE', 'PE']))].copy()
+        df['expiry'] = pd.to_datetime(df['expiry_epoch'], unit='s', utc=True).dt.tz_convert('Asia/Kolkata').dt.date
+        cache.parent.mkdir(parents=True, exist_ok=True)
+        df.to_pickle(cache)
+        return df
+    except Exception:
+        return pd.DataFrame(columns=['symbol', 'strike', 'opt_type', 'expiry', 'lot_size'])
+
 from key_level_strategy import aggregate_five_minute, backtest_key_levels, read_paper_events, settings_from_config as key_level_settings, summarize_key_level_trades
 from option_paper import read_option_paper_trades
 
@@ -218,6 +242,16 @@ def current_nifty_options() -> pd.DataFrame:
             _option_master_cache["df"] = load_nifty_options()
             _option_master_cache["date"] = session_date
         return _option_master_cache["df"]
+
+
+def current_banknifty_options() -> pd.DataFrame:
+    """Load the Bank Nifty option master once per local trading day."""
+    session_date = today()
+    with _bnf_option_master_lock:
+        if _bnf_option_master_cache["date"] != session_date or _bnf_option_master_cache["df"] is None:
+            _bnf_option_master_cache["df"] = load_banknifty_options()
+            _bnf_option_master_cache["date"] = session_date
+        return _bnf_option_master_cache["df"]
 
 
 def current_sensex_options() -> pd.DataFrame:
@@ -906,6 +940,30 @@ def load_technovusin_day(date_str: str, symbol: str = "NIFTY") -> pd.DataFrame:
 
 def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
     sym = str(symbol or "NIFTY").strip().upper()
+    if sym in ("BANKNIFTY", "BNF", "BANK_NIFTY"):
+        # 1. Live captured file
+        path = LIVE_DIR / f"banknifty_1min_{date}.csv"
+        if path.exists():
+            try:
+                df = pd.read_csv(path)
+                if not df.empty and "timestamp" in df.columns:
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                    return df.dropna(subset=["timestamp"])
+            except Exception:
+                pass
+        # 2. Historical data
+        try:
+            hist_p = ROOT / "historical_data" / "banknifty" / "1min" / date[:4] / date[5:7] / f"BANKNIFTY_1min_{date}.csv"
+            if hist_p.exists():
+                df = pd.read_csv(hist_p)
+                if not df.empty and "Timestamp" in df.columns:
+                    df = df.rename(columns={"Timestamp": "timestamp", "Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"})
+                    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
+                    return df.dropna(subset=["timestamp"])
+        except Exception:
+            pass
+        return pd.DataFrame()
+
     if sym == "SENSEX":
         # 1. Live captured file
         path = LIVE_DIR / f"sensex_1min_{date}.csv"
@@ -1557,6 +1615,10 @@ def submit_scalp_order(body: dict) -> dict:
         lot_size = 20
         spot_step = 100
         spot = float((st.get("sensex_last_tick") or {}).get("ltp") or 75000.0)
+    elif "BANK" in symbol or "BNF" in symbol:
+        lot_size = 15
+        spot_step = 100
+        spot = float((st.get("banknifty_last_tick") or {}).get("ltp") or 55000.0)
     else:
         lot_size = 65
         spot_step = 50
@@ -1569,7 +1631,12 @@ def submit_scalp_order(body: dict) -> dict:
     req_expiry = body.get("expiry")
     if not req_expiry:
         try:
-            options = current_sensex_options() if "SENSEX" in symbol else current_nifty_options()
+            if "SENSEX" in symbol:
+                options = current_sensex_options()
+            elif "BANK" in symbol or "BNF" in symbol:
+                options = current_banknifty_options()
+            else:
+                options = current_nifty_options()
             current_date = datetime.now(IST).date()
             upcoming = sorted([d for d in options["expiry"].unique() if d >= current_date])
             if upcoming:
@@ -2178,6 +2245,29 @@ def status() -> dict:
         "prev_close": sensex_q.get("prev_close"),
     } if (sensex_q.get("ltp") or sx_ltp) else None
 
+    # BankNifty tick
+    bnf_q = q_data.get("banknifty", {})
+    b_secs = LIVE_DIR / f"banknifty_1s_{today()}.csv"
+    b_mins = LIVE_DIR / f"banknifty_1min_{today()}.csv"
+    bn_time, bn_ltp = None, None
+    if b_secs.exists():
+        lines = b_secs.read_text(encoding="utf-8").strip().splitlines()
+        if len(lines) > 1:
+            ts, ltp, _ = lines[-1].split(",")
+            bn_time, bn_ltp = ts[11:], float(ltp)
+    if not bn_ltp and b_mins.exists():
+        lines = b_mins.read_text(encoding="utf-8").strip().splitlines()
+        if len(lines) > 1:
+            parts = lines[-1].split(",")
+            bn_time, bn_ltp = parts[0][11:16], float(parts[4])
+    banknifty_last_tick = {
+        "time": bnf_q.get("time", bn_time),
+        "ltp": bnf_q.get("ltp", bn_ltp),
+        "change": bnf_q.get("change"),
+        "per_change": bnf_q.get("per_change"),
+        "prev_close": bnf_q.get("prev_close"),
+    } if (bnf_q.get("ltp") or bn_ltp) else None
+
     from broker import get_active_broker, get_all_broker_status
     active_broker = get_active_broker()
     return {
@@ -2193,6 +2283,7 @@ def status() -> dict:
         "kill_switch": STOP_FILE.exists(),
         "last_tick": last_tick,
         "sensex_last_tick": sensex_last_tick,
+        "banknifty_last_tick": banknifty_last_tick,
         "scalper": scalper_status(),
     }
 

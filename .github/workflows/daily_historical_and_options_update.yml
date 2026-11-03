@@ -57,7 +57,7 @@ jobs:
           fi
           python scripts/update_spot_history.py $DATE_ARG
 
-      - name: Fetch Weekly Options Data (NIFTY & SENSEX)
+      - name: Fetch Weekly Options Data (NIFTY, SENSEX & BANKNIFTY)
         env:
           NEO_CONSUMER_KEY: ${{ secrets.NEO_CONSUMER_KEY }}
           NEO_MOBILE_NUMBER: ${{ secrets.NEO_MOBILE_NUMBER }}
@@ -71,6 +71,7 @@ jobs:
           fi
           python scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
           python scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
+          python scripts/fetch_weekly_options.py --index BANKNIFTY $DATE_ARG || echo "BankNifty options fetch completed or not an expiry session"
 
       - name: Rebuild DuckDB Options Parquet Catalogs
         run: |

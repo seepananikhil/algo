@@ -144,6 +144,8 @@ class KotakCapture:
         self.nifty_min_file = LIVE_DIR / f"nifty_1min_{self.day}.csv"
         self.sensex_sec_file = LIVE_DIR / f"sensex_1s_{self.day}.csv"
         self.sensex_min_file = LIVE_DIR / f"sensex_1min_{self.day}.csv"
+        self.bnf_sec_file = LIVE_DIR / f"banknifty_1s_{self.day}.csv"
+        self.bnf_min_file = LIVE_DIR / f"banknifty_1min_{self.day}.csv"
 
         self.signals = LiveSignalEngine(self.nifty_min_file, LIVE_DIR / f"signals_{self.day}.csv")
 
@@ -152,7 +154,7 @@ class KotakCapture:
             print("[KotakCapture] Error: Could not initialize Kotak Neo client. Check credentials.")
             sys.exit(1)
 
-        print("[KotakCapture] Tracking Official Spot Indices via Kotak Neo: Nifty 50, SENSEX, INDIA VIX")
+        print("[KotakCapture] Tracking Official Spot Indices via Kotak Neo: Nifty 50, Bank Nifty, SENSEX, INDIA VIX")
 
     def _sync_instrument_candles(self, seg: str, tok: str, target_file: Path) -> bool:
         try:
@@ -219,13 +221,16 @@ class KotakCapture:
         """Sync official 1-minute OHLC candles from Kotak Neo historical API."""
         ok_nifty = self._sync_instrument_candles("nse_cm", "Nifty 50", self.nifty_min_file)
         time.sleep(1.2)
+        ok_bnf = self._sync_instrument_candles("nse_cm", "Nifty Bank", self.bnf_min_file)
+        time.sleep(1.2)
         ok_sensex = self._sync_instrument_candles("bse_cm", "SENSEX", self.sensex_min_file)
-        return ok_nifty or ok_sensex
+        return ok_nifty or ok_bnf or ok_sensex
 
     def quote_loop(self) -> None:
         """Fetch quotes every 3 seconds to record ticks for NIFTY, SENSEX, and INDIA VIX via Kotak Neo."""
         quote_req = [
             {"instrument_token": "Nifty 50", "exchange_segment": "nse_cm"},
+            {"instrument_token": "Nifty Bank", "exchange_segment": "nse_cm"},
             {"instrument_token": "SENSEX", "exchange_segment": "bse_cm"},
             {"instrument_token": "INDIA VIX", "exchange_segment": "nse_cm"},
         ]
@@ -254,6 +259,19 @@ class KotakCapture:
 
                         if "india vix" in tok.lower() or "vix" in tok.lower():
                             quotes_data["vix"] = {
+                                "ltp": ltp,
+                                "change": change,
+                                "per_change": per_change,
+                                "prev_close": prev_close,
+                                "time": ts.strftime(TS_FMT),
+                            }
+                        elif "bank" in tok.lower():
+                            append_row(
+                                self.bnf_sec_file,
+                                ["timestamp", "ltp", "last_tick_at"],
+                                [ts.strftime(TS_FMT), ltp, ts.strftime(TS_FMT)],
+                            )
+                            quotes_data["banknifty"] = {
                                 "ltp": ltp,
                                 "change": change,
                                 "per_change": per_change,

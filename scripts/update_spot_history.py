@@ -35,6 +35,12 @@ INDICES = {
         "file_prefix": "SENSEX_1min_",
         "daily_file": "SENSEX_daily.csv",
     },
+    "BANKNIFTY": {
+        "neosymbol": "nse_cm|Nifty Bank",
+        "dir": ROOT / "historical_data" / "banknifty",
+        "file_prefix": "BANKNIFTY_1min_",
+        "daily_file": "BANKNIFTY_daily.csv",
+    },
 }
 
 
