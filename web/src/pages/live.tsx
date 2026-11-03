@@ -80,6 +80,7 @@ export function LivePage() {
   const [scalpSpot, setScalpSpot] = useState<"NIFTY" | "SENSEX">("NIFTY")
   const [scalpLots, setScalpLots] = useState(1)
   const [scalpOptionType, setScalpOptionType] = useState<"CE" | "PE">("CE")
+  const [scalpLiveMode, setScalpLiveMode] = useState<boolean>(() => status?.mode === "LIVE" || status?.broker === "KOTAK_NEO")
   const [scalpTp, setScalpTp] = useState<number>(0)
   const [scalpTs, setScalpTs] = useState<number>(0)
   const [scalpBusy, setScalpBusy] = useState(false)
@@ -308,6 +309,7 @@ export function LivePage() {
         strike: activeStrike,
         tp: scalpTp,
         ts: scalpTs,
+        is_live: scalpLiveMode,
       })
       toast.success(res.message || `${action} ${optionType} Scalp executed`)
       liveTradesPoll.reload()
@@ -798,6 +800,18 @@ export function LivePage() {
                 <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
                 <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
                 <span className="font-bold text-[11px] tracking-wider uppercase text-foreground">Scalper</span>
+                <button
+                  type="button"
+                  onClick={() => setScalpLiveMode(!scalpLiveMode)}
+                  className={`px-1.5 py-0.2 text-[9px] font-extrabold rounded border transition-colors cursor-pointer ${
+                    scalpLiveMode
+                      ? "bg-rose-500/15 border-rose-500/40 text-rose-600 dark:text-rose-400"
+                      : "bg-emerald-500/15 border-emerald-500/40 text-emerald-600 dark:text-emerald-400"
+                  }`}
+                  title={scalpLiveMode ? "LIVE Mode: Orders sent directly to Kotak Neo broker. Click to switch to Paper." : "PAPER Mode: Simulated trades only. Click to switch to Live."}
+                >
+                  {scalpLiveMode ? "LIVE" : "PAPER"}
+                </button>
                 <span className="text-[10px] font-mono font-bold text-foreground bg-muted px-1.5 py-0.2 rounded border border-border">
                   {scalpSpot} {activeStrike} {scalpOptionType}
                 </span>
@@ -1082,7 +1096,7 @@ export function LivePage() {
                   title={`Buy ${scalpSpot} ${activeStrike} ${scalpOptionType}${scalpTp > 0 ? ` TP:${scalpTp}pt` : ""}${scalpTs > 0 ? ` TS:${scalpTs}pt` : ""}`}
                 >
                   {scalpBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowUpRight className="w-3.5 h-3.5" />}
-                  <span>BUY {scalpOptionType}</span>
+                  <span>BUY {scalpOptionType} {scalpLiveMode ? "(LIVE)" : "(PAPER)"}</span>
                 </Button>
 
                 <Button

@@ -1568,7 +1568,11 @@ def submit_scalp_order(body: dict) -> dict:
     lots = max(1, int(body.get("lots", 1)))
 
     cfg = read_config()
-    is_live = bool(cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading"))
+    req_live = body.get("is_live")
+    if req_live is not None:
+        is_live = bool(req_live)
+    else:
+        is_live = bool(body.get("mode") == "LIVE" or cfg.get("mode") == "LIVE" or cfg.get("scalper_live_trading"))
 
     today_str = today()
     now_time = datetime.now(IST).strftime("%H:%M")
@@ -1659,10 +1663,13 @@ def submit_scalp_order(body: dict) -> dict:
         if tgt_pts > 0:
             body["target_pts"] = tgt_pts
         res = submit_manual_order(body)
-        if isinstance(res, dict) and res.get("ok"):
-            raw_sym = str(res.get("symbol", "")).strip()
-            fill_px = float(res.get("fill_price") or 0.0)
-            if sl_pts > 0 or tgt_pts > 0:
+        if not isinstance(res, dict) or not res.get("ok"):
+            raise ManualTradeError(f"Broker order was not successful: {res}")
+
+        raw_sym = str(res.get("symbol", "")).strip()
+        fill_px = float(res.get("fill_price") or 0.0)
+        if sl_pts > 0 or tgt_pts > 0:
+            try:
                 update_tp_tl({
                     "symbol": raw_sym,
                     "tp_pts": tgt_pts,
@@ -1670,6 +1677,8 @@ def submit_scalp_order(body: dict) -> dict:
                     "entry_price": fill_px,
                     "qty": res.get("qty", lots * lot_size),
                 })
+            except Exception as exc:
+                print(f"Warning: could not set initial Kotak SL/TP: {exc}")
         return res
 
     # Paper Scalp Execution

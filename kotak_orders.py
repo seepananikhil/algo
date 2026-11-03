@@ -330,6 +330,8 @@ def place_kotak_order(
 
     # Confirm fill
     traded_price = 0.0
+    last_status = "pending"
+    last_rej = ""
     for _ in range(15):
         time.sleep(0.5)
         try:
@@ -339,15 +341,20 @@ def place_kotak_order(
                 if isinstance(data, list) and data:
                     ord_info = data[-1]
                     status_str = str(ord_info.get("ordSt", "")).lower()
+                    last_status = status_str
+                    last_rej = str(ord_info.get("rejRsn", "") or "")
                     if status_str in ("trd", "complete", "traded", "filled"):
                         traded_price = float(ord_info.get("avgPrc") or ord_info.get("prc") or 0.0)
                         return order_id, traded_price
                     if status_str in ("can", "rej", "rejected", "cancelled"):
-                        rej_reason = ord_info.get("rejRsn", "Order rejected/cancelled")
+                        rej_reason = ord_info.get("rejRsn") or "Order rejected/cancelled"
                         raise RuntimeError(f"Kotak order {order_id} failed: {rej_reason}")
         except Exception as e:
             if "failed:" in str(e):
                 raise
+
+    if last_status in ("can", "rej", "rejected", "cancelled"):
+        raise RuntimeError(f"Kotak order {order_id} rejected: {last_rej or last_status}")
 
     return order_id, traded_price
 
