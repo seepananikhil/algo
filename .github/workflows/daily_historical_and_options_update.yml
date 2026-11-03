@@ -37,8 +37,8 @@ jobs:
           fi
           echo "$HOME/algo_venv/bin" >> $GITHUB_PATH
           export PATH="$HOME/algo_venv/bin:$PATH"
-          pip install --upgrade pip
-          pip install -r requirements.txt
+          "$HOME/algo_venv/bin/python3" -m pip install --upgrade pip setuptools wheel
+          "$HOME/algo_venv/bin/pip" install --prefer-binary -r requirements.txt
       - name: Install DuckDB CLI
         run: |
           ARCH=$(uname -m)
