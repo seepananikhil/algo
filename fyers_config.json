@@ -14,7 +14,7 @@
   "hero_zero_live_trading": false,
   "midpoint_live_trading": false,
   "live_trading": false,
-  "daily_loss_limit": 1000,
+  "daily_loss_limit": 2000,
   "strike_offset": 100,
   "option_target_pct": 15,
   "lots": 1,
@@ -51,5 +51,7 @@
   "sensex_key_levels_paper_trading": false,
   "sensex_runner_paper_trading": true,
   "sensex_runner_live_trading": false,
-  "sensex_runner_lots": 1
+  "sensex_runner_lots": 1,
+  "risk_guardian_enabled": true,
+  "risk_guardian_auto_close": true
 }

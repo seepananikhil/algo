@@ -1614,6 +1614,19 @@ def submit_scalp_order(body: dict) -> dict:
 
         return {"ok": True, "message": f"{target_opt or symbol} position squared off successfully", "closed": closed}
 
+    # Check Risk Guardian and Kill Switch before placing buy orders
+    from risk_guardian import is_risk_locked
+    locked, lock_info = is_risk_locked()
+    if locked:
+        lim = lock_info.get("limit", 2000)
+        pnl_val = lock_info.get("pnl", 0)
+        raise ManualTradeError(
+            f"Risk Guardian Active: Max daily loss limit of Rs. {lim:,.0f} breached today (P&L: Rs. {pnl_val:+,.2f}). Trading locked and new positions will be auto-closed.",
+            409,
+        )
+    if STOP_FILE.exists():
+        raise ManualTradeError("Emergency kill switch is active; new scalp orders are blocked.", 409)
+
     req_tp = body.get("tp") if body.get("tp") is not None else body.get("tgt_pts")
     req_ts = body.get("ts") if body.get("ts") is not None else body.get("sl_pts")
     try:
@@ -1739,8 +1752,18 @@ def submit_manual_order(body: dict) -> dict:
     if lots < 1 or lots > int(PAPER_LOTS):
         raise ManualTradeError(f"Lots must be between 1 and {int(PAPER_LOTS)}.")
 
-    if STOP_FILE.exists() and action == "BUY":
-        raise ManualTradeError("Kill switch is on; new manual buys are blocked.", 409)
+    if action == "BUY":
+        from risk_guardian import is_risk_locked
+        locked, lock_info = is_risk_locked()
+        if locked:
+            lim = lock_info.get("limit", 2000)
+            pnl_val = lock_info.get("pnl", 0)
+            raise ManualTradeError(
+                f"Risk Guardian Active: Max daily loss limit of Rs. {lim:,.0f} breached today (P&L: Rs. {pnl_val:+,.2f}). Trading locked and new positions will be auto-closed.",
+                409,
+            )
+        if STOP_FILE.exists():
+            raise ManualTradeError("Kill switch is on; new manual buys are blocked.", 409)
 
     from broker import get_active_broker
     broker = get_active_broker()
@@ -2285,8 +2308,9 @@ def status() -> dict:
         "capture_running": capture_running(),
         "mode": "LIVE" if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or cfg.get("hero_zero_live_trading") or cfg.get("key_levels_live_trading") or cfg.get("scalper_live_trading") or auto_live_started else "PAPER",
         "lots": int(cfg.get("lots", PAPER_LOTS)) if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or auto_live_started else PAPER_LOTS,
-        "daily_loss_limit": cfg.get("daily_loss_limit"),
+        "daily_loss_limit": cfg.get("daily_loss_limit", 2000),
         "kill_switch": STOP_FILE.exists(),
+        "risk_guardian": (lambda: (__import__("risk_guardian").check_and_enforce_guardian()))(),
         "last_tick": last_tick,
         "sensex_last_tick": sensex_last_tick,
         "scalper": scalper_status(),
@@ -4737,6 +4761,9 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/brokers":
             from broker import get_all_broker_status
             self._json(get_all_broker_status())
+        elif url.path in ("/api/risk-guardian", "/api/risk-guardian/status"):
+            from risk_guardian import check_and_enforce_guardian
+            self._json(check_and_enforce_guardian())
         else:
             self._json({"error": "not found"}, 404)
 
@@ -4883,6 +4910,26 @@ class Handler(BaseHTTPRequestHandler):
             body = self._body()
             res = kotak_login(totp_code=body.get("totp"), mpin=body.get("mpin"))
             self._json(res, 200 if res.get("ok") else 400)
+        elif url.path == "/api/risk-guardian/reset":
+            if not self._is_local_client():
+                return self._json({"error": "action is local-only"}, 403)
+            from risk_guardian import reset_risk_lock
+            reset_risk_lock()
+            self._json({"ok": True, "message": "Risk Guardian lock reset successfully."})
+        elif url.path == "/api/risk-guardian/config":
+            if not self._is_local_client():
+                return self._json({"error": "action is local-only"}, 403)
+            body = self._body()
+            cfg = read_config()
+            if "daily_loss_limit" in body:
+                cfg["daily_loss_limit"] = float(body["daily_loss_limit"])
+            if "risk_guardian_enabled" in body:
+                cfg["risk_guardian_enabled"] = bool(body["risk_guardian_enabled"])
+            if "risk_guardian_auto_close" in body:
+                cfg["risk_guardian_auto_close"] = bool(body["risk_guardian_auto_close"])
+            write_config(cfg)
+            from risk_guardian import check_and_enforce_guardian
+            self._json(check_and_enforce_guardian())
         else:
             self._json({"error": "not found"}, 404)
 
@@ -4898,6 +4945,11 @@ if __name__ == "__main__":
     threading.Thread(target=scalper_forward_loop, daemon=True, name="micro-scalper-forward").start()
     threading.Thread(target=scalp_tp_tl_sentinel_loop, daemon=True, name="scalp-tp-tl-sentinel").start()
     threading.Thread(target=trend_runner_forward_loop, daemon=True, name="trend-runner-forward").start()
+    try:
+        from risk_guardian import start_risk_guardian
+        start_risk_guardian()
+    except Exception as exc:
+        print(f"Error launching risk guardian: {exc}")
     threading.Thread(target=sensex_runner_forward_loop, daemon=True, name="sensex-runner-forward").start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Dashboard: http://{HOST}:{PORT}/  (Ctrl+C to stop)")

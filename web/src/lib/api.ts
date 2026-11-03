@@ -28,6 +28,23 @@ export type Status = {
   lots: number
   daily_loss_limit: number | null
   kill_switch: boolean
+  risk_guardian?: {
+    status: 'ACTIVE' | 'LOCKED' | 'BREACHED_JUST_NOW' | 'DISABLED'
+    is_locked: boolean
+    enabled: boolean
+    daily_loss_limit: number
+    current_pnl: number
+    remaining_buffer: number
+    open_count: number
+    lock_info?: {
+      date: string
+      breached_at: string
+      limit: number
+      pnl: number
+      reason: string
+    } | null
+    checked_at?: string
+  }
   last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
   sensex_last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
   scalper?: {
