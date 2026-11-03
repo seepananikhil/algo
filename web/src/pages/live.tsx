@@ -80,7 +80,15 @@ export function LivePage() {
   const [scalpSpot, setScalpSpot] = useState<"NIFTY" | "SENSEX">("NIFTY")
   const [scalpLots, setScalpLots] = useState(1)
   const [scalpOptionType, setScalpOptionType] = useState<"CE" | "PE">("CE")
-  const [scalpLiveMode, setScalpLiveMode] = useState<boolean>(() => status?.mode === "LIVE" || status?.broker === "KOTAK_NEO")
+  const [scalpLiveMode, setScalpLiveMode] = useState<boolean>(true)
+
+  useEffect(() => {
+    if (status?.scalper?.mode) {
+      setScalpLiveMode(status.scalper.mode === "LIVE")
+    } else if (status?.broker === "KOTAK_NEO") {
+      setScalpLiveMode(true)
+    }
+  }, [status?.broker, status?.scalper?.mode])
   const [scalpTp, setScalpTp] = useState<number>(0)
   const [scalpTs, setScalpTs] = useState<number>(0)
   const [scalpBusy, setScalpBusy] = useState(false)
