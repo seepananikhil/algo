@@ -282,7 +282,7 @@ const tooltip = {
 
 
 
-type StrategyKey = "trend_runner" | "sensex_runner"
+type StrategyKey = "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box"
 
 
 
@@ -322,7 +322,8 @@ export function BacktestPage() {
 
 
 
-    return (saved === "sensex_runner") ? "sensex_runner" : "trend_runner"
+    if (saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box") return saved
+    return "trend_runner"
 
 
 
@@ -373,6 +374,10 @@ export function BacktestPage() {
   const { data: raw, loading, error, reload } = usePoll<Backtest>(
     strategy === "sensex_runner"
       ? "/api/backtest?strategy=sensex_runner"
+      : strategy === "midpoint"
+      ? "/api/backtest?strategy=midpoint"
+      : strategy === "dynamic_box"
+      ? "/api/backtest?strategy=dynamic_box"
       : "/api/backtest?strategy=trend_runner"
   )
 
@@ -549,6 +554,10 @@ export function BacktestPage() {
         <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
           SENSEX
         </TabsTrigger>
+        <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">
+          MIDPOINT (NIFTY)
+        </TabsTrigger>
+
       </TabsList>
     </Tabs>
   )
@@ -607,11 +616,13 @@ export function BacktestPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
-            Trend Runner Backtest
+            {strategy === "midpoint" ? "Midpoint Rejection Backtest" : "Trend Runner Backtest"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {strategy === "sensex_runner"
               ? `Sensex · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
+              : strategy === "midpoint"
+              ? `Nifty 50 Midpoint · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size || 50}`
               : `Nifty 50 · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`}
           </p>
         </div>
@@ -797,6 +808,8 @@ export function BacktestPage() {
         title={
           strategy === "sensex_runner"
             ? "Sensex Trend Runner Strategy Streaks & Recovery"
+            : strategy === "midpoint"
+            ? "Nifty Midpoint Rejection Strategy Streaks & Recovery"
             : "Nifty Trend Runner Strategy Streaks & Recovery"
         }
 

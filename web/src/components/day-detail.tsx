@@ -202,6 +202,7 @@ export function DayDetail({
                 currentPrice={useFiveMinute ? keyLevelDay.data?.current_price ?? undefined : day.data?.forming?.close}
                 setup={useFiveMinute || (isStrategyFiltered && strategy !== "midpoint") ? undefined : s}
                 trades={chartTrades}
+                boxes={day.data?.boxes ?? []}
                 keyLevelZone={useFiveMinute ? (keyLevelDay.data?.key_level_zone ?? s?.key_level_zone) : null}
                 showKeyLevels={true}
                 showTradeLevels={true}

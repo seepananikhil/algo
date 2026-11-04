@@ -19,6 +19,8 @@ import {
 import type { Candle, RuleTrade, Setup } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { PriceBandPrimitive, type Band } from "@/components/price-band"
+import { BoxPrimitive, type TimeBoundedBox } from "@/components/box-primitive"
+import type { CompressionBox } from "@/lib/api"
 
 import { cn } from "@/lib/utils"
 
@@ -53,6 +55,7 @@ type Props = {
   keyLevelZone?: { level: number; buffer: number } | null
   showKeyLevels?: boolean
   showTradeLevels?: boolean
+  boxes?: CompressionBox[]
   className?: string
   overlay?: ReactNode
   zoomable?: boolean
@@ -62,13 +65,14 @@ type Props = {
   resetKey?: string
 }
 
-export function CandleChart({ date, candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
+export function CandleChart({ date, candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, boxes = [], className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
   const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const lines = useRef<IPriceLine[]>([])
   const band = useRef<PriceBandPrimitive | null>(null)
+  const boxPrimitive = useRef<BoxPrimitive | null>(null)
   const dataKey = useRef<string>("")
   const bars = useRef(0)
   const manualRange = useRef(false)
@@ -146,6 +150,8 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     markers.current = createSeriesMarkers(s, [])
     band.current = new PriceBandPrimitive()
     s.attachPrimitive(band.current)
+    boxPrimitive.current = new BoxPrimitive()
+    s.attachPrimitive(boxPrimitive.current)
     // Keep the whole session in view when the card resizes, unless the user zoomed.
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
@@ -173,6 +179,7 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
       series.current = null
       markers.current = null
       band.current = null
+      boxPrimitive.current = null
       lines.current = []
       dataKey.current = ""
     }
@@ -221,7 +228,7 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
       viewKey.current = frame
       manualRange.current = false
     }
-    const key = JSON.stringify([date, data.length, data.at(-1), currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels])
+    const key = JSON.stringify([date, data.length, data.at(-1), currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels, boxes])
     if (key === dataKey.current) return
     dataKey.current = key
 
@@ -340,6 +347,15 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
         if (!trade) continue
         const slNum = Number(trade.sl)
         const tgtNum = Number(trade.target)
+        const ceilNum = Number((trade as any).box_high ?? (trade as any).ceil)
+        const floorNum = Number((trade as any).box_low ?? (trade as any).floor)
+
+        if (!Number.isNaN(ceilNum) && Number.isFinite(ceilNum) && ceilNum > 0 && ceilNum >= sessionLow * 0.9 && ceilNum <= sessionHigh * 1.1) {
+          add(ceilNum, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
+        }
+        if (!Number.isNaN(floorNum) && Number.isFinite(floorNum) && floorNum > 0 && floorNum >= sessionLow * 0.9 && floorNum <= sessionHigh * 1.1) {
+          add(floorNum, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
+        }
         if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 && slNum >= sessionLow * 0.9 && slNum <= sessionHigh * 1.1) {
           add(slNum, "#ef4444", LineStyle.Dashed, true, "SL")
         }
@@ -349,7 +365,53 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
       }
     }
 
+    if (boxes && boxes.length > 0) {
+      for (const b of boxes) {
+        if (b.ceiling && (!trades || trades.length === 0)) {
+          add(b.ceiling, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
+        }
+        if (b.floor && (!trades || trades.length === 0)) {
+          add(b.floor, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
+        }
+      }
+    }
+
     const m: SeriesMarker<Time>[] = []
+    const seenTouches = new Set<string>()
+    const addTouches = (touchTimes: string[] | undefined, isRes: boolean) => {
+      if (!touchTimes || !Array.isArray(touchTimes)) return
+      const badges = ["①", "②", "③", "④", "⑤"]
+      touchTimes.forEach((tt, idx) => {
+        const timeKey = `${tt.slice(0, 5)}_${idx}`
+        if (seenTouches.has(timeKey)) return
+        seenTouches.add(timeKey)
+        const tVal = toTime(date, tt.slice(0, 5))
+        if (tVal > 0) {
+          m.push({
+            time: tVal,
+            position: isRes ? "aboveBar" : "belowBar",
+            color: isRes ? "#f59e0b" : "#38bdf8",
+            shape: "circle",
+            text: badges[idx] || `T${idx + 1}`,
+            size: 1,
+          })
+        }
+      })
+    }
+
+    if (boxes && boxes.length > 0) {
+      for (const b of boxes) {
+        if (b.touch_times) {
+          addTouches(b.touch_times, b.status !== "breakout_down")
+        }
+      }
+    }
+    for (const t of trades) {
+      if ((t as any).touch_times) {
+        addTouches((t as any).touch_times, t.side === "CALL")
+      }
+    }
+
     for (const t of trades) {
       const call = t.side === "CALL"
       if (t.entry) {
@@ -377,12 +439,33 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     } catch (e) {
       console.warn("CandleChart: failed to set markers", e)
     }
+
+    if (boxes && boxes.length > 0) {
+      const bBoxes: TimeBoundedBox[] = boxes.map((b, idx) => {
+        const sTime = toTime(date, b.start_time)
+        const eTime = toTime(date, b.end_time || b.break_time || "15:25")
+        return {
+          id: b.box_id || `box-${idx}`,
+          startTime: sTime,
+          endTime: eTime,
+          ceiling: b.ceiling,
+          floor: b.floor,
+          midpoint: b.midpoint || (b.ceiling + b.floor) / 2,
+          rangePts: b.range_pts || (b.ceiling - b.floor),
+          durationBars: b.duration_bars || 14,
+          status: b.status || "coiling",
+        }
+      })
+      boxPrimitive.current?.setBoxes(bBoxes)
+    } else {
+      boxPrimitive.current?.setBoxes([])
+    }
     const isFirstBarFit = bars.current === 0 && data.length > 0
     bars.current = data.length
     if (chart.current && !manualRange.current && isFirstBarFit) {
       fitSession(chart.current, data.length, fullDay)
     }
-  }, [date, candles, forming, currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels, fullDay, resetKey])
+  }, [date, candles, forming, currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels, fullDay, resetKey, boxes])
 
   useEffect(() => {
     manualRange.current = false

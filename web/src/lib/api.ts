@@ -95,6 +95,7 @@ export type DayData = {
   forming: Partial<Candle>
   setup: Setup
   trades: RuleTrade[]
+  boxes?: CompressionBox[]
   signals?: Signal[]
   paper_trades?: PaperTrade[]
   option_trades?: OptionTrade[]
@@ -684,6 +685,8 @@ export type CompressionBox = {
   break_price?: number | null
   ceil_touches?: number
   floor_touches?: number
+  touch_times?: string[]
+  touch_prices?: number[]
 }
 
 export type RaiseStep = {
