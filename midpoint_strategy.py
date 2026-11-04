@@ -90,11 +90,11 @@ PAPER_LOTS = 2
 PAPER_STARTING_CAPITAL = 25_000
 WICK_TOUCH_TOLERANCE = 2.0  # a wick within this many points of the midpoint counts as touching it
 OPEN_TOLERANCE = 2.0  # the rejection candle may open up to this many points on the wrong side of the midpoint
-TARGET_POINTS = 50.0
-TRAIL_ACTIVATE_POINTS: Optional[float] = 40.0  # locks in profit once trade reaches +40 pts
-TRAIL_POINTS = 10.0
+TARGET_POINTS = 38.0
+TRAIL_ACTIVATE_POINTS: Optional[float] = 28.0  # locks in profit once trade reaches +40 pts
+TRAIL_POINTS = 8.0
 MIDPOINT_SL_OFFSET: float = 15.0  # SL anchored 15 pts beyond the midpoint so normal retests never shake out
-HARD_STOP_POINTS: Optional[float] = 25.0  # hard-cap maximum stop loss to 25 pts from entry
+HARD_STOP_POINTS: Optional[float] = 20.0  # hard-cap maximum stop loss to 25 pts from entry
 MAX_ENTRY_DISTANCE: Optional[float] = 22.0  # keep entry close to buffer zone (skips late runaway candles)
 MIN_SETUP_MINUTES = 5
 MIN_FIRST_CANDLE_BODY_RATIO = 0.12
@@ -164,9 +164,11 @@ def wick_rejection_side(work: pd.DataFrame, k: int, mid: float) -> Optional[str]
     prev_close = float(work.loc[k - 1, "close"])
     tol = WICK_TOUCH_TOLERANCE
     if prev_close > mid and o > mid - OPEN_TOLERANCE and l <= mid + tol and c >= mid + MIDPOINT_BUFFER_POINTS:
-        return "LONG"
+        if c >= o:
+            return "LONG"
     if prev_close < mid and o < mid + OPEN_TOLERANCE and h >= mid - tol and c <= mid - MIDPOINT_BUFFER_POINTS:
-        return "SHORT"
+        if c <= o:
+            return "SHORT"
     return None
 
 
