@@ -6,7 +6,6 @@ Run: python3 app_server.py  ->  http://127.0.0.1:8090
 
 from __future__ import annotations
 
-import ast
 import csv
 import gzip
 import hashlib
@@ -732,8 +731,6 @@ def trend_runner_forward_loop() -> None:
                     lots=lots_cfg,
                     sizing_mode="fixed",
                     reentry=True,
-                    be_trigger=40.0,
-                    be_lock=5.0,
                 )
                 engine.current_day_str = today_str
 
@@ -797,8 +794,6 @@ def sensex_runner_forward_loop() -> None:
                     lots=lots_cfg,
                     sizing_mode="fixed",
                     reentry=True,
-                    be_trigger=120.0,
-                    be_lock=15.0,
                 )
                 engine.current_day_str = today_str
 
@@ -3586,14 +3581,13 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
 
 
 
-def dynamic_box_backtest_report(symbol: str = "NIFTY") -> dict:
+def dynamic_box_backtest_report() -> dict:
     """Historical backtest performance for Dynamic Volatility Box Breakout."""
     csv_path = ROOT / "performance" / "dynamic_box_trades.csv"
-    lot_size = 25
-
     if not csv_path.exists():
         return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
 
+    lot_size = 25
     option_delta = 0.60
     raw_trades = read_csv_rows(csv_path)
     trades, equity, peak = [], 0.0, 0.0
@@ -3617,28 +3611,6 @@ def dynamic_box_backtest_report(symbol: str = "NIFTY") -> dict:
             b_low = round(float(r.get("box_low") or 0.0), 2)
             b_med = round(float(r.get("box_median") or 0.0), 2)
 
-            tt_raw = r.get("touch_times")
-            touch_times = []
-            if tt_raw:
-                try:
-                    touch_times = ast.literal_eval(tt_raw) if isinstance(tt_raw, str) else list(tt_raw)
-                except Exception:
-                    try:
-                        touch_times = json.loads(tt_raw)
-                    except Exception:
-                        touch_times = []
-
-            tp_raw = r.get("touch_prices")
-            touch_prices = []
-            if tp_raw:
-                try:
-                    touch_prices = ast.literal_eval(tp_raw) if isinstance(tp_raw, str) else list(tp_raw)
-                except Exception:
-                    try:
-                        touch_prices = json.loads(tp_raw)
-                    except Exception:
-                        touch_prices = []
-
             trades.append({
                 "date": r_date,
                 "side": side,
@@ -3654,11 +3626,7 @@ def dynamic_box_backtest_report(symbol: str = "NIFTY") -> dict:
                 "drawdown": round(equity - peak, 2),
                 "box_high": b_high,
                 "box_low": b_low,
-                "box_median": b_med,
-                "ceil": b_high,
-                "floor": b_low,
-                "touch_times": touch_times,
-                "touch_prices": touch_prices,
+                "box_median": b_med
             })
 
             d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0})
@@ -3703,7 +3671,7 @@ def dynamic_box_backtest_report(symbol: str = "NIFTY") -> dict:
     }
 
 
-def dynamic_box_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
+def dynamic_box_spot_trades_for_day(date: str) -> list:
     """Historical spot trades for Dynamic Box Breakout on date."""
     csv_path = ROOT / "performance" / "dynamic_box_trades.csv"
     if not csv_path.exists():
@@ -3716,31 +3684,6 @@ def dynamic_box_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
             exit_spot = float(r.get("exit_price") or 0.0)
             sl_spot = float(r.get("sl") or 0.0)
             tgt_spot = float(r.get("target") or 0.0)
-            b_high = float(r.get("box_high") or 0.0)
-            b_low = float(r.get("box_low") or 0.0)
-
-            tt_raw = r.get("touch_times")
-            touch_times = []
-            if tt_raw:
-                try:
-                    touch_times = ast.literal_eval(tt_raw) if isinstance(tt_raw, str) else list(tt_raw)
-                except Exception:
-                    try:
-                        touch_times = json.loads(tt_raw)
-                    except Exception:
-                        touch_times = []
-
-            tp_raw = r.get("touch_prices")
-            touch_prices = []
-            if tp_raw:
-                try:
-                    touch_prices = ast.literal_eval(tp_raw) if isinstance(tp_raw, str) else list(tp_raw)
-                except Exception:
-                    try:
-                        touch_prices = json.loads(tp_raw)
-                    except Exception:
-                        touch_prices = []
-
             out.append({
                 "side": side,
                 "entry": str(r.get("entry_time", ""))[:5],
@@ -3751,20 +3694,13 @@ def dynamic_box_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
                 "exit_price": exit_spot,
                 "reason": str(r.get("exit_reason", "")),
                 "pnl_points": float(r.get("pnl_points") or 0.0),
-                "box_high": b_high,
-                "box_low": b_low,
-                "ceil": b_high,
-                "floor": b_low,
-                "touch_times": touch_times,
-                "touch_prices": touch_prices,
             })
     return out
 
 
-def dynamic_box_boxes_for_day(date: str, symbol: str = "NIFTY") -> list:
+def dynamic_box_boxes_for_day(date: str) -> list:
     """Historical compression boxes for Dynamic Box Breakout on date."""
     json_path = ROOT / "performance" / "dynamic_box_boxes.json"
-
     if not json_path.exists():
         return []
     try:
@@ -4628,7 +4564,7 @@ class Handler(BaseHTTPRequestHandler):
             elif strategy_param in ("trend_runner", "trend_runner_10y", "10y", "vix_trend", "trend_expansion"):
                 rule_trades = vix_trend_runner_spot_trades_for_day(date)
             elif strategy_param in ("dynamic_box", "box_breakout", "volatility_box"):
-                rule_trades = dynamic_box_spot_trades_for_day(date, symbol=symbol)
+                rule_trades = dynamic_box_spot_trades_for_day(date)
             elif strategy_param in ("sr_breakout", "swing_sr", "breakout"):
                 rule_trades = sr_breakout_spot_trades_for_day(date)
             else:
@@ -4652,7 +4588,7 @@ class Handler(BaseHTTPRequestHandler):
                 "forming": forming,
                 "setup": setup_info(df),
                 "trades": rule_trades,
-                "boxes": dynamic_box_boxes_for_day(date, symbol=symbol) if strategy_param in ("dynamic_box", "box_breakout", "volatility_box") else [],
+                "boxes": dynamic_box_boxes_for_day(date) if strategy_param in ("dynamic_box", "box_breakout", "volatility_box") else [],
                 "signals": read_csv_rows(LIVE_DIR / f"signals_{symbol.lower()}_{date}.csv") if (LIVE_DIR / f"signals_{symbol.lower()}_{date}.csv").exists() else (read_csv_rows(LIVE_DIR / f"signals_{date}.csv") if symbol == "NIFTY" else []),
                 "paper_trades": selected_paper_trades,
                 "option_trades": option_fills,
@@ -4830,8 +4766,7 @@ class Handler(BaseHTTPRequestHandler):
             if strategy in ("", "trend_runner_10y", "10y", "10year", "trend_10y", "trend_runner", "vix_trend", "trend_expansion"):
                 self._json(nifty_10y_backtest_report())
             elif strategy in ("dynamic_box", "box_breakout", "volatility_box", "dynamic_volatility_box"):
-                sym = q.get("symbol", ["NIFTY"])[0].upper()
-                self._json(dynamic_box_backtest_report(symbol=sym))
+                self._json(dynamic_box_backtest_report())
             elif strategy in ("sensex_runner", "sensex", "sensex_trend"):
                 self._json(sensex_runner_backtest_report())
             elif strategy in ("sensex_key_levels", "sensex_levels", "key_levels_sensex"):
