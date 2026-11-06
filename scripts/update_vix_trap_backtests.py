@@ -286,14 +286,14 @@ for dp in sx_packages:
             sig = "BUY"
         if not sig: continue
         
-        # Swing SL with 180 pt cap and 60 pt floor
+        # Swing SL with 120 pt cap and 60 pt floor (aligns with Trend Runner max 240 pt 2-lot risk)
         if sig == "SELL":
             swing_high = highs[:i+1].max()
-            sl_dist = max(60.0, min(180.0, swing_high - c + 10.0))
+            sl_dist = max(60.0, min(120.0, swing_high - c + 10.0))
             initial_sl = c + sl_dist
         else:
             swing_low = lows[:i+1].min()
-            sl_dist = max(60.0, min(180.0, c - swing_low + 10.0))
+            sl_dist = max(60.0, min(120.0, c - swing_low + 10.0))
             initial_sl = c - sl_dist
             
         entry = (sig, t, c, initial_sl, sl_dist, i)
