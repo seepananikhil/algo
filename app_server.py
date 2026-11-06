@@ -3118,6 +3118,16 @@ def vix_divergence_backtest_report() -> dict:
     )
 
 
+def sensex_vix_divergence_backtest_report() -> dict:
+    """Historical 4-Year backtest performance (2023-2026) for Sensex VIX Trap Divergence (Dynamic Sizing)."""
+    return vix_trend_runner_backtest_report(
+        ROOT / "performance" / "sensex_vix_divergence_trades.csv",
+        lot_size=20,
+        option_delta=0.60,
+        use_weighted=True
+    )
+
+
 def aggressive_midpoint_scalp_report(key_level_only: bool = False) -> dict:
     """Historical backtest performance for Aggressive Morning Midpoint & Key Level Scalp."""
     filename = "aggressive_key_level_trades.csv" if key_level_only else "aggressive_midpoint_scalp_trades.csv"
@@ -3431,6 +3441,36 @@ def vix_trend_runner_spot_trades_for_day(date: str) -> list:
         if out:
             return out
     return []
+
+
+def sensex_vix_divergence_spot_trades_for_day(date: str) -> list:
+    """Historical spot trades for Sensex VIX Trap Divergence on date."""
+    csv_path = ROOT / "performance" / "sensex_vix_divergence_trades.csv"
+    if not csv_path.exists():
+        return []
+    out = []
+    for r in read_csv_rows(csv_path):
+        if r.get("date") == date:
+            side = str(r.get("side", "CALL"))
+            entry_spot = float(r.get("entry_price") or 0.0)
+            exit_spot = float(r.get("exit_price") or 0.0)
+            sl_spot = float(r.get("initial_sl") or (entry_spot - 100.0 if side == "CALL" else entry_spot + 100.0))
+            tgt_spot = float(r.get("target") or (entry_spot + 300.0 if side == "CALL" else entry_spot - 300.0))
+            pts = float(r.get("weighted_pnl_points") or r.get("pnl_points") or 0.0)
+            out.append({
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": str(r.get("exit_reason", "")),
+                "pnl_points": pts,
+                "base_points": float(r.get("pnl_points") or 0.0),
+                "lots": int(r.get("total_lots") or 1)
+            })
+    return out
 
 
 def vix_divergence_spot_trades_for_day(date: str) -> list:
@@ -4618,6 +4658,8 @@ class Handler(BaseHTTPRequestHandler):
                 rule_trades = sensex_key_levels_spot_trades_for_day(date)
             elif strategy_param in ("nifty_key_levels", "nifty_levels", "key_levels_nifty"):
                 rule_trades = nifty_key_levels_spot_trades_for_day(date)
+            elif strategy_param in ("sensex_vix_divergence", "sensex_vix", "sensex_trap"):
+                rule_trades = sensex_vix_divergence_spot_trades_for_day(date)
             elif strategy_param in ("vix_divergence", "vix_trap", "vix_reversal", "vix"):
                 rule_trades = vix_divergence_spot_trades_for_day(date)
             elif strategy_param in ("trend_runner", "trend_runner_10y", "10y", "vix_trend", "trend_expansion"):
@@ -4852,6 +4894,8 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(aggressive_midpoint_scalp_report(key_level_only=True))
             elif strategy in ("sr_breakout", "swing_sr", "breakout"):
                 self._json(sr_breakout_backtest_report())
+            elif strategy in ("sensex_vix_divergence", "sensex_vix", "sensex_trap", "vix_sensex"):
+                self._json(sensex_vix_divergence_backtest_report())
             elif strategy in ("vix_divergence", "vix_trap", "vix_reversal", "vix", "vix_dynamic"):
                 self._json(vix_divergence_backtest_report())
             elif strategy in ("midpoint", "10y_midpoint"):

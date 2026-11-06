@@ -282,7 +282,7 @@ const tooltip = {
 
 
 
-type StrategyKey = "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box" | "vix_divergence"
+type StrategyKey = "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box" | "vix_divergence" | "sensex_vix_divergence"
 
 
 
@@ -322,7 +322,7 @@ export function BacktestPage() {
 
 
 
-    if (saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box" || saved === "vix_divergence") return saved
+    if (saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box" || saved === "vix_divergence" || saved === "sensex_vix_divergence") return saved
     return "trend_runner"
 
 
@@ -380,6 +380,8 @@ export function BacktestPage() {
       ? "/api/backtest?strategy=dynamic_box"
       : strategy === "vix_divergence"
       ? "/api/backtest?strategy=vix_divergence"
+      : strategy === "sensex_vix_divergence"
+      ? "/api/backtest?strategy=sensex_vix_divergence"
       
       : "/api/backtest?strategy=trend_runner"
   )
@@ -561,7 +563,10 @@ export function BacktestPage() {
           MIDPOINT (NIFTY)
         </TabsTrigger>
         <TabsTrigger value="vix_divergence" className="font-medium text-xs sm:text-sm">
-          VIX TRAP (DYNAMIC)
+          VIX TRAP (NIFTY)
+        </TabsTrigger>
+        <TabsTrigger value="sensex_vix_divergence" className="font-medium text-xs sm:text-sm">
+          VIX TRAP (SENSEX)
         </TabsTrigger>
         
         
@@ -627,7 +632,9 @@ export function BacktestPage() {
             {strategy === "midpoint"
               ? "Midpoint Rejection Backtest"
               : strategy === "vix_divergence"
-              ? "VIX Trap Divergence Backtest (Dynamic 2+1 Lots)"
+              ? "VIX Trap (Nifty · Dynamic 2+1 Lots)"
+              : strategy === "sensex_vix_divergence"
+              ? "VIX Trap (Sensex · Dynamic 2+1 Lots)"
               : "Trend Runner Backtest"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -636,7 +643,9 @@ export function BacktestPage() {
               : strategy === "midpoint"
               ? `Nifty 50 Midpoint · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size || 50}`
               : strategy === "vix_divergence"
-              ? `Nifty 50 VIX Trap Divergence · ${s.days} days (${s.from} → ${s.to}) · Dynamic 2+1 Lots · Lot size ${s.lot_size}`
+              ? `Nifty 50 VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Dynamic 2+1 Lots · Lot size ${s.lot_size}`
+              : strategy === "sensex_vix_divergence"
+              ? `Sensex VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Dynamic 2+1 Lots · Lot size ${s.lot_size}`
               : `Nifty 50 · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`}
           </p>
         </div>
@@ -678,7 +687,7 @@ export function BacktestPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard
-          label={strategy === "trend_runner" && s.dynamic_points ? "Total points (1-Lot)" : "Total points"}
+          label={strategy === "vix_divergence" || strategy === "sensex_vix_divergence" ? "Dynamic Points (2+1 Lots)" : strategy === "trend_runner" && s.dynamic_points ? "Total points (1-Lot)" : "Total points"}
 
 
 
@@ -710,7 +719,9 @@ export function BacktestPage() {
 
 
 
-            strategy === "trend_runner" && s.dynamic_points
+            (strategy === "vix_divergence" || strategy === "sensex_vix_divergence") && s.base_points
+              ? `1-Lot: ${fmtPts(s.base_points)} · Option: ${fmtRs(s.total_points * s.lot_size * (s.option_delta || 0.6))}`
+              : strategy === "trend_runner" && s.dynamic_points
 
 
 
