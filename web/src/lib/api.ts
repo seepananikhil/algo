@@ -242,7 +242,7 @@ export function chartTradesFromOptionFills(fills: OptionTrade[]): RuleTrade[] {
   }))
 }
 
-export type BacktestTrade = RuleTrade & { date: string; equity: number; drawdown: number; bars_held?: number; setup?: string }
+export type BacktestTrade = RuleTrade & { date: string; equity: number; drawdown: number; bars_held?: number; setup?: string; lots?: number; base_points?: number }
 
 export type PaperReport = {
   summary: {
@@ -442,6 +442,7 @@ export type Backtest = {
     total_points: number
     dynamic_points?: number
     dynamic_rupees?: number
+    base_points?: number
     avg_points: number
     max_drawdown: number
     best: number

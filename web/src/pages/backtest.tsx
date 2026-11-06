@@ -282,7 +282,7 @@ const tooltip = {
 
 
 
-type StrategyKey = "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box"
+type StrategyKey = "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box" | "vix_divergence"
 
 
 
@@ -322,7 +322,7 @@ export function BacktestPage() {
 
 
 
-    if (saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box") return saved
+    if (saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box" || saved === "vix_divergence") return saved
     return "trend_runner"
 
 
@@ -378,6 +378,9 @@ export function BacktestPage() {
       ? "/api/backtest?strategy=midpoint"
       : strategy === "dynamic_box"
       ? "/api/backtest?strategy=dynamic_box"
+      : strategy === "vix_divergence"
+      ? "/api/backtest?strategy=vix_divergence"
+      
       : "/api/backtest?strategy=trend_runner"
   )
 
@@ -557,6 +560,11 @@ export function BacktestPage() {
         <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">
           MIDPOINT (NIFTY)
         </TabsTrigger>
+        <TabsTrigger value="vix_divergence" className="font-medium text-xs sm:text-sm">
+          VIX TRAP (DYNAMIC)
+        </TabsTrigger>
+        
+        
 
       </TabsList>
     </Tabs>
@@ -616,13 +624,19 @@ export function BacktestPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
-            {strategy === "midpoint" ? "Midpoint Rejection Backtest" : "Trend Runner Backtest"}
+            {strategy === "midpoint"
+              ? "Midpoint Rejection Backtest"
+              : strategy === "vix_divergence"
+              ? "VIX Trap Divergence Backtest (Dynamic 2+1 Lots)"
+              : "Trend Runner Backtest"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {strategy === "sensex_runner"
               ? `Sensex · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
               : strategy === "midpoint"
               ? `Nifty 50 Midpoint · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size || 50}`
+              : strategy === "vix_divergence"
+              ? `Nifty 50 VIX Trap Divergence · ${s.days} days (${s.from} → ${s.to}) · Dynamic 2+1 Lots · Lot size ${s.lot_size}`
               : `Nifty 50 · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`}
           </p>
         </div>
@@ -1763,7 +1777,7 @@ export function BacktestPage() {
 
 
 
-                  <TableCell className="text-xs text-muted-foreground">{t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{t.lots && t.lots > 1 ? `${t.setup || "VIX TRAP"} (${t.lots}L) · ${prettyReason(t.reason)}` : t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}</TableCell>
 
 
 
