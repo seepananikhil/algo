@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useEffect, useRef } from "react"
+import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 import {
   Radio,
@@ -1287,6 +1288,21 @@ export function LivePage() {
                     <span className="text-muted-foreground font-mono text-[11px] shrink-0">
                       Spot: <span className="font-bold text-foreground">{sensexLtp.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
                     </span>
+                    {(sensexDay.data?.vix?.close != null || niftyDay.data?.vix?.close != null) && (() => {
+                      const vx = sensexDay.data?.vix ?? niftyDay.data?.vix
+                      if (!vx?.close) return null
+                      return (
+                        <div className="flex items-baseline gap-1 px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono text-xs shrink-0" title={`India VIX: ${vx.close.toFixed(2)}`}>
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase">VIX</span>
+                          <span className="text-xs font-bold text-foreground">{vx.close.toFixed(2)}</span>
+                          {vx.change_pct != null && (
+                            <span className={cn("text-[10px] font-semibold", vx.change_pct > 0 ? "text-amber-500" : "text-sky-500")}>
+                              {vx.change_pct >= 0 ? "+" : ""}{vx.change_pct.toFixed(2)}%
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Focused Trade badge */}
                     {selectedTrade && (selectedTrade.symbol?.toUpperCase().includes("SENSEX") || selectedTrade.symbol?.includes("BSESN")) && (
@@ -1350,6 +1366,21 @@ export function LivePage() {
                     <span className="text-muted-foreground font-mono text-[11px] shrink-0">
                       Spot: <span className="font-bold text-foreground">{niftyLtp.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
                     </span>
+                    {(niftyDay.data?.vix?.close != null || sensexDay.data?.vix?.close != null) && (() => {
+                      const vx = niftyDay.data?.vix ?? sensexDay.data?.vix
+                      if (!vx?.close) return null
+                      return (
+                        <div className="flex items-baseline gap-1 px-1.5 py-0.5 rounded border border-border/60 bg-muted/40 font-mono text-xs shrink-0" title={`India VIX: ${vx.close.toFixed(2)}`}>
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase">VIX</span>
+                          <span className="text-xs font-bold text-foreground">{vx.close.toFixed(2)}</span>
+                          {vx.change_pct != null && (
+                            <span className={cn("text-[10px] font-semibold", vx.change_pct > 0 ? "text-amber-500" : "text-sky-500")}>
+                              {vx.change_pct >= 0 ? "+" : ""}{vx.change_pct.toFixed(2)}%
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })()}
 
                     {/* Focused Trade badge */}
                     {selectedTrade && (!selectedTrade.symbol || selectedTrade.symbol?.toUpperCase().includes("NIFTY") || selectedTrade.symbol?.includes("NSEI")) && (

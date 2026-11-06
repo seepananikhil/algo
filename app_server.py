@@ -2181,6 +2181,14 @@ def status() -> dict:
             pass
     nifty_q = q_data.get("nifty", {})
     sensex_q = q_data.get("sensex", {})
+    vix_q = q_data.get("vix", {})
+    vix_last_tick = {
+        "time": vix_q.get("time"),
+        "ltp": vix_q.get("ltp"),
+        "change": vix_q.get("change"),
+        "per_change": vix_q.get("per_change"),
+        "prev_close": vix_q.get("prev_close"),
+    } if vix_q.get("ltp") else None
 
     last_tick = {
         "time": nifty_q.get("time", s_time or m_time),
@@ -2228,6 +2236,7 @@ def status() -> dict:
         "risk_guardian": (lambda: (__import__("risk_guardian").check_and_enforce_guardian()))(),
         "last_tick": last_tick,
         "sensex_last_tick": sensex_last_tick,
+        "vix_last_tick": vix_last_tick,
         "scalper": scalper_status(),
     }
 
@@ -3530,6 +3539,65 @@ def sensex_trend_runner_spot_trades_for_day(date: str) -> list:
     return []
 
 
+_VIX_DAILY_CACHE = None
+
+def get_vix_daily_map() -> dict:
+    global _VIX_DAILY_CACHE
+    if _VIX_DAILY_CACHE is None:
+        vix_path = ROOT / "captured_data" / "india_vix_10y.csv"
+        m = {}
+        if vix_path.exists():
+            import csv
+            with open(vix_path, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                prev_c = None
+                for r in reader:
+                    d = r.get("date", "")
+                    try:
+                        c = float(r.get("close") or 0.0)
+                        pct_val = r.get("vix_change_pct")
+                        pct = float(pct_val) if pct_val and pct_val != "" else 0.0
+                        pts = round(c - prev_c, 2) if prev_c is not None else 0.0
+                        m[d] = {
+                            "close": c,
+                            "change_pct": round(pct, 2),
+                            "change_pts": pts,
+                            "prev_close": prev_c
+                        }
+                        prev_c = c
+                    except Exception:
+                        pass
+        _VIX_DAILY_CACHE = m
+    return _VIX_DAILY_CACHE
+
+
+def get_vix_for_date(date: str) -> dict | None:
+    """Return VIX close, change_pct, change_pts, prev_close for a given day."""
+    if not date:
+        return None
+    # 1. Live quotes file if available
+    quotes_file = LIVE_DIR / f"quotes_{date}.json"
+    if quotes_file.exists():
+        try:
+            q_data = json.loads(quotes_file.read_text(encoding="utf-8"))
+            vix_quote = q_data.get("vix")
+            if vix_quote and vix_quote.get("ltp"):
+                return {
+                    "close": float(vix_quote.get("ltp") or 0.0),
+                    "change_pct": float(vix_quote.get("per_change") or 0.0),
+                    "change_pts": float(vix_quote.get("change") or 0.0),
+                    "prev_close": float(vix_quote.get("prev_close") or 0.0),
+                }
+        except Exception:
+            pass
+
+    # 2. Historical VIX 10y map
+    v_map = get_vix_daily_map()
+    if date in v_map:
+        return v_map[date]
+    return None
+
+
 def sensex_key_levels_spot_trades_for_day(date: str) -> list:
     """Historical spot trades for Sensex Key Levels on date."""
     for fname in ["sensex_key_levels_trades.csv", "sensex_key_levels_paper_trades.csv"]:
@@ -4685,6 +4753,7 @@ class Handler(BaseHTTPRequestHandler):
                 "date": date,
                 "cutoff": cutoff,
                 "prev_close": prev_close,
+                "vix": get_vix_for_date(date),
                 "candles": rows,
                 "forming": forming,
                 "setup": setup_info(df),

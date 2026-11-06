@@ -47,6 +47,7 @@ export type Status = {
   }
   last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
   sensex_last_tick: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
+  vix_last_tick?: { time: string; ltp: number; change?: number; per_change?: number; prev_close?: number } | null
   scalper?: {
     enabled: boolean
     mode: "PAPER" | "LIVE"
@@ -87,10 +88,18 @@ export type Setup = {
   armed?: { side: "CALL" | "PUT"; candle: string; level: number; stop: number }
 }
 
+export type VixData = {
+  close: number
+  change_pct: number
+  change_pts?: number
+  prev_close?: number | null
+}
+
 export type DayData = {
   date: string
   symbol?: string
   prev_close?: number | null
+  vix?: VixData | null
   candles: Candle[]
   forming: Partial<Candle>
   setup: Setup

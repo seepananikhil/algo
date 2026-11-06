@@ -152,6 +152,24 @@ export function DayDetail({
                   </span>
                 </div>
               )}
+              {day.data?.vix?.close != null && (
+                <div
+                  className="flex items-baseline gap-1 px-2 py-0.5 rounded border border-border/60 bg-muted/40 font-mono shadow-2xs shrink-0"
+                  title={`India VIX for ${date ?? day.data?.date}: ${day.data.vix.close.toFixed(2)}${day.data.vix.prev_close ? ` (prev ${day.data.vix.prev_close.toFixed(2)})` : ""}`}
+                >
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">VIX</span>
+                  <span className="text-xs font-bold text-foreground">{day.data.vix.close.toFixed(2)}</span>
+                  {day.data.vix.change_pct != null && (
+                    <span className={cn(
+                      "text-[11px] font-semibold",
+                      day.data.vix.change_pct > 0 ? "text-amber-500 dark:text-amber-400" : day.data.vix.change_pct < 0 ? "text-sky-500 dark:text-sky-400" : "text-muted-foreground"
+                    )}>
+                      {day.data.vix.change_pct >= 0 ? "+" : ""}{day.data.vix.change_pct.toFixed(2)}%
+                      {day.data.vix.change_pts != null && ` (${day.data.vix.change_pts >= 0 ? "+" : ""}{day.data.vix.change_pts.toFixed(2)})`}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-2">
               {(fills.length > 0 || trades.length > 0) && (
@@ -236,6 +254,28 @@ export function DayDetail({
                   </span>
                 </div>
               )}
+              {(secondaryDay.data?.vix?.close != null || day.data?.vix?.close != null) && (() => {
+                const vx = secondaryDay.data?.vix ?? day.data?.vix
+                if (!vx?.close) return null
+                return (
+                  <div
+                    className="flex items-baseline gap-1 px-2 py-0.5 rounded border border-border/60 bg-muted/40 font-mono shadow-2xs shrink-0"
+                    title={`India VIX for ${date ?? secondaryDay.data?.date}: ${vx.close.toFixed(2)}${vx.prev_close ? ` (prev ${vx.prev_close.toFixed(2)})` : ""}`}
+                  >
+                    <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">VIX</span>
+                    <span className="text-xs font-bold text-foreground">{vx.close.toFixed(2)}</span>
+                    {vx.change_pct != null && (
+                      <span className={cn(
+                        "text-[11px] font-semibold",
+                        vx.change_pct > 0 ? "text-amber-500 dark:text-amber-400" : vx.change_pct < 0 ? "text-sky-500 dark:text-sky-400" : "text-muted-foreground"
+                      )}>
+                        {vx.change_pct >= 0 ? "+" : ""}{vx.change_pct.toFixed(2)}%
+                        {vx.change_pts != null && ` (${vx.change_pts >= 0 ? "+" : ""}{vx.change_pts.toFixed(2)})`}
+                      </span>
+                    )}
+                  </div>
+                )
+              })()}
             </div>
             <div className="flex items-center gap-2">
               {secondarySetup?.mid != null && (
