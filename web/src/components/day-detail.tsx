@@ -165,7 +165,7 @@ export function DayDetail({
                       day.data.vix.change_pct > 0 ? "text-amber-500 dark:text-amber-400" : day.data.vix.change_pct < 0 ? "text-sky-500 dark:text-sky-400" : "text-muted-foreground"
                     )}>
                       {day.data.vix.change_pct >= 0 ? "+" : ""}{day.data.vix.change_pct.toFixed(2)}%
-                      {day.data.vix.change_pts != null && ` (${day.data.vix.change_pts >= 0 ? "+" : ""}{day.data.vix.change_pts.toFixed(2)})`}
+                      {day.data.vix.change_pts != null && ` (${day.data.vix.change_pts >= 0 ? "+" : ""}${day.data.vix.change_pts.toFixed(2)})`}
                     </span>
                   )}
                 </div>
@@ -270,7 +270,7 @@ export function DayDetail({
                         vx.change_pct > 0 ? "text-amber-500 dark:text-amber-400" : vx.change_pct < 0 ? "text-sky-500 dark:text-sky-400" : "text-muted-foreground"
                       )}>
                         {vx.change_pct >= 0 ? "+" : ""}{vx.change_pct.toFixed(2)}%
-                        {vx.change_pts != null && ` (${vx.change_pts >= 0 ? "+" : ""}{vx.change_pts.toFixed(2)})`}
+                        {vx.change_pts != null && ` (${vx.change_pts >= 0 ? "+" : ""}${vx.change_pts.toFixed(2)})`}
                       </span>
                     )}
                   </div>
