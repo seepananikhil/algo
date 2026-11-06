@@ -632,9 +632,9 @@ export function BacktestPage() {
             {strategy === "midpoint"
               ? "Midpoint Rejection Backtest"
               : strategy === "vix_divergence"
-              ? "VIX Trap (Nifty · Dynamic 2+1 Lots)"
+              ? "VIX Trap Divergence (Nifty)"
               : strategy === "sensex_vix_divergence"
-              ? "VIX Trap (Sensex · Dynamic 2+1 Lots)"
+              ? "VIX Trap Divergence (Sensex)"
               : "Trend Runner Backtest"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
@@ -643,9 +643,9 @@ export function BacktestPage() {
               : strategy === "midpoint"
               ? `Nifty 50 Midpoint · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size || 50}`
               : strategy === "vix_divergence"
-              ? `Nifty 50 VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Dynamic 2+1 Lots · Lot size ${s.lot_size}`
+              ? `Nifty 50 VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
               : strategy === "sensex_vix_divergence"
-              ? `Sensex VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Dynamic 2+1 Lots · Lot size ${s.lot_size}`
+              ? `Sensex VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
               : `Nifty 50 · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`}
           </p>
         </div>
@@ -687,74 +687,16 @@ export function BacktestPage() {
 
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard
-          label={strategy === "vix_divergence" || strategy === "sensex_vix_divergence" ? "Dynamic Points (2+1 Lots)" : strategy === "trend_runner" && s.dynamic_points ? "Total points (1-Lot)" : "Total points"}
-
-
-
-
-
-
-
+          label={s.dynamic_points ? "Total points (1-Lot)" : "Total points"}
           value={fmtPts(s.total_points)}
-
-
-
-
-
-
-
           className={pnlClass(s.total_points)}
-
-
-
-
-
-
-
           hint={
-
-
-
-
-
-
-
-            (strategy === "vix_divergence" || strategy === "sensex_vix_divergence") && s.base_points
-              ? `1-Lot: ${fmtPts(s.base_points)} · Option: ${fmtRs(s.total_points * s.lot_size * (s.option_delta || 0.6))}`
-              : strategy === "trend_runner" && s.dynamic_points
-
-
-
-
-
-
-
+            s.dynamic_points
               ? `Dynamic: ${fmtPts(s.dynamic_points)} (≈ ${fmtRs(s.dynamic_rupees || s.dynamic_points * s.lot_size)})`
-
-
-
-
-
-
-
               : s.option_delta
               ? `Option (≈${Math.round(s.option_delta * 100)}%Δ): ${fmtRs(s.total_points * s.lot_size * s.option_delta)} · Spot: ${fmtRs(s.total_points * s.lot_size)}`
               : `≈ ${fmtRs(s.total_points * s.lot_size)}`
-
-
-
-
-
-
-
           }
-
-
-
-
-
-
-
         />
 
 
