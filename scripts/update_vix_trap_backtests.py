@@ -12,7 +12,10 @@ import numpy as np
 # 1. Load VIX
 vdf = pd.read_csv("captured_data/india_vix_10y.csv")
 vdf["date_str"] = pd.to_datetime(vdf["date"]).dt.strftime("%Y-%m-%d")
+vdf["prev_close"] = vdf["close"].shift(1)
+vdf["vix_pts_chg"] = (vdf["close"] - vdf["prev_close"]).abs()
 vix_map = dict(zip(vdf["date_str"], vdf["vix_change_pct"].fillna(0.0)))
+vix_pts_map = dict(zip(vdf["date_str"], vdf["vix_pts_chg"].fillna(0.0)))
 
 # =====================================================================
 # PART 1: NIFTY 10-YEAR VIX TRAP (2017 - 2026)
@@ -53,6 +56,7 @@ for d, g in df_nifty.groupby("date_str"):
     nifty_packages.append({
         "date": d,
         "vix_chg": vix_map.get(d, 0.0),
+        "vix_pts": vix_pts_map.get(d, 0.0),
         "or_high": or_high,
         "or_low": or_low,
         "times": g["time_str"].values,
@@ -71,6 +75,10 @@ lot_size_nifty = 25
 delta = 0.60
 
 for dp in nifty_packages:
+    # Dual filter on Nifty: Skip sleepy days where VIX point movement < 0.40 pts
+    if dp.get("vix_pts", 0.0) < 0.40:
+        continue
+        
     v_chg = dp["vix_chg"]
     or_h = dp["or_high"]
     or_l = dp["or_low"]
@@ -94,14 +102,14 @@ for dp in nifty_packages:
             sig = "CALL"
         if not sig: continue
         
-        # Swing SL with 60 pt cap and 25 pt floor
+        # Loosened Swing High/Low SL (capped at 80 pts with 25 pt floor)
         if sig == "PUT":
             swing_high = highs[:i+1].max()
-            sl_dist = max(25.0, min(60.0, swing_high - c + 2.0))
+            sl_dist = max(25.0, min(80.0, swing_high - c + 2.0))
             initial_sl = c + sl_dist
         else:
             swing_low = lows[:i+1].min()
-            sl_dist = max(25.0, min(60.0, c - swing_low + 2.0))
+            sl_dist = max(25.0, min(80.0, c - swing_low + 2.0))
             initial_sl = c - sl_dist
             
         entry = (sig, t, c, initial_sl, sl_dist, i)
