@@ -148,6 +148,9 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
         active_pos = None
         has_tested_h, has_tested_l = False, False
         trap_attempted = False
+        last_exit_idx = -999
+        roll_h = or_h
+        roll_l = or_l
         
         for i in range(n_bars):
             t = times[i]
@@ -157,6 +160,10 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
             
             if h >= or_h: has_tested_h = True
             if l <= or_l: has_tested_l = True
+            prev_dh = roll_h
+            prev_dl = roll_l
+            roll_h = max(roll_h, h)
+            roll_l = min(roll_l, l)
             
             # --- 1. MANAGE ACTIVE POSITION ---
             if active_pos is not None:
@@ -256,6 +263,7 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                         "total_lots": tot_lots,
                     })
                     active_pos = None
+                    last_exit_idx = i
                     if is_eod:
                         break
                     continue
@@ -309,13 +317,31 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                 # If no Trap is running or if Trap was stopped out early
                 if t >= "10:00":
                     runner_sig = None
+                    
+                    # Candle conviction & Rejection Wick Filter
+                    c_rng = h - l
+                    c_body = abs(c - o)
+                    body_ratio = c_body / c_rng if c_rng > 0 else 0.0
+                    uw_pct = (h - max(o, c)) / c_rng if c_rng > 0 else 0.0
+                    lw_pct = (min(o, c) - l) / c_rng if c_rng > 0 else 0.0
+                    
+                    if day_trades == 0:
+                        # Trade 1: Breakout beyond OR with conviction (body >= 55%, rejection wick <= 30%)
+                        long_pass = (c > or_h) and (body_ratio >= 0.55) and (uw_pct <= 0.30)
+                        short_pass = (c < or_l) and (body_ratio >= 0.55) and (lw_pct <= 0.30)
+                    else:
+                        # Trade 2 (Re-entry): Requires 30-min cool-off AND breaking Rolling Day Extreme
+                        cool_off_ok = (i - last_exit_idx >= 30)
+                        long_pass = cool_off_ok and (c > prev_dh) and (body_ratio >= 0.55) and (uw_pct <= 0.30)
+                        short_pass = cool_off_ok and (c < prev_dl) and (body_ratio >= 0.55) and (lw_pct <= 0.30)
+                    
                     # Long breakout: close > OR high and close > open and close > vwap
-                    if c > or_h and c > o and c > v:
+                    if long_pass and c > o and c > v:
                         # VIX confirming: VIX negative or flat
                         if v_chg <= 0.0 or (is_sx and v_chg < 1.0):
                             runner_sig = "CALL"
                     # Short breakout: close < OR low and close < open and close < vwap
-                    elif c < or_l and c < o and c < v:
+                    elif short_pass and c < o and c < v:
                         # VIX confirming: VIX positive (spiking fear)
                         if v_chg >= 0.0 or (is_sx and v_chg > -1.0):
                             runner_sig = "PUT"
