@@ -282,112 +282,56 @@ const tooltip = {
 
 
 
-type StrategyKey = "vix_master_nifty" | "vix_master_sensex" | "vix_divergence" | "sensex_vix_divergence" | "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box"
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+type MainStrategy = "vix_master" | "trend_runner" | "vix_trap"
+type SubSymbol = "all" | "nifty" | "sensex"
+type StrategyKey = string
 
 export function BacktestPage() {
-
-
-
-
-
-
-
-  const [strategy, setStrategy] = useState<StrategyKey>(() => {
-
-
-
-
-
-
-
-    const saved = localStorage.getItem("backtest_strategy") as StrategyKey
-
-
-
-
-
-
-
-    if (saved === "vix_master_nifty" || saved === "vix_master_sensex" || saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box" || saved === "vix_divergence" || saved === "sensex_vix_divergence") return saved
-    return "vix_master_nifty"
-
-
-
-
-
-
-
+  const [mainStrategy, setMainStrategy] = useState<MainStrategy>(() => {
+    const saved = localStorage.getItem("backtest_main_strategy") as MainStrategy
+    if (saved === "trend_runner" || saved === "vix_trap") return saved
+    return "vix_master"
   })
 
+  const [subSymbol, setSubSymbol] = useState<SubSymbol>(() => {
+    const saved = localStorage.getItem("backtest_sub_symbol") as SubSymbol
+    if (saved === "nifty" || saved === "sensex") return saved
+    return "all"
+  })
 
+  const apiUrl = useMemo(() => {
+    if (mainStrategy === "vix_master") {
+      if (subSymbol === "nifty") return "/api/backtest?strategy=vix_master_nifty"
+      if (subSymbol === "sensex") return "/api/backtest?strategy=vix_master_sensex"
+      return "/api/backtest?strategy=vix_master_all"
+    } else if (mainStrategy === "trend_runner") {
+      if (subSymbol === "nifty") return "/api/backtest?strategy=trend_runner"
+      if (subSymbol === "sensex") return "/api/backtest?strategy=sensex_runner"
+      return "/api/backtest?strategy=trend_runner_all"
+    } else {
+      if (subSymbol === "nifty") return "/api/backtest?strategy=vix_divergence"
+      if (subSymbol === "sensex") return "/api/backtest?strategy=sensex_vix_divergence"
+      return "/api/backtest?strategy=vix_trap_all"
+    }
+  }, [mainStrategy, subSymbol])
 
+  const strategy = useMemo(() => {
+    if (mainStrategy === "vix_master") {
+      if (subSymbol === "sensex") return "vix_master_sensex"
+      if (subSymbol === "all") return "vix_master_all"
+      return "vix_master_nifty"
+    } else if (mainStrategy === "trend_runner") {
+      if (subSymbol === "sensex") return "sensex_runner"
+      if (subSymbol === "all") return "trend_runner_all"
+      return "trend_runner"
+    } else {
+      if (subSymbol === "sensex") return "sensex_vix_divergence"
+      if (subSymbol === "all") return "vix_trap_all"
+      return "vix_divergence"
+    }
+  }, [mainStrategy, subSymbol])
 
-
-
-
-  const handleStrategyChange = (value: StrategyKey) => {
-
-
-
-
-
-
-
-    localStorage.setItem("backtest_strategy", value)
-
-
-
-
-
-
-
-    setStrategy(value)
-
-
-
-
-
-
-
-  }
-
-
-
-
-
-
-
-  const { data: raw, loading, error, reload } = usePoll<Backtest>(
-    strategy === "vix_master_nifty"
-      ? "/api/backtest?strategy=vix_master_nifty"
-      : strategy === "vix_master_sensex"
-      ? "/api/backtest?strategy=vix_master_sensex"
-      : strategy === "sensex_runner"
-      ? "/api/backtest?strategy=sensex_runner"
-      : strategy === "midpoint"
-      ? "/api/backtest?strategy=midpoint"
-      : strategy === "dynamic_box"
-      ? "/api/backtest?strategy=dynamic_box"
-      : strategy === "vix_divergence"
-      ? "/api/backtest?strategy=vix_divergence"
-      : strategy === "sensex_vix_divergence"
-      ? "/api/backtest?strategy=sensex_vix_divergence"
-      : "/api/backtest?strategy=trend_runner"
-  )
+  const { data: raw, loading, error, reload } = usePoll<Backtest>(apiUrl)
 
 
 
@@ -553,67 +497,89 @@ export function BacktestPage() {
 
 
 
-  const strategyTabs = (
-    <Tabs value={strategy} onValueChange={(val) => { setPicked(null); handleStrategyChange(val as StrategyKey) }}>
-      <TabsList className="bg-muted/60 p-1 rounded-lg flex flex-wrap gap-1">
-        <TabsTrigger value="vix_master_nifty" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-          ⚡ VIX MASTER (NIFTY)
-        </TabsTrigger>
-        <TabsTrigger value="vix_master_sensex" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-cyan-600 data-[state=active]:text-white">
-          ⚡ VIX MASTER (SENSEX)
-        </TabsTrigger>
-        <TabsTrigger value="vix_divergence" className="font-medium text-xs sm:text-sm">
-          VIX TRAP (NIFTY)
-        </TabsTrigger>
-        <TabsTrigger value="sensex_vix_divergence" className="font-medium text-xs sm:text-sm">
-          VIX TRAP (SENSEX)
-        </TabsTrigger>
-        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
-          TREND RUNNER (NIFTY)
-        </TabsTrigger>
-        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
-          TREND RUNNER (SENSEX)
-        </TabsTrigger>
-        <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">
-          MIDPOINT
-        </TabsTrigger>
-      </TabsList>
-    </Tabs>
+    const strategyTabs = (
+    <div className="flex flex-col gap-2.5">
+      {/* Strategy Top Row */}
+      <div className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/60 rounded-xl w-fit">
+        <button
+          onClick={() => { setPicked(null); setMainStrategy("vix_master"); localStorage.setItem("backtest_main_strategy", "vix_master") }}
+          className={cn(
+            "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
+            mainStrategy === "vix_master"
+              ? "bg-emerald-600 text-white shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <span>⚡</span>
+          <span>VIX Master</span>
+        </button>
+
+        <button
+          onClick={() => { setPicked(null); setMainStrategy("trend_runner"); localStorage.setItem("backtest_main_strategy", "trend_runner") }}
+          className={cn(
+            "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
+            mainStrategy === "trend_runner"
+              ? "bg-blue-600 text-white shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <span>Trend Runner</span>
+        </button>
+
+        <button
+          onClick={() => { setPicked(null); setMainStrategy("vix_trap"); localStorage.setItem("backtest_main_strategy", "vix_trap") }}
+          className={cn(
+            "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
+            mainStrategy === "vix_trap"
+              ? "bg-amber-600 text-white shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <span>VIX Trap</span>
+        </button>
+      </div>
+
+      {/* Sub-selector below that strategy */}
+      <div className="flex items-center gap-1.5 p-1 bg-muted/40 rounded-lg w-fit border border-border/40">
+        <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground px-2">Index:</span>
+        <button
+          onClick={() => { setPicked(null); setSubSymbol("all"); localStorage.setItem("backtest_sub_symbol", "all") }}
+          className={cn(
+            "px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer",
+            subSymbol === "all"
+              ? "bg-background text-foreground shadow-xs font-bold border border-border/60"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          🌐 ALL (Combined)
+        </button>
+
+        <button
+          onClick={() => { setPicked(null); setSubSymbol("nifty"); localStorage.setItem("backtest_sub_symbol", "nifty") }}
+          className={cn(
+            "px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer",
+            subSymbol === "nifty"
+              ? "bg-background text-foreground shadow-xs font-bold border border-border/60"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          NIFTY 50
+        </button>
+
+        <button
+          onClick={() => { setPicked(null); setSubSymbol("sensex"); localStorage.setItem("backtest_sub_symbol", "sensex") }}
+          className={cn(
+            "px-3 py-1 text-xs font-medium rounded-md transition-all cursor-pointer",
+            subSymbol === "sensex"
+              ? "bg-background text-foreground shadow-xs font-bold border border-border/60"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+        >
+          SENSEX
+        </button>
+      </div>
+    </div>
   )
-
-  if (error) return <div className="flex flex-col gap-4">{strategyTabs}<p className="text-sm text-red-500">Backtest failed: {error}</p></div>
-
-
-
-
-
-
-
-  if (loading || !data) return <div className="flex flex-col gap-4">{strategyTabs}<Skeleton className="h-[600px] w-full" /></div>
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  const s = data.summary
-
-
-
-
-
-
-
-  const curve = [{ label: "start", equity: 0, drawdown: 0 }, ...(data?.trades ?? []).map((t) => ({ label: `${t.date} ${t.entry}`, equity: t.equity, drawdown: t.drawdown }))]
 
 
 
@@ -634,35 +600,15 @@ export function BacktestPage() {
       {/* Top Header & Page Actions */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
         <div>
-          <h1 className="text-xl font-bold tracking-tight">
-            {strategy === "vix_master_nifty"
-              ? "Unified VIX Master Strategy (Nifty 50)"
-              : strategy === "vix_master_sensex"
-              ? "Unified VIX Master Strategy (Sensex)"
-              : strategy === "midpoint"
-              ? "Midpoint Rejection Backtest"
-              : strategy === "vix_divergence"
-              ? "VIX Trap Divergence (Nifty)"
-              : strategy === "sensex_vix_divergence"
-              ? "VIX Trap Divergence (Sensex)"
-              : strategy === "sensex_runner"
-              ? "Sensex Trend Runner Backtest"
-              : "Nifty Trend Runner Backtest"}
+                    <h1 className="text-xl font-bold tracking-tight">
+            {mainStrategy === "vix_master"
+              ? `⚡ VIX Master Strategy · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`
+              : mainStrategy === "trend_runner"
+              ? `Trend Runner Breakout · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`
+              : `VIX Trap Divergence · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {strategy === "vix_master_nifty"
-              ? `Nifty 50 VIX Master · Morning Trap Sniper + Trend Runner Expansion · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
-              : strategy === "vix_master_sensex"
-              ? `Sensex VIX Master · Morning Trap Sniper + Trend Runner Expansion · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
-              : strategy === "sensex_runner"
-              ? `Sensex · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
-              : strategy === "midpoint"
-              ? `Nifty 50 Midpoint · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size || 50}`
-              : strategy === "vix_divergence"
-              ? `Nifty 50 VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
-              : strategy === "sensex_vix_divergence"
-              ? `Sensex VIX Trap · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
-              : `Nifty 50 · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`}
+            {s.days} days ({s.from} → {s.to}) · Lot size {s.lot_size || (subSymbol === "sensex" ? 10 : 25)} · Option Delta {Math.round((s.option_delta || 0.60) * 100)}%
           </p>
         </div>
 
@@ -691,29 +637,12 @@ export function BacktestPage() {
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="text-xs text-muted-foreground">Period:</span>
           <Tabs value={year} onValueChange={(v) => { setYear(v as string); setPicked(null) }}>
-            <TabsList className="bg-muted/60 p-1 rounded-lg flex flex-wrap gap-1">
-        <TabsTrigger value="vix_master_nifty" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
-          ⚡ VIX MASTER (NIFTY)
-        </TabsTrigger>
-        <TabsTrigger value="vix_master_sensex" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-cyan-600 data-[state=active]:text-white">
-          ⚡ VIX MASTER (SENSEX)
-        </TabsTrigger>
-        <TabsTrigger value="vix_divergence" className="font-medium text-xs sm:text-sm">
-          VIX TRAP (NIFTY)
-        </TabsTrigger>
-        <TabsTrigger value="sensex_vix_divergence" className="font-medium text-xs sm:text-sm">
-          VIX TRAP (SENSEX)
-        </TabsTrigger>
-        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
-          TREND RUNNER (NIFTY)
-        </TabsTrigger>
-        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
-          TREND RUNNER (SENSEX)
-        </TabsTrigger>
-        <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">
-          MIDPOINT
-        </TabsTrigger>
-      </TabsList>
+            <TabsList className="bg-muted/60 p-1 rounded-lg">
+              <TabsTrigger value="all" className="text-xs font-medium">All</TabsTrigger>
+              {years.map((y) => (
+                <TabsTrigger key={y} value={y} className="text-xs font-medium">{y}</TabsTrigger>
+              ))}
+            </TabsList>
           </Tabs>
         </div>
       </div>

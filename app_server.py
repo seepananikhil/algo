@@ -3799,6 +3799,140 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
 
 
 
+def combined_strategy_backtest_report(
+    nifty_csv: Path,
+    sensex_csv: Path,
+    nifty_lot: int = 25,
+    sensex_lot: int = 10,
+    option_delta: float = 0.60,
+    use_weighted: bool = False
+) -> dict:
+    """Historical combined portfolio performance merging Nifty and Sensex trade logs."""
+    raw_nifty = read_csv_rows(nifty_csv) if nifty_csv.exists() else []
+    raw_sensex = read_csv_rows(sensex_csv) if sensex_csv.exists() else []
+
+    parsed_trades = []
+    for r in raw_nifty:
+        try:
+            pnl_pts = round(float(r.get("pnl_points") or 0.0), 2)
+            w_pts = round(float(r.get("weighted_pnl_points") or pnl_pts), 2)
+            pts = w_pts if use_weighted else pnl_pts
+            opt_rs = round(pts * nifty_lot * option_delta, 2)
+            fut_rs = round(pts * nifty_lot, 2)
+            parsed_trades.append({
+                "date": str(r.get("date", "")),
+                "symbol": "NIFTY",
+                "side": str(r.get("side", "CALL")),
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": round(float(r.get("entry_price") or 0.0), 2),
+                "sl": round(float(r.get("sl") or r.get("initial_sl") or 0.0), 2),
+                "target": round(float(r.get("target") or 0.0), 2),
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": round(float(r.get("exit_price") or 0.0), 2),
+                "reason": str(r.get("exit_reason", "")),
+                "pnl_points": pts,
+                "base_points": pnl_pts,
+                "pnl_rupees": opt_rs,
+                "futures_rupees": fut_rs,
+                "lots": int(r.get("total_lots") or 1),
+                "lot_size": nifty_lot,
+            })
+        except Exception:
+            continue
+
+    for r in raw_sensex:
+        try:
+            pnl_pts = round(float(r.get("pnl_points") or 0.0), 2)
+            w_pts = round(float(r.get("weighted_pnl_points") or pnl_pts), 2)
+            pts = w_pts if use_weighted else pnl_pts
+            opt_rs = round(pts * sensex_lot * option_delta, 2)
+            fut_rs = round(pts * sensex_lot, 2)
+            parsed_trades.append({
+                "date": str(r.get("date", "")),
+                "symbol": "SENSEX",
+                "side": str(r.get("side", "CALL")),
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": round(float(r.get("entry_price") or 0.0), 2),
+                "sl": round(float(r.get("sl") or r.get("initial_sl") or 0.0), 2),
+                "target": round(float(r.get("target") or 0.0), 2),
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": round(float(r.get("exit_price") or 0.0), 2),
+                "reason": str(r.get("exit_reason", "")),
+                "pnl_points": pts,
+                "base_points": pnl_pts,
+                "pnl_rupees": opt_rs,
+                "futures_rupees": fut_rs,
+                "lots": int(r.get("total_lots") or 1),
+                "lot_size": sensex_lot,
+            })
+        except Exception:
+            continue
+
+    parsed_trades.sort(key=lambda x: (x["date"], x["entry"]))
+
+    trades, equity, peak = [], 0.0, 0.0
+    daily_map = {}
+    monthly_map = {}
+    reasons_map = {}
+
+    for t in parsed_trades:
+        rs = t["pnl_rupees"]
+        norm_pts = round(rs / (25.0 * option_delta), 2)
+        equity += norm_pts
+        peak = max(peak, equity)
+        r_date = t["date"]
+
+        t_copy = dict(t)
+        t_copy["equity"] = round(equity, 2)
+        t_copy["drawdown"] = round(equity - peak, 2)
+        trades.append(t_copy)
+
+        d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0, "rupees": 0.0})
+        d["points"] = round(d["points"] + norm_pts, 2)
+        d["rupees"] = round(d["rupees"] + rs, 2)
+        d["trades"] += 1
+
+        m = r_date[:7]
+        monthly_map[m] = round(monthly_map.get(m, 0.0) + norm_pts, 2)
+        reasons_map[t["reason"]] = reasons_map.get(t["reason"], 0) + 1
+
+    n = len(trades)
+    wins = sum(1 for x in trades if x["pnl_rupees"] > 0)
+    sorted_daily = sorted(daily_map.values(), key=lambda x: x["date"])
+    sorted_monthly = [{"month": m, "points": pts} for m, pts in sorted(monthly_map.items())]
+    sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+    total_dyn_rs = round(sum(x["pnl_rupees"] for x in trades), 2)
+    total_fut_rs = round(sum(x["futures_rupees"] for x in trades), 2)
+
+    return {
+        "summary": {
+            "from": sorted_daily[0]["date"] if sorted_daily else "",
+            "to": sorted_daily[-1]["date"] if sorted_daily else "",
+            "days": len(sorted_daily),
+            "trades": n,
+            "wins": wins,
+            "losses": sum(1 for x in trades if x["pnl_rupees"] < 0),
+            "win_rate": round(100.0 * wins / n, 2) if n else 0.0,
+            "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+            "total_points": round(equity, 2),
+            "dynamic_points": round(equity, 2),
+            "dynamic_rupees": total_dyn_rs,
+            "futures_rupees": total_fut_rs,
+            "base_points": round(equity, 2),
+            "avg_points": round(equity / n, 2) if n else 0.0,
+            "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
+            "best": max((x["pnl_points"] for x in trades), default=0.0),
+            "worst": min((x["pnl_points"] for x in trades), default=0.0),
+            "lot_size": 25,
+            "option_delta": option_delta,
+        },
+        "trades": trades,
+        "daily": sorted_daily,
+        "monthly": sorted_monthly,
+        "exit_reasons": sorted_reasons,
+    }
+
 def dynamic_box_backtest_report() -> dict:
     """Historical backtest performance for Dynamic Volatility Box Breakout."""
     csv_path = ROOT / "performance" / "dynamic_box_trades.csv"
@@ -5020,6 +5154,24 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(aggressive_midpoint_scalp_report(key_level_only=True))
             elif strategy in ("sr_breakout", "swing_sr", "breakout"):
                 self._json(sr_breakout_backtest_report())
+            elif strategy in ("vix_master_all", "vix_master_combined"):
+                self._json(combined_strategy_backtest_report(
+                    ROOT / "performance" / "nifty_vix_master_trades.csv",
+                    ROOT / "performance" / "sensex_vix_master_trades.csv",
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
+                ))
+            elif strategy in ("trend_runner_all", "trend_runner_combined"):
+                self._json(combined_strategy_backtest_report(
+                    ROOT / "performance" / "vix_trend_runner_trades.csv",
+                    ROOT / "performance" / "sensex_backtest_trades.csv",
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
+                ))
+            elif strategy in ("vix_trap_all", "vix_divergence_all", "vix_trap_combined"):
+                self._json(combined_strategy_backtest_report(
+                    ROOT / "performance" / "vix_divergence_backtest_trades.csv",
+                    ROOT / "performance" / "sensex_vix_divergence_trades.csv",
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
+                ))
             elif strategy in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
                 self._json(nifty_vix_master_backtest_report())
             elif strategy in ("vix_master_sensex", "sensex_vix_master"):
