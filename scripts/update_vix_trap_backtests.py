@@ -273,7 +273,7 @@ for d, g in df_sx.groupby("date_str"):
 print(f"Indexed {len(sx_packages)} Sensex trading days.", flush=True)
 
 sx_records = []
-lot_size_sx = 20
+lot_size_sx = 10  # Standard BSE Sensex options contract lot size (10 qty)
 
 for dp in sx_packages:
     v_chg = dp["vix_chg"]

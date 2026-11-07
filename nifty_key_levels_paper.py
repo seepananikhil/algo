@@ -73,6 +73,8 @@ def simulate_day_trades(
     trades = []
     active_trade = None
     level_state = {}
+    level_fades_taken = set()
+    day_open = opens[0]
     day_pnl = 0.0
     last_exit_ts = None
     last_exit_reason = None
@@ -184,12 +186,13 @@ def simulate_day_trades(
                     continue
 
                 if status == "ARMED_RETRACE_CALL":
-                    # Avoid afternoon CALL bull traps (cutoff at 12:00 PM)
-                    if call_retest_cutoff_hour is not None and t.hour >= call_retest_cutoff_hour:
+                    # Trend alignment: only take CALL BO if holding above Day Open
+                    if c < day_open:
                         continue
                     retested = (l <= lvl + max_entry_dist)
                     holding = (lvl - 2 <= c <= lvl + max_entry_dist + 5)
-                    if retested and holding:
+                    confirmed = (c > o)
+                    if retested and holding and confirmed:
                         entry_p = c
                         trade_sl = lvl - sl
                         trade_tp = entry_p + rev_tp
@@ -211,9 +214,13 @@ def simulate_day_trades(
                         st["status"] = "EXPIRED"
 
                 elif status == "ARMED_RETRACE_PUT":
+                    # Trend alignment: only take PUT Breakdown if holding below Day Open
+                    if c > day_open:
+                        continue
                     retested = (h >= lvl - max_entry_dist)
                     holding = (lvl - max_entry_dist - 5 <= c <= lvl + 2)
-                    if retested and holding:
+                    confirmed = (c < o)
+                    if retested and holding and confirmed:
                         entry_p = c
                         trade_sl = lvl + sl
                         trade_tp = entry_p - rev_tp
@@ -258,10 +265,12 @@ def simulate_day_trades(
             if not in_lockout:
                 if c <= lvl - approach_min:
                     if st is None or st["status"] in ["DONE", "EXPIRED"]:
-                        level_state[lvl] = {"origin": "BELOW", "status": "ARMED", "profit_ts": None, "pullback": False}
+                        if lvl not in level_fades_taken:
+                            level_state[lvl] = {"origin": "BELOW", "status": "ARMED", "profit_ts": None, "pullback": False}
                 elif c >= lvl + approach_min:
                     if st is None or st["status"] in ["DONE", "EXPIRED"]:
-                        level_state[lvl] = {"origin": "ABOVE", "status": "ARMED", "profit_ts": None, "pullback": False}
+                        if lvl not in level_fades_taken:
+                            level_state[lvl] = {"origin": "ABOVE", "status": "ARMED", "profit_ts": None, "pullback": False}
 
             st = level_state.get(lvl)
             if not st:
@@ -295,6 +304,7 @@ def simulate_day_trades(
                                     "tp": round(trade_tp, 2),
                                 }
                                 st["status"] = "TOUCH1_ACTIVE"
+                                level_fades_taken.add(lvl)
                                 break
                         else:
                             # Closed ABOVE level: Avoid PUT! Enter CALL on RETRACE ONLY if candle range is strong
@@ -327,6 +337,7 @@ def simulate_day_trades(
                                     "tp": round(trade_tp, 2),
                                 }
                                 st["status"] = "TOUCH1_ACTIVE"
+                                level_fades_taken.add(lvl)
                                 break
                         else:
                             # Closed BELOW level: Avoid CALL! Enter PUT on RETRACE ONLY if candle range is strong

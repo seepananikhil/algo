@@ -2741,13 +2741,13 @@ def sensex_runner_paper_report() -> dict:
 def sensex_runner_backtest_report() -> dict:
     """Backtest performance for Sensex Trend Runner."""
     csv_path = ROOT / "performance" / "sensex_backtest_trades.csv"
-    return vix_trend_runner_backtest_report(csv_path, lot_size=20, option_delta=0.60)
+    return vix_trend_runner_backtest_report(csv_path, lot_size=10, option_delta=0.60)
 
 
 def sensex_key_levels_backtest_report() -> dict:
     """Backtest performance for Sensex Key Levels S&R + Reverse Retry."""
     csv_path = ROOT / "performance" / "sensex_key_levels_trades.csv"
-    return vix_trend_runner_backtest_report(csv_path, lot_size=20, option_delta=0.50)
+    return vix_trend_runner_backtest_report(csv_path, lot_size=10, option_delta=0.50)
 
 
 def sensex_key_levels_live_paper_trades(date: str | None = None) -> list:
@@ -3111,7 +3111,7 @@ def nifty_btst_backtest_report() -> dict:
 
 def sensex_btst_backtest_report() -> dict:
     """Historical Multi-Year backtest performance (2023-2026) for Sensex Overnight BTST Gap Strategy."""
-    return vix_trend_runner_backtest_report(ROOT / "performance" / "sensex_btst_trades.csv", lot_size=20)
+    return vix_trend_runner_backtest_report(ROOT / "performance" / "sensex_btst_trades.csv", lot_size=10)
 
 
 def vix_divergence_backtest_report() -> dict:
@@ -3128,7 +3128,7 @@ def sensex_vix_divergence_backtest_report() -> dict:
     """Historical 4-Year backtest performance (2023-2026) for Sensex VIX Trap Divergence (1-Lot Baseline)."""
     return vix_trend_runner_backtest_report(
         ROOT / "performance" / "sensex_vix_divergence_trades.csv",
-        lot_size=20,
+        lot_size=10,
         option_delta=0.60,
         use_weighted=False
     )
@@ -3728,7 +3728,8 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
             "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
             "total_points": round(equity, 2),
             "dynamic_points": round(sum(float(x.get("weighted_pnl_points") or x.get("pnl_points") or 0.0) for x in raw_trades), 2),
-            "dynamic_rupees": round(sum(float(x.get("weighted_pnl_points") or x.get("pnl_points") or 0.0) for x in raw_trades) * lot_size, 2),
+            "dynamic_rupees": round(sum(float(x.get("weighted_pnl_points") or x.get("pnl_points") or 0.0) for x in raw_trades) * lot_size * (option_delta if option_delta else 1.0), 2),
+            "futures_rupees": round(sum(float(x.get("weighted_pnl_points") or x.get("pnl_points") or 0.0) for x in raw_trades) * lot_size, 2),
             "base_points": round(sum(float(x.get("pnl_points") or 0.0) for x in raw_trades), 2),
             "avg_points": round(equity / n, 2) if n else 0.0,
             "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
