@@ -138,7 +138,7 @@ function forYear(data: Backtest, year: string): Backtest {
 
     summary: data.summary ?? {},
 
-    trades: data.trades ?? [],
+    trades: data?.trades ?? [],
 
     daily: data.daily ?? [],
 
@@ -171,41 +171,40 @@ function forYear(data: Backtest, year: string): Backtest {
   trades.forEach((t) => reasons.set(t.reason, (reasons.get(t.reason) ?? 0) + 1))
 
   const pts = trades.map((t) => t.pnl_points)
-
+  const basePts = trades.map((t) => (t as any).base_points ?? t.pnl_points)
   const wins = pts.filter((p) => p > 0).length
+  const total = Math.round(pts.reduce((a, p) => a + p, 0) * 100) / 100
+  const baseTotal = Math.round(basePts.reduce((a, p) => a + p, 0) * 100) / 100
 
-  const total = pts.reduce((a, p) => a + p, 0)
+  const lotSize = safeData.summary.lot_size || 25
+  const optDelta = safeData.summary.option_delta || 0.60
+  const hasRs = trades.some((t) => (t as any).pnl_rupees !== undefined)
+  const dynRs = hasRs
+    ? Math.round(trades.reduce((a, t) => a + ((t as any).pnl_rupees || 0), 0) * 100) / 100
+    : Math.round(total * lotSize * optDelta * 100) / 100
+  const futRs = hasRs && trades.some((t) => (t as any).futures_rupees !== undefined)
+    ? Math.round(trades.reduce((a, t) => a + ((t as any).futures_rupees || 0), 0) * 100) / 100
+    : Math.round(total * lotSize * 100) / 100
 
   return {
-
     summary: {
-
       ...safeData.summary,
-
       from: daily[0]?.date ?? "",
-
       to: daily[daily.length - 1]?.date ?? "",
-
       days: daily.length,
-
       trades: trades.length,
-
       wins,
-
       losses: pts.filter((p) => p < 0).length,
-
       win_rate_pct: trades.length ? Math.round((10000 * wins) / trades.length) / 100 : 0,
-
       total_points: total,
-
-      avg_points: trades.length ? total / trades.length : 0,
-
+      dynamic_points: total,
+      base_points: baseTotal,
+      dynamic_rupees: dynRs,
+      futures_rupees: futRs,
+      avg_points: trades.length ? Math.round((total / trades.length) * 100) / 100 : 0,
       max_drawdown: Math.min(0, ...trades.map((t) => t.drawdown)),
-
       best: pts.length ? Math.max(...pts) : 0,
-
       worst: pts.length ? Math.min(...pts) : 0,
-
     },
 
     trades,
@@ -284,7 +283,6 @@ const tooltip = {
 
 type MainStrategy = "vix_master" | "trend_runner" | "vix_trap"
 type SubSymbol = "all" | "nifty" | "sensex"
-type StrategyKey = string
 
 export function BacktestPage() {
   const [mainStrategy, setMainStrategy] = useState<MainStrategy>(() => {
@@ -581,10 +579,10 @@ export function BacktestPage() {
     </div>
   )
 
-  const s = data?.summary ?? {}
+  const s: any = data?.summary ?? {}
   const curve = useMemo(() => {
     if (!data?.trades) return []
-    return [{ label: "start", equity: 0, drawdown: 0 }, ...data.trades.map((t) => ({ label: `${t.date} ${t.entry}`, equity: t.equity, drawdown: t.drawdown }))]
+    return [{ label: "start", equity: 0, drawdown: 0 }, ...data?.trades.map((t) => ({ label: `${t.date} ${t.entry}`, equity: t.equity, drawdown: t.drawdown }))]
   }, [data?.trades])
 
 
@@ -672,12 +670,12 @@ export function BacktestPage() {
         <div className={cn("flex flex-col gap-4 transition-opacity duration-200", loading && "opacity-60")}>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard
-          label={s.dynamic_points ? "Total points (1-Lot)" : "Total points"}
-          value={fmtPts(s.total_points)}
-          className={pnlClass(s.total_points)}
+          label={s.dynamic_points ? "Dynamic Net Points" : "Total points"}
+          value={fmtPts(s.dynamic_points ?? s.total_points)}
+          className={pnlClass(s.dynamic_points ?? s.total_points)}
           hint={
             s.dynamic_points
-              ? `Dynamic: ${fmtPts(s.dynamic_points)} (≈ ${fmtRs(s.dynamic_rupees || s.dynamic_points * s.lot_size)})`
+              ? `Options (≈${Math.round((s.option_delta || 0.6) * 100)}%Δ): ${fmtRs(s.dynamic_rupees || (s.total_points * s.lot_size * (s.option_delta || 0.6)))} · 1-Lot: ${fmtPts(s.base_points)}`
               : s.option_delta
               ? `Option (≈${Math.round(s.option_delta * 100)}%Δ): ${fmtRs(s.total_points * s.lot_size * s.option_delta)} · Spot: ${fmtRs(s.total_points * s.lot_size)}`
               : `≈ ${fmtRs(s.total_points * s.lot_size)}`
@@ -760,7 +758,7 @@ export function BacktestPage() {
         title={
           strategy === "sensex_runner"
             ? "Sensex Trend Runner Strategy Streaks & Recovery"
-            : strategy === "midpoint"
+            : (strategy as string) === "midpoint"
             ? "Nifty Midpoint Rejection Strategy Streaks & Recovery"
             : "Nifty Trend Runner Strategy Streaks & Recovery"
         }
@@ -1123,7 +1121,7 @@ export function BacktestPage() {
 
 
 
-              <BarChart data={data.monthly} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+              <BarChart data={data?.monthly ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
 
 
 

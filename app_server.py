@@ -3174,8 +3174,10 @@ def vix_master_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
                 "stage": str(r.get("stage", "")),
                 "origin": str(r.get("origin", ""))
             })
-    return out
-
+    return out
+
+
+
 def sensex_vix_divergence_backtest_report() -> dict:
     """Historical 4-Year backtest performance (2023-2026) for Sensex VIX Trap Divergence (1-Lot Baseline)."""
     return vix_trend_runner_backtest_report(
@@ -3734,6 +3736,9 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
             sl_spot = round(float(r.get("sl") or r.get("initial_sl") or (entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0)), 2)
             tgt_spot = round(float(r.get("target") or (entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0)), 2)
 
+            opt_rs = round(float(r.get("pnl_rupees") or (pts_to_use * lot_size * option_delta)), 2)
+            fut_rs = round(float(r.get("futures_pnl_rupees") or (pts_to_use * lot_size)), 2)
+
             trades.append({
                 "date": r_date,
                 "side": side,
@@ -3746,6 +3751,8 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
                 "reason": reason,
                 "pnl_points": pts_to_use,
                 "base_points": pnl_pts,
+                "pnl_rupees": opt_rs,
+                "futures_rupees": fut_rs,
                 "lots": int(r.get("total_lots") or 1),
                 "equity": round(equity, 2),
                 "drawdown": round(equity - peak, 2),
