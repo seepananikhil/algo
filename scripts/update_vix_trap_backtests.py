@@ -164,15 +164,20 @@ for dp in nifty_packages:
     strike = strike_round + 150 if sig == "PUT" else strike_round - 150
     opt_name = f"NIFTY {int(strike)} {sig[:2]} (ITM-150)"
     
-    base_lots = 2
-    pyramided = (max_fav >= 60.0 and pnl > 0)
-    total_lots = 3 if pyramided else 2
+    # Smart Sizing: 2 Base Lots on A+ (VIX chg >= 3.5%), 1 Single Lot on Grade B (< 3.5%)
+    is_a_plus = abs(v_chg) >= 3.5
+    base_lots = 2 if is_a_plus else 1
+    pyramided = (is_a_plus and max_fav >= 60.0 and pnl > 0)
+    total_lots = (3 if pyramided else 2) if is_a_plus else 1
     
-    if pnl <= 0:
-        weighted_pnl = round(pnl * 2, 2)
+    if not is_a_plus:
+        weighted_pnl = round(pnl, 2)
     else:
-        pyr_pnl = max(0.0, pnl - 60.0) if pyramided else 0.0
-        weighted_pnl = round((pnl * 2) + pyr_pnl, 2)
+        if pnl <= 0:
+            weighted_pnl = round(pnl * 2, 2)
+        else:
+            pyr_pnl = max(0.0, pnl - 60.0) if pyramided else 0.0
+            weighted_pnl = round((pnl * 2) + pyr_pnl, 2)
         
     fut_pnl = round(weighted_pnl * lot_size_nifty, 2)
     opt_pnl = round(weighted_pnl * lot_size_nifty * delta, 2)
@@ -355,15 +360,20 @@ for dp in sx_packages:
     strike = strike_round + 400 if side == "PUT" else strike_round - 400
     opt_name = f"SENSEX {int(strike)} {side[:2]} (ITM-400)"
     
-    base_lots = 2
-    pyramided = (max_fav >= 150.0 and pnl > 0)
-    total_lots = 3 if pyramided else 2
+    # Smart Sizing: 2 Base Lots on A+ (VIX chg >= 3.5%), 1 Single Lot on Grade B (< 3.5%)
+    is_a_plus = abs(v_chg) >= 3.5
+    base_lots = 2 if is_a_plus else 1
+    pyramided = (is_a_plus and max_fav >= 150.0 and pnl > 0)
+    total_lots = (3 if pyramided else 2) if is_a_plus else 1
     
-    if pnl <= 0:
-        weighted_pnl = round(pnl * 2, 2)
+    if not is_a_plus:
+        weighted_pnl = round(pnl, 2)
     else:
-        pyr_pnl = max(0.0, pnl - 150.0) if pyramided else 0.0
-        weighted_pnl = round((pnl * 2) + pyr_pnl, 2)
+        if pnl <= 0:
+            weighted_pnl = round(pnl * 2, 2)
+        else:
+            pyr_pnl = max(0.0, pnl - 150.0) if pyramided else 0.0
+            weighted_pnl = round((pnl * 2) + pyr_pnl, 2)
         
     fut_pnl = round(weighted_pnl * lot_size_sx, 2)
     opt_pnl = round(weighted_pnl * lot_size_sx * delta, 2)
