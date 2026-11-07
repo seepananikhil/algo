@@ -581,11 +581,11 @@ export function BacktestPage() {
     </div>
   )
 
-  if (error) return <div className="flex flex-col gap-4">{strategyTabs}<p className="text-sm text-red-500">Backtest failed: {error}</p></div>
-  if (loading || !data) return <div className="flex flex-col gap-4">{strategyTabs}<Skeleton className="h-[600px] w-full" /></div>
-
-  const s = data.summary
-  const curve = [{ label: "start", equity: 0, drawdown: 0 }, ...(data?.trades ?? []).map((t) => ({ label: `${t.date} ${t.entry}`, equity: t.equity, drawdown: t.drawdown }))]
+  const s = data?.summary ?? {}
+  const curve = useMemo(() => {
+    if (!data?.trades) return []
+    return [{ label: "start", equity: 0, drawdown: 0 }, ...data.trades.map((t) => ({ label: `${t.date} ${t.entry}`, equity: t.equity, drawdown: t.drawdown }))]
+  }, [data?.trades])
 
 
 
@@ -613,8 +613,10 @@ export function BacktestPage() {
               ? `Trend Runner Breakout · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`
               : `VIX Trap Divergence · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`}
           </h1>
-          <p className="text-sm text-muted-foreground mt-0.5">
-            {s.days} days ({s.from} → {s.to}) · Lot size {s.lot_size || (subSymbol === "sensex" ? 10 : 25)} · Option Delta {Math.round((s.option_delta || 0.60) * 100)}%
+          <p className="text-sm text-muted-foreground mt-0.5 min-h-[20px]">
+            {data
+              ? `${s.days || 0} days (${s.from || "..."} → ${s.to || "..."}) · Lot size ${s.lot_size || (subSymbol === "sensex" ? 10 : 25)} · Option Delta ${Math.round((s.option_delta || 0.60) * 100)}%`
+              : "Loading backtest data..."}
           </p>
         </div>
 
@@ -653,7 +655,22 @@ export function BacktestPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+      {error ? (
+        <div className="p-4 rounded-xl border border-red-500/30 bg-red-500/10 text-red-400 text-sm">
+          Backtest failed: {error}
+        </div>
+      ) : (!data && loading) ? (
+        <div className="flex flex-col gap-4 mt-2">
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Skeleton key={i} className="h-24 rounded-xl" />
+            ))}
+          </div>
+          <Skeleton className="h-[400px] w-full rounded-xl" />
+        </div>
+      ) : (
+        <div className={cn("flex flex-col gap-4 transition-opacity duration-200", loading && "opacity-60")}>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard
           label={s.dynamic_points ? "Total points (1-Lot)" : "Total points"}
           value={fmtPts(s.total_points)}
@@ -1770,14 +1787,9 @@ export function BacktestPage() {
 
 
 
+            </div>
+      )}
     </div>
-
-
-
-
-
-
-
   )
 
 
