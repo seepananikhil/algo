@@ -60,7 +60,11 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
         r1_trig, r1_lk = 280.0, 80.0
         r2_trig, r2_lk = 520.0, 240.0
         r3_trig, r3_lk = 720.0, 440.0
-        runner_sl = 120.0
+        r4_trig, r4_lk = 1000.0, 700.0
+        r5_trig, r5_lk = 1400.0, 1050.0
+        runner_sl_floor = 100.0
+        runner_sl_cap = 240.0
+        runner_buffer = 15.0
     else:
         years = [str(y) for y in range(2017, 2027)]
         base_nifty = ROOT / "captured_data" / "technovusin_nifty50" / "1min"
@@ -86,7 +90,11 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
         r1_trig, r1_lk = 70.0, 20.0
         r2_trig, r2_lk = 130.0, 60.0
         r3_trig, r3_lk = 180.0, 110.0
-        runner_sl = 28.0
+        r4_trig, r4_lk = 260.0, 180.0
+        r5_trig, r5_lk = 360.0, 270.0
+        runner_sl_floor = 35.0
+        runner_sl_cap = 75.0
+        runner_buffer = 5.0
 
     tp = (df_all["high"] + df_all["low"] + df_all["close"]) / 3.0
     cum_tp = tp.groupby(df_all["date_str"]).cumsum()
@@ -176,8 +184,14 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                         active_pos["sl"] = curr_sl
                         active_pos["stage"] = "TRAP_RUNNER_PYRAMID"
                 
-                # Ratchet Logic
-                if mf >= r3_trig:
+                # Ratchet Logic (5-Tier Extended Ratchets)
+                if mf >= r5_trig:
+                    new_sl = (e_px + r5_lk) if side in ("CALL", "LONG") else (e_px - r5_lk)
+                    curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
+                elif mf >= r4_trig:
+                    new_sl = (e_px + r4_lk) if side in ("CALL", "LONG") else (e_px - r4_lk)
+                    curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
+                elif mf >= r3_trig:
                     new_sl = (e_px + r3_lk) if side in ("CALL", "LONG") else (e_px - r3_lk)
                     curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
                 elif mf >= r2_trig:
@@ -310,7 +324,16 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                         day_trades += 1
                         is_a_plus = abs(v_chg) >= 3.5
                         base_lots = 2 if is_a_plus else 1
-                        init_sl = (c - runner_sl) if runner_sig == "CALL" else (c + runner_sl)
+                        
+                        # Dynamic Swing SL calculation
+                        if runner_sig == "CALL":
+                            swing_low = lows[:i+1].min()
+                            sl_dist = max(runner_sl_floor, min(runner_sl_cap, c - swing_low + runner_buffer))
+                            init_sl = c - sl_dist
+                        else:
+                            swing_high = highs[:i+1].max()
+                            sl_dist = max(runner_sl_floor, min(runner_sl_cap, swing_high - c + runner_buffer))
+                            init_sl = c + sl_dist
                         
                         active_pos = {
                             "origin": "TREND_RUNNER",

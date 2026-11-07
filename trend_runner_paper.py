@@ -189,7 +189,7 @@ class TrendRunnerPaperEngine:
         symbol: str = "NIFTY",
         sl_points: float = 30.0,
         reentry_sl_points: float = 30.0,
-        sl_mode: str = "adaptive",
+        sl_mode: str = "swing",
         lots: int = 1,
         sizing_mode: str = "hybrid",
         pyramid: bool = True,
@@ -695,12 +695,24 @@ class TrendRunnerPaperEngine:
 
         if sig in ("LONG", "SHORT"):
             entry_px = next_bar_open if next_bar_open is not None else c
-            if self.sl_mode == "adaptive":
-                effective_sl_pts = max(30.0, min(45.0, round(atr * 0.95, 1)))
+            is_sx = (self.symbol == "SENSEX")
+            sl_floor = 100.0 if is_sx else 35.0
+            sl_cap = 240.0 if is_sx else 75.0
+            sl_buffer = 15.0 if is_sx else 5.0
+
+            if self.sl_mode in ("swing", "adaptive", "adaptive_swing"):
+                if sig == "LONG":
+                    swing_ref = self.rolling_day_low if self.rolling_day_low < 900000 else entry_px - sl_floor
+                    sl_dist = max(sl_floor, min(sl_cap, entry_px - swing_ref + sl_buffer))
+                    sl_px = entry_px - sl_dist
+                else:
+                    swing_ref = self.rolling_day_high if self.rolling_day_high > 0 else entry_px + sl_floor
+                    sl_dist = max(sl_floor, min(sl_cap, swing_ref - entry_px + sl_buffer))
+                    sl_px = entry_px + sl_dist
+                effective_sl_pts = sl_dist
             else:
                 effective_sl_pts = self.sl_points if trade_num == 1 else self.reentry_sl_points
-
-            sl_px = entry_px - effective_sl_pts if sig == "LONG" else entry_px + effective_sl_pts
+                sl_px = entry_px - effective_sl_pts if sig == "LONG" else entry_px + effective_sl_pts
             opt_type = "CE" if sig == "LONG" else "PE"
 
             # Strike Selection: ITM-150 vs ATM
@@ -911,7 +923,7 @@ def run_replay(
     target_date: str,
     symbol: str = "NIFTY",
     sl_pts: float = 30.0,
-    sl_mode: str = "fixed",
+    sl_mode: str = "swing",
     lots: int = 1,
     sizing_mode: str = "fixed",
     reentry: bool = True,
@@ -1027,7 +1039,7 @@ def run_live_monitor(
     symbol: str = "NIFTY",
     poll_interval: int = 5,
     sl_pts: float = 30.0,
-    sl_mode: str = "fixed",
+    sl_mode: str = "swing",
     lots: int = 1,
     sizing_mode: str = "fixed",
     reentry: bool = True,
