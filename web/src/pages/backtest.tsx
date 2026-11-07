@@ -282,7 +282,7 @@ const tooltip = {
 
 
 
-type StrategyKey = "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box" | "vix_divergence" | "sensex_vix_divergence"
+type StrategyKey = "vix_master_nifty" | "vix_master_sensex" | "vix_divergence" | "sensex_vix_divergence" | "trend_runner" | "sensex_runner" | "midpoint" | "dynamic_box"
 
 
 
@@ -322,8 +322,8 @@ export function BacktestPage() {
 
 
 
-    if (saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box" || saved === "vix_divergence" || saved === "sensex_vix_divergence") return saved
-    return "trend_runner"
+    if (saved === "vix_master_nifty" || saved === "vix_master_sensex" || saved === "sensex_runner" || saved === "midpoint" || saved === "dynamic_box" || saved === "vix_divergence" || saved === "sensex_vix_divergence") return saved
+    return "vix_master_nifty"
 
 
 
@@ -372,7 +372,11 @@ export function BacktestPage() {
 
 
   const { data: raw, loading, error, reload } = usePoll<Backtest>(
-    strategy === "sensex_runner"
+    strategy === "vix_master_nifty"
+      ? "/api/backtest?strategy=vix_master_nifty"
+      : strategy === "vix_master_sensex"
+      ? "/api/backtest?strategy=vix_master_sensex"
+      : strategy === "sensex_runner"
       ? "/api/backtest?strategy=sensex_runner"
       : strategy === "midpoint"
       ? "/api/backtest?strategy=midpoint"
@@ -382,7 +386,6 @@ export function BacktestPage() {
       ? "/api/backtest?strategy=vix_divergence"
       : strategy === "sensex_vix_divergence"
       ? "/api/backtest?strategy=sensex_vix_divergence"
-      
       : "/api/backtest?strategy=trend_runner"
   )
 
@@ -552,15 +555,12 @@ export function BacktestPage() {
 
   const strategyTabs = (
     <Tabs value={strategy} onValueChange={(val) => { setPicked(null); handleStrategyChange(val as StrategyKey) }}>
-      <TabsList className="bg-muted/60 p-1 rounded-lg">
-        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
-          NIFTY 50
+      <TabsList className="bg-muted/60 p-1 rounded-lg flex flex-wrap gap-1">
+        <TabsTrigger value="vix_master_nifty" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+          ⚡ VIX MASTER (NIFTY)
         </TabsTrigger>
-        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
-          SENSEX
-        </TabsTrigger>
-        <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">
-          MIDPOINT (NIFTY)
+        <TabsTrigger value="vix_master_sensex" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-cyan-600 data-[state=active]:text-white">
+          ⚡ VIX MASTER (SENSEX)
         </TabsTrigger>
         <TabsTrigger value="vix_divergence" className="font-medium text-xs sm:text-sm">
           VIX TRAP (NIFTY)
@@ -568,9 +568,15 @@ export function BacktestPage() {
         <TabsTrigger value="sensex_vix_divergence" className="font-medium text-xs sm:text-sm">
           VIX TRAP (SENSEX)
         </TabsTrigger>
-        
-        
-
+        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
+          TREND RUNNER (NIFTY)
+        </TabsTrigger>
+        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
+          TREND RUNNER (SENSEX)
+        </TabsTrigger>
+        <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">
+          MIDPOINT
+        </TabsTrigger>
       </TabsList>
     </Tabs>
   )
@@ -629,16 +635,26 @@ export function BacktestPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
         <div>
           <h1 className="text-xl font-bold tracking-tight">
-            {strategy === "midpoint"
+            {strategy === "vix_master_nifty"
+              ? "Unified VIX Master Strategy (Nifty 50)"
+              : strategy === "vix_master_sensex"
+              ? "Unified VIX Master Strategy (Sensex)"
+              : strategy === "midpoint"
               ? "Midpoint Rejection Backtest"
               : strategy === "vix_divergence"
               ? "VIX Trap Divergence (Nifty)"
               : strategy === "sensex_vix_divergence"
               ? "VIX Trap Divergence (Sensex)"
-              : "Trend Runner Backtest"}
+              : strategy === "sensex_runner"
+              ? "Sensex Trend Runner Backtest"
+              : "Nifty Trend Runner Backtest"}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            {strategy === "sensex_runner"
+            {strategy === "vix_master_nifty"
+              ? `Nifty 50 VIX Master · Morning Trap Sniper + Trend Runner Expansion · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
+              : strategy === "vix_master_sensex"
+              ? `Sensex VIX Master · Morning Trap Sniper + Trend Runner Expansion · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
+              : strategy === "sensex_runner"
               ? `Sensex · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size}`
               : strategy === "midpoint"
               ? `Nifty 50 Midpoint · ${s.days} days (${s.from} → ${s.to}) · Lot size ${s.lot_size || 50}`
@@ -675,12 +691,29 @@ export function BacktestPage() {
         <div className="flex items-center gap-2 self-start sm:self-auto">
           <span className="text-xs text-muted-foreground">Period:</span>
           <Tabs value={year} onValueChange={(v) => { setYear(v as string); setPicked(null) }}>
-            <TabsList className="bg-muted/60 p-1 rounded-lg">
-              <TabsTrigger value="all" className="text-xs font-medium">All</TabsTrigger>
-              {years.map((y) => (
-                <TabsTrigger key={y} value={y} className="text-xs font-medium">{y}</TabsTrigger>
-              ))}
-            </TabsList>
+            <TabsList className="bg-muted/60 p-1 rounded-lg flex flex-wrap gap-1">
+        <TabsTrigger value="vix_master_nifty" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-emerald-600 data-[state=active]:text-white">
+          ⚡ VIX MASTER (NIFTY)
+        </TabsTrigger>
+        <TabsTrigger value="vix_master_sensex" className="font-semibold text-xs sm:text-sm data-[state=active]:bg-cyan-600 data-[state=active]:text-white">
+          ⚡ VIX MASTER (SENSEX)
+        </TabsTrigger>
+        <TabsTrigger value="vix_divergence" className="font-medium text-xs sm:text-sm">
+          VIX TRAP (NIFTY)
+        </TabsTrigger>
+        <TabsTrigger value="sensex_vix_divergence" className="font-medium text-xs sm:text-sm">
+          VIX TRAP (SENSEX)
+        </TabsTrigger>
+        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
+          TREND RUNNER (NIFTY)
+        </TabsTrigger>
+        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
+          TREND RUNNER (SENSEX)
+        </TabsTrigger>
+        <TabsTrigger value="midpoint" className="font-medium text-xs sm:text-sm">
+          MIDPOINT
+        </TabsTrigger>
+      </TabsList>
           </Tabs>
         </div>
       </div>

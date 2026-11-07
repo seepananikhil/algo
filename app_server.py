@@ -3124,6 +3124,58 @@ def vix_divergence_backtest_report() -> dict:
     )
 
 
+def nifty_vix_master_backtest_report() -> dict:
+    """Historical 10-Year backtest performance (2017-2026) for Unified VIX Master Strategy (Nifty)."""
+    return vix_trend_runner_backtest_report(
+        ROOT / "performance" / "nifty_vix_master_trades.csv",
+        lot_size=25,
+        option_delta=0.60,
+        use_weighted=True
+    )
+
+
+def sensex_vix_master_backtest_report() -> dict:
+    """Historical 4-Year backtest performance (2023-2026) for Unified VIX Master Strategy (Sensex)."""
+    return vix_trend_runner_backtest_report(
+        ROOT / "performance" / "sensex_vix_master_trades.csv",
+        lot_size=10,
+        option_delta=0.60,
+        use_weighted=True
+    )
+
+
+def vix_master_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
+    """Historical spot trades for Unified VIX Master Strategy on date."""
+    fname = "sensex_vix_master_trades.csv" if symbol.upper() == "SENSEX" else "nifty_vix_master_trades.csv"
+    csv_path = ROOT / "performance" / fname
+    if not csv_path.exists():
+        return []
+    out = []
+    for r in read_csv_rows(csv_path):
+        if r.get("date") == date:
+            side = str(r.get("side", "CALL"))
+            entry_spot = float(r.get("entry_price") or 0.0)
+            exit_spot = float(r.get("exit_price") or 0.0)
+            sl_spot = float(r.get("initial_sl") or 0.0)
+            tgt_spot = float(r.get("target") or 0.0)
+            pts = float(r.get("weighted_pnl_points") or r.get("pnl_points") or 0.0)
+            out.append({
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": str(r.get("exit_reason", "")),
+                "pnl_points": pts,
+                "base_points": float(r.get("pnl_points") or 0.0),
+                "lots": int(r.get("total_lots") or 1),
+                "stage": str(r.get("stage", "")),
+                "origin": str(r.get("origin", ""))
+            })
+    return out
+
 def sensex_vix_divergence_backtest_report() -> dict:
     """Historical 4-Year backtest performance (2023-2026) for Sensex VIX Trap Divergence (1-Lot Baseline)."""
     return vix_trend_runner_backtest_report(
@@ -4727,6 +4779,10 @@ class Handler(BaseHTTPRequestHandler):
                 rule_trades = sensex_key_levels_spot_trades_for_day(date)
             elif strategy_param in ("nifty_key_levels", "nifty_levels", "key_levels_nifty"):
                 rule_trades = nifty_key_levels_spot_trades_for_day(date)
+            elif strategy_param in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
+                rule_trades = vix_master_spot_trades_for_day(date, "NIFTY")
+            elif strategy_param in ("vix_master_sensex", "sensex_vix_master"):
+                rule_trades = vix_master_spot_trades_for_day(date, "SENSEX")
             elif strategy_param in ("sensex_vix_divergence", "sensex_vix", "sensex_trap"):
                 rule_trades = sensex_vix_divergence_spot_trades_for_day(date)
             elif strategy_param in ("vix_divergence", "vix_trap", "vix_reversal", "vix"):
@@ -4964,6 +5020,10 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(aggressive_midpoint_scalp_report(key_level_only=True))
             elif strategy in ("sr_breakout", "swing_sr", "breakout"):
                 self._json(sr_breakout_backtest_report())
+            elif strategy in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
+                self._json(nifty_vix_master_backtest_report())
+            elif strategy in ("vix_master_sensex", "sensex_vix_master"):
+                self._json(sensex_vix_master_backtest_report())
             elif strategy in ("sensex_vix_divergence", "sensex_vix", "sensex_trap", "vix_sensex"):
                 self._json(sensex_vix_divergence_backtest_report())
             elif strategy in ("vix_divergence", "vix_trap", "vix_reversal", "vix", "vix_dynamic"):
