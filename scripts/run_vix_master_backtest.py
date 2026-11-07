@@ -53,17 +53,20 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
         df_all.reset_index(drop=True, inplace=True)
         df_all["date_str"] = df_all["timestamp"].dt.strftime("%Y-%m-%d")
         df_all["time_str"] = df_all["timestamp"].dt.strftime("%H:%M")
-        min_or_pts = 80.0
-        trap_cap = 120.0
-        trap_floor = 60.0
-        pyr_trigger = 150.0
-        r1_trig, r1_lk = 280.0, 80.0
-        r2_trig, r2_lk = 520.0, 240.0
-        r3_trig, r3_lk = 720.0, 440.0
-        r4_trig, r4_lk = 1000.0, 700.0
-        r5_trig, r5_lk = 1400.0, 1050.0
+        min_or_pts = 75.0
+        trap_cap = 220.0
+        trap_floor = 100.0
+        scale_trigger = 120.0
+        pyr_trigger = 200.0
+        t0_trig_1, t0_lk_1 = 130.0, -40.0
+        t0_trig_2, t0_lk_2 = 180.0, 15.0
+        r1_trig, r1_lk = 240.0, 80.0
+        r2_trig, r2_lk = 400.0, 200.0
+        r3_trig, r3_lk = 600.0, 360.0
+        r4_trig, r4_lk = 850.0, 550.0
+        r5_trig, r5_lk = 1200.0, 850.0
         runner_sl_floor = 100.0
-        runner_sl_cap = 240.0
+        runner_sl_cap = 220.0
         runner_buffer = 15.0
     else:
         years = [str(y) for y in range(2017, 2027)]
@@ -84,16 +87,19 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
         df_all["date_str"] = df_all["timestamp"].dt.strftime("%Y-%m-%d")
         df_all["time_str"] = df_all["timestamp"].dt.strftime("%H:%M")
         min_or_pts = 25.0
-        trap_cap = 80.0
+        trap_cap = 65.0
         trap_floor = 25.0
+        scale_trigger = 35.0
         pyr_trigger = 60.0
+        t0_trig_1, t0_lk_1 = 40.0, -15.0
+        t0_trig_2, t0_lk_2 = 55.0, 5.0
         r1_trig, r1_lk = 70.0, 20.0
         r2_trig, r2_lk = 130.0, 60.0
         r3_trig, r3_lk = 180.0, 110.0
         r4_trig, r4_lk = 260.0, 180.0
         r5_trig, r5_lk = 360.0, 270.0
         runner_sl_floor = 35.0
-        runner_sl_cap = 75.0
+        runner_sl_cap = 65.0
         runner_buffer = 5.0
 
     tp = (df_all["high"] + df_all["low"] + df_all["close"]) / 3.0
@@ -177,8 +183,14 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                 # Check Ratchets / Transitions
                 mf = active_pos["max_fav"]
                 
-                # Trap to Runner Transition & Pyramiding
-                if active_pos["origin"] == "VIX_TRAP" and not active_pos["pyramided"]:
+                # Scale-in Confirmation: Lot 1 -> Lot 2 on A+ setups
+                if active_pos["is_a_plus"] and not active_pos["scaled_in"]:
+                    if mf >= scale_trigger:
+                        active_pos["scaled_in"] = True
+                        active_pos["total_lots"] = 2
+
+                # Trap / Expansion Pyramid: Lot 2 -> Lot 3
+                if not active_pos["pyramided"]:
                     if mf >= pyr_trigger and active_pos["is_a_plus"]:
                         active_pos["pyramided"] = True
                         active_pos["total_lots"] = 3
@@ -191,7 +203,7 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                         active_pos["sl"] = curr_sl
                         active_pos["stage"] = "TRAP_RUNNER_PYRAMID"
                 
-                # Ratchet Logic (5-Tier Extended Ratchets)
+                # Ratchet Logic (Tier 0 Protection + 5-Tier Extended Ratchets)
                 if mf >= r5_trig:
                     new_sl = (e_px + r5_lk) if side in ("CALL", "LONG") else (e_px - r5_lk)
                     curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
@@ -206,6 +218,12 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                     curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
                 elif mf >= r1_trig:
                     new_sl = (e_px + r1_lk) if side in ("CALL", "LONG") else (e_px - r1_lk)
+                    curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
+                elif mf >= t0_trig_2:
+                    new_sl = (e_px + t0_lk_2) if side in ("CALL", "LONG") else (e_px - t0_lk_2)
+                    curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
+                elif mf >= t0_trig_1:
+                    new_sl = (e_px + t0_lk_1) if side in ("CALL", "LONG") else (e_px - t0_lk_1)
                     curr_sl = max(curr_sl, new_sl) if side in ("CALL", "LONG") else min(curr_sl, new_sl)
                 active_pos["sl"] = curr_sl
                 
@@ -225,10 +243,13 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                         weighted_pnl = round(pnl, 2)
                     else:
                         if pnl <= 0:
-                            weighted_pnl = round(pnl * 2, 2)
+                            # If stopped out before scaling in, loss is ONLY 1 LOT!
+                            lots_at_loss = 2 if active_pos["scaled_in"] else 1
+                            weighted_pnl = round(pnl * lots_at_loss, 2)
                         else:
-                            pyr_pnl = max(0.0, pnl - pyr_trigger) if active_pos["pyramided"] else 0.0
-                            weighted_pnl = round((pnl * 2) + pyr_pnl, 2)
+                            lot2_pnl = max(0.0, pnl - scale_trigger) if active_pos["scaled_in"] else 0.0
+                            lot3_pnl = max(0.0, pnl - pyr_trigger) if active_pos["pyramided"] else 0.0
+                            weighted_pnl = round(pnl + lot2_pnl + lot3_pnl, 2)
                             
                     fut_rs = round(weighted_pnl * lot_size, 2)
                     opt_rs = round(weighted_pnl * lot_size * delta, 2)
@@ -285,7 +306,7 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                         trap_attempted = True
                         day_trades += 1
                         is_a_plus = abs(v_chg) >= 3.5
-                        base_lots = 2 if is_a_plus else 1
+                        base_lots = 1
                         
                         # Swing SL calculation
                         if trap_sig == "PUT":
@@ -307,8 +328,9 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                             "initial_sl": init_sl,
                             "max_fav": 0.0,
                             "is_a_plus": is_a_plus,
-                            "base_lots": base_lots,
-                            "total_lots": base_lots,
+                            "base_lots": 1,
+                            "total_lots": 1,
+                            "scaled_in": False,
                             "pyramided": False,
                         }
                         continue
@@ -349,7 +371,7 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                     if runner_sig:
                         day_trades += 1
                         is_a_plus = abs(v_chg) >= 3.5
-                        base_lots = 2 if is_a_plus else 1
+                        base_lots = 1
                         
                         # Dynamic Swing SL calculation
                         if runner_sig == "CALL":
@@ -371,8 +393,9 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                             "initial_sl": init_sl,
                             "max_fav": 0.0,
                             "is_a_plus": is_a_plus,
-                            "base_lots": base_lots,
-                            "total_lots": base_lots,
+                            "base_lots": 1,
+                            "total_lots": 1,
+                            "scaled_in": False,
                             "pyramided": False,
                         }
                         continue

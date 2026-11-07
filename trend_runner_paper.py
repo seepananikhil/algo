@@ -368,6 +368,31 @@ class TrendRunnerPaperEngine:
             if fav > pos["max_fav"]:
                 pos["max_fav"] = fav
 
+            # --- Tier 0: Pre-Ratchet Retention Guard ---
+            # Guard A: +40 pts (Nifty) / +130 pts (Sensex) -> Pull SL to Entry - 15 (Nifty) / Entry - 40 (Sensex)
+            t0_trig_1 = 40.0 if not (self.symbol == "SENSEX") else 130.0
+            t0_lk_1 = -15.0 if not (self.symbol == "SENSEX") else -40.0
+            if pos["max_fav"] >= t0_trig_1:
+                t0_level_1 = entry_px + t0_lk_1 if sig == "LONG" else entry_px - t0_lk_1
+                if (sig == "LONG" and t0_level_1 > curr_sl) or (sig == "SHORT" and t0_level_1 < curr_sl):
+                    pos["current_sl"] = t0_level_1
+                    curr_sl = t0_level_1
+                    if self.log_trades and pos.get("last_ratchet") != "Tier 0A":
+                        print(f"  [TIER 0A RETENTION GUARD] Reached +{pos['max_fav']:.1f} pts! Stop pulled to {curr_sl:.2f} (Max loss capped to {abs(t0_lk_1):.1f} pts)")
+                    pos["last_ratchet"] = "Tier 0A"
+
+            # Guard B: +55 pts (Nifty) / +180 pts (Sensex) -> Lock Entry + 5 (Nifty) / Entry + 15 (Sensex)
+            t0_trig_2 = 55.0 if not (self.symbol == "SENSEX") else 180.0
+            t0_lk_2 = 5.0 if not (self.symbol == "SENSEX") else 15.0
+            if pos["max_fav"] >= t0_trig_2:
+                t0_level_2 = entry_px + t0_lk_2 if sig == "LONG" else entry_px - t0_lk_2
+                if (sig == "LONG" and t0_level_2 > curr_sl) or (sig == "SHORT" and t0_level_2 < curr_sl):
+                    pos["current_sl"] = t0_level_2
+                    curr_sl = t0_level_2
+                    if self.log_trades and pos.get("last_ratchet") != "Tier 0B":
+                        print(f"  [TIER 0B BREAKEVEN LOCK] Reached +{pos['max_fav']:.1f} pts! Stop moved to {curr_sl:.2f} (Locking Breakeven +{t0_lk_2:.1f} pts)")
+                    pos["last_ratchet"] = "Tier 0B"
+
             # --- 3-Tier Progressive Ratchet Lock ---
             # Tier 1: +70 pts -> Lock +20 pts & Risk-Free Pyramiding
             if self.r1_trigger is not None and pos["max_fav"] >= self.r1_trigger:
@@ -697,7 +722,7 @@ class TrendRunnerPaperEngine:
             entry_px = next_bar_open if next_bar_open is not None else c
             is_sx = (self.symbol == "SENSEX")
             sl_floor = 100.0 if is_sx else 35.0
-            sl_cap = 240.0 if is_sx else 75.0
+            sl_cap = 220.0 if is_sx else 65.0
             sl_buffer = 15.0 if is_sx else 5.0
 
             if self.sl_mode in ("swing", "adaptive", "adaptive_swing"):
