@@ -3785,11 +3785,12 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
             "losses": sum(1 for x in trades if x["pnl_points"] < 0),
             "win_rate": round(100.0 * wins / n, 2) if n else 0.0,
             "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
-            "total_points": round(equity, 2),
+            "total_points": round(sum(float(x.get("pnl_points") or 0.0) for x in raw_trades), 2),
+            "base_points": round(sum(float(x.get("pnl_points") or 0.0) for x in raw_trades), 2),
+            "base_rupees": round(sum(float(x.get("pnl_points") or 0.0) for x in raw_trades) * lot_size * (option_delta if option_delta else 1.0), 2),
             "dynamic_points": round(sum(float(x.get("weighted_pnl_points") or x.get("pnl_points") or 0.0) for x in raw_trades), 2),
             "dynamic_rupees": round(sum(float(x.get("weighted_pnl_points") or x.get("pnl_points") or 0.0) for x in raw_trades) * lot_size * (option_delta if option_delta else 1.0), 2),
             "futures_rupees": round(sum(float(x.get("weighted_pnl_points") or x.get("pnl_points") or 0.0) for x in raw_trades) * lot_size, 2),
-            "base_points": round(sum(float(x.get("pnl_points") or 0.0) for x in raw_trades), 2),
             "avg_points": round(equity / n, 2) if n else 0.0,
             "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
             "best": max((x["pnl_points"] for x in trades), default=0.0),
@@ -3911,6 +3912,8 @@ def combined_strategy_backtest_report(
 
     total_dyn_rs = round(sum(x["pnl_rupees"] for x in trades), 2)
     total_fut_rs = round(sum(x["futures_rupees"] for x in trades), 2)
+    total_base_rs = round(sum(float(x.get("base_points", x.get("pnl_points", 0.0))) * x.get("lot_size", 25) * option_delta for x in trades), 2)
+    base_norm_pts = round(total_base_rs / (25.0 * option_delta), 2)
 
     return {
         "summary": {
@@ -3922,11 +3925,12 @@ def combined_strategy_backtest_report(
             "losses": sum(1 for x in trades if x["pnl_rupees"] < 0),
             "win_rate": round(100.0 * wins / n, 2) if n else 0.0,
             "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
-            "total_points": round(equity, 2),
+            "total_points": base_norm_pts,
+            "base_points": base_norm_pts,
+            "base_rupees": total_base_rs,
             "dynamic_points": round(equity, 2),
             "dynamic_rupees": total_dyn_rs,
             "futures_rupees": total_fut_rs,
-            "base_points": round(equity, 2),
             "avg_points": round(equity / n, 2) if n else 0.0,
             "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
             "best": max((x["pnl_points"] for x in trades), default=0.0),

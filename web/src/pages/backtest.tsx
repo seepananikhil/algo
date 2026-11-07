@@ -670,15 +670,15 @@ export function BacktestPage() {
         <div className={cn("flex flex-col gap-4 transition-opacity duration-200", loading && "opacity-60")}>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
         <StatCard
-          label={s.dynamic_points ? "Dynamic Net Points" : "Total points"}
-          value={fmtPts(s.dynamic_points ?? s.total_points)}
-          className={pnlClass(s.dynamic_points ?? s.total_points)}
+          label="Total points (1-Lot)"
+          value={fmtPts(s.base_points ?? s.total_points)}
+          className={pnlClass(s.base_points ?? s.total_points)}
           hint={
             s.dynamic_points
-              ? `Options (≈${Math.round((s.option_delta || 0.6) * 100)}%Δ): ${fmtRs(s.dynamic_rupees || (s.total_points * s.lot_size * (s.option_delta || 0.6)))} · 1-Lot: ${fmtPts(s.base_points)}`
+              ? `Dynamic: ${fmtPts(s.dynamic_points)} (Options: ${fmtRs(s.dynamic_rupees || (s.dynamic_points * s.lot_size * (s.option_delta || 0.6)))})`
               : s.option_delta
-              ? `Option (≈${Math.round(s.option_delta * 100)}%Δ): ${fmtRs(s.total_points * s.lot_size * s.option_delta)} · Spot: ${fmtRs(s.total_points * s.lot_size)}`
-              : `≈ ${fmtRs(s.total_points * s.lot_size)}`
+              ? `Option (≈${Math.round(s.option_delta * 100)}%Δ): ${fmtRs((s.base_points ?? s.total_points) * s.lot_size * s.option_delta)} · Spot: ${fmtRs((s.base_points ?? s.total_points) * s.lot_size)}`
+              : `≈ ${fmtRs((s.base_points ?? s.total_points) * s.lot_size)}`
           }
         />
 
