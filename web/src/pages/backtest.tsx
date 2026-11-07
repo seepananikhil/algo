@@ -581,6 +581,12 @@ export function BacktestPage() {
     </div>
   )
 
+  if (error) return <div className="flex flex-col gap-4">{strategyTabs}<p className="text-sm text-red-500">Backtest failed: {error}</p></div>
+  if (loading || !data) return <div className="flex flex-col gap-4">{strategyTabs}<Skeleton className="h-[600px] w-full" /></div>
+
+  const s = data.summary
+  const curve = [{ label: "start", equity: 0, drawdown: 0 }, ...(data?.trades ?? []).map((t) => ({ label: `${t.date} ${t.entry}`, equity: t.equity, drawdown: t.drawdown }))]
+
 
 
 
