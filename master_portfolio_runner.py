@@ -40,7 +40,6 @@ def load_portfolio_config():
         "setups": {
             "vix_master_morning": True,
             "vix_master_afternoon": True,
-            "gap_and_go_morning": True,
             "williams_afternoon": True
         },
         "spot_ratchet_settings": {
@@ -89,20 +88,11 @@ class MasterPortfolioDispatcher:
         print("=" * 75)
 
     def on_market_open(self, open_price, prev_close_1515):
-        """Processes 09:15 AM market open and determines gap routing."""
+        """Processes 09:15 AM market open and establishes opening baseline."""
         gap_pts = open_price - prev_close_1515
         self.gap_pct = (gap_pts / prev_close_1515) * 100.0
         print(f"[{datetime.now(IST).strftime('%H:%M:%S')}] 📊 09:15 Open: {open_price:.1f} | Prev Close: {prev_close_1515:.1f} | Gap: {gap_pts:+.1f} pts ({self.gap_pct:+.2f}%)")
-        
-        if abs(self.gap_pct) >= 0.5:
-            self.gap_detected = True
-            if self.setups.get("gap_and_go_morning"):
-                print("   👉 Large Gap Detected (>= 0.5%). Morning priority routed to Setup 3: Gap-and-Go.")
-            else:
-                print("   👉 Large Gap Detected, but Setup 3 is disabled. Passing to VIX Master.")
-        else:
-            self.gap_detected = False
-            print("   👉 Normal Opening Range (< 0.5%). Morning priority routed to Setup 1: VIX Master.")
+        print("   👉 Morning session routed to Setup 1: VIX Master Morning ORB.")
 
     def can_trade_now(self, setup_name, current_time_str):
         """Enforces scheduling windows, setup enablement, and priority exclusivity."""

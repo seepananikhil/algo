@@ -28,8 +28,8 @@ type PortfolioConfig = {
   setups: {
     vix_master_morning: boolean
     vix_master_afternoon: boolean
-    gap_and_go_morning: boolean
     williams_afternoon: boolean
+    gap_and_go_morning?: boolean
   }
   spot_ratchet_settings: {
     initial_sl_pts: number
@@ -56,7 +56,6 @@ const DEFAULT_CONFIG: PortfolioConfig = {
   setups: {
     vix_master_morning: true,
     vix_master_afternoon: true,
-    gap_and_go_morning: true,
     williams_afternoon: true,
   },
   spot_ratchet_settings: {
@@ -130,7 +129,11 @@ export function ConfigPage() {
     )
   }
 
-  const activeSetupsCount = Object.values(config.setups).filter(Boolean).length
+  const activeSetupsCount = [
+    config.setups.vix_master_morning,
+    config.setups.vix_master_afternoon,
+    config.setups.williams_afternoon,
+  ].filter(Boolean).length
 
   return (
     <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-6xl mx-auto">
@@ -142,15 +145,15 @@ export function ConfigPage() {
               <Sliders className="size-3" /> Master Portfolio Suite
             </Badge>
             <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 gap-1 text-xs">
-              <ShieldCheck className="size-3" /> Live Dispatcher Ready
+              <ShieldCheck className="size-3" /> 10-Year Verified Engine
             </Badge>
             <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10 gap-1 text-xs">
-              {activeSetupsCount} / 4 Setups Active
+              {activeSetupsCount} / 3 Setups Active
             </Badge>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Strategy Configuration</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Toggle modular strategy setups, configure priority execution routing, and customize fixed spot points ratchet milestones.
+            Configure the 3 production setups (VIX Morning ORB, VIX Afternoon Trend, and Williams Fractal), execution priority, and fixed spot points ratchet milestones.
           </p>
         </div>
 
@@ -268,22 +271,22 @@ export function ConfigPage() {
               <div className="text-xs text-muted-foreground bg-muted/40 p-3 rounded-md flex items-center gap-2">
                 <Info className="size-4 shrink-0 text-sky-400" />
                 <span>
-                  <strong>Priority Mode:</strong> Perfect for strict margin accounts. If a morning setup is running, afternoon setups only trigger if the morning position has closed, capping exposure to exactly 1 active trade.
+                  <strong>Priority Mode:</strong> Perfect for strict margin accounts. If morning ORB trade is running, afternoon setups only trigger after the morning position has closed, capping exposure to exactly 1 active trade.
                 </span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Section 2: The 4 Modular Setups */}
+          {/* Section 2: The 3 Core Setups */}
           <div className="space-y-3">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">The 4 Modular Strategy Setups</h2>
+              <h2 className="text-lg font-semibold tracking-tight">The 3 Core Production Setups</h2>
               <p className="text-xs text-muted-foreground">
-                Decoupled engines with independent trigger mechanics. Toggle any setup on or off for live and paper dispatching.
+                High-expectancy, mutually orthogonal engines. Zero morning cannibalization.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {/* Setup 1: VIX Master Morning */}
               <Card className={config.setups.vix_master_morning ? "border-emerald-500/40 bg-card" : "opacity-60"}>
                 <CardHeader className="pb-2">
@@ -313,11 +316,11 @@ export function ConfigPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Trigger Condition:</span>
-                    <span className="text-foreground">Break of 15m ORB + VIX confirmation</span>
+                    <span className="text-foreground">Break of 15m ORB + VIX confluence</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Standalone PF:</span>
-                    <span className="text-emerald-400 font-semibold">1.93 PF (54.9% WR)</span>
+                    <span>Expectancy:</span>
+                    <span className="text-emerald-400 font-semibold">+18.45 pt / trade (2.00 PF)</span>
                   </div>
                 </CardContent>
               </Card>
@@ -354,56 +357,18 @@ export function ConfigPage() {
                     <span className="text-foreground">Breakout of rolling midday extremes</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Standalone PF:</span>
-                    <span className="text-emerald-400 font-semibold">1.88 PF (52.4% WR)</span>
+                    <span>Expectancy:</span>
+                    <span className="text-sky-400 font-semibold">+10.08 pt / trade (1.88 PF)</span>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Setup 3: Pure Gap-and-Go */}
-              <Card className={config.setups.gap_and_go_morning ? "border-amber-500/40 bg-card" : "opacity-60"}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="border-amber-500/50 text-amber-400 bg-amber-500/10 text-[10px]">
-                      Setup 3 · Gap Expansion
-                    </Badge>
-                    <Switch
-                      checked={config.setups.gap_and_go_morning}
-                      onCheckedChange={(checked) =>
-                        setConfig({
-                          ...config,
-                          setups: { ...config.setups, gap_and_go_morning: checked },
-                        })
-                      }
-                    />
-                  </div>
-                  <CardTitle className="text-base mt-2">Pure Gap-and-Go</CardTitle>
-                  <CardDescription className="text-xs">
-                    10% ORB breakout in gap direction on significant gap days (|Gap| &ge; 0.5%).
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="text-xs space-y-1.5 text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>Execution Window:</span>
-                    <span className="font-mono text-foreground font-medium">09:46 – 12:00 IST</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Filter:</span>
-                    <span className="text-foreground">Stands down if gap fills before break</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Standalone PF:</span>
-                    <span className="text-amber-400 font-semibold">1.38 PF (+4,499.2 pts)</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Setup 4: Williams Fractal */}
+              {/* Setup 3: Williams Fractal */}
               <Card className={config.setups.williams_afternoon ? "border-purple-500/40 bg-card" : "opacity-60"}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="border-purple-500/50 text-purple-400 bg-purple-500/10 text-[10px]">
-                      Setup 4 · Williams Fractal
+                      Setup 3 · Williams Fractal
                     </Badge>
                     <Switch
                       checked={config.setups.williams_afternoon}
@@ -430,8 +395,8 @@ export function ConfigPage() {
                     <span className="text-foreground">Prior Day High / Low breakout</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Standalone PF:</span>
-                    <span className="text-purple-400 font-semibold">1.66 PF (Max DD 347.7 pt)</span>
+                    <span>Risk Profile:</span>
+                    <span className="text-purple-400 font-semibold">1.66 PF (Max DD only 347.7 pt)</span>
                   </div>
                 </CardContent>
               </Card>

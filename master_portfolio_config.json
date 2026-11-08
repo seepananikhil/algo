@@ -6,7 +6,6 @@
   "setups": {
     "vix_master_morning": true,
     "vix_master_afternoon": true,
-    "gap_and_go_morning": true,
     "williams_afternoon": true
   },
   "spot_ratchet_settings": {

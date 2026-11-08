@@ -27,7 +27,7 @@ ROOT = Path(__file__).resolve().parent.parent
 
 def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
     if enabled_setups is None or "all" in enabled_setups:
-        enabled_setups = ["vix_morn", "vix_aft", "gap_morn", "williams"]
+        enabled_setups = ["vix_morn", "vix_aft", "williams"]
     else:
         enabled_setups = [s.strip().lower() for s in enabled_setups]
 
