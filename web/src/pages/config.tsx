@@ -27,8 +27,8 @@ type PortfolioConfig = {
   max_concurrent_positions: number
   setups: {
     vix_master_morning: boolean
-    vix_master_afternoon: boolean
     williams_afternoon: boolean
+    vix_master_afternoon?: boolean
     gap_and_go_morning?: boolean
   }
   spot_ratchet_settings: {
@@ -55,7 +55,6 @@ const DEFAULT_CONFIG: PortfolioConfig = {
   max_concurrent_positions: 1,
   setups: {
     vix_master_morning: true,
-    vix_master_afternoon: true,
     williams_afternoon: true,
   },
   spot_ratchet_settings: {
@@ -131,7 +130,6 @@ export function ConfigPage() {
 
   const activeSetupsCount = [
     config.setups.vix_master_morning,
-    config.setups.vix_master_afternoon,
     config.setups.williams_afternoon,
   ].filter(Boolean).length
 
@@ -148,12 +146,12 @@ export function ConfigPage() {
               <ShieldCheck className="size-3" /> 10-Year Verified Engine
             </Badge>
             <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10 gap-1 text-xs">
-              {activeSetupsCount} / 3 Setups Active
+              {activeSetupsCount} / 2 Daily Engines Active
             </Badge>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Strategy Configuration</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure the 3 production setups (VIX Morning ORB, VIX Afternoon Trend, and Williams Fractal), execution priority, and fixed spot points ratchet milestones.
+            Production 2-stage daily relay: VIX Master handles the morning trend (09:30–11:00), and Williams Fractal takes the afternoon session (12:00–14:30).
           </p>
         </div>
 
@@ -182,7 +180,7 @@ export function ConfigPage() {
                 Portfolio Execution Mode & Instrument
               </CardTitle>
               <CardDescription>
-                Define margin allocation rules and execution priority when multiple strategy signals fire on the same day.
+                Define margin allocation rules and execution priority across the morning and afternoon sessions.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -271,28 +269,28 @@ export function ConfigPage() {
               <div className="text-xs text-muted-foreground bg-muted/40 p-3 rounded-md flex items-center gap-2">
                 <Info className="size-4 shrink-0 text-sky-400" />
                 <span>
-                  <strong>Priority Mode:</strong> Perfect for strict margin accounts. If morning ORB trade is running, afternoon setups only trigger after the morning position has closed, capping exposure to exactly 1 active trade.
+                  <strong>Clean 2-Stage Daily Relay:</strong> VIX Master takes the morning trade (09:30–11:00). After 12:00 PM, Williams Fractal kicks in to capture afternoon prior-day breakout momentum, capping daily exposure to 1 position at a time.
                 </span>
               </div>
             </CardContent>
           </Card>
 
-          {/* Section 2: The 3 Core Setups */}
+          {/* Section 2: The 2 Core Daily Relay Engines */}
           <div className="space-y-3">
             <div>
-              <h2 className="text-lg font-semibold tracking-tight">The 3 Core Production Setups</h2>
+              <h2 className="text-lg font-semibold tracking-tight">The 2 Daily Relay Engines</h2>
               <p className="text-xs text-muted-foreground">
-                High-expectancy, mutually orthogonal engines. Zero morning cannibalization.
+                Mutually orthogonal execution windows with zero cannibalization. Morning trend capture + Afternoon fractal breakout.
               </p>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Setup 1: VIX Master Morning */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Engine 1: VIX Master Morning ORB */}
               <Card className={config.setups.vix_master_morning ? "border-emerald-500/40 bg-card" : "opacity-60"}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="border-emerald-500/50 text-emerald-400 bg-emerald-500/10 text-[10px]">
-                      Setup 1 · Morning ORB
+                      Stage 1 · Morning Session
                     </Badge>
                     <Switch
                       checked={config.setups.vix_master_morning}
@@ -304,9 +302,9 @@ export function ConfigPage() {
                       }
                     />
                   </div>
-                  <CardTitle className="text-base mt-2">VIX Master (Morning ORB)</CardTitle>
+                  <CardTitle className="text-base mt-2">⚡ VIX Master (Morning ORB)</CardTitle>
                   <CardDescription className="text-xs">
-                    Directional opening range breakout aligned with India VIX momentum.
+                    Directional opening range breakout confirmed by India VIX momentum.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-xs space-y-1.5 text-muted-foreground">
@@ -320,55 +318,21 @@ export function ConfigPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Expectancy:</span>
-                    <span className="text-emerald-400 font-semibold">+18.45 pt / trade (2.00 PF)</span>
+                    <span className="text-emerald-400 font-semibold">+18.45 pt / trade (2.00 PF, 55.9% WR)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>10-Year Total:</span>
+                    <span className="text-foreground font-medium">+23,392.8 spot pts (1,268 trades)</span>
                   </div>
                 </CardContent>
               </Card>
 
-              {/* Setup 2: VIX Master Afternoon */}
-              <Card className={config.setups.vix_master_afternoon ? "border-emerald-500/40 bg-card" : "opacity-60"}>
-                <CardHeader className="pb-2">
-                  <div className="flex items-center justify-between">
-                    <Badge variant="outline" className="border-sky-500/50 text-sky-400 bg-sky-500/10 text-[10px]">
-                      Setup 2 · Afternoon Trend
-                    </Badge>
-                    <Switch
-                      checked={config.setups.vix_master_afternoon}
-                      onCheckedChange={(checked) =>
-                        setConfig({
-                          ...config,
-                          setups: { ...config.setups, vix_master_afternoon: checked },
-                        })
-                      }
-                    />
-                  </div>
-                  <CardTitle className="text-base mt-2">VIX Master (Afternoon Trend)</CardTitle>
-                  <CardDescription className="text-xs">
-                    Symmetric Trade 2 continuation taking rolling high/low breakouts.
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="text-xs space-y-1.5 text-muted-foreground">
-                  <div className="flex justify-between">
-                    <span>Execution Window:</span>
-                    <span className="font-mono text-foreground font-medium">12:00 – 14:30 IST</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Trigger Condition:</span>
-                    <span className="text-foreground">Breakout of rolling midday extremes</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span>Expectancy:</span>
-                    <span className="text-sky-400 font-semibold">+10.08 pt / trade (1.88 PF)</span>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Setup 3: Williams Fractal */}
+              {/* Engine 2: Williams Fractal Afternoon */}
               <Card className={config.setups.williams_afternoon ? "border-purple-500/40 bg-card" : "opacity-60"}>
                 <CardHeader className="pb-2">
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="border-purple-500/50 text-purple-400 bg-purple-500/10 text-[10px]">
-                      Setup 3 · Williams Fractal
+                      Stage 2 · Afternoon Session
                     </Badge>
                     <Switch
                       checked={config.setups.williams_afternoon}
@@ -380,9 +344,9 @@ export function ConfigPage() {
                       }
                     />
                   </div>
-                  <CardTitle className="text-base mt-2">Williams Fractal Runner</CardTitle>
+                  <CardTitle className="text-base mt-2">🎯 Williams Fractal Runner</CardTitle>
                   <CardDescription className="text-xs">
-                    Afternoon prior day range expansion breakout when morning consolidates.
+                    Afternoon prior day range breakout when morning session is quiet or closed.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="text-xs space-y-1.5 text-muted-foreground">
@@ -392,11 +356,15 @@ export function ConfigPage() {
                   </div>
                   <div className="flex justify-between">
                     <span>Trigger Level:</span>
-                    <span className="text-foreground">Prior Day High / Low breakout</span>
+                    <span className="text-foreground">Prior Day High / Low fractal breakout</span>
                   </div>
                   <div className="flex justify-between">
-                    <span>Risk Profile:</span>
-                    <span className="text-purple-400 font-semibold">1.66 PF (Max DD only 347.7 pt)</span>
+                    <span>Expectancy:</span>
+                    <span className="text-purple-400 font-semibold">+10.31 pt / trade (1.66 PF, 43.2% WR)</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span>Max Drawdown:</span>
+                    <span className="text-foreground font-medium">Only 347.7 pt (Ultra-Tight Risk)</span>
                   </div>
                 </CardContent>
               </Card>
@@ -413,7 +381,7 @@ export function ConfigPage() {
                     Spot Points Profit Ratchet Ladder
                   </CardTitle>
                   <CardDescription>
-                    All setups lock fixed spot points at each milestone. Zero percentage drift or volatility guessing.
+                    Both engines lock fixed spot points at each milestone. Zero percentage drift or volatility guessing.
                   </CardDescription>
                 </div>
                 <Badge variant="outline" className="text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10">

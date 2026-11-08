@@ -5,7 +5,6 @@
   "max_concurrent_positions": 1,
   "setups": {
     "vix_master_morning": true,
-    "vix_master_afternoon": true,
     "williams_afternoon": true
   },
   "spot_ratchet_settings": {

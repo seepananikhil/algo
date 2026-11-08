@@ -39,7 +39,6 @@ def load_portfolio_config():
         "max_concurrent_positions": 1,
         "setups": {
             "vix_master_morning": True,
-            "vix_master_afternoon": True,
             "williams_afternoon": True
         },
         "spot_ratchet_settings": {
@@ -212,7 +211,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Master Portfolio Dispatcher")
     parser.add_argument("--mode", choices=["priority", "concurrent"], help="Override mode")
     parser.add_argument("--symbol", choices=["NIFTY", "SENSEX"], help="Override symbol")
-    parser.add_argument("--setups", help="Comma-separated setups to enable: vix_morn,vix_aft,gap_morn,williams or all")
+    parser.add_argument("--setups", help="Comma-separated setups to enable: vix_morn,williams or all")
     args = parser.parse_args()
 
     cfg = load_portfolio_config()
@@ -222,9 +221,7 @@ if __name__ == '__main__':
         cfg["symbol"] = args.symbol
     if args.setups:
         selected = [s.strip().lower() for s in args.setups.split(",")]
-        cfg["setups"]["vix_master_morning"] = "all" in selected or "vix_morn" in selected
-        cfg["setups"]["vix_master_afternoon"] = "all" in selected or "vix_aft" in selected
-        cfg["setups"]["gap_and_go_morning"] = "all" in selected or "gap_morn" in selected
-        cfg["setups"]["williams_afternoon"] = "all" in selected or "williams" in selected
+        cfg["setups"]["vix_master_morning"] = "all" in selected or "vix_morn" in selected or "vix_master" in selected
+        cfg["setups"]["williams_afternoon"] = "all" in selected or "williams" in selected or "williams_fractal" in selected
 
     dispatcher = MasterPortfolioDispatcher(cfg)
