@@ -3144,6 +3144,19 @@ def sensex_vix_master_backtest_report() -> dict:
     )
 
 
+def master_portfolio_backtest_report(symbol: str = "nifty") -> dict:
+    """Historical backtest performance for Unified Master Portfolio Suite (VIX Master + Gap-and-Go Williams)."""
+    csv_path = ROOT / "performance" / f"master_portfolio_{symbol.lower()}_trades.csv"
+    if not csv_path.exists():
+        csv_path = ROOT / "performance" / "master_portfolio_nifty_trades.csv"
+    return vix_trend_runner_backtest_report(
+        csv_path,
+        lot_size=10 if symbol.lower() == "sensex" else 25,
+        option_delta=0.60,
+        use_weighted=False
+    )
+
+
 def vix_master_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
     """Historical spot trades for Unified VIX Master Strategy on date."""
     fname = "sensex_vix_master_trades.csv" if symbol.upper() == "SENSEX" else "nifty_vix_master_trades.csv"
@@ -5182,6 +5195,15 @@ class Handler(BaseHTTPRequestHandler):
                     ROOT / "performance" / "vix_divergence_backtest_trades.csv",
                     ROOT / "performance" / "sensex_vix_divergence_trades.csv",
                     nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
+                ))
+            elif strategy in ("master_portfolio", "master_portfolio_nifty", "master_portfolio_all", "portfolio", "unified_master"):
+                self._json(master_portfolio_backtest_report())
+            elif strategy in ("gap_and_go_williams", "gap_williams", "williams", "gap_and_go"):
+                self._json(vix_trend_runner_backtest_report(
+                    ROOT / "performance" / "gap_and_go_williams_official_trades.csv",
+                    lot_size=25,
+                    option_delta=0.72,
+                    use_weighted=False
                 ))
             elif strategy in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
                 self._json(nifty_vix_master_backtest_report())

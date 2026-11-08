@@ -281,7 +281,7 @@ const tooltip = {
 
 
 
-type MainStrategy = "vix_master" | "trend_runner" | "vix_trap"
+type MainStrategy = "master_portfolio" | "vix_master" | "gap_williams" | "trend_runner" | "vix_trap"
 type SubSymbol = "all" | "nifty" | "sensex"
 
 export function BacktestPage() {
@@ -298,7 +298,11 @@ export function BacktestPage() {
   })
 
   const apiUrl = useMemo(() => {
-    if (mainStrategy === "vix_master") {
+    if (mainStrategy === "master_portfolio") {
+      return "/api/backtest?strategy=master_portfolio"
+    } else if (mainStrategy === "gap_williams") {
+      return "/api/backtest?strategy=gap_and_go_williams"
+    } else if (mainStrategy === "vix_master") {
       if (subSymbol === "nifty") return "/api/backtest?strategy=vix_master_nifty"
       if (subSymbol === "sensex") return "/api/backtest?strategy=vix_master_sensex"
       return "/api/backtest?strategy=vix_master_all"
@@ -314,7 +318,11 @@ export function BacktestPage() {
   }, [mainStrategy, subSymbol])
 
   const strategy = useMemo(() => {
-    if (mainStrategy === "vix_master") {
+    if (mainStrategy === "master_portfolio") {
+      return "master_portfolio"
+    } else if (mainStrategy === "gap_williams") {
+      return "gap_and_go_williams"
+    } else if (mainStrategy === "vix_master") {
       if (subSymbol === "sensex") return "vix_master_sensex"
       if (subSymbol === "all") return "vix_master_all"
       return "vix_master_nifty"
@@ -500,6 +508,19 @@ export function BacktestPage() {
       {/* Strategy Top Row */}
       <div className="flex flex-wrap items-center gap-1.5 p-1 bg-muted/60 rounded-xl w-fit">
         <button
+          onClick={() => { setPicked(null); setMainStrategy("master_portfolio"); localStorage.setItem("backtest_main_strategy", "master_portfolio") }}
+          className={cn(
+            "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
+            mainStrategy === "master_portfolio"
+              ? "bg-purple-600 text-white shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <span>👑</span>
+          <span>Master Suite (VIX + Williams)</span>
+        </button>
+
+        <button
           onClick={() => { setPicked(null); setMainStrategy("vix_master"); localStorage.setItem("backtest_main_strategy", "vix_master") }}
           className={cn(
             "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
@@ -510,6 +531,19 @@ export function BacktestPage() {
         >
           <span>⚡</span>
           <span>VIX Master</span>
+        </button>
+
+        <button
+          onClick={() => { setPicked(null); setMainStrategy("gap_williams"); localStorage.setItem("backtest_main_strategy", "gap_williams") }}
+          className={cn(
+            "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
+            mainStrategy === "gap_williams"
+              ? "bg-amber-600 text-white shadow-sm"
+              : "text-muted-foreground hover:text-foreground hover:bg-muted"
+          )}
+        >
+          <span>🎯</span>
+          <span>Gap & Go Williams</span>
         </button>
 
         <button
