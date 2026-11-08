@@ -208,23 +208,21 @@ def run_simulation(parquet_path='historical_data/nifty50/parquet/NIFTY50_01min.p
             entry_prem = 150.0 + extrinsic_base
             delta = 0.72
 
-            # Tiered Ratchet Settings:
-            # - Initial SL: 70% (-30% max loss)
-            # - Tier 1 (+20% gain): Lock SL to Breakeven + 2%
-            # - Tier 2 (+50% gain): Lock SL to +25% profit
-            # - Above Tier 2: Trail 25% behind peak watermark
-            initial_sl = entry_prem * 0.70
-            sl_price = initial_sl
-            peak_prem = entry_prem
+            # Exact Spot Points Ratchet Ladder (Matching VIX Master / Trend Runner discipline):
+            # - Initial SL: 28.0 pt
+            # - Tier 0A (+40 pt): Pull SL to -15 pt (risk cut in half)
+            # - Tier 0B (+55 pt): Lock Breakeven +5 pt
+            # - Tier 1 (+70 pt): Lock +20 pt profit
+            # - Tier 2 (+130 pt): Lock +60 pt profit
+            # - Tier 3 (+180 pt): Lock +110 pt profit
+            # - Tier 4 (+230 pt): Lock +165 pt profit
+            initial_sl_pts = 28.0
+            curr_sl_pts = -initial_sl_pts
+            max_fav = 0.0
             exit_prem = None
             exit_time = None
             exit_reason = None
             exit_spot = None
-
-            t1_trig = entry_prem * 1.20
-            t1_lock = entry_prem * 1.02
-            t2_trig = entry_prem * 1.50
-            t2_lock = entry_prem * 1.25
 
             for k in range(entry_idx, n_bars):
                 t_k = times[k]
@@ -232,24 +230,27 @@ def run_simulation(parquet_path='historical_data/nifty50/parquet/NIFTY50_01min.p
                 h_k = highs[k]
                 l_k = lows[k]
 
-                if opt_type == 'CE':
-                    p_high = entry_prem + (h_k - entry_spot) * delta
-                    p_close = entry_prem + (c_k - entry_spot) * delta
-                else:
-                    p_high = entry_prem + (entry_spot - l_k) * delta
-                    p_close = entry_prem + (entry_spot - c_k) * delta
+                fav = (h_k - entry_spot) if opt_type == 'CE' else (entry_spot - l_k)
+                curr_fav = (c_k - entry_spot) if opt_type == 'CE' else (entry_spot - c_k)
 
-                if p_high > peak_prem:
-                    peak_prem = p_high
+                if fav > max_fav:
+                    max_fav = fav
 
-                # Ratchet locks
-                if peak_prem >= t2_trig:
-                    trail_level = peak_prem * 0.75 # 25% from peak
-                    sl_price = max(sl_price, t2_lock, trail_level)
-                elif peak_prem >= t1_trig:
-                    sl_price = max(sl_price, t1_lock)
+                # Spot Points Ratchet Locks
+                if max_fav >= 230.0:
+                    curr_sl_pts = max(curr_sl_pts, 165.0)
+                elif max_fav >= 180.0:
+                    curr_sl_pts = max(curr_sl_pts, 110.0)
+                elif max_fav >= 130.0:
+                    curr_sl_pts = max(curr_sl_pts, 60.0)
+                elif max_fav >= 70.0:
+                    curr_sl_pts = max(curr_sl_pts, 20.0)
+                elif max_fav >= 55.0:
+                    curr_sl_pts = max(curr_sl_pts, 5.0)
+                elif max_fav >= 40.0:
+                    curr_sl_pts = max(curr_sl_pts, -15.0)
 
-                if p_close <= sl_price:
+                if curr_fav <= curr_sl_pts:
                     exit_idx = min(k + 1, n_bars - 1)
                     exit_time = times[exit_idx]
                     exit_spot = opens[exit_idx]
@@ -257,13 +258,16 @@ def run_simulation(parquet_path='historical_data/nifty50/parquet/NIFTY50_01min.p
                         exit_prem = entry_prem + (exit_spot - entry_spot) * delta
                     else:
                         exit_prem = entry_prem + (entry_spot - exit_spot) * delta
-                    exit_reason = 'TRAILING_RATCHET' if sl_price > initial_sl else 'STOP_LOSS_-30%'
+                    exit_reason = 'TRAILING_RATCHET' if curr_sl_pts > -initial_sl_pts else 'INITIAL_SL'
                     break
 
                 if t_k >= '15:15':
                     exit_time = '15:15'
                     exit_spot = c_k
-                    exit_prem = p_close
+                    if opt_type == 'CE':
+                        exit_prem = entry_prem + (exit_spot - entry_spot) * delta
+                    else:
+                        exit_prem = entry_prem + (entry_spot - exit_spot) * delta
                     exit_reason = 'FLAT_15:15'
                     break
 

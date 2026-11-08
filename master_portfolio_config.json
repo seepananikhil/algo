@@ -9,11 +9,19 @@
     "gap_and_go_morning": true,
     "williams_afternoon": true
   },
-  "ratchet_settings": {
-    "tier1_trigger_pct": 20.0,
-    "tier1_lock_pct": 2.0,
-    "tier2_trigger_pct": 50.0,
-    "tier2_lock_pct": 25.0,
-    "trailing_pullback_pct": 25.0
+  "spot_ratchet_settings": {
+    "initial_sl_pts": 28.0,
+    "tier0a_trigger_pts": 40.0,
+    "tier0a_lock_pts": -15.0,
+    "tier0b_breakeven_trigger_pts": 55.0,
+    "tier0b_breakeven_lock_pts": 5.0,
+    "tier1_trigger_pts": 70.0,
+    "tier1_lock_pts": 20.0,
+    "tier2_trigger_pts": 130.0,
+    "tier2_lock_pts": 60.0,
+    "tier3_trigger_pts": 180.0,
+    "tier3_lock_pts": 110.0,
+    "tier4_trigger_pts": 230.0,
+    "tier4_lock_pts": 165.0
   }
 }

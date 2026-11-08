@@ -43,12 +43,20 @@ def load_portfolio_config():
             "gap_and_go_morning": True,
             "williams_afternoon": True
         },
-        "ratchet_settings": {
-            "tier1_trigger_pct": 20.0,
-            "tier1_lock_pct": 2.0,
-            "tier2_trigger_pct": 50.0,
-            "tier2_lock_pct": 25.0,
-            "trailing_pullback_pct": 25.0
+        "spot_ratchet_settings": {
+            "initial_sl_pts": 28.0,
+            "tier0a_trigger_pts": 40.0,
+            "tier0a_lock_pts": -15.0,
+            "tier0b_breakeven_trigger_pts": 55.0,
+            "tier0b_breakeven_lock_pts": 5.0,
+            "tier1_trigger_pts": 70.0,
+            "tier1_lock_pts": 20.0,
+            "tier2_trigger_pts": 130.0,
+            "tier2_lock_pts": 60.0,
+            "tier3_trigger_pts": 180.0,
+            "tier3_lock_pts": 110.0,
+            "tier4_trigger_pts": 230.0,
+            "tier4_lock_pts": 165.0
         }
     }
 
@@ -58,7 +66,7 @@ class MasterPortfolioDispatcher:
         self.symbol = self.cfg.get("symbol", "NIFTY").upper()
         self.mode = self.cfg.get("mode", "priority").lower()
         self.setups = self.cfg.get("setups", {})
-        self.ratchet = self.cfg.get("ratchet_settings", {})
+        self.ratchet = self.cfg.get("spot_ratchet_settings", {})
         
         self.current_position = None
         self.trades_today = []
@@ -77,7 +85,7 @@ class MasterPortfolioDispatcher:
         for name, active in self.setups.items():
             status = "🟢 ENABLED" if active else "⚪ DISABLED"
             print(f"     - {name:<26}: {status}")
-        print(f"   Tiered Ratchet: T1 +{self.ratchet.get('tier1_trigger_pct')}% -> Lock BE +{self.ratchet.get('tier1_lock_pct')}%, T2 +{self.ratchet.get('tier2_trigger_pct')}% -> Lock +{self.ratchet.get('tier2_lock_pct')}%")
+        print(f"   Spot Ratchet Ladder: SL -{self.ratchet.get('initial_sl_pts', 28.0):.0f}pt | BE +{self.ratchet.get('tier0b_breakeven_trigger_pts', 55.0):.0f}->+{self.ratchet.get('tier0b_breakeven_lock_pts', 5.0):.0f}pt | R1 +{self.ratchet.get('tier1_trigger_pts', 70.0):.0f}->+{self.ratchet.get('tier1_lock_pts', 20.0):.0f}pt | R2 +{self.ratchet.get('tier2_trigger_pts', 130.0):.0f}->+{self.ratchet.get('tier2_lock_pts', 60.0):.0f}pt")
         print("=" * 75)
 
     def on_market_open(self, open_price, prev_close_1515):
@@ -120,15 +128,19 @@ class MasterPortfolioDispatcher:
 
         return True
 
-    def record_entry(self, setup_name, side, price, sl, target, time_str):
+    def record_entry(self, setup_name, side, price, sl, target, time_str, spot_ref=None):
         trade = {
             "setup": setup_name,
             "side": side,
             "entry_time": time_str,
             "entry_price": price,
+            "entry_spot": spot_ref if spot_ref is not None else price,
             "sl": sl,
+            "initial_sl": sl,
             "target": target,
             "peak_price": price,
+            "max_fav_pts": 0.0,
+            "last_ratchet": None,
             "status": "OPEN",
             "lots": 1
         }
@@ -141,33 +153,70 @@ class MasterPortfolioDispatcher:
 
         print(f"[{time_str}] ⚡ ENTRY by {setup_name}: {side} @ {price:.1f} | SL: {sl:.1f} | TGT: {target:.1f}")
 
-    def update_ratchet(self, current_high, current_close):
-        """Applies dynamic tiered ratchet to current active position."""
+    def update_ratchet(self, current_spot_high, current_spot_low, current_spot_close):
+        """
+        Applies exact VIX Master / Trend Runner Spot Points Ratchet Lock discipline.
+        Locks fixed spot points at each milestone regardless of option price or volatility.
+        """
         pos = self.current_position
         if not pos:
             return
 
-        entry_prem = pos["entry_price"]  # In option terms
-        peak = max(pos["peak_price"], current_high)
-        pos["peak_price"] = peak
+        side = pos["side"]
+        entry_spot = pos["entry_spot"]
+        
+        # Calculate maximum favorable spot excursion
+        fav = (current_spot_high - entry_spot) if "LONG" in side or "CALL" in side else (entry_spot - current_spot_low)
+        if fav > pos["max_fav_pts"]:
+            pos["max_fav_pts"] = fav
 
-        t1_trig = entry_prem * (1.0 + self.ratchet.get("tier1_trigger_pct", 20.0) / 100.0)
-        t1_lock = entry_prem * (1.0 + self.ratchet.get("tier1_lock_pct", 2.0) / 100.0)
-        t2_trig = entry_prem * (1.0 + self.ratchet.get("tier2_trigger_pct", 50.0) / 100.0)
-        t2_lock = entry_prem * (1.0 + self.ratchet.get("tier2_lock_pct", 25.0) / 100.0)
-        pullback = self.ratchet.get("trailing_pullback_pct", 25.0) / 100.0
+        max_fav = pos["max_fav_pts"]
+        
+        # Spot Points Milestone Locks
+        t0a_trig = self.ratchet.get("tier0a_trigger_pts", 40.0)
+        t0a_lock = self.ratchet.get("tier0a_lock_pts", -15.0)
+        t0b_trig = self.ratchet.get("tier0b_breakeven_trigger_pts", 55.0)
+        t0b_lock = self.ratchet.get("tier0b_breakeven_lock_pts", 5.0)
+        r1_trig = self.ratchet.get("tier1_trigger_pts", 70.0)
+        r1_lock = self.ratchet.get("tier1_lock_pts", 20.0)
+        r2_trig = self.ratchet.get("tier2_trigger_pts", 130.0)
+        r2_lock = self.ratchet.get("tier2_lock_pts", 60.0)
+        r3_trig = self.ratchet.get("tier3_trigger_pts", 180.0)
+        r3_lock = self.ratchet.get("tier3_lock_pts", 110.0)
+        r4_trig = self.ratchet.get("tier4_trigger_pts", 230.0)
+        r4_lock = self.ratchet.get("tier4_lock_pts", 165.0)
 
-        current_sl = pos["sl"]
-        if peak >= t2_trig:
-            trail_level = peak * (1.0 - pullback)
-            new_sl = max(current_sl, t2_lock, trail_level)
-            if new_sl > current_sl:
-                pos["sl"] = new_sl
-                print(f"   🛡️ RATCHET TIER 2: Locked +25% profit / trailing at {new_sl:.1f}")
-        elif peak >= t1_trig:
-            if t1_lock > current_sl:
-                pos["sl"] = t1_lock
-                print(f"   🛡️ RATCHET TIER 1: Locked Breakeven + costs at {t1_lock:.1f}")
+        new_lock_pts = None
+        tier_label = None
+
+        if max_fav >= r4_trig:
+            new_lock_pts = r4_lock
+            tier_label = f"Tier 4 (+{r4_trig:.0f} pts)"
+        elif max_fav >= r3_trig:
+            new_lock_pts = r3_lock
+            tier_label = f"Tier 3 (+{r3_trig:.0f} pts)"
+        elif max_fav >= r2_trig:
+            new_lock_pts = r2_lock
+            tier_label = f"Tier 2 (+{r2_trig:.0f} pts)"
+        elif max_fav >= r1_trig:
+            new_lock_pts = r1_lock
+            tier_label = f"Tier 1 (+{r1_trig:.0f} pts)"
+        elif max_fav >= t0b_trig:
+            new_lock_pts = t0b_lock
+            tier_label = f"Tier 0B Breakeven (+{t0b_trig:.0f} pts)"
+        elif max_fav >= t0a_trig:
+            new_lock_pts = t0a_lock
+            tier_label = f"Tier 0A Guard (+{t0a_trig:.0f} pts)"
+
+        if new_lock_pts is not None and pos.get("last_ratchet") != tier_label:
+            pos["last_ratchet"] = tier_label
+            # Update stop loss
+            is_call = "LONG" in side or "CALL" in side
+            if pos["entry_spot"] == pos["entry_price"]: # Spot / Futures
+                pos["sl"] = entry_spot + new_lock_pts if is_call else entry_spot - new_lock_pts
+            else: # Option premium approximation (0.72 delta)
+                pos["sl"] = pos["entry_price"] + (new_lock_pts * 0.72)
+            print(f"   🛡️ [RATCHET {tier_label}]: Peak +{max_fav:.1f} pts! Stop moved to {pos['sl']:.1f} (Locked {new_lock_pts:+.1f} spot pts)")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="Master Portfolio Dispatcher")
