@@ -299,9 +299,13 @@ export function BacktestPage() {
 
   const apiUrl = useMemo(() => {
     if (mainStrategy === "master_portfolio") {
-      return "/api/backtest?strategy=master_portfolio"
+      if (subSymbol === "sensex") return "/api/backtest?strategy=master_portfolio_sensex"
+      if (subSymbol === "nifty") return "/api/backtest?strategy=master_portfolio_nifty"
+      return "/api/backtest?strategy=master_portfolio_all"
     } else if (mainStrategy === "gap_williams") {
-      return "/api/backtest?strategy=gap_and_go_williams"
+      if (subSymbol === "sensex") return "/api/backtest?strategy=gap_and_go_sensex"
+      if (subSymbol === "nifty") return "/api/backtest?strategy=gap_and_go_nifty"
+      return "/api/backtest?strategy=gap_and_go_all"
     } else if (mainStrategy === "vix_master") {
       if (subSymbol === "nifty") return "/api/backtest?strategy=vix_master_nifty"
       if (subSymbol === "sensex") return "/api/backtest?strategy=vix_master_sensex"
@@ -319,9 +323,13 @@ export function BacktestPage() {
 
   const strategy = useMemo(() => {
     if (mainStrategy === "master_portfolio") {
-      return "master_portfolio"
+      if (subSymbol === "sensex") return "master_portfolio_sensex"
+      if (subSymbol === "all") return "master_portfolio_all"
+      return "master_portfolio_nifty"
     } else if (mainStrategy === "gap_williams") {
-      return "gap_and_go_williams"
+      if (subSymbol === "sensex") return "gap_and_go_sensex"
+      if (subSymbol === "all") return "gap_and_go_all"
+      return "gap_and_go_nifty"
     } else if (mainStrategy === "vix_master") {
       if (subSymbol === "sensex") return "vix_master_sensex"
       if (subSymbol === "all") return "vix_master_all"

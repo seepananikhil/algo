@@ -3157,6 +3157,102 @@ def master_portfolio_backtest_report(symbol: str = "nifty") -> dict:
     )
 
 
+def gap_and_go_backtest_report(symbol: str = "nifty") -> dict:
+    """Historical backtest performance for Gap-and-Go -> Williams Chain."""
+    is_sx = symbol.lower() == "sensex"
+    csv_path = ROOT / "performance" / ("gap_and_go_sensex_trades.csv" if is_sx else "gap_and_go_williams_official_trades.csv")
+    if not csv_path.exists():
+        csv_path = ROOT / "performance" / "gap_and_go_williams_official_trades.csv"
+    if not csv_path.exists():
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+    raw_trades = read_csv_rows(csv_path)
+    trades, equity, peak = [], 0.0, 0.0
+    daily_map = {}
+    monthly_map = {}
+    reasons_map = {}
+    lot_size = 10 if is_sx else 25
+    option_delta = 0.72
+
+    for r in raw_trades:
+        try:
+            r_date = str(r.get("date", ""))
+            side = "CALL" if str(r.get("type", "")).upper() == "CE" else "PUT"
+            entry_spot = round(float(r.get("entry_spot") or r.get("entry_price") or 0.0), 2)
+            exit_spot = round(float(r.get("exit_spot") or r.get("exit_price") or 0.0), 2)
+            pnl_pts = round(float(r.get("spot_pts") or r.get("pnl_points") or 0.0), 2)
+            opt_pts = round(float(r.get("net_pts_base") or r.get("net_pts") or (pnl_pts * option_delta)), 2)
+            
+            equity += pnl_pts
+            peak = max(peak, equity)
+            reason = str(r.get("exit_reason", ""))
+            
+            sl_spot = round(entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0, 2)
+            tgt_spot = round(entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0, 2)
+            
+            opt_rs = round(opt_pts * lot_size, 2)
+            fut_rs = round(pnl_pts * lot_size, 2)
+
+            trades.append({
+                "date": r_date,
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": reason,
+                "pnl_points": pnl_pts,
+                "base_points": pnl_pts,
+                "pnl_rupees": opt_rs,
+                "futures_rupees": fut_rs,
+                "lots": 1,
+                "equity": round(equity, 2),
+                "drawdown": round(equity - peak, 2),
+            })
+
+            d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0})
+            d["points"] = round(d["points"] + pnl_pts, 2)
+            d["trades"] += 1
+
+            m = r_date[:7]
+            monthly_map[m] = round(monthly_map.get(m, 0.0) + pnl_pts, 2)
+
+            reasons_map[reason] = reasons_map.get(reason, 0) + 1
+        except Exception:
+            continue
+
+    n = len(trades)
+    wins = sum(1 for x in trades if x["pnl_points"] > 0)
+    sorted_daily = sorted(daily_map.values(), key=lambda x: x["date"])
+    sorted_monthly = [{"month": m, "points": pts} for m, pts in sorted(monthly_map.items())]
+    sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+    return {
+        "summary": {
+            "from": sorted_daily[0]["date"] if sorted_daily else "",
+            "to": sorted_daily[-1]["date"] if sorted_daily else "",
+            "days": len(sorted_daily),
+            "trades": n,
+            "wins": wins,
+            "losses": sum(1 for x in trades if x["pnl_points"] < 0),
+            "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+            "total_points": round(equity, 2),
+            "avg_points": round(equity / n, 2) if n else 0.0,
+            "max_drawdown": min((x["drawdown"] for x in trades), default=0.0),
+            "best": max((x["pnl_points"] for x in trades), default=0.0),
+            "worst": min((x["pnl_points"] for x in trades), default=0.0),
+            "lot_size": lot_size,
+            "option_delta": option_delta,
+        },
+        "trades": trades,
+        "daily": sorted_daily,
+        "monthly": sorted_monthly,
+        "exit_reasons": sorted_reasons,
+    }
+
+
 def vix_master_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
     """Historical spot trades for Unified VIX Master Strategy on date."""
     fname = "sensex_vix_master_trades.csv" if symbol.upper() == "SENSEX" else "nifty_vix_master_trades.csv"
@@ -5196,15 +5292,18 @@ class Handler(BaseHTTPRequestHandler):
                     ROOT / "performance" / "sensex_vix_divergence_trades.csv",
                     nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
                 ))
-            elif strategy in ("master_portfolio", "master_portfolio_nifty", "master_portfolio_all", "portfolio", "unified_master"):
-                self._json(master_portfolio_backtest_report())
-            elif strategy in ("gap_and_go_williams", "gap_williams", "williams", "gap_and_go"):
-                self._json(vix_trend_runner_backtest_report(
-                    ROOT / "performance" / "gap_and_go_williams_official_trades.csv",
-                    lot_size=25,
-                    option_delta=0.72,
-                    use_weighted=False
-                ))
+            elif strategy in ("master_portfolio_all", "master_portfolio_combined"):
+                self._json(master_portfolio_backtest_report("nifty"))
+            elif strategy in ("master_portfolio", "master_portfolio_nifty", "portfolio", "unified_master"):
+                self._json(master_portfolio_backtest_report("nifty"))
+            elif strategy in ("master_portfolio_sensex",):
+                self._json(master_portfolio_backtest_report("sensex"))
+            elif strategy in ("gap_and_go_all", "gap_and_go_combined", "gap_williams_all"):
+                self._json(gap_and_go_backtest_report("nifty"))
+            elif strategy in ("gap_and_go_williams", "gap_williams", "williams", "gap_and_go", "gap_and_go_nifty"):
+                self._json(gap_and_go_backtest_report("nifty"))
+            elif strategy in ("gap_and_go_sensex", "gap_sensex", "williams_sensex"):
+                self._json(gap_and_go_backtest_report("sensex"))
             elif strategy in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
                 self._json(nifty_vix_master_backtest_report())
             elif strategy in ("vix_master_sensex", "sensex_vix_master"):
