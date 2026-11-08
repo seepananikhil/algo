@@ -1,0 +1,19 @@
+{
+  "symbol": "NIFTY",
+  "mode": "priority",
+  "max_trades_per_day": 2,
+  "max_concurrent_positions": 1,
+  "setups": {
+    "vix_master_morning": true,
+    "vix_master_afternoon": true,
+    "gap_and_go_morning": true,
+    "williams_afternoon": true
+  },
+  "ratchet_settings": {
+    "tier1_trigger_pct": 20.0,
+    "tier1_lock_pct": 2.0,
+    "tier2_trigger_pct": 50.0,
+    "tier2_lock_pct": 25.0,
+    "trailing_pullback_pct": 25.0
+  }
+}
