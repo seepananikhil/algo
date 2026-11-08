@@ -194,7 +194,7 @@ class TrendRunnerPaperEngine:
         sizing_mode: str = "hybrid",
         pyramid: bool = True,
         reentry: bool = False,
-        max_trades_per_day: int = 1,
+        max_trades_per_day: int = 2,
         vix_th: float = 2.5,
         vix_call_th: Optional[float] = None,
         vix_put_th: Optional[float] = 0.0,
@@ -637,10 +637,6 @@ class TrendRunnerPaperEngine:
         # 2. ENTRY SIGNAL EVALUATION
         # ----------------------------------------------------
         if self.trades_today >= self.max_trades_per_day:
-            return None
-
-        # Minimum VIX Volatility Gate: Require |VIX Change| >= 2.0%
-        if abs(vix_chg) < 2.0:
             return None
 
         trade_num = self.trades_today + 1
