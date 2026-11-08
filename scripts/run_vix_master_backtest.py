@@ -349,10 +349,16 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                     
                     if day_trades == 0:
                         # Trade 1: Breakout beyond OR with conviction (body >= 55%, rejection wick <= 30%)
+                        # Midday Chop Blackout: No new entries between 11:00 AM and 11:59 AM
+                        if "11:00" <= t < "12:00":
+                            continue
                         long_pass = (c > or_h) and (body_ratio >= 0.55) and (uw_pct <= 0.30)
                         short_pass = (c < or_l) and (body_ratio >= 0.55) and (lw_pct <= 0.30)
                     else:
-                        # Trade 2 (Re-entry): Requires 30-min cool-off AND breaking Rolling Day Extreme
+                        # Trade 2 (Afternoon Re-entry): Only allowed AFTER 12:00 PM (bypassing morning revenge & lunch chop)
+                        # Requires 30-min cool-off AND breaking Rolling Day Extreme
+                        if t < "12:00":
+                            continue
                         cool_off_ok = (i - last_exit_idx >= 30)
                         long_pass = cool_off_ok and (c > prev_dh) and (body_ratio >= 0.55) and (uw_pct <= 0.30)
                         short_pass = cool_off_ok and (c < prev_dl) and (body_ratio >= 0.55) and (lw_pct <= 0.30)

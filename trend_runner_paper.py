@@ -644,6 +644,9 @@ class TrendRunnerPaperEngine:
         stage_name = "MORNING_TREND"
 
         if trade_num == 1:
+            # Midday Chop Blackout: No new entries between 11:00 AM and 11:59 AM
+            if "11:00" <= t_str < "12:00":
+                return None
             # Trend Breakout Window: 09:30 to 13:00 IST (1:00 PM Hard Cutoff)
             # MANDATORY: Must break Dynamic Expanded Range (OR High / Low expanded by pre-breakout wicks)
             if "09:30" <= t_str <= "13:00":
@@ -700,9 +703,9 @@ class TrendRunnerPaperEngine:
                 return None
 
             # 3. Symmetric Re-entry Gate:
-            # Window: 09:30 to 13:00 IST
+            # Window: 12:00 to 13:00 IST (Trade 2 allowed ONLY AFTER 12:00 PM to bypass morning revenge & lunch chop)
             # Both CALL and PUT re-entries are enabled symmetrically with 30-min cool-off and Day High/Low expansion.
-            if "09:30" <= t_str <= "13:00":
+            if "12:00" <= t_str <= "13:00":
                 # Dynamic Expansion Re-entry (Breakout continuation after 30-min cool-off)
                 candle_rng = h - l
                 candle_body = abs(c - o)
