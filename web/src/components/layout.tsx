@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sun, Wallet } from "lucide-react"
+import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sliders, Sun, Wallet } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -13,6 +13,7 @@ const nav = [
   { to: "/day", label: "Day viewer", icon: CalendarDays },
   { to: "/paper", label: "Paper P&L", icon: Wallet },
   { to: "/backtest", label: "Backtest", icon: LineChart },
+  { to: "/config", label: "Config", icon: Sliders },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
 ]
 

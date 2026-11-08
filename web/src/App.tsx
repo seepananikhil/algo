@@ -14,6 +14,7 @@ const PaperPage = lazy(() => import("@/pages/paper").then(m => ({ default: m.Pap
 const BacktestPage = lazy(() => import("@/pages/backtest").then(m => ({ default: m.BacktestPage })))
 const LoginPage = lazy(() => import("@/pages/login").then(m => ({ default: m.LoginPage })))
 const SettingsPage = lazy(() => import("@/pages/settings").then(m => ({ default: m.SettingsPage })))
+const ConfigPage = lazy(() => import("@/pages/config").then(m => ({ default: m.ConfigPage })))
 
 function PageFallback() {
   return (
@@ -40,6 +41,8 @@ export default function App() {
                     <Route path="backtest" element={<Suspense fallback={<PageFallback />}><BacktestPage /></Suspense>} />
                     <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
                     <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
+                    <Route path="config" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
+                    <Route path="strategy-info" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
                     <Route path="*" element={<Navigate to="/" replace />} />
                   </Route>
                 </Routes>

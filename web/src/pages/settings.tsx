@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react"
+import { Link } from "react-router-dom"
 import { toast } from "sonner"
-import { AlertTriangle, Banknote, Save } from "lucide-react"
+import { AlertTriangle, Banknote, Save, Sliders, ArrowRight, ShieldAlert } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
@@ -9,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Badge } from "@/components/ui/badge"
 import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
 
@@ -18,24 +20,8 @@ type Form = {
   strike_offset: string
   option_target_pct: string
   minimum_live_funds: string
-  key_levels_lots: string
-  hero_zero_lots: string
-  scalper_lots: string
-  scalper_sl_pts: string
-  scalper_target_pts: string
-  scalper_max_trades: string
-  hourly_trend_lots: string
+  trend_runner_lots: string
 }
-
-type StrategyId = "midpoint" | "hero_zero" | "key_levels" | "scalper" | "hourly_trend"
-
-const LIVE_MODE = {
-  midpoint: { field: "midpoint_live_trading", label: "Midpoint" },
-  hero_zero: { field: "hero_zero_live_trading", label: "HeroZero" },
-  key_levels: { field: "key_levels_live_trading", label: "Key Levels" },
-  scalper: { field: "scalper_live_trading", label: "Micro Scalper" },
-  hourly_trend: { field: "hourly_trend_live_trading", label: "Hourly Trend" },
-} as const
 
 type KotakForm = {
   consumer_key: string
@@ -58,9 +44,8 @@ export function SettingsPage() {
   })
   const [kotakTotp, setKotakTotp] = useState("")
   const [kotakLoggingIn, setKotakLoggingIn] = useState(false)
-  const [tab, setTab] = useState("scalper")
+  const [tab, setTab] = useState("execution")
   const [confirmOpen, setConfirmOpen] = useState(false)
-  const [confirmStrategy, setConfirmStrategy] = useState<StrategyId | null>(null)
   const [typed, setTyped] = useState("")
   const [restart, setRestart] = useState(false)
   const [funds, setFunds] = useState<FundsStatus | null>(null)
@@ -69,18 +54,12 @@ export function SettingsPage() {
   useEffect(() => {
     if (data && !form) {
       setForm({
-        lots: String(data.lots),
-        daily_loss_limit: String(data.daily_loss_limit),
-        strike_offset: String(data.strike_offset),
-        option_target_pct: String(data.option_target_pct ?? 10),
+        lots: String(data.trend_runner_lots ?? data.lots ?? 1),
+        daily_loss_limit: String(data.daily_loss_limit ?? 5000),
+        strike_offset: String(data.strike_offset ?? 100),
+        option_target_pct: String(data.option_target_pct ?? 0),
         minimum_live_funds: String(data.minimum_live_funds ?? 25000),
-        key_levels_lots: String(data.key_levels_lots),
-        hero_zero_lots: String(data.hero_zero_lots),
-        scalper_lots: String(data.scalper_lots ?? 1),
-        scalper_sl_pts: String(data.scalper_sl_pts ?? 9.0),
-        scalper_target_pts: String(data.scalper_target_pts ?? 25.0),
-        scalper_max_trades: String(data.scalper_max_trades ?? 1),
-        hourly_trend_lots: String(data.hourly_trend_lots ?? 1),
+        trend_runner_lots: String(data.trend_runner_lots ?? data.lots ?? 1),
       })
       setKotakForm({
         consumer_key: "",
@@ -105,30 +84,17 @@ export function SettingsPage() {
     }
   }
 
-  function saveMidpoint() {
+  function saveExecution() {
     if (!form) return
+    const lotsNum = Number(form.lots || form.trend_runner_lots || 1)
     save({
-      lots: Number(form.lots),
+      lots: lotsNum,
+      trend_runner_lots: lotsNum,
       daily_loss_limit: Number(form.daily_loss_limit),
       strike_offset: Number(form.strike_offset),
       option_target_pct: Number(form.option_target_pct),
       minimum_live_funds: Number(form.minimum_live_funds),
-    }, "Midpoint settings saved")
-  }
-
-  function saveHeroZero() {
-    if (!form) return
-    save({ hero_zero_lots: Number(form.hero_zero_lots) }, "HeroZero settings saved")
-  }
-
-  function saveScalper() {
-    if (!form) return
-    save({
-      scalper_lots: Number(form.scalper_lots),
-      scalper_sl_pts: Number(form.scalper_sl_pts),
-      scalper_target_pts: Number(form.scalper_target_pts),
-      scalper_max_trades: Number(form.scalper_max_trades),
-    }, "Micro Scalper settings saved")
+    }, "Execution & risk settings saved")
   }
 
   function saveKotakCredentials() {
@@ -163,13 +129,19 @@ export function SettingsPage() {
     }
   }
 
-  function setLiveMode(strategy: StrategyId, enabled: boolean) {
-    const { field, label } = LIVE_MODE[strategy]
+  function toggleLiveMode(enabled: boolean) {
     if (enabled) {
-      setConfirmStrategy(strategy)
       setConfirmOpen(true)
     } else {
-      save({ [field]: false }, `${label} switched to PAPER`)
+      save({ trend_runner_live_trading: false, midpoint_live_trading: false }, "Switched to PAPER trading")
+    }
+  }
+
+  async function confirmLive() {
+    if (typed !== "LIVE") return
+    if (await save({ trend_runner_live_trading: true, midpoint_live_trading: true, confirm: typed }, "LIVE trading enabled!")) {
+      setConfirmOpen(false)
+      setTyped("")
     }
   }
 
@@ -184,40 +156,49 @@ export function SettingsPage() {
     }
   }
 
-  async function confirmLive() {
-    if (!confirmStrategy || typed !== "LIVE") return
-    const { field, label } = LIVE_MODE[confirmStrategy]
-    if (await save({ [field]: true, confirm: typed }, `${label} LIVE enabled`)) {
-      setConfirmOpen(false)
-      setConfirmStrategy(null)
-      setTyped("")
-    }
-  }
-
   if (!data || !form) return null
   const activeBroker = data.broker ?? "FYERS"
-  const midpointLive = data.midpoint_live_trading ?? data.live_trading
-  const heroZeroLive = data.hero_zero_live_trading
-  const scalperLive = data.scalper_live_trading
+  const isLiveTrading = Boolean(data.trend_runner_live_trading || data.midpoint_live_trading || data.live_trading)
   const minimumFunds = Number(form.minimum_live_funds).toLocaleString("en-IN")
 
   return (
-    <div className="mx-auto flex max-w-2xl flex-col gap-4">
-      <h1 className="text-xl font-semibold">Settings</h1>
+    <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4 md:p-8 pt-6">
+      {/* Top Title Banner */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">System Settings</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Broker connectivity, capital limits, risk parameters, and live trading safeguards.
+          </p>
+        </div>
+        <Link to="/config">
+          <Button variant="outline" size="sm" className="gap-2">
+            <Sliders className="size-3.5 text-sky-400" />
+            Configure Strategy Setups &rarr;
+          </Button>
+        </Link>
+      </div>
 
       {restart && (
         <Alert>
           <AlertTriangle />
-          <AlertTitle>Restart capture to apply</AlertTitle>
-          <AlertDescription>Strategy and risk settings apply after a restart or next session.</AlertDescription>
+          <AlertTitle>Restart Required</AlertTitle>
+          <AlertDescription>Strategy and risk changes will apply after restarting the live daemon.</AlertDescription>
         </Alert>
       )}
 
       {/* Broker Selection Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Active Broker</CardTitle>
-          <CardDescription>Select which broker receives your automated live orders.</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Active Broker</CardTitle>
+              <CardDescription>Select which broker receives your automated orders.</CardDescription>
+            </div>
+            <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10">
+              Active: {activeBroker}
+            </Badge>
+          </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
           <div className="grid grid-cols-2 gap-3">
@@ -246,21 +227,23 @@ export function SettingsPage() {
       {/* Balance Card */}
       <Card>
         <CardHeader>
-          <CardTitle>{activeBroker === "KOTAK_NEO" ? "Kotak Neo balance" : "Fyers balance"}</CardTitle>
+          <CardTitle className="text-lg">{activeBroker === "KOTAK_NEO" ? "Kotak Neo Balance" : "Fyers Balance"}</CardTitle>
           <CardDescription>Available equity margin from your active {activeBroker === "KOTAK_NEO" ? "Kotak Neo" : "Fyers"} account.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div>
             {funds?.ok ? (
-              <div className="text-lg font-semibold tabular-nums">₹{funds.available_equity_funds.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div>
+              <div className="text-xl font-bold tabular-nums text-emerald-400">
+                ₹{funds.available_equity_funds.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </div>
             ) : funds ? (
               <p className="max-w-md text-sm text-red-500">{funds.error}</p>
             ) : (
-              <p className="text-sm text-muted-foreground">Balance not checked</p>
+              <p className="text-sm text-muted-foreground">Click below to check current broker balance</p>
             )}
           </div>
-          <Button variant="outline" onClick={checkFunds} disabled={fundsLoading}>
-            <Banknote /> {fundsLoading ? "Checking…" : "Check balance"}
+          <Button variant="outline" onClick={checkFunds} disabled={fundsLoading} className="gap-2">
+            <Banknote className="size-4" /> {fundsLoading ? "Checking…" : "Check Balance"}
           </Button>
         </CardContent>
       </Card>
@@ -269,7 +252,7 @@ export function SettingsPage() {
       {activeBroker === "KOTAK_NEO" && (
         <Card className="border-sky-500/50">
           <CardHeader>
-            <CardTitle>Kotak Neo API Setup</CardTitle>
+            <CardTitle className="text-lg">Kotak Neo API Credentials</CardTitle>
             <CardDescription>
               Enter credentials from Kotak Neo Portal (More &rarr; Trade API). Free F&O execution.
             </CardDescription>
@@ -277,7 +260,7 @@ export function SettingsPage() {
           <CardContent className="flex flex-col gap-4">
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="kotak-ck">Consumer Key (API Token) {data.kotak_consumer_key_set && <span className="text-emerald-500 text-xs">(Configured)</span>}</Label>
+                <Label htmlFor="kotak-ck">Consumer Key {data.kotak_consumer_key_set && <span className="text-emerald-500 text-xs">(Configured)</span>}</Label>
                 <Input
                   id="kotak-ck"
                   type="password"
@@ -315,7 +298,7 @@ export function SettingsPage() {
                   onChange={(e) => setKotakForm({ ...kotakForm, mpin: e.target.value })}
                 />
               </div>
-              <div className="grid gap-1.5">
+              <div className="grid gap-1.5 sm:col-span-2">
                 <Label htmlFor="kotak-totp-sec">TOTP Secret Key (Optional - Auto Login) {data.kotak_totp_secret_set && <span className="text-emerald-500 text-xs">(Configured)</span>}</Label>
                 <Input
                   id="kotak-totp-sec"
@@ -328,8 +311,8 @@ export function SettingsPage() {
             </div>
 
             <div className="flex justify-end gap-2">
-              <Button onClick={saveKotakCredentials}>
-                <Save /> Save Credentials
+              <Button onClick={saveKotakCredentials} size="sm">
+                <Save className="size-3.5 mr-1.5" /> Save Credentials
               </Button>
             </div>
 
@@ -344,12 +327,12 @@ export function SettingsPage() {
                     <Input
                       placeholder="6-digit TOTP"
                       maxLength={6}
-                      className="w-32"
+                      className="w-32 h-9 text-sm"
                       value={kotakTotp}
                       onChange={(e) => setKotakTotp(e.target.value)}
                     />
                   )}
-                  <Button onClick={loginKotak} disabled={kotakLoggingIn}>
+                  <Button onClick={loginKotak} disabled={kotakLoggingIn} size="sm">
                     {kotakLoggingIn ? "Logging in…" : "Log in to Kotak Neo"}
                   </Button>
                 </div>
@@ -359,172 +342,198 @@ export function SettingsPage() {
         </Card>
       )}
 
-      <Card className={midpointLive || heroZeroLive || scalperLive ? "border-red-600/60" : undefined}>
+      {/* Trading Mode & Live Switch Card */}
+      <Card className={isLiveTrading ? "border-red-600/70 bg-red-950/10" : undefined}>
         <CardHeader>
-          <CardTitle>Strategy modes</CardTitle>
-          <CardDescription>Always visible. LIVE submits real orders to active broker.</CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg">Execution Mode</CardTitle>
+              <CardDescription>
+                Toggle between simulated Paper trading and Real Live order placement.
+              </CardDescription>
+            </div>
+            <Badge variant={isLiveTrading ? "destructive" : "secondary"}>
+              {isLiveTrading ? "🔥 LIVE TRADING" : "🛡️ PAPER SIMULATION"}
+            </Badge>
+          </div>
         </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2">
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-            <div>
-              <div className={scalperLive ? "font-semibold text-red-500" : "font-semibold text-sky-500"}>Micro Scalper · {scalperLive ? "LIVE" : "PAPER"}</div>
-              <p className="text-xs text-muted-foreground">{data.scalper_lots ?? 1} lot · {Number(data.scalper_max_trades) >= 999 ? "Unlimited" : (data.scalper_max_trades ?? 1)} trade{(data.scalper_max_trades ?? 1) === 1 ? "" : "s"}/day</p>
+        <CardContent>
+          <div className="flex items-center justify-between gap-4 rounded-lg border p-4 bg-card">
+            <div className="space-y-0.5">
+              <div className={isLiveTrading ? "font-bold text-red-500 text-base" : "font-semibold text-foreground text-base"}>
+                Master Portfolio · {isLiveTrading ? "LIVE (Real Money)" : "PAPER (Simulated)"}
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Routes signals to active broker ({activeBroker}) at {form.lots} lot{Number(form.lots) === 1 ? "" : "s"} per trade.
+              </p>
             </div>
             <Switch
-              checked={scalperLive}
-              onCheckedChange={(enabled) => setLiveMode("scalper", enabled)}
-              aria-label="Micro Scalper live trading"
-            />
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-            <div>
-              <div className={midpointLive ? "font-semibold text-red-500" : "font-semibold text-sky-500"}>Midpoint · {midpointLive ? "LIVE" : "PAPER"}</div>
-              <p className="text-xs text-muted-foreground">{data.lots} lot{data.lots === 1 ? "" : "s"} per LIVE signal</p>
-            </div>
-            <Switch
-              checked={midpointLive}
-              onCheckedChange={(enabled) => setLiveMode("midpoint", enabled)}
-              aria-label="Midpoint live trading"
-            />
-          </div>
-          <div className="flex items-center justify-between gap-3 rounded-lg border p-3">
-            <div>
-              <div className={heroZeroLive ? "font-semibold text-red-500" : "font-semibold text-sky-500"}>HeroZero · {heroZeroLive ? "LIVE" : "PAPER"}</div>
-              <p className="text-xs text-muted-foreground">1 PE + 1 CE maximum · {data.hero_zero_lots} lot{data.hero_zero_lots === 1 ? "" : "s"} each</p>
-            </div>
-            <Switch
-              checked={heroZeroLive}
-              onCheckedChange={(enabled) => setLiveMode("hero_zero", enabled)}
-              aria-label="HeroZero live trading"
+              checked={isLiveTrading}
+              onCheckedChange={toggleLiveMode}
+              aria-label="Master Portfolio live trading switch"
             />
           </div>
         </CardContent>
       </Card>
 
+      {/* Execution & Risk Settings */}
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="scalper">Micro Scalper</TabsTrigger>
-          <TabsTrigger value="midpoint">Midpoint</TabsTrigger>
-          <TabsTrigger value="hero_zero">HeroZero</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-2">
+          <TabsTrigger value="execution">Execution & Lots</TabsTrigger>
+          <TabsTrigger value="risk">Capital & Risk Guardian</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="scalper" className="mt-4">
+        <TabsContent value="execution" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Micro-Compression Scalper settings</CardTitle>
+              <CardTitle className="text-base">Order Sizing & Strikes</CardTitle>
               <CardDescription>
-                1-minute coiling breakout after 5-minute trend &amp; VWAP confirmation. Zero brokerage with Kotak Neo Trade API.
+                Configure lot sizing and strike selection for automated option trades.
               </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-3 text-xs text-muted-foreground">
-                <span className="font-semibold text-emerald-500">Sniper Mode (1 trade/day):</span> Slashes max drawdown to only <span className="font-medium text-foreground">-₹1,265</span> (-96 pts) while winning 9 out of 10 months (+689.4 pts net). Planned RR is 1 : 2.78.
-              </div>
+            <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="scalper-lots">Lots per trade (65 qty / lot · ~₹5k–8k margin)</Label>
-                  <Input id="scalper-lots" type="number" min={1} max={5} step={1} value={form.scalper_lots} onChange={(event) => setForm({ ...form, scalper_lots: event.target.value })} />
+                  <Label htmlFor="live-lots">Trading Lots Per Signal</Label>
+                  <Input
+                    id="live-lots"
+                    type="number"
+                    min={1}
+                    max={5}
+                    step={1}
+                    value={form.lots}
+                    onChange={(e) => setForm({ ...form, lots: e.target.value, trend_runner_lots: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Base lot count applied to all strategy entries</p>
                 </div>
+
                 <div className="grid gap-1.5">
-                  <Label htmlFor="scalper-sl">Stop Loss (Nifty spot points)</Label>
-                  <Input id="scalper-sl" type="number" min={3} max={30} step={0.5} value={form.scalper_sl_pts} onChange={(event) => setForm({ ...form, scalper_sl_pts: event.target.value })} />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="scalper-tgt">Profit Target (Nifty spot points)</Label>
-                  <Input id="scalper-tgt" type="number" min={10} max={60} step={0.5} value={form.scalper_target_pts} onChange={(event) => setForm({ ...form, scalper_target_pts: event.target.value })} />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="scalper-max-tr">Max trades per day (1 = Sniper Mode, 999 = Unlimited)</Label>
-                  <Input id="scalper-max-tr" type="number" min={1} max={999} step={1} value={form.scalper_max_trades} onChange={(event) => setForm({ ...form, scalper_max_trades: event.target.value })} />
+                  <Label htmlFor="strike-offset">Strike Selection (Points from ATM)</Label>
+                  <Input
+                    id="strike-offset"
+                    type="number"
+                    min={0}
+                    max={500}
+                    step={50}
+                    value={form.strike_offset}
+                    onChange={(e) => setForm({ ...form, strike_offset: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Default 100 pt ITM (Delta ~0.72) for minimal theta decay</p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Trades active liquid windows (09:20–11:30 &amp; 13:15–15:05 IST). Automatic 10-minute time exit closes stalling trades to conserve capital.
-              </p>
+
+              {/* Quick Link to Modular Strategy Setup */}
+              <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <div className="font-semibold text-sm text-sky-400 flex items-center gap-1.5">
+                    <Sliders className="size-4" />
+                    Modular Strategy Setups &amp; Spot Ratchet Ladder
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Independently enable/disable VIX Morning, VIX Afternoon, Gap-and-Go, or Williams Fractal.
+                  </p>
+                </div>
+                <Link to="/config">
+                  <Button size="sm" variant="default" className="shrink-0 bg-sky-500 hover:bg-sky-600 text-white font-medium">
+                    Open Configurator <ArrowRight className="size-3.5 ml-1" />
+                  </Button>
+                </Link>
+              </div>
             </CardContent>
-            <CardFooter className="justify-end">
-              <Button onClick={saveScalper}><Save /> Save Micro Scalper</Button>
+            <CardFooter className="justify-end border-t pt-4">
+              <Button onClick={saveExecution} size="sm">
+                <Save className="size-3.5 mr-1.5" /> Save Execution Settings
+              </Button>
             </CardFooter>
           </Card>
         </TabsContent>
 
-        <TabsContent value="midpoint" className="mt-4">
+        <TabsContent value="risk" className="space-y-4 mt-4">
           <Card>
             <CardHeader>
-              <CardTitle>Midpoint settings</CardTitle>
-              <CardDescription>Paper size stays at 2 lots. LIVE size uses the lot count below.</CardDescription>
+              <CardTitle className="text-base">Capital Guardian &amp; Loss Limits</CardTitle>
+              <CardDescription>
+                Systematic circuit breakers to safeguard your trading account from excessive drawdown.
+              </CardDescription>
             </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <p className="text-sm text-muted-foreground">Estimated LIVE funds: max of ₹{minimumFunds} minimum balance or option LTP × exchange lot size × selected lots × 1.05.</p>
+            <CardContent className="space-y-4">
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="live-lots">LIVE lots per signal</Label>
-                  <Input id="live-lots" type="number" min={1} max={2} step={1} value={form.lots} onChange={(event) => setForm({ ...form, lots: event.target.value })} />
+                  <Label htmlFor="dll">Daily Loss Limit (₹)</Label>
+                  <Input
+                    id="dll"
+                    type="number"
+                    min={500}
+                    step={500}
+                    value={form.daily_loss_limit}
+                    onChange={(e) => setForm({ ...form, daily_loss_limit: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Algorithm locks automatically if daily MTM loss exceeds this</p>
                 </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="min-live-funds">Minimum LIVE balance (₹)</Label>
-                  <Input id="min-live-funds" type="number" min={10000} max={10000000} step={1000} value={form.minimum_live_funds} onChange={(event) => setForm({ ...form, minimum_live_funds: event.target.value })} />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="dll">Daily loss limit (₹)</Label>
-                  <Input id="dll" type="number" min={100} step={100} value={form.daily_loss_limit} onChange={(event) => setForm({ ...form, daily_loss_limit: event.target.value })} />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="so">Strike offset (points from ATM)</Label>
-                  <Input id="so" type="number" min={0} max={500} step={50} value={form.strike_offset} onChange={(event) => setForm({ ...form, strike_offset: event.target.value })} />
-                </div>
-                <div className="grid gap-1.5">
-                  <Label htmlFor="otp">Option profit target (% of premium, 0 = off)</Label>
-                  <Input id="otp" type="number" min={0} max={200} step={5} value={form.option_target_pct} onChange={(event) => setForm({ ...form, option_target_pct: event.target.value })} />
-                </div>
-              </div>
-            </CardContent>
-            <CardFooter className="justify-end">
-              <Button onClick={saveMidpoint}><Save /> Save Midpoint</Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
 
-        <TabsContent value="hero_zero" className="mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>HeroZero settings</CardTitle>
-              <CardDescription>One PE and one CE per expiry session, closest to spot.</CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-4">
-              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="hero-zero-lots">Lots per leg</Label>
-                  <Input id="hero-zero-lots" type="number" min={1} max={2} step={1} value={form.hero_zero_lots} onChange={(event) => setForm({ ...form, hero_zero_lots: event.target.value })} />
+                  <Label htmlFor="min-live-funds">Minimum LIVE Balance Threshold (₹)</Label>
+                  <Input
+                    id="min-live-funds"
+                    type="number"
+                    min={10000}
+                    max={10000000}
+                    step={5000}
+                    value={form.minimum_live_funds}
+                    onChange={(e) => setForm({ ...form, minimum_live_funds: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Current threshold: ₹{minimumFunds}. Orders reject if balance falls below.</p>
+                </div>
+
+                <div className="grid gap-1.5">
+                  <Label htmlFor="otp">Option Profit Target (% of Premium, 0 = off)</Label>
+                  <Input
+                    id="otp"
+                    type="number"
+                    min={0}
+                    max={200}
+                    step={5}
+                    value={form.option_target_pct}
+                    onChange={(e) => setForm({ ...form, option_target_pct: e.target.value })}
+                  />
+                  <p className="text-[11px] text-muted-foreground">Keep 0 to rely on the dynamic spot points ratchet ladder</p>
                 </div>
               </div>
-              <p className="text-sm text-muted-foreground">
-                Estimated PE + CE entry reserve is about ₹{(1700 * Number(form.hero_zero_lots || 1)).toLocaleString("en-IN")}. LIVE orders check actual quotes and require the Midpoint LIVE balance threshold.
-              </p>
             </CardContent>
-            <CardFooter className="justify-end">
-              <Button onClick={saveHeroZero}><Save /> Save HeroZero</Button>
+            <CardFooter className="justify-end border-t pt-4">
+              <Button onClick={saveExecution} size="sm">
+                <Save className="size-3.5 mr-1.5" /> Save Risk Settings
+              </Button>
             </CardFooter>
           </Card>
         </TabsContent>
       </Tabs>
 
-      <Dialog open={confirmOpen} onOpenChange={(open) => { setConfirmOpen(open); if (!open) { setConfirmStrategy(null); setTyped("") } }}>
+      {/* Confirmation Dialog for LIVE Trading */}
+      <Dialog open={confirmOpen} onOpenChange={(open) => { setConfirmOpen(open); if (!open) setTyped("") }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Enable {confirmStrategy === "hero_zero" ? "HeroZero" : confirmStrategy === "scalper" ? "Micro Scalper" : "Midpoint"} LIVE?</DialogTitle>
+            <DialogTitle className="text-red-500 flex items-center gap-2">
+              <ShieldAlert className="size-5" />
+              Enable LIVE Trading with Real Capital?
+            </DialogTitle>
             <DialogDescription>
-              {confirmStrategy === "hero_zero"
-                ? `HeroZero will place one live order for the selected PE and CE (${data.hero_zero_lots} lot${data.hero_zero_lots === 1 ? "" : "s"} each), then attempt the expiry exit. Type LIVE to confirm.`
-                : confirmStrategy === "scalper"
-                ? `Micro Scalper will place live ATM option orders (${data.scalper_lots ?? 1} lot, ${data.scalper_max_trades ?? 1} max trade/day) via active broker (${activeBroker}) on 1-min coiling breakouts. Type LIVE to confirm.`
-                : `Midpoint will place real orders at ${data.lots} lot${data.lots === 1 ? "" : "s"} per signal after the funds check. Type LIVE to confirm.`}
+              This will route all incoming Master Portfolio signals ({form.lots} lot{Number(form.lots) === 1 ? "" : "s"}) directly to your active {activeBroker} account.
+              Type <strong>LIVE</strong> below to confirm.
             </DialogDescription>
           </DialogHeader>
-          <Input autoFocus value={typed} onChange={(event) => setTyped(event.target.value)} placeholder="LIVE" />
+          <Input
+            autoFocus
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder="Type LIVE to confirm"
+            className="font-mono tracking-wider text-center font-bold"
+          />
           <DialogFooter>
             <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button variant="destructive" disabled={typed !== "LIVE"} onClick={confirmLive}>Enable LIVE</Button>
+            <Button variant="destructive" disabled={typed !== "LIVE"} onClick={confirmLive}>
+              Enable LIVE Trading
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -5420,6 +5420,41 @@ class Handler(BaseHTTPRequestHandler):
 
         elif url.path == "/api/settings":
             self._json(public_settings())
+        elif url.path in ("/api/portfolio/config", "/api/portfolio-config"):
+            try:
+                p = ROOT / "master_portfolio_config.json"
+                if p.exists():
+                    self._json(json.loads(p.read_text(encoding="utf-8")))
+                else:
+                    self._json({
+                        "symbol": "NIFTY",
+                        "mode": "priority",
+                        "max_trades_per_day": 2,
+                        "max_concurrent_positions": 1,
+                        "setups": {
+                            "vix_master_morning": True,
+                            "vix_master_afternoon": True,
+                            "gap_and_go_morning": True,
+                            "williams_afternoon": True
+                        },
+                        "spot_ratchet_settings": {
+                            "initial_sl_pts": 28.0,
+                            "tier0a_trigger_pts": 40.0,
+                            "tier0a_lock_pts": -15.0,
+                            "tier0b_breakeven_trigger_pts": 55.0,
+                            "tier0b_breakeven_lock_pts": 5.0,
+                            "tier1_trigger_pts": 70.0,
+                            "tier1_lock_pts": 20.0,
+                            "tier2_trigger_pts": 130.0,
+                            "tier2_lock_pts": 60.0,
+                            "tier3_trigger_pts": 180.0,
+                            "tier3_lock_pts": 110.0,
+                            "tier4_trigger_pts": 230.0,
+                            "tier4_lock_pts": 165.0
+                        }
+                    })
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
         elif url.path == "/api/funds":
             try:
                 funds = broker_funds()
@@ -5594,6 +5629,42 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/settings":
             data, code = update_settings(self._body())
             self._json(data, code)
+        elif url.path in ("/api/portfolio/config", "/api/portfolio-config"):
+            try:
+                body = self._body()
+                p = ROOT / "master_portfolio_config.json"
+                curr = {}
+                if p.exists():
+                    try:
+                        curr = json.loads(p.read_text(encoding="utf-8"))
+                    except Exception:
+                        pass
+                if "symbol" in body and body["symbol"] in ("NIFTY", "SENSEX"):
+                    curr["symbol"] = body["symbol"]
+                if "mode" in body and body["mode"] in ("priority", "concurrent"):
+                    curr["mode"] = body["mode"]
+                if "max_trades_per_day" in body:
+                    curr["max_trades_per_day"] = int(body["max_trades_per_day"])
+                if "max_concurrent_positions" in body:
+                    curr["max_concurrent_positions"] = int(body["max_concurrent_positions"])
+                if "setups" in body and isinstance(body["setups"], dict):
+                    if "setups" not in curr:
+                        curr["setups"] = {}
+                    for k in ("vix_master_morning", "vix_master_afternoon", "gap_and_go_morning", "williams_afternoon"):
+                        if k in body["setups"]:
+                            curr["setups"][k] = bool(body["setups"][k])
+                if "spot_ratchet_settings" in body and isinstance(body["spot_ratchet_settings"], dict):
+                    if "spot_ratchet_settings" not in curr:
+                        curr["spot_ratchet_settings"] = {}
+                    for k, val in body["spot_ratchet_settings"].items():
+                        try:
+                            curr["spot_ratchet_settings"][k] = float(val)
+                        except (ValueError, TypeError):
+                            pass
+                p.write_text(json.dumps(curr, indent=2) + "\n", encoding="utf-8")
+                self._json({"ok": True, "config": curr})
+            except Exception as e:
+                self._json({"error": str(e)}, 500)
         elif url.path == "/api/login/start":
             try:
                 self._json(start_login())
