@@ -58,7 +58,7 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
         trap_floor = 100.0
         scale_trigger = 120.0
         pyr_trigger = 200.0
-        t0_trig_1, t0_lk_1 = 130.0, -40.0
+        t0_trig_1, t0_lk_1 = 115.0, -40.0
         t0_trig_2, t0_lk_2 = 180.0, 15.0
         r1_trig, r1_lk = 240.0, 80.0
         r2_trig, r2_lk = 400.0, 200.0
@@ -119,11 +119,16 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
         or_l = float(or_bars["low"].min())
         if (or_h - or_l) < min_or_pts:
             continue
-            
+
+        v_chg_day = vix_map.get(d, 0.0)
+        # Minimum VIX Energy Gate: Bypasses flat low-energy chop regimes (|VIX Change| >= 2.0%)
+        if abs(v_chg_day) < 2.0:
+            continue
+
         packages.append({
             "date": d,
             "year": int(d[:4]),
-            "vix_chg": vix_map.get(d, 0.0),
+            "vix_chg": v_chg_day,
             "vix_pts": vix_pts_map.get(d, 0.0),
             "or_h": or_h,
             "or_l": or_l,
@@ -289,8 +294,8 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                         break
                     continue
             
-            # --- 2. CHECK NEW ENTRY (IF NO ACTIVE POSITION & DAY_TRADES < 2) ---
-            if active_pos is None and day_trades < 2 and t <= "12:30":
+            # --- 2. CHECK NEW ENTRY (IF NO ACTIVE POSITION & DAY_TRADES < 1) ---
+            if active_pos is None and day_trades < 1 and t <= "12:30":
                 # PHASE A: PRIORITY TO VIX TRAP DIVERGENCE (09:30 - 10:15)
                 # Filter: on Nifty require vix_pts >= 0.40
                 trap_valid = (not is_sx and v_pts >= 0.40) or is_sx
