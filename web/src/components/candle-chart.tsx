@@ -414,6 +414,7 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
 
     for (const t of trades) {
       const call = t.side === "CALL"
+      const label = (t as any).strategy_label || (t as any).trigger_label || (t as any).engine || (t as any).stage || (call ? "BUY CALL" : "BUY PUT")
       if (t.entry) {
         m.push({
           time: toTime(date, t.entry.slice(0, 5)),
@@ -421,15 +422,18 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
           color: call ? "#10b981" : "#ef4444",
           shape: call ? "arrowUp" : "arrowDown",
           size: 1,
+          text: `${label} @ ${t.entry_price || ""}`
         })
       }
       if (t.exit && !(t.reason && t.reason.endsWith("open"))) {
+        const pnl = t.pnl_points !== undefined ? ` (${t.pnl_points >= 0 ? "+" : ""}${t.pnl_points}pt)` : ""
         m.push({
           time: toTime(date, t.exit.slice(0, 5)),
           position: call ? "aboveBar" : "belowBar",
           color: "#71717a",
           shape: call ? "arrowDown" : "arrowUp",
           size: 1,
+          text: `Exit [${t.reason || "OUT"}]${pnl}`
         })
       }
     }

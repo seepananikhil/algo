@@ -26,10 +26,12 @@ export function SideBadge({ side }: { side: string }) {
 
 export function RuleTradesTable({ trades, empty = "No trades." }: { trades: RuleTrade[]; empty?: string }) {
   if (!trades.length) return <p className="py-6 text-center text-sm text-muted-foreground">{empty}</p>
+  const hasEngineLabels = trades.some(t => Boolean((t as any).strategy_label || (t as any).engine || (t as any).stage))
   return (
     <Table>
       <TableHeader>
         <TableRow>
+          {hasEngineLabels && <TableHead>Engine / Signal</TableHead>}
           <TableHead>Side</TableHead>
           <TableHead>In</TableHead>
           <TableHead>Out</TableHead>
@@ -38,23 +40,34 @@ export function RuleTradesTable({ trades, empty = "No trades." }: { trades: Rule
         </TableRow>
       </TableHeader>
       <TableBody>
-        {trades.map((t, i) => (
-          <TableRow key={i} className="bg-transparent hover:bg-muted/20">
-            <TableCell><SideBadge side={t.side} /></TableCell>
-            <TableCell className="tabular-nums">
-              <div>{t.entry}</div>
-              <div className="text-xs text-muted-foreground">{fmtNum(t.entry_price)} · SL {fmtNum(t.sl)}</div>
-            </TableCell>
-            <TableCell className="tabular-nums">
-              <div>{t.exit || "—"}</div>
-              <div className="text-xs text-muted-foreground">{fmtNum(t.exit_price)} · TGT {fmtNum(t.target)}</div>
-            </TableCell>
-            <TableCell className="text-xs text-muted-foreground">
-              {t.reason === "open" ? <Badge variant="outline">OPEN</Badge> : prettyReason(t.reason)}
-            </TableCell>
-            <TableCell className={cn("text-right tabular-nums font-medium", pnlClass(t.pnl_points))}>{fmtPts(t.pnl_points)}</TableCell>
-          </TableRow>
-        ))}
+        {trades.map((t, i) => {
+          const label = (t as any).strategy_label || (t as any).engine || (t as any).stage || "Master"
+          return (
+            <TableRow key={i} className="bg-transparent hover:bg-muted/20">
+              {hasEngineLabels && (
+                <TableCell>
+                  <div className="font-semibold text-xs text-foreground flex items-center gap-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block shrink-0" />
+                    <span>{label}</span>
+                  </div>
+                </TableCell>
+              )}
+              <TableCell><SideBadge side={t.side} /></TableCell>
+              <TableCell className="tabular-nums">
+                <div>{t.entry}</div>
+                <div className="text-xs text-muted-foreground">{fmtNum(t.entry_price)} · SL {fmtNum(t.sl)}</div>
+              </TableCell>
+              <TableCell className="tabular-nums">
+                <div>{t.exit || "—"}</div>
+                <div className="text-xs text-muted-foreground">{fmtNum(t.exit_price)} · TGT {fmtNum(t.target)}</div>
+              </TableCell>
+              <TableCell className="text-xs text-muted-foreground">
+                {t.reason === "open" ? <Badge variant="outline">OPEN</Badge> : prettyReason(t.reason)}
+              </TableCell>
+              <TableCell className={cn("text-right tabular-nums font-medium", pnlClass(t.pnl_points))}>{fmtPts(t.pnl_points)}</TableCell>
+            </TableRow>
+          )
+        })}
       </TableBody>
     </Table>
   )

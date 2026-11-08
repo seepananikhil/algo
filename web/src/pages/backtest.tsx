@@ -1715,7 +1715,16 @@ export function BacktestPage() {
 
 
 
-                  <TableCell><SideBadge side={t.side} /></TableCell>
+                  <TableCell>
+                    <div className="flex flex-col gap-0.5">
+                      <SideBadge side={t.side} />
+                      {Boolean((t as any).strategy_label || (t as any).engine) && (
+                        <span className="text-[10px] text-muted-foreground font-semibold tracking-tight">
+                          {(t as any).strategy_label || (t as any).engine}
+                        </span>
+                      )}
+                    </div>
+                  </TableCell>
 
 
 

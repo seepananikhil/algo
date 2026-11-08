@@ -3285,6 +3285,96 @@ def vix_master_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
             })
     return out
 
+def master_portfolio_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
+    """Spot trades for Master Portfolio Suite on date with engine & trigger attribution."""
+    is_sx = symbol.upper() == "SENSEX"
+    fname = "master_portfolio_sensex_trades.csv" if is_sx else "master_portfolio_nifty_trades.csv"
+    csv_path = ROOT / "performance" / fname
+    if not csv_path.exists():
+        fname = "master_portfolio_nifty_trades.csv"
+        csv_path = ROOT / "performance" / fname
+    if not csv_path.exists():
+        return []
+    out = []
+    for r in read_csv_rows(csv_path):
+        if r.get("date") == date:
+            side = str(r.get("side", "CALL"))
+            if side not in ("CALL", "PUT"):
+                side = "CALL" if str(r.get("side", "")).upper() == "LONG" or "CE" in str(r.get("option", "")).upper() else "PUT"
+            entry_spot = float(r.get("entry_price") or r.get("entry_spot") or 0.0)
+            exit_spot = float(r.get("exit_price") or r.get("exit_spot") or 0.0)
+            sl_spot = float(r.get("final_sl") or r.get("initial_sl") or (entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0))
+            tgt_spot = float(r.get("target") or (entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0))
+            pts = float(r.get("pnl_points") or r.get("spot_pts") or 0.0)
+            engine = str(r.get("engine") or r.get("origin") or "MASTER")
+            stage = str(r.get("stage") or "")
+            label = str(r.get("strategy_label") or "")
+            if not label or label.lower() == "nan":
+                if "GAP" in engine.upper() or "GAP" in stage.upper():
+                    label = "Gap-and-Go" if "GAP_AND_GO" in stage.upper() else "Williams Fractal"
+                else:
+                    label = "VIX Master"
+            
+            out.append({
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": str(r.get("exit_reason", "")),
+                "pnl_points": pts,
+                "base_points": pts,
+                "lots": int(r.get("total_lots") or 1),
+                "stage": stage,
+                "engine": engine,
+                "strategy_label": label,
+                "trigger_label": f"[{label}] {side} Trigger"
+            })
+    return out
+
+
+def gap_and_go_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
+    """Spot trades for Gap-and-Go -> Williams strategy on date."""
+    is_sx = symbol.upper() == "SENSEX"
+    fname = "gap_and_go_sensex_trades.csv" if is_sx else "gap_and_go_williams_official_trades.csv"
+    csv_path = ROOT / "performance" / fname
+    if not csv_path.exists():
+        csv_path = ROOT / "performance" / "gap_and_go_williams_official_trades.csv"
+    if not csv_path.exists():
+        return []
+    out = []
+    for r in read_csv_rows(csv_path):
+        if r.get("date") == date:
+            side = "CALL" if str(r.get("type", "")).upper() == "CE" else "PUT"
+            entry_spot = float(r.get("entry_spot") or r.get("entry_price") or 0.0)
+            exit_spot = float(r.get("exit_spot") or r.get("exit_price") or 0.0)
+            sl_spot = round(entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0, 2)
+            tgt_spot = round(entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0, 2)
+            pts = float(r.get("spot_pts") or r.get("pnl_points") or 0.0)
+            stage = str(r.get("stage", ""))
+            label = "Gap-and-Go" if "GAP" in stage.upper() else "Williams Fractal"
+            out.append({
+                "side": side,
+                "entry": str(r.get("entry_time", ""))[:5],
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": str(r.get("exit_time", ""))[:5],
+                "exit_price": exit_spot,
+                "reason": str(r.get("exit_reason", "")),
+                "pnl_points": pts,
+                "base_points": pts,
+                "lots": 1,
+                "stage": stage,
+                "engine": "GAP_WILLIAMS",
+                "strategy_label": label,
+                "trigger_label": f"[{label}] {side} Trigger"
+            })
+    return out
+
+
 
 
 def sensex_vix_divergence_backtest_report() -> dict:
@@ -3863,6 +3953,9 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
                 "pnl_rupees": opt_rs,
                 "futures_rupees": fut_rs,
                 "lots": int(r.get("total_lots") or 1),
+                "engine": str(r.get("engine") or r.get("origin") or ""),
+                "strategy_label": str(r.get("strategy_label") or ""),
+                "stage": str(r.get("stage") or ""),
                 "equity": round(equity, 2),
                 "drawdown": round(equity - peak, 2),
             })
@@ -5033,6 +5126,10 @@ class Handler(BaseHTTPRequestHandler):
                 rule_trades = sensex_key_levels_spot_trades_for_day(date)
             elif strategy_param in ("nifty_key_levels", "nifty_levels", "key_levels_nifty"):
                 rule_trades = nifty_key_levels_spot_trades_for_day(date)
+            elif strategy_param in ("master_portfolio", "master_portfolio_nifty", "master_portfolio_sensex", "master_portfolio_all", "portfolio", "unified_master"):
+                rule_trades = master_portfolio_spot_trades_for_day(date, symbol)
+            elif strategy_param in ("gap_and_go", "gap_and_go_williams", "gap_williams", "williams", "gap_and_go_nifty", "gap_and_go_sensex", "gap_and_go_all"):
+                rule_trades = gap_and_go_spot_trades_for_day(date, symbol)
             elif strategy_param in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
                 rule_trades = vix_master_spot_trades_for_day(date, "NIFTY")
             elif strategy_param in ("vix_master_sensex", "sensex_vix_master"):
