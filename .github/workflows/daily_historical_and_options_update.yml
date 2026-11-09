@@ -103,3 +103,4 @@ jobs:
         with:
           commit_message: "chore(data): automated daily update of spot & options OHLC data and master backtests"
           file_pattern: "historical_data/** options_data/** paper/** performance/**"
+          before_push_hook: "git pull --rebase origin master"
