@@ -3,6 +3,7 @@ import { toast } from "sonner"
 import {
   Sliders,
   ShieldCheck,
+  ShieldAlert,
   Save,
   RotateCcw,
   Layers,
@@ -19,7 +20,7 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { getJSON, postJSON } from "@/lib/api"
+import { getJSON, postJSON, type Settings } from "@/lib/api"
 import { StrategyInfoPage } from "./strategy-info"
 
 type SpotRatchetSettings = {
@@ -119,6 +120,11 @@ export function ConfigPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [activeTab, setActiveTab] = useState("portfolio")
+  const [capitalSettings, setCapitalSettings] = useState({
+    lots: 1,
+    daily_loss_limit: 2500,
+    minimum_live_funds: 10000,
+  })
 
   useEffect(() => {
     fetchConfig()
@@ -137,6 +143,14 @@ export function ConfigPage() {
         ...data,
         setups,
       })
+      try {
+        const sData = await getJSON<Settings>("/api/settings")
+        setCapitalSettings({
+          lots: sData.trend_runner_lots ?? sData.lots ?? 1,
+          daily_loss_limit: sData.daily_loss_limit ?? 2500,
+          minimum_live_funds: sData.minimum_live_funds ?? 10000,
+        })
+      } catch {}
     } catch {
       toast.error("Failed to load portfolio configuration. Using defaults.")
       setConfig(DEFAULT_CONFIG)
@@ -149,9 +163,17 @@ export function ConfigPage() {
     if (!config) return
     setSaving(true)
     try {
-      const res = await postJSON<{ ok: boolean; config: PortfolioConfig }>("/api/portfolio/config", config)
+      const [res] = await Promise.all([
+        postJSON<{ ok: boolean; config: PortfolioConfig }>("/api/portfolio/config", config),
+        postJSON("/api/settings", {
+          lots: Number(capitalSettings.lots),
+          trend_runner_lots: Number(capitalSettings.lots),
+          daily_loss_limit: Number(capitalSettings.daily_loss_limit),
+          minimum_live_funds: Number(capitalSettings.minimum_live_funds),
+        }),
+      ])
       if (res.ok) {
-        toast.success("Apex Duo configuration saved successfully!")
+        toast.success("Apex Duo strategy & capital configuration saved!")
         const setups = {
           trend_runner: res.config.setups?.trend_runner ?? true,
           vix_trap: res.config.setups?.vix_trap ?? true,
@@ -231,7 +253,7 @@ export function ConfigPage() {
               {activeSetupsCount} / 2 Strategy Engines Active
             </Badge>
             <Badge variant="secondary" className="text-xs">
-              {isSx ? "BSE SENSEX (~80,000 Index | Lot 10)" : "NSE NIFTY (~24,500 Index | Lot 25)"}
+              {isSx ? "BSE SENSEX (~80,000 Index | Lot 10)" : "NSE NIFTY (~24,500 Index | Lot 65)"}
             </Badge>
           </div>
           <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Apex Duo Configuration</h1>
@@ -376,6 +398,90 @@ export function ConfigPage() {
             </CardContent>
           </Card>
 
+          {/* Capital Guardian & Loss Limits Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <ShieldAlert className="size-4 text-emerald-400" />
+                    Capital Guardian &amp; Loss Limits
+                  </CardTitle>
+                  <CardDescription>
+                    Account-level circuit breakers, lot sizing, and broker liquid balance protection.
+                  </CardDescription>
+                </div>
+                <Badge variant="outline" className="text-xs font-mono border-emerald-500/40 text-emerald-400">
+                  Active Protection
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1.5 rounded-lg border p-3">
+                  <Label htmlFor="lots" className="text-xs text-muted-foreground font-medium">
+                    Nifty Lots (65 Qty/Lot)
+                  </Label>
+                  <Input
+                    id="lots"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={capitalSettings.lots}
+                    onChange={(e) =>
+                      setCapitalSettings({ ...capitalSettings, lots: parseInt(e.target.value) || 1 })
+                    }
+                    className="h-9 text-sm font-semibold"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Base trade sizing (1 lot = 65 shares)
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 rounded-lg border p-3">
+                  <Label htmlFor="dll" className="text-xs text-muted-foreground font-medium">
+                    Daily Loss Limit (₹)
+                  </Label>
+                  <Input
+                    id="dll"
+                    type="number"
+                    min={500}
+                    step={500}
+                    value={capitalSettings.daily_loss_limit}
+                    onChange={(e) =>
+                      setCapitalSettings({ ...capitalSettings, daily_loss_limit: parseFloat(e.target.value) || 2500 })
+                    }
+                    className="h-9 text-sm font-semibold"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Circuit breaker: locks trading if day loss reaches ₹{capitalSettings.daily_loss_limit.toLocaleString('en-IN')}
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 rounded-lg border p-3">
+                  <Label htmlFor="min-funds" className="text-xs text-muted-foreground font-medium">
+                    Minimum LIVE Balance (₹)
+                  </Label>
+                  <Input
+                    id="min-funds"
+                    type="number"
+                    min={5000}
+                    max={10000000}
+                    step={5000}
+                    value={capitalSettings.minimum_live_funds}
+                    onChange={(e) =>
+                      setCapitalSettings({ ...capitalSettings, minimum_live_funds: parseFloat(e.target.value) || 10000 })
+                    }
+                    className="h-9 text-sm font-semibold"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Orders reject if broker cash is below ₹{capitalSettings.minimum_live_funds.toLocaleString('en-IN')}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Section 2: The 2 Core Strategy Engines (Apex Duo) */}
           <div className="space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
@@ -513,7 +619,7 @@ export function ConfigPage() {
                   <CardDescription>
                     {isSx
                       ? "Sensex Index (~80,000 pt scale, 10 qty/lot). Fixed spot point ladder calibrated to Sensex intraday volatility."
-                      : "Nifty Index (~24,500 pt scale, 25 qty/lot). Fixed spot point ladder locking verified milestones."}
+                      : "Nifty Index (~24,500 pt scale, 65 qty/lot). Fixed spot point ladder locking verified milestones."}
                   </CardDescription>
                 </div>
                 <Badge variant="outline" className="text-xs border-emerald-500/40 text-emerald-400 bg-emerald-500/10">

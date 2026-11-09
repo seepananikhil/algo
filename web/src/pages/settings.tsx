@@ -4,7 +4,7 @@ import { toast } from "sonner"
 import { AlertTriangle, Banknote, Save, Sliders, ArrowRight, ShieldAlert } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -12,12 +12,6 @@ import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
-
-type Form = {
-  lots: string
-  daily_loss_limit: string
-  minimum_live_funds: string
-}
 
 type KotakForm = {
   consumer_key: string
@@ -30,7 +24,6 @@ type KotakForm = {
 export function SettingsPage() {
   const { data, reload } = usePoll<Settings>("/api/settings")
   const status = useStatus()
-  const [form, setForm] = useState<Form | null>(null)
   const [kotakForm, setKotakForm] = useState<KotakForm>({
     consumer_key: "",
     mobile_number: "",
@@ -47,12 +40,7 @@ export function SettingsPage() {
   const [fundsLoading, setFundsLoading] = useState(false)
 
   useEffect(() => {
-    if (data && !form) {
-      setForm({
-        lots: String(data.trend_runner_lots ?? data.lots ?? 1),
-        daily_loss_limit: String(data.daily_loss_limit ?? 2500),
-        minimum_live_funds: String(data.minimum_live_funds ?? 10000),
-      })
+    if (data) {
       setKotakForm({
         consumer_key: "",
         mobile_number: data.kotak_mobile_number ?? "",
@@ -61,7 +49,7 @@ export function SettingsPage() {
         totp_secret: "",
       })
     }
-  }, [data, form])
+  }, [data])
 
   async function save(body: Record<string, unknown>, message: string) {
     try {
@@ -74,16 +62,6 @@ export function SettingsPage() {
       toast.error(error instanceof Error ? error.message : String(error))
       return false
     }
-  }
-
-  function saveRiskSettings() {
-    if (!form) return
-    save({
-      lots: Number(form.lots),
-      trend_runner_lots: Number(form.lots),
-      daily_loss_limit: Number(form.daily_loss_limit),
-      minimum_live_funds: Number(form.minimum_live_funds),
-    }, "Capital & lot size safeguards saved")
   }
 
   function saveKotakCredentials() {
@@ -145,10 +123,9 @@ export function SettingsPage() {
     }
   }
 
-  if (!data || !form) return null
+  if (!data) return null
   const activeBroker = "KOTAK_NEO"
   const isLiveTrading = Boolean(data.trend_runner_live_trading || data.midpoint_live_trading || data.live_trading)
-  const minimumFunds = Number(form.minimum_live_funds).toLocaleString("en-IN")
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4 md:p-8 pt-6">
@@ -352,87 +329,24 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Capital Guardian & Loss Limits Card */}
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base">Capital Guardian &amp; Loss Limits</CardTitle>
-              <CardDescription>
-                Systematic circuit breakers to safeguard your trading account from excessive drawdown.
-              </CardDescription>
+      {/* Strategy, Lot Sizing & Capital Guardian Link Card */}
+      <Card className="border-sky-500/30 bg-sky-500/5">
+        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="font-semibold text-base text-foreground flex items-center gap-2">
+              <Sliders className="size-4 text-sky-400" />
+              Strategy Setups, Lot Sizing &amp; Capital Guardian
             </div>
-            <Badge variant="outline" className="text-xs font-mono border-emerald-500/40 text-emerald-400">
-              Active Protection
-            </Badge>
+            <p className="text-xs text-muted-foreground mt-1">
+              Configure Nifty lot sizing (65 shares/lot), Daily Loss Limits (₹2,500), and Spot Ratchet profit locking milestones on the Strategy Config page.
+            </p>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div className="grid gap-1.5">
-              <Label htmlFor="lots">Nifty Lots (65 Qty/Lot)</Label>
-              <Input
-                id="lots"
-                type="number"
-                min={1}
-                max={10}
-                value={form.lots}
-                onChange={(e) => setForm({ ...form, lots: e.target.value })}
-              />
-              <p className="text-[11px] text-muted-foreground">Base lot sizing for automated trades (1 lot = 65 shares)</p>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="dll">Daily Loss Limit (₹)</Label>
-              <Input
-                id="dll"
-                type="number"
-                min={500}
-                step={500}
-                value={form.daily_loss_limit}
-                onChange={(e) => setForm({ ...form, daily_loss_limit: e.target.value })}
-              />
-              <p className="text-[11px] text-muted-foreground">Circuit breaker (₹2,500 recommended for 1 lot)</p>
-            </div>
-
-            <div className="grid gap-1.5">
-              <Label htmlFor="min-live-funds">Minimum LIVE Balance (₹)</Label>
-              <Input
-                id="min-live-funds"
-                type="number"
-                min={5000}
-                max={10000000}
-                step={5000}
-                value={form.minimum_live_funds}
-                onChange={(e) => setForm({ ...form, minimum_live_funds: e.target.value })}
-              />
-              <p className="text-[11px] text-muted-foreground">Current: ₹{minimumFunds}. Orders reject if balance falls below.</p>
-            </div>
-          </div>
-
-          {/* Quick Link to Modular Strategy Setup */}
-          <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4">
-            <div>
-              <div className="font-semibold text-sm text-sky-400 flex items-center gap-1.5">
-                <Sliders className="size-4" />
-                Strategy Setups, Lot Sizing &amp; Spot Ratchet Ladder
-              </div>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Configure individual strategy lots, active engines, and ratchet milestones on the Config page.
-              </p>
-            </div>
-            <Link to="/config">
-              <Button size="sm" variant="default" className="shrink-0 bg-sky-500 hover:bg-sky-600 text-white font-medium">
-                Open Strategy Configurator <ArrowRight className="size-3.5 ml-1" />
-              </Button>
-            </Link>
-          </div>
+          <Link to="/config">
+            <Button className="gap-2 bg-sky-500 hover:bg-sky-600 text-white font-medium shrink-0">
+              Open Strategy Config <ArrowRight className="size-4" />
+            </Button>
+          </Link>
         </CardContent>
-        <CardFooter className="justify-end border-t pt-4">
-          <Button onClick={saveRiskSettings} size="sm">
-            <Save className="size-3.5 mr-1.5" /> Save Safeguards & Lot Sizing
-          </Button>
-        </CardFooter>
       </Card>
 
       {/* Confirmation Dialog for LIVE Trading */}
