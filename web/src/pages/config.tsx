@@ -579,7 +579,14 @@ export function ConfigPage() {
                       size="sm"
                       variant={capitalSettings.sizing_mode === "fixed" ? "default" : "outline"}
                       className="h-8 text-xs font-medium"
-                      onClick={() => setCapitalSettings({ ...capitalSettings, sizing_mode: "fixed" })}
+                      onClick={() => {
+                        setCapitalSettings({
+                          ...capitalSettings,
+                          sizing_mode: "fixed",
+                          daily_loss_limit: 2500,
+                        })
+                        toast.info("Fixed Sizing: Daily Loss Limit calibrated to ₹2,500. Click 'Save Configuration' to persist.")
+                      }}
                     >
                       Fixed (1 Lot Always)
                     </Button>
@@ -588,7 +595,14 @@ export function ConfigPage() {
                       size="sm"
                       variant={capitalSettings.sizing_mode === "dynamic" ? "default" : "outline"}
                       className="h-8 text-xs font-medium"
-                      onClick={() => setCapitalSettings({ ...capitalSettings, sizing_mode: "dynamic" })}
+                      onClick={() => {
+                        setCapitalSettings({
+                          ...capitalSettings,
+                          sizing_mode: "dynamic",
+                          daily_loss_limit: 4500,
+                        })
+                        toast.info("Dynamic Sizing: Daily Loss Limit calibrated to ₹4,500 for 2-lot coverage. Click 'Save Configuration' to persist.")
+                      }}
                     >
                       Dynamic (1 → 2 Lots)
                     </Button>
