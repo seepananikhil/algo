@@ -37,44 +37,45 @@ export function StrategyInfoPage() {
   const [activeTab, setActiveTab] = useState("overview")
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-7xl mx-auto">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
-        <div>
-          <div className="flex items-center gap-2 mb-1.5">
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 gap-1 text-xs">
-              <Sparkles className="size-3" /> Locked Production Architecture
-            </Badge>
-            <Badge variant="outline" className="border-blue-500/40 text-blue-400 bg-blue-500/10 gap-1 text-xs">
-              <ShieldCheck className="size-3" /> 10-Year Verified (2017–2026)
-            </Badge>
-            <Badge variant="outline" className="border-purple-500/40 text-purple-400 bg-purple-500/10 gap-1 text-xs">
-              <Award className="size-3" /> 10/10 Green Years
-            </Badge>
+    <div className="space-y-5">
+      {/* Sleek Integrated Strategy Handbook Header */}
+      <Card className="border-border/60 bg-gradient-to-r from-card via-card to-muted/20">
+        <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
+              <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 gap-1 text-[11px]">
+                <Sparkles className="size-3" /> Institutional Architecture
+              </Badge>
+              <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10 gap-1 text-[11px]">
+                <ShieldCheck className="size-3" /> 10-Year Verified (2017–2026)
+              </Badge>
+              <Badge variant="outline" className="border-purple-500/40 text-purple-400 bg-purple-500/10 gap-1 text-[11px]">
+                <Award className="size-3" /> 10/10 Green Years
+              </Badge>
+            </div>
+            <h2 className="text-lg font-bold tracking-tight text-foreground">Trend Runner &amp; VIX Trap Edge Handbook</h2>
+            <p className="text-xs text-muted-foreground mt-0.5 max-w-2xl">
+              Systematic playbook detailing 15m Opening Range breakouts, volatility divergence traps, 6-tier ratchet stop mechanics, and option delta decay defense.
+            </p>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Trend Runner Master Strategy</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Systematic institutional breakout engine with India VIX directional confluence, symmetric Trade 2 continuation, 6-tier ratchet locks, and dynamic 4-factor sizing.
-          </p>
-        </div>
-
-        <div className="flex items-center gap-2">
-          <div className="text-right">
-            <div className="text-xs text-muted-foreground">Default Instrument</div>
-            <div className="text-sm font-semibold text-foreground">NIFTY 50 / SENSEX</div>
+          <div className="flex items-center gap-3 shrink-0 border-t sm:border-t-0 sm:border-l sm:pl-4 pt-2 sm:pt-0">
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase font-mono">Index Scale</div>
+              <div className="text-xs font-semibold text-foreground">NIFTY (65) / SENSEX (10)</div>
+            </div>
+            <div className="h-6 w-px bg-border/60" />
+            <div>
+              <div className="text-[10px] text-muted-foreground uppercase font-mono">Execution Delta</div>
+              <div className="text-xs font-semibold text-emerald-400">ATM / ITM (Δ ~0.60–0.72)</div>
+            </div>
           </div>
-          <div className="h-8 w-px bg-border" />
-          <div className="text-right">
-            <div className="text-xs text-muted-foreground">Execution Strike</div>
-            <div className="text-sm font-semibold text-emerald-400">ITM-150 (Delta ~0.72)</div>
-          </div>
-        </div>
-      </div>
+        </CardContent>
+      </Card>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
         <Card className="bg-card/70 border-border/80">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               Total 10Y Return
               <TrendingUp className="size-3.5 text-emerald-400" />
@@ -85,7 +86,7 @@ export function StrategyInfoPage() {
         </Card>
 
         <Card className="bg-card/70 border-border/80">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               High Conviction WR
               <Award className="size-3.5 text-purple-400" />
@@ -96,7 +97,7 @@ export function StrategyInfoPage() {
         </Card>
 
         <Card className="bg-card/70 border-border/80">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               Baseline Win Rate
               <Percent className="size-3.5 text-blue-400" />
@@ -107,7 +108,7 @@ export function StrategyInfoPage() {
         </Card>
 
         <Card className="bg-card/70 border-border/80">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               Profit Factor
               <Scale className="size-3.5 text-amber-400" />
@@ -118,7 +119,7 @@ export function StrategyInfoPage() {
         </Card>
 
         <Card className="bg-card/70 border-border/80">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               Max Drawdown
               <ShieldCheck className="size-3.5 text-teal-400" />
@@ -129,7 +130,7 @@ export function StrategyInfoPage() {
         </Card>
 
         <Card className="bg-card/70 border-border/80">
-          <CardContent className="p-4">
+          <CardContent className="p-3">
             <div className="text-xs font-medium text-muted-foreground flex items-center justify-between">
               Yearly Consistency
               <Flame className="size-3.5 text-orange-400" />

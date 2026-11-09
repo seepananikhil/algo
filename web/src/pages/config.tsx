@@ -293,9 +293,9 @@ export function ConfigPage() {
               {isSx ? "BSE SENSEX (~80,000 Index | Lot 10)" : "NSE NIFTY (~24,500 Index | Lot 65)"}
             </Badge>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Apex Duo Configuration</h1>
+          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Strategy Controls &amp; Portfolio</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Configure the decoupled Apex Duo architecture: Trend Runner (15m ORB) and VIX Trap (Contrarian Divergence) with symbol-specific fixed spot ratchet profit locking.
+            Configure execution mode (Paper/Live), Nifty lot sizing, Daily Loss circuit breakers, active strategy engines, and spot ratchet profit locking milestones.
           </p>
         </div>
 
@@ -309,17 +309,17 @@ export function ConfigPage() {
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-        <TabsList>
-          <TabsTrigger value="portfolio" className="gap-2">
-            <Layers className="size-4" /> Portfolio Parameters
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-5">
+        <TabsList className="bg-muted/50 p-1 rounded-xl border border-border/50 h-auto">
+          <TabsTrigger value="portfolio" className="gap-2 rounded-lg py-2 px-4 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Sliders className="size-4 text-sky-400" /> Strategy Controls &amp; Sizing
           </TabsTrigger>
-          <TabsTrigger value="strategy_info" className="gap-2">
-            <Info className="size-4" /> Strategy Edge Reference
+          <TabsTrigger value="strategy_info" className="gap-2 rounded-lg py-2 px-4 text-xs font-medium data-[state=active]:bg-background data-[state=active]:shadow-sm">
+            <Info className="size-4 text-emerald-400" /> Strategy Handbook &amp; Edge Playbook
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="portfolio" className="space-y-6">
+        <TabsContent value="portfolio" className="space-y-5">
           {/* Section 0: Execution Mode (Paper vs Live Switch) */}
           <Card className={isLiveTrading ? "border-red-600/70 bg-red-950/10 shadow-lg" : undefined}>
             <CardHeader className="pb-3">
@@ -441,7 +441,7 @@ export function ConfigPage() {
                     onChange={(e) =>
                       setConfig({ ...config, max_trades_per_day: parseInt(e.target.value) || 2 })
                     }
-                    className="h-8 text-sm"
+                    className="h-9 text-sm font-semibold"
                   />
                 </div>
 
@@ -457,7 +457,7 @@ export function ConfigPage() {
                     onChange={(e) =>
                       setConfig({ ...config, max_concurrent_positions: parseInt(e.target.value) || 1 })
                     }
-                    className="h-8 text-sm"
+                    className="h-9 text-sm font-semibold"
                   />
                 </div>
               </div>
@@ -475,7 +475,7 @@ export function ConfigPage() {
           </Card>
 
           {/* Capital Guardian & Loss Limits Card */}
-          <Card>
+          <Card className="border-emerald-500/30 bg-emerald-500/[0.015] shadow-xs">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
@@ -1000,7 +1000,7 @@ export function ConfigPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="strategy_info" className="mt-6">
+        <TabsContent value="strategy_info" className="mt-3">
           <StrategyInfoPage />
         </TabsContent>
       </Tabs>
