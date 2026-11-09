@@ -1207,7 +1207,7 @@ def public_settings() -> dict:
     out["hourly_trend_lots"] = int(cfg.get("hourly_trend_lots", 1))
     out["trend_runner_paper_trading"] = bool(cfg.get("trend_runner_paper_trading", True))
     out["trend_runner_live_trading"] = bool(cfg.get("trend_runner_live_trading", False))
-    out["trend_runner_lots"] = int(cfg.get("trend_runner_lots", 3))
+    out["trend_runner_lots"] = int(cfg.get("trend_runner_lots", 1))
     out["sensex_runner_paper_trading"] = bool(cfg.get("sensex_runner_paper_trading", True))
     out["sensex_runner_live_trading"] = bool(cfg.get("sensex_runner_live_trading", False))
     out["sensex_runner_lots"] = int(cfg.get("sensex_runner_lots", 1))

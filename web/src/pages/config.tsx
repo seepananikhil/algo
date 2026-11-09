@@ -152,7 +152,7 @@ export function ConfigPage() {
       try {
         const sData = await getJSON<Settings>("/api/settings")
         setCapitalSettings({
-          lots: sData.trend_runner_lots ?? sData.lots ?? 1,
+          lots: sData.sizing_mode === "fixed" ? 1 : Math.max(1, Number(sData.lots || 1)),
           daily_loss_limit: sData.daily_loss_limit ?? 2500,
           minimum_live_funds: sData.minimum_live_funds ?? 10000,
           sizing_mode: sData.sizing_mode || "fixed",
