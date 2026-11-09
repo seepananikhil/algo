@@ -108,7 +108,7 @@ export function ManualTradingPage() {
       : { action: manualAction, order_type: orderType, symbol: sellSymbol, lots: requestedLots, limit_price: orderType === "LIMIT" ? Number(limitPrice) : undefined, confirm: confirmText }
     try {
       const result = await postJSON<ManualOrderResult>("/api/manual-order", body)
-      toast.success("Fyers accepted the order", { description: `${result.action} ${result.symbol} · ${result.qty} qty · ${result.order_id}` })
+      toast.success("Broker accepted the order", { description: `${result.action} ${result.symbol} · ${result.qty} qty · ${result.order_id}` })
       setConfirmOpen(false)
       setConfirmText("")
       void manualBroker.reload()
@@ -140,7 +140,7 @@ export function ManualTradingPage() {
           <CardHeader>
             <CardTitle>Order Entry</CardTitle>
             <CardDescription>
-              Real Fyers orders · intraday · up to {manualOptions.data?.max_lots ?? 0} lots · submission during market hours
+              Real broker orders · intraday · up to {manualOptions.data?.max_lots ?? 0} lots · submission during market hours
             </CardDescription>
           </CardHeader>
           <CardContent className="flex flex-col gap-4">
@@ -226,7 +226,7 @@ export function ManualTradingPage() {
 
             <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
               <span className="text-xs text-muted-foreground">
-                {!status?.token.valid ? "Login required on Fyers" : !manualBroker.data?.order_window_open ? "Market closed (09:15–15:30 weekdays only)" : manualBroker.data?.kill_switch && manualAction === "BUY" ? "Kill switch is active" : !fundsSufficient ? "Insufficient equity margin" : "Ready to place order"}
+                {!status?.token.valid ? "Login required on Kotak Neo" : !manualBroker.data?.order_window_open ? "Market closed (09:15–15:30 weekdays only)" : manualBroker.data?.kill_switch && manualAction === "BUY" ? "Kill switch is active" : !fundsSufficient ? "Insufficient equity margin" : "Ready to place order"}
               </span>
               <Button variant={manualAction === "BUY" ? "default" : "destructive"} disabled={!manualFormValid || manualBusy || !status?.token.valid} onClick={reviewManualOrder}>
                 {manualAction === "BUY" ? "Review Buy Order" : "Review Sell Order"}
@@ -280,7 +280,7 @@ export function ManualTradingPage() {
       <Card>
         <CardHeader>
           <CardTitle>Recent Manual Orders</CardTitle>
-          <CardDescription>Last 50 orders on Fyers broker</CardDescription>
+          <CardDescription>Last 50 orders on Kotak Neo broker</CardDescription>
         </CardHeader>
         <CardContent>
           {manualBroker.data?.orders.length ? (

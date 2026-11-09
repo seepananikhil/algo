@@ -355,20 +355,16 @@ def fyers_token_status() -> dict:
 
 
 def token_status() -> dict:
-    from broker import get_active_broker
-    active = get_active_broker()
-    if active == "KOTAK_NEO":
-        from kotak_orders import kotak_token_status
-        ks = kotak_token_status()
-        return {
-            "broker": "KOTAK_NEO",
-            "valid": ks.get("valid", False),
-            "ucc": ks.get("ucc"),
-            "greeting_name": ks.get("greeting_name"),
-            "generated_at_utc": ks.get("logged_in_at"),
-            "reason": ks.get("reason"),
-        }
-    return fyers_token_status()
+    from kotak_orders import kotak_token_status
+    ks = kotak_token_status()
+    return {
+        "broker": "KOTAK_NEO",
+        "valid": ks.get("valid", False),
+        "ucc": ks.get("ucc"),
+        "greeting_name": ks.get("greeting_name"),
+        "generated_at_utc": ks.get("logged_in_at"),
+        "reason": ks.get("reason"),
+    }
 
 
 def _process_pids_by_pattern(pattern: str) -> list[int]:
@@ -1184,7 +1180,7 @@ def read_config() -> dict:
 def public_settings() -> dict:
     cfg = read_config()
     out = {k: cfg.get(k) for k in EDITABLE_SETTINGS}
-    out["broker"] = cfg.get("broker", "FYERS")
+    out["broker"] = cfg.get("broker", "KOTAK_NEO")
     out["lots"] = int(cfg.get("lots", PAPER_LOTS))
     out["daily_loss_limit"] = cfg.get("daily_loss_limit") if cfg.get("daily_loss_limit") is not None else 1000
     out["strike_offset"] = cfg.get("strike_offset") if cfg.get("strike_offset") is not None else 100

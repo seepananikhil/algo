@@ -34,8 +34,8 @@ export function LoginPage() {
     <div className="mx-auto flex max-w-xl flex-col gap-4 pt-6">
       <Card>
         <CardHeader>
-          <CardTitle>Fyers connection</CardTitle>
-          <CardDescription>Fyers tokens expire daily. Log in once each trading morning.</CardDescription>
+          <CardTitle>Kotak Neo connection</CardTitle>
+          <CardDescription>Kotak Neo authenticates automatically each morning via TOTP and MPIN.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <div className="flex items-center gap-3 rounded-lg border p-4">
@@ -48,15 +48,15 @@ export function LoginPage() {
           {waiting && !valid && (
             <Alert>
               <Loader2 className="animate-spin" />
-              <AlertTitle>Waiting for Fyers login…</AlertTitle>
-              <AlertDescription>After you sign in, Fyers redirects to 127.0.0.1:8080 and the token is saved.</AlertDescription>
+              <AlertTitle>Connecting to Kotak Neo…</AlertTitle>
+              <AlertDescription>Authenticating headless session with Kotak Neo servers.</AlertDescription>
             </Alert>
           )}
         </CardContent>
         <CardFooter>
           <Button onClick={login} variant={valid ? "outline" : "default"} className="w-full">
             <ExternalLink />
-            {valid ? "Log in again" : "Log in with Fyers"}
+            {valid ? "Re-authenticate Kotak" : "Connect Kotak Neo"}
           </Button>
         </CardFooter>
       </Card>

@@ -157,7 +157,7 @@ export function SettingsPage() {
   }
 
   if (!data || !form) return null
-  const activeBroker = data.broker ?? "FYERS"
+  const activeBroker = "KOTAK_NEO"
   const isLiveTrading = Boolean(data.trend_runner_live_trading || data.midpoint_live_trading || data.live_trading)
   const minimumFunds = Number(form.minimum_live_funds).toLocaleString("en-IN")
 
@@ -187,39 +187,26 @@ export function SettingsPage() {
         </Alert>
       )}
 
-      {/* Broker Selection Card */}
+      {/* Broker Card (Kotak Neo Only) */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg">Active Broker</CardTitle>
-              <CardDescription>Select which broker receives your automated orders.</CardDescription>
+              <CardDescription>Execution engine is connected exclusively to Kotak Neo.</CardDescription>
             </div>
-            <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10">
-              Active: {activeBroker}
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-mono">
+              Kotak Neo
             </Badge>
           </div>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
-          <div className="grid grid-cols-2 gap-3">
-            <Button
-              type="button"
-              variant={activeBroker === "FYERS" ? "default" : "outline"}
-              className="flex flex-col h-auto py-3 items-start"
-              onClick={() => save({ broker: "FYERS" }, "Active broker set to Fyers")}
-            >
-              <span className="font-semibold text-base">Fyers</span>
-              <span className="text-xs font-normal opacity-80">Full tick capture + browser OAuth login</span>
-            </Button>
-            <Button
-              type="button"
-              variant={activeBroker === "KOTAK_NEO" ? "default" : "outline"}
-              className="flex flex-col h-auto py-3 items-start"
-              onClick={() => save({ broker: "KOTAK_NEO" }, "Active broker set to Kotak Neo")}
-            >
-              <span className="font-semibold text-base">Kotak Neo</span>
-              <span className="text-xs font-normal opacity-80">Zero brokerage on F&O (Trade Free Plan)</span>
-            </Button>
+          <div className="flex items-center justify-between p-3.5 rounded-xl border border-border/60 bg-muted/20">
+            <div className="flex flex-col">
+              <span className="font-semibold text-base text-foreground">Kotak Neo (Zero Brokerage)</span>
+              <span className="text-xs text-muted-foreground">Trade Free Youth / Trade Free Plan · Direct high-speed API execution</span>
+            </div>
+            <Badge className="bg-emerald-600 text-white font-medium text-xs">Active</Badge>
           </div>
         </CardContent>
       </Card>
@@ -227,8 +214,8 @@ export function SettingsPage() {
       {/* Balance Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">{activeBroker === "KOTAK_NEO" ? "Kotak Neo Balance" : "Fyers Balance"}</CardTitle>
-          <CardDescription>Available equity margin from your active {activeBroker === "KOTAK_NEO" ? "Kotak Neo" : "Fyers"} account.</CardDescription>
+          <CardTitle className="text-lg">Kotak Neo Balance</CardTitle>
+          <CardDescription>Available equity margin from your Kotak Neo account.</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center justify-between gap-3">
           <div>

@@ -80,7 +80,7 @@ export function Layout() {
               <>
                 <Badge variant="outline" className="gap-1 py-0 text-[11px]">
                   <Dot ok={status.token.valid} />
-                  {status.broker === "KOTAK_NEO" ? "Kotak" : "Fyers"}: {status.token.valid ? (status.token.greeting_name || "Connected") : "Expired"}
+                  Kotak: {status.token.valid ? (status.token.greeting_name || "Connected") : "Offline"}
                 </Badge>
                 <button
                   type="button"
