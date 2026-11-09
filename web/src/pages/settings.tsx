@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import {  } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
@@ -44,7 +44,6 @@ export function SettingsPage() {
   })
   const [kotakTotp, setKotakTotp] = useState("")
   const [kotakLoggingIn, setKotakLoggingIn] = useState(false)
-  const [tab, setTab] = useState("execution")
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [typed, setTyped] = useState("")
   const [restart, setRestart] = useState(false)
@@ -84,17 +83,13 @@ export function SettingsPage() {
     }
   }
 
-  function saveExecution() {
+  function saveRiskSettings() {
     if (!form) return
-    const lotsNum = Number(form.lots || form.trend_runner_lots || 1)
     save({
-      lots: lotsNum,
-      trend_runner_lots: lotsNum,
       daily_loss_limit: Number(form.daily_loss_limit),
-      strike_offset: Number(form.strike_offset),
-      option_target_pct: Number(form.option_target_pct),
       minimum_live_funds: Number(form.minimum_live_funds),
-    }, "Execution & risk settings saved")
+      option_target_pct: Number(form.option_target_pct),
+    }, "Risk & capital safeguards saved")
   }
 
   function saveKotakCredentials() {
@@ -351,7 +346,7 @@ export function SettingsPage() {
                 Apex Duo · {isLiveTrading ? "LIVE (Real Money)" : "PAPER (Simulated)"}
               </div>
               <p className="text-xs text-muted-foreground">
-                Routes signals to active broker ({activeBroker}) at {form.lots} lot{Number(form.lots) === 1 ? "" : "s"} per trade.
+                Routes automated signals directly to your active Kotak Neo broker account.
               </p>
             </div>
             <Switch
@@ -363,138 +358,89 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Execution & Risk Settings */}
-      <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="execution">Execution & Lots</TabsTrigger>
-          <TabsTrigger value="risk">Capital & Risk Guardian</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="execution" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">Order Sizing & Strikes</CardTitle>
-              <CardDescription>
-                Configure lot sizing and strike selection for automated option trades.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="live-lots">Trading Lots Per Signal</Label>
-                  <Input
-                    id="live-lots"
-                    type="number"
-                    min={1}
-                    max={5}
-                    step={1}
-                    value={form.lots}
-                    onChange={(e) => setForm({ ...form, lots: e.target.value, trend_runner_lots: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Base lot count applied to all strategy entries</p>
-                </div>
-
-                <div className="grid gap-1.5">
-                  <Label htmlFor="strike-offset">Strike Selection (Points from ATM)</Label>
-                  <Input
-                    id="strike-offset"
-                    type="number"
-                    min={0}
-                    max={500}
-                    step={50}
-                    value={form.strike_offset}
-                    onChange={(e) => setForm({ ...form, strike_offset: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Default 100 pt ITM (Delta ~0.72) for minimal theta decay</p>
-                </div>
-              </div>
-
-              {/* Quick Link to Modular Strategy Setup */}
-              <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <div className="font-semibold text-sm text-sky-400 flex items-center gap-1.5">
-                    <Sliders className="size-4" />
-                    Modular Strategy Setups &amp; Spot Ratchet Ladder
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Independently enable/disable Trend Runner and VIX Trap engines.
-                  </p>
-                </div>
-                <Link to="/config">
-                  <Button size="sm" variant="default" className="shrink-0 bg-sky-500 hover:bg-sky-600 text-white font-medium">
-                    Open Configurator <ArrowRight className="size-3.5 ml-1" />
-                  </Button>
-                </Link>
-              </div>
-            </CardContent>
-            <CardFooter className="justify-end border-t pt-4">
-              <Button onClick={saveExecution} size="sm">
-                <Save className="size-3.5 mr-1.5" /> Save Execution Settings
-              </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="risk" className="space-y-4 mt-4">
-          <Card>
-            <CardHeader>
+      {/* Capital Guardian & Loss Limits Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
               <CardTitle className="text-base">Capital Guardian &amp; Loss Limits</CardTitle>
               <CardDescription>
                 Systematic circuit breakers to safeguard your trading account from excessive drawdown.
               </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="grid gap-1.5">
-                  <Label htmlFor="dll">Daily Loss Limit (₹)</Label>
-                  <Input
-                    id="dll"
-                    type="number"
-                    min={500}
-                    step={500}
-                    value={form.daily_loss_limit}
-                    onChange={(e) => setForm({ ...form, daily_loss_limit: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Algorithm locks automatically if daily MTM loss exceeds this</p>
-                </div>
+            </div>
+            <Badge variant="outline" className="text-xs font-mono border-emerald-500/40 text-emerald-400">
+              Active Protection
+            </Badge>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="dll">Daily Loss Limit (₹)</Label>
+              <Input
+                id="dll"
+                type="number"
+                min={500}
+                step={500}
+                value={form.daily_loss_limit}
+                onChange={(e) => setForm({ ...form, daily_loss_limit: e.target.value })}
+              />
+              <p className="text-[11px] text-muted-foreground">Algorithm locks automatically if daily MTM loss exceeds this limit</p>
+            </div>
 
-                <div className="grid gap-1.5">
-                  <Label htmlFor="min-live-funds">Minimum LIVE Balance Threshold (₹)</Label>
-                  <Input
-                    id="min-live-funds"
-                    type="number"
-                    min={10000}
-                    max={10000000}
-                    step={5000}
-                    value={form.minimum_live_funds}
-                    onChange={(e) => setForm({ ...form, minimum_live_funds: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Current threshold: ₹{minimumFunds}. Orders reject if balance falls below.</p>
-                </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="min-live-funds">Minimum LIVE Balance Threshold (₹)</Label>
+              <Input
+                id="min-live-funds"
+                type="number"
+                min={10000}
+                max={10000000}
+                step={5000}
+                value={form.minimum_live_funds}
+                onChange={(e) => setForm({ ...form, minimum_live_funds: e.target.value })}
+              />
+              <p className="text-[11px] text-muted-foreground">Current threshold: ₹{minimumFunds}. Orders reject if balance falls below.</p>
+            </div>
 
-                <div className="grid gap-1.5">
-                  <Label htmlFor="otp">Option Profit Target (% of Premium, 0 = off)</Label>
-                  <Input
-                    id="otp"
-                    type="number"
-                    min={0}
-                    max={200}
-                    step={5}
-                    value={form.option_target_pct}
-                    onChange={(e) => setForm({ ...form, option_target_pct: e.target.value })}
-                  />
-                  <p className="text-[11px] text-muted-foreground">Keep 0 to rely on the dynamic spot points ratchet ladder</p>
-                </div>
+            <div className="grid gap-1.5">
+              <Label htmlFor="otp">Option Profit Target (% of Premium, 0 = off)</Label>
+              <Input
+                id="otp"
+                type="number"
+                min={0}
+                max={200}
+                step={5}
+                value={form.option_target_pct}
+                onChange={(e) => setForm({ ...form, option_target_pct: e.target.value })}
+              />
+              <p className="text-[11px] text-muted-foreground">Keep 0 to rely on the dynamic spot points ratchet ladder</p>
+            </div>
+          </div>
+
+          {/* Quick Link to Modular Strategy Setup */}
+          <div className="rounded-lg border border-sky-500/30 bg-sky-500/5 p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4">
+            <div>
+              <div className="font-semibold text-sm text-sky-400 flex items-center gap-1.5">
+                <Sliders className="size-4" />
+                Strategy Setups, Lot Sizing &amp; Spot Ratchet Ladder
               </div>
-            </CardContent>
-            <CardFooter className="justify-end border-t pt-4">
-              <Button onClick={saveExecution} size="sm">
-                <Save className="size-3.5 mr-1.5" /> Save Risk Settings
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Configure individual strategy lots, active engines, and ratchet milestones on the Config page.
+              </p>
+            </div>
+            <Link to="/config">
+              <Button size="sm" variant="default" className="shrink-0 bg-sky-500 hover:bg-sky-600 text-white font-medium">
+                Open Strategy Configurator <ArrowRight className="size-3.5 ml-1" />
               </Button>
-            </CardFooter>
-          </Card>
-        </TabsContent>
-      </Tabs>
+            </Link>
+          </div>
+        </CardContent>
+        <CardFooter className="justify-end border-t pt-4">
+          <Button onClick={saveRiskSettings} size="sm">
+            <Save className="size-3.5 mr-1.5" /> Save Risk Safeguards
+          </Button>
+        </CardFooter>
+      </Card>
 
       {/* Confirmation Dialog for LIVE Trading */}
       <Dialog open={confirmOpen} onOpenChange={(open) => { setConfirmOpen(open); if (!open) setTyped("") }}>
@@ -505,7 +451,7 @@ export function SettingsPage() {
               Enable LIVE Trading with Real Capital?
             </DialogTitle>
             <DialogDescription>
-              This will route all incoming Apex Duo signals ({form.lots} lot{Number(form.lots) === 1 ? "" : "s"}) directly to your active {activeBroker} account.
+              This will route all incoming automated strategy signals directly to your active Kotak Neo account with real capital.
               Type <strong>LIVE</strong> below to confirm.
             </DialogDescription>
           </DialogHeader>
