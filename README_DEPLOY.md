@@ -129,25 +129,31 @@ You will see the full AlgoNeo Dashboard:
 
 ## 🔄 Day-to-Day Operations & Updates
 
-### 1. Updating to Latest Code from GitHub
-Whenever you push new changes or strategy fixes from your local machine to GitHub, update your VM with a single command:
+### 1. Instant 2-Second Update
+Whenever you push new changes or fixes to GitHub, update your VM with:
 ```bash
 cd ~/algo
-./update.sh
+npm run update
 ```
-`update.sh` will automatically pull the newest commits, rebuild the frontend bundle, and reload the PM2 service with zero downtime.
+*(This pulls latest commits and restarts PM2 in ~2 seconds without rebuilding).*
+
+For a full update with dependency checks:
+```bash
+npm run update:full
+```
 
 ---
 
-### 2. Monitoring & Useful Commands
+### 2. Monitoring & Useful npm Shortcuts
 
-| Task | Command |
-| :--- | :--- |
-| **View Live Real-Time Logs** | `pm2 logs algoneo` |
-| **Check Process Status** | `pm2 status` |
-| **Restart Platform** | `pm2 restart algoneo` |
-| **Stop Platform** | `pm2 stop algoneo` |
-| **View System Resource Usage** | `pm2 monit` |
+| Task | npm Shortcut | Direct PM2 Command |
+| :--- | :--- | :--- |
+| **Instant Update (Pull & Reload)** | `npm run update` | `git pull && pm2 restart algoneo` |
+| **Full Update (With Dependency Checks)** | `npm run update:full` | `./update.sh` |
+| **View Live Real-Time Logs** | `npm run logs` | `pm2 logs algoneo` |
+| **Check Process Status** | `npm run status` | `pm2 status` |
+| **Restart Platform** | `npm run restart` | `pm2 restart algoneo` |
+| **Stop Platform** | `npm run stop` | `pm2 stop algoneo` |
 
 ---
 
