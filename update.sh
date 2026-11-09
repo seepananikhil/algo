@@ -15,31 +15,48 @@ APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_DIR"
 
 # 1. Fetch latest changes from GitHub
-echo "[1/4] Fetching latest commits from GitHub..."
+echo "[1/3] Fetching latest commits from GitHub..."
 git fetch origin master
 
 # 2. Hard sync to origin/master so local modifications never block updates
-# (Files in .gitignore like neo_config.json, tokens, and live data are 100% preserved)
-echo "[2/4] Resetting tracked files to origin/master..."
+echo "[2/3] Resetting tracked files to origin/master..."
+PREV_COMMIT=$(git rev-parse HEAD 2>/dev/null || echo "HEAD~1")
 git reset --hard origin/master
+CURR_COMMIT=$(git rev-parse HEAD)
 
-# 3. Update dependencies if changed
-if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -E "(requirements.txt|package.json|web/package.json)" > /dev/null; then
-    echo "📦 Detected dependency changes, installing..."
+# Detect what actually changed in this update
+CHANGED_FILES=$(git diff --name-only "$PREV_COMMIT" "$CURR_COMMIT" 2>/dev/null || echo "")
+
+# 3. Smart dependency check (only run if files changed)
+if echo "$CHANGED_FILES" | grep -qE "requirements.txt"; then
+    echo "📦 Detected Python dependency changes, installing..."
     if [ -d "venv" ]; then
         venv/bin/pip install --prefer-binary -r requirements.txt
     elif command -v pip3 &> /dev/null; then
         pip3 install --prefer-binary -r requirements.txt
     fi
+fi
+
+if echo "$CHANGED_FILES" | grep -qE "web/package.json"; then
+    echo "📦 Detected npm package changes, installing..."
     npm --prefix web install
 fi
 
-# 4. Rebuild the frontend bundle
-echo "[3/4] Rebuilding frontend bundle..."
-npm --prefix web run build
+# 4. Smart frontend build:
+# If prebuilt web/dist is already committed or web/src didn't change, SKIP the heavy npm build!
+if echo "$CHANGED_FILES" | grep -qE "^web/src/"; then
+    if ! echo "$CHANGED_FILES" | grep -qE "^web/dist/"; then
+        echo "🎨 Detected source changes in web/src without prebuilt dist. Rebuilding..."
+        npm --prefix web run build
+    else
+        echo "⚡ Using pre-built web/dist from Git (skipped slow npm build)."
+    fi
+else
+    echo "⚡ No frontend changes detected (skipped slow npm build)."
+fi
 
-# 5. Restart the server service
-echo "[4/4] Restarting platform service..."
+# 5. Fast restart service
+echo "[3/3] Reloading platform service..."
 if command -v systemctl &> /dev/null && systemctl is-active --quiet algo.service 2>/dev/null; then
     sudo systemctl restart algo.service
     echo "  ✅ Restarted systemd service: algo.service"
