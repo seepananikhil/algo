@@ -27,7 +27,7 @@ ssh -i /path/to/your-key.pem ubuntu@YOUR_VM_IP
 ```bash
 ssh ubuntu@YOUR_VM_IP
 ```
-*(Replace `YOUR_VM_IP` with your actual server IP, e.g., `137.23.58.183`)*
+*(Replace `YOUR_VM_IP` with your actual server IP)*
 
 ---
 
@@ -119,7 +119,7 @@ Open your browser on your laptop or phone:
 ```text
 http://YOUR_VM_IP:8090
 ```
-*(Example: `http://137.23.58.183:8090`)*
+*(Example: `http://YOUR_VM_IP:8090`)*
 
 You will see the full AlgoNeo Dashboard:
 - **Strategy Tab**: Switch between Paper / Live mode, configure Sizing (Fixed 1 Lot vs Dynamic Pyramiding), and inspect the Capital Guardian.

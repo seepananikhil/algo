@@ -62,5 +62,5 @@ fi
 
 echo ""
 echo "=================================================================="
-echo "  🎉 Update Complete! Live at: http://137.23.58.183:8090"
+echo "  🎉 Update Complete! Live at: http://$(curl -s ifconfig.me || echo 'YOUR_VM_IP'):8090"
 echo "=================================================================="

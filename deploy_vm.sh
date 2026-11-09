@@ -3,7 +3,7 @@
 # Remote VM Deployer: Run from your local terminal or Cloud Shell
 # ==============================================================================
 
-VM_HOST="${VM_HOST:-137.23.58.183}"
+VM_HOST="${VM_HOST:-YOUR_VM_IP}"
 VM_USER="${VM_USER:-ubuntu}"
 SSH_KEY="${SSH_KEY:-}"
 

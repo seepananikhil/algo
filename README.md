@@ -45,7 +45,7 @@ ssh -i /path/to/your-key.pem ubuntu@YOUR_VM_IP
 # Or with password:
 ssh ubuntu@YOUR_VM_IP
 ```
-*(Example: `ssh ubuntu@137.23.58.183`)*
+*(Example: `ssh ubuntu@YOUR_VM_IP`)*
 
 ---
 
@@ -117,7 +117,7 @@ Open your browser on your computer or mobile:
 ```text
 http://YOUR_VM_IP:8090
 ```
-*(Example: `http://137.23.58.183:8090`)*
+*(Example: `http://YOUR_VM_IP:8090`)*
 
 ---
 
