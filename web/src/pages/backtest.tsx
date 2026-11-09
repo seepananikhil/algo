@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { DayPanel } from "@/components/day-detail"
+import { DayDetail } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -8,8 +8,9 @@ import { SideBadge, StatCard } from "@/components/common"
 import { PnlCalendar } from "@/components/pnl-calendar"
 import { StrategyStreakSummary } from "@/components/strategy-streak-summary"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Activity, BarChart2, Calendar, Flame, RefreshCw, TrendingUp } from "lucide-react"
+import { Activity, ArrowDown, ArrowUp, ArrowUpDown, Calendar, Flame, RefreshCw, TrendingUp, X } from "lucide-react"
 import { toast } from "sonner"
 import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, type Backtest } from "@/lib/api"
 
@@ -39,38 +40,22 @@ function forYear(data: Backtest, year: string): Backtest {
   trades.forEach((t) => reasons.set(t.reason, (reasons.get(t.reason) ?? 0) + 1))
 
   const pts = trades.map((t) => t.pnl_points)
-  const basePts = trades.map((t) => (t as any).base_points ?? t.pnl_points)
-  const wins = pts.filter((p) => p > 0).length
-  const total = Math.round(pts.reduce((a, p) => a + p, 0) * 100) / 100
-  const baseTotal = Math.round(basePts.reduce((a, p) => a + p, 0) * 100) / 100
-
-  const lotSize = safeData.summary.lot_size || 25
-  const optDelta = safeData.summary.option_delta || 0.60
-  const hasRs = trades.some((t) => (t as any).pnl_rupees !== undefined)
-  const dynRs = hasRs
-    ? Math.round(trades.reduce((a, t) => a + ((t as any).pnl_rupees || 0), 0) * 100) / 100
-    : Math.round(total * lotSize * optDelta * 100) / 100
-  const futRs = hasRs && trades.some((t) => (t as any).futures_rupees !== undefined)
-    ? Math.round(trades.reduce((a, t) => a + ((t as any).futures_rupees || 0), 0) * 100) / 100
-    : Math.round(total * lotSize * 100) / 100
+  const wins = pts.filter((p) => p > 0)
+  const losses = pts.filter((p) => p < 0)
 
   return {
+    ...safeData,
     summary: {
       ...safeData.summary,
-      from: daily[0]?.date ?? "",
-      to: daily[daily.length - 1]?.date ?? "",
-      days: daily.length,
       trades: trades.length,
-      wins,
-      losses: pts.filter((p) => p < 0).length,
-      win_rate_pct: trades.length ? Math.round((10000 * wins) / trades.length) / 100 : 0,
-      total_points: total,
-      dynamic_points: total,
-      base_points: baseTotal,
-      dynamic_rupees: dynRs,
-      futures_rupees: futRs,
-      avg_points: trades.length ? Math.round((total / trades.length) * 100) / 100 : 0,
-      max_drawdown: Math.min(0, ...trades.map((t) => t.drawdown)),
+      days: daily.length,
+      wins: wins.length,
+      losses: losses.length,
+      win_rate_pct: trades.length ? Math.round((wins.length / trades.length) * 1000) / 10 : 0,
+      base_points: pts.reduce((a, b) => a + b, 0),
+      total_points: pts.reduce((a, b) => a + b, 0),
+      max_drawdown: trades.length ? Math.min(...trades.map((t) => t.drawdown)) : 0,
+      avg_points: trades.length ? Math.round((pts.reduce((a, b) => a + b, 0) / trades.length) * 10) / 10 : 0,
       best: pts.length ? Math.max(...pts) : 0,
       worst: pts.length ? Math.min(...pts) : 0,
     },
@@ -89,12 +74,13 @@ const tooltip = {
 
 type MainStrategy = "master_portfolio" | "trend_runner" | "vix_trap"
 type SubSymbol = "all" | "nifty" | "sensex"
-type AnalyticsView = "curve" | "monthly" | "streaks" | "calendar"
+type AnalyticsView = "curve" | "calendar" | "streaks"
+type TradeSort = "date-desc" | "date-asc" | "pnl-desc" | "pnl-asc"
 
 export function BacktestPage() {
   const [mainStrategy, setMainStrategy] = useState<MainStrategy>(() => {
-    const saved = localStorage.getItem("backtest_main_strategy")
-    if (saved === "trend_runner" || saved === "vix_trap" || saved === "master_portfolio") return saved
+    const saved = localStorage.getItem("backtest_main_strategy") as MainStrategy
+    if (saved === "master_portfolio" || saved === "trend_runner" || saved === "vix_trap") return saved
     return "master_portfolio"
   })
 
@@ -105,6 +91,8 @@ export function BacktestPage() {
   })
 
   const [analyticsView, setAnalyticsView] = useState<AnalyticsView>("curve")
+  const [sortOrder, setSortOrder] = useState<TradeSort>("date-desc")
+  const [filter, setFilter] = useState<"all" | "wins" | "losses">("all")
 
   const apiUrl = useMemo(() => {
     if (mainStrategy === "master_portfolio") {
@@ -138,37 +126,34 @@ export function BacktestPage() {
     }
   }, [mainStrategy, subSymbol])
 
-  const { data: raw, loading, error, reload } = usePoll<Backtest>(apiUrl)
-
-  const [filter, setFilter] = useState("all")
+  const { data: raw, loading, error, reload } = usePoll<Backtest>(apiUrl, 0)
   const [isSyncing, setIsSyncing] = useState(false)
 
   const handleSyncBacktest = async () => {
-    if (isSyncing) return
-    setIsSyncing(true)
-    toast.info("Syncing latest market data & master backtests...")
     try {
-      const res = await fetch("/api/backtest/sync")
-      const d = await res.json()
-      if (!d.ok && !d.running) {
-        toast.error("Sync error: " + (d.message || "Failed"))
+      setIsSyncing(true)
+      toast.info("Triggering background historical backtest update...")
+      const res = await fetch("/api/update-backtests", { method: "POST" })
+      const data = await res.json()
+      if (!res.ok) {
+        toast.error(data.error || "Failed to start update")
         setIsSyncing(false)
         return
       }
-
-      const pollInterval = setInterval(async () => {
+      toast.success(data.message || "Update started. Syncing...")
+      const pollTimer = setInterval(async () => {
         try {
-          const sRes = await fetch("/api/backtest/sync/status")
-          const s = await sRes.json()
-          if (s.status === "completed") {
-            clearInterval(pollInterval)
+          const statusRes = await fetch("/api/update-backtests/status")
+          const s = await statusRes.json()
+          if (!s.running) {
+            clearInterval(pollTimer)
             setIsSyncing(false)
-            if (reload) await reload()
-            toast.success("Master backtests updated successfully!")
-          } else if (s.status === "failed") {
-            clearInterval(pollInterval)
-            setIsSyncing(false)
-            toast.error(s.message || "Backtest update failed")
+            if (s.success) {
+              toast.success("Master backtests successfully regenerated!")
+              reload()
+            } else {
+              toast.error(s.message || "Backtest update failed")
+            }
           }
         } catch {
           // ignore transient poll errors
@@ -193,6 +178,23 @@ export function BacktestPage() {
     if (filter === "losses") return t.filter((x) => x.pnl_points < 0)
     return t
   }, [data, filter])
+
+  const sortedTrades = useMemo(() => {
+    const list = [...trades]
+    if (sortOrder === "date-desc") {
+      return list.sort((a, b) => (b.date + (b.entry || "")).localeCompare(a.date + (a.entry || "")))
+    }
+    if (sortOrder === "date-asc") {
+      return list.sort((a, b) => (a.date + (a.entry || "")).localeCompare(b.date + (b.entry || "")))
+    }
+    if (sortOrder === "pnl-desc") {
+      return list.sort((a, b) => b.pnl_points - a.pnl_points)
+    }
+    if (sortOrder === "pnl-asc") {
+      return list.sort((a, b) => a.pnl_points - b.pnl_points)
+    }
+    return list
+  }, [trades, sortOrder])
 
   const s: any = data?.summary ?? {}
   const curve = useMemo(() => {
@@ -281,8 +283,8 @@ export function BacktestPage() {
                 className={cn(
                   "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
                   mainStrategy === "trend_runner"
-                    ? "bg-blue-600 text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-blue-600 text-white shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-semibold"
                 )}
               >
                 <span>⚡</span>
@@ -294,8 +296,8 @@ export function BacktestPage() {
                 className={cn(
                   "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
                   mainStrategy === "vix_trap"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-amber-600 text-white shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-semibold"
                 )}
               >
                 <span>🪤</span>
@@ -308,7 +310,7 @@ export function BacktestPage() {
               <button
                 onClick={() => { setPicked(null); setSubSymbol("all"); localStorage.setItem("backtest_sub_symbol", "all") }}
                 className={cn(
-                  "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer",
+                  "px-2.5 py-1.5 text-xs rounded-lg transition-all cursor-pointer",
                   subSymbol === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
@@ -317,7 +319,7 @@ export function BacktestPage() {
               <button
                 onClick={() => { setPicked(null); setSubSymbol("nifty"); localStorage.setItem("backtest_sub_symbol", "nifty") }}
                 className={cn(
-                  "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer",
+                  "px-2.5 py-1.5 text-xs rounded-lg transition-all cursor-pointer",
                   subSymbol === "nifty" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
@@ -326,7 +328,7 @@ export function BacktestPage() {
               <button
                 onClick={() => { setPicked(null); setSubSymbol("sensex"); localStorage.setItem("backtest_sub_symbol", "sensex") }}
                 className={cn(
-                  "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer",
+                  "px-2.5 py-1.5 text-xs rounded-lg transition-all cursor-pointer",
                   subSymbol === "sensex" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
@@ -342,7 +344,7 @@ export function BacktestPage() {
               <button
                 onClick={() => { setYear(null); setPicked(null) }}
                 className={cn(
-                  "px-2.5 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer",
+                  "px-2.5 py-1 text-xs rounded-lg transition-all cursor-pointer",
                   year === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
@@ -353,7 +355,7 @@ export function BacktestPage() {
                   key={y}
                   onClick={() => { setYear(y); setPicked(null) }}
                   className={cn(
-                    "px-2 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer",
+                    "px-2 py-1 text-xs rounded-lg transition-all cursor-pointer",
                     year === y ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                   )}
                 >
@@ -422,11 +424,11 @@ export function BacktestPage() {
 
             <StatCard
               label="Max Drawdown"
-              value={fmtNum(s.max_drawdown)}
+              value={fmtPts(s.max_drawdown)}
               className="text-red-500"
               hint={
                 s.option_delta
-                  ? `Option: ${fmtRs(s.max_drawdown * s.lot_size * s.option_delta)}`
+                  ? `Option: ${fmtRs(Math.abs(s.max_drawdown) * s.lot_size * s.option_delta)}`
                   : `Spot: ${fmtRs(s.max_drawdown * s.lot_size)}`
               }
             />
@@ -444,8 +446,8 @@ export function BacktestPage() {
             />
           </div>
 
-          {/* 3. CONSOLIDATED ANALYTICS HUB (Combines Equity Curve, Monthly, Streaks & Calendar) */}
-          <Card className="overflow-hidden border border-border/60 shadow-xs">
+          {/* 3. CONSOLIDATED ANALYTICS HUB (Combines Equity Curve, Monthly Breakdown & Daily Calendar) */}
+          <Card id="analytics-hub-card" className="overflow-hidden border border-border/60 shadow-xs">
             <CardHeader className="border-b bg-card/60 p-3 sm:px-4 sm:py-3">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 {/* View Selector Tabs */}
@@ -453,8 +455,8 @@ export function BacktestPage() {
                   <button
                     onClick={() => setAnalyticsView("curve")}
                     className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "curve" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
+                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5",
+                      analyticsView === "curve" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                     )}
                   >
                     <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
@@ -462,36 +464,25 @@ export function BacktestPage() {
                   </button>
 
                   <button
-                    onClick={() => setAnalyticsView("monthly")}
+                    onClick={() => setAnalyticsView("calendar")}
                     className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "monthly" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
+                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5",
+                      analyticsView === "calendar" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                     )}
                   >
-                    <BarChart2 className="h-3.5 w-3.5 text-sky-500" />
-                    <span>Monthly Breakdown</span>
+                    <Calendar className="h-3.5 w-3.5 text-sky-500" />
+                    <span>Monthly &amp; Daily Calendar</span>
                   </button>
 
                   <button
                     onClick={() => setAnalyticsView("streaks")}
                     className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "streaks" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
+                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-colors cursor-pointer flex items-center gap-1.5",
+                      analyticsView === "streaks" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                     )}
                   >
                     <Flame className="h-3.5 w-3.5 text-amber-500" />
                     <span>Streaks &amp; Edge</span>
-                  </button>
-
-                  <button
-                    onClick={() => setAnalyticsView("calendar")}
-                    className={cn(
-                      "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "calendar" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
-                    )}
-                  >
-                    <Calendar className="h-3.5 w-3.5 text-primary" />
-                    <span>Daily Calendar</span>
                   </button>
                 </div>
 
@@ -540,27 +531,93 @@ export function BacktestPage() {
                 </div>
               )}
 
-              {/* TAB 2: MONTHLY BREAKDOWN */}
-              {analyticsView === "monthly" && (
-                <div className="flex flex-col gap-2">
-                  <div className="h-[340px] w-full">
-                    <ResponsiveContainer width="100%" height="100%">
-                      <BarChart data={data?.monthly ?? []} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={0.6} />
-                        <XAxis dataKey="month" {...axis} />
-                        <YAxis {...axis} tickFormatter={(v) => `${v}`} />
-                        <Tooltip {...tooltip} formatter={(v: any) => [`${fmtPts(Number(v))}`, "Points"]} />
-                        <Bar dataKey="points" radius={[4, 4, 0, 0]}>
-                          {(data?.monthly ?? []).map((m, i) => (
-                            <Cell key={i} fill={m.points >= 0 ? "#10b981" : "#ef4444"} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                    </ResponsiveContainer>
+              {/* TAB 2: MONTHLY & DAILY CALENDAR (Clubbed + Instant Fast Chart Viewer) */}
+              {analyticsView === "calendar" && (
+                <div className="flex flex-col gap-5">
+                  {/* FAST 1-MINUTE DAY CHART: Opens instantly right here when any day is clicked! */}
+                  {picked && (
+                    <div id="quick-day-chart" className="rounded-xl border border-primary/30 bg-card p-3 sm:p-4 shadow-sm animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between pb-2 mb-3 border-b border-border/40">
+                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                          <span className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                            <span>🕯️</span>
+                            <span>1-Min Session Chart: <span className="font-mono text-primary font-bold">{picked}</span></span>
+                          </span>
+                          {(() => {
+                            const d = (data?.daily ?? []).find((x) => x.date === picked)
+                            if (!d) return null
+                            return (
+                              <Badge variant="outline" className={cn("text-xs font-mono font-bold", pnlClass(d.points))}>
+                                {fmtPts(d.points)} ({d.trades} trade{d.trades === 1 ? "" : "s"})
+                              </Badge>
+                            )
+                          })()}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setPicked(null)}
+                          className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                        >
+                          <X className="h-3.5 w-3.5" />
+                          <span>Close Chart</span>
+                        </Button>
+                      </div>
+
+                      <DayDetail
+                        key={`${picked}-${strategy}`}
+                        date={picked}
+                        mode="backtest"
+                        strategy={strategy}
+                        compact={true}
+                        allowTimeframeSwitch={true}
+                      />
+                    </div>
+                  )}
+
+                  {/* Top Part: Monthly Breakdown Bar Chart */}
+                  <div className="flex flex-col gap-2 rounded-xl border border-border/40 bg-muted/20 p-3 sm:p-4">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-semibold tracking-tight uppercase text-muted-foreground">Monthly P&amp;L Distribution</h3>
+                      {data?.monthly && data.monthly.length > 0 && (
+                        <span className="text-xs font-mono font-medium text-muted-foreground">
+                          <span className="text-emerald-500 font-bold">{data.monthly.filter((m: any) => m.points > 0).length}</span> / {data.monthly.length} profitable months
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="h-[200px] w-full">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data?.monthly ?? []} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={0.5} />
+                          <XAxis dataKey="month" {...axis} />
+                          <YAxis {...axis} tickFormatter={(v) => `${v}`} />
+                          <Tooltip {...tooltip} formatter={(v: any) => [`${fmtPts(Number(v))}`, "Points"]} />
+                          <Bar dataKey="points" radius={[3, 3, 0, 0]}>
+                            {(data?.monthly ?? []).map((m, i) => (
+                              <Cell key={i} fill={m.points >= 0 ? "#10b981" : "#ef4444"} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
                   </div>
-                  <div className="flex items-center justify-between text-[11px] text-muted-foreground px-1 border-t border-border/30 pt-2">
-                    <span>Month-by-Month Net Points</span>
-                    <span>Green = Profitable Month · Red = Drawdown Month</span>
+
+                  {/* Bottom Part: Daily Session Heatmap */}
+                  <div className="flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground px-0.5">
+                      <span className="font-semibold uppercase tracking-wider text-[11px]">Daily Session Heatmap</span>
+                      <span className="text-[11px]">Click any day to instantly view its 1-min chart above</span>
+                    </div>
+                    <PnlCalendar
+                      daily={(data?.daily ?? []).map((d) => ({ ...d, value: d.points }))}
+                      format={fmtPts}
+                      onPick={(dt) => {
+                        setPicked(dt)
+                        const el = document.getElementById("analytics-hub-card")
+                        if (el) el.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }}
+                    />
                   </div>
                 </div>
               )}
@@ -581,70 +638,87 @@ export function BacktestPage() {
                   />
                 </div>
               )}
-
-              {/* TAB 4: CALENDAR HEATMAP */}
-              {analyticsView === "calendar" && (
-                <div className="flex flex-col gap-3">
-                  <div className="flex items-center justify-between text-xs text-muted-foreground">
-                    <span>Green = profit day, red = loss day, gray = no trade. Click any day to open its 1-min chart below.</span>
-                  </div>
-                  <PnlCalendar daily={(data?.daily ?? []).map((d) => ({ ...d, value: d.points }))} format={fmtPts} onPick={setPicked} />
-                </div>
-              )}
             </CardContent>
           </Card>
 
-          {/* 4. DAY DETAIL PANEL (Expands smoothly when a date is selected) */}
-          <DayPanel
-            date={picked}
-            mode="backtest"
-            strategy={strategy}
-            days={(data?.daily ?? []).map((d) => d.date)}
-            onPick={setPicked}
-            onClose={() => setPicked(null)}
-            allowTimeframeSwitch={true}
-          />
-
-          {/* 5. TRADES EXECUTION LOG */}
+          {/* 4. TRADES EXECUTION LOG (With Interactive Sorting for Winners & Losers) */}
           <Card className="border border-border/60 shadow-xs">
-            <CardHeader className="flex flex-row items-center justify-between gap-3 p-3.5 sm:p-4 border-b">
+            <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 sm:p-4 border-b">
               <div className="flex items-center gap-2">
                 <Activity className="h-4 w-4 text-primary" />
                 <CardTitle className="text-sm font-semibold tracking-tight">Trade Execution Log</CardTitle>
                 <Badge variant="secondary" className="text-[11px] font-mono font-medium">
-                  {trades.length} trade{trades.length === 1 ? "" : "s"}
+                  {sortedTrades.length} trade{sortedTrades.length === 1 ? "" : "s"}
                 </Badge>
               </div>
 
-              {/* Filter Tabs */}
-              <div className="flex items-center p-0.5 bg-muted/60 rounded-lg border border-border/40">
-                <button
-                  onClick={() => setFilter("all")}
-                  className={cn(
-                    "px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer",
-                    filter === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
-                  )}
-                >
-                  All ({data?.trades?.length || 0})
-                </button>
-                <button
-                  onClick={() => setFilter("wins")}
-                  className={cn(
-                    "px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer text-emerald-500",
-                    filter === "wins" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100 font-medium"
-                  )}
-                >
-                  Wins ({s.wins || 0})
-                </button>
-                <button
-                  onClick={() => setFilter("losses")}
-                  className={cn(
-                    "px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer text-red-500",
-                    filter === "losses" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100 font-medium"
-                  )}
-                >
-                  Losses ({s.losses || 0})
-                </button>
+              {/* Filter & Sort Controls Grouped */}
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                {/* Filter Pills */}
+                <div className="flex items-center p-0.5 bg-muted/60 rounded-lg border border-border/40">
+                  <button
+                    onClick={() => setFilter("all")}
+                    className={cn(
+                      "px-2.5 py-1 text-xs rounded-md transition-all cursor-pointer font-medium",
+                      filter === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    All ({data?.trades?.length || 0})
+                  </button>
+                  <button
+                    onClick={() => setFilter("wins")}
+                    className={cn(
+                      "px-2.5 py-1 text-xs rounded-md transition-all cursor-pointer text-emerald-500 font-medium",
+                      filter === "wins" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100"
+                    )}
+                  >
+                    Wins ({s.wins || 0})
+                  </button>
+                  <button
+                    onClick={() => setFilter("losses")}
+                    className={cn(
+                      "px-2.5 py-1 text-xs rounded-md transition-all cursor-pointer text-red-500 font-medium",
+                      filter === "losses" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100"
+                    )}
+                  >
+                    Losses ({s.losses || 0})
+                  </button>
+                </div>
+
+                {/* Sort Order Selector (Winners & Losers) */}
+                <div className="flex items-center p-0.5 bg-muted/60 rounded-lg border border-border/40">
+                  <button
+                    onClick={() => setSortOrder(sortOrder === "date-desc" ? "date-asc" : "date-desc")}
+                    title="Sort by Date (click to toggle newest/oldest)"
+                    className={cn(
+                      "px-2 py-1 text-xs rounded-md transition-all cursor-pointer flex items-center gap-1 font-medium",
+                      sortOrder.startsWith("date") ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span>Date</span>
+                    <span>{sortOrder === "date-desc" ? "↓" : sortOrder === "date-asc" ? "↑" : ""}</span>
+                  </button>
+                  <button
+                    onClick={() => setSortOrder("pnl-desc")}
+                    title="Sort by Biggest Winners first"
+                    className={cn(
+                      "px-2 py-1 text-xs rounded-md transition-all cursor-pointer flex items-center gap-1 text-emerald-500 font-medium",
+                      sortOrder === "pnl-desc" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100"
+                    )}
+                  >
+                    <span>🏆 Winners</span>
+                  </button>
+                  <button
+                    onClick={() => setSortOrder("pnl-asc")}
+                    title="Sort by Biggest Losers first"
+                    className={cn(
+                      "px-2 py-1 text-xs rounded-md transition-all cursor-pointer flex items-center gap-1 text-red-500 font-medium",
+                      sortOrder === "pnl-asc" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100"
+                    )}
+                  >
+                    <span>🩸 Losers</span>
+                  </button>
+                </div>
               </div>
             </CardHeader>
 
@@ -652,24 +726,59 @@ export function BacktestPage() {
               <Table className="table-fixed w-full">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[105px]">Date</TableHead>
+                    <TableHead
+                      className="w-[105px] cursor-pointer select-none hover:text-foreground transition-colors group"
+                      onClick={() => setSortOrder(prev => prev === "date-desc" ? "date-asc" : "date-desc")}
+                      title="Sort by Date"
+                    >
+                      <div className="flex items-center gap-1">
+                        <span>Date</span>
+                        {sortOrder === "date-desc" ? (
+                          <ArrowDown className="h-3 w-3 text-primary shrink-0" />
+                        ) : sortOrder === "date-asc" ? (
+                          <ArrowUp className="h-3 w-3 text-primary shrink-0" />
+                        ) : (
+                          <ArrowUpDown className="h-2.5 w-2.5 opacity-30 group-hover:opacity-100 shrink-0" />
+                        )}
+                      </div>
+                    </TableHead>
                     <TableHead className="w-[150px]">Side / Engine</TableHead>
                     <TableHead className="w-[65px]">In</TableHead>
                     <TableHead className="w-[85px] text-right">Entry</TableHead>
                     <TableHead className="w-[65px]">Out</TableHead>
                     <TableHead className="w-[85px] text-right">Exit</TableHead>
                     <TableHead className="w-auto">Exit Reason</TableHead>
-                    <TableHead className="w-[95px] text-right">Points</TableHead>
+                    <TableHead
+                      className="w-[95px] text-right cursor-pointer select-none hover:text-foreground transition-colors group"
+                      onClick={() => setSortOrder(prev => prev === "pnl-desc" ? "pnl-asc" : "pnl-desc")}
+                      title="Sort by Points (Winners / Losers)"
+                    >
+                      <div className="flex items-center justify-end gap-1">
+                        <span>Points</span>
+                        {sortOrder === "pnl-desc" ? (
+                          <ArrowDown className="h-3 w-3 text-emerald-500 shrink-0" />
+                        ) : sortOrder === "pnl-asc" ? (
+                          <ArrowUp className="h-3 w-3 text-red-500 shrink-0" />
+                        ) : (
+                          <ArrowUpDown className="h-2.5 w-2.5 opacity-30 group-hover:opacity-100 shrink-0" />
+                        )}
+                      </div>
+                    </TableHead>
                     <TableHead className="w-[105px] text-right">Cumulative</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {trades.slice().reverse().map((t, i) => (
+                  {sortedTrades.map((t, i) => (
                     <TableRow
                       key={i}
                       className="cursor-pointer hover:bg-muted/40 transition-colors"
-                      onClick={() => setPicked(t.date)}
-                      title="Click to view 1-minute chart"
+                      onClick={() => {
+                        setPicked(t.date)
+                        setAnalyticsView("calendar")
+                        const hub = document.getElementById("analytics-hub-card")
+                        if (hub) hub.scrollIntoView({ behavior: "smooth", block: "start" })
+                      }}
+                      title="Click to view 1-minute chart in the Analytics Hub"
                     >
                       <TableCell className="tabular-nums font-mono text-xs w-[105px]">{t.date}</TableCell>
                       <TableCell className="w-[150px]">
