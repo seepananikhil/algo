@@ -14,6 +14,7 @@ import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/l
 import { useStatus } from "@/lib/status"
 
 type Form = {
+  lots: string
   daily_loss_limit: string
   minimum_live_funds: string
 }
@@ -48,8 +49,9 @@ export function SettingsPage() {
   useEffect(() => {
     if (data && !form) {
       setForm({
-        daily_loss_limit: String(data.daily_loss_limit ?? 5000),
-        minimum_live_funds: String(data.minimum_live_funds ?? 25000),
+        lots: String(data.trend_runner_lots ?? data.lots ?? 1),
+        daily_loss_limit: String(data.daily_loss_limit ?? 2500),
+        minimum_live_funds: String(data.minimum_live_funds ?? 10000),
       })
       setKotakForm({
         consumer_key: "",
@@ -77,9 +79,11 @@ export function SettingsPage() {
   function saveRiskSettings() {
     if (!form) return
     save({
+      lots: Number(form.lots),
+      trend_runner_lots: Number(form.lots),
       daily_loss_limit: Number(form.daily_loss_limit),
       minimum_live_funds: Number(form.minimum_live_funds),
-    }, "Risk & capital safeguards saved")
+    }, "Capital & lot size safeguards saved")
   }
 
   function saveKotakCredentials() {
@@ -364,7 +368,20 @@ export function SettingsPage() {
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
+            <div className="grid gap-1.5">
+              <Label htmlFor="lots">Nifty Lots (65 Qty/Lot)</Label>
+              <Input
+                id="lots"
+                type="number"
+                min={1}
+                max={10}
+                value={form.lots}
+                onChange={(e) => setForm({ ...form, lots: e.target.value })}
+              />
+              <p className="text-[11px] text-muted-foreground">Base lot sizing for automated trades (1 lot = 65 shares)</p>
+            </div>
+
             <div className="grid gap-1.5">
               <Label htmlFor="dll">Daily Loss Limit (₹)</Label>
               <Input
@@ -375,24 +392,22 @@ export function SettingsPage() {
                 value={form.daily_loss_limit}
                 onChange={(e) => setForm({ ...form, daily_loss_limit: e.target.value })}
               />
-              <p className="text-[11px] text-muted-foreground">Algorithm locks automatically if daily MTM loss exceeds this limit</p>
+              <p className="text-[11px] text-muted-foreground">Circuit breaker (₹2,500 recommended for 1 lot)</p>
             </div>
 
             <div className="grid gap-1.5">
-              <Label htmlFor="min-live-funds">Minimum LIVE Balance Threshold (₹)</Label>
+              <Label htmlFor="min-live-funds">Minimum LIVE Balance (₹)</Label>
               <Input
                 id="min-live-funds"
                 type="number"
-                min={10000}
+                min={5000}
                 max={10000000}
                 step={5000}
                 value={form.minimum_live_funds}
                 onChange={(e) => setForm({ ...form, minimum_live_funds: e.target.value })}
               />
-              <p className="text-[11px] text-muted-foreground">Current threshold: ₹{minimumFunds}. Orders reject if balance falls below.</p>
+              <p className="text-[11px] text-muted-foreground">Current: ₹{minimumFunds}. Orders reject if balance falls below.</p>
             </div>
-
-
           </div>
 
           {/* Quick Link to Modular Strategy Setup */}
@@ -415,7 +430,7 @@ export function SettingsPage() {
         </CardContent>
         <CardFooter className="justify-end border-t pt-4">
           <Button onClick={saveRiskSettings} size="sm">
-            <Save className="size-3.5 mr-1.5" /> Save Risk Safeguards
+            <Save className="size-3.5 mr-1.5" /> Save Safeguards & Lot Sizing
           </Button>
         </CardFooter>
       </Card>

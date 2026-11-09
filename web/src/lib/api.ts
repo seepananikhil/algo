@@ -26,6 +26,7 @@ export type Status = {
   market_open_day?: boolean
   mode: "PAPER" | "LIVE"
   lots: number
+  trend_runner_lots?: number
   daily_loss_limit: number | null
   kill_switch: boolean
   risk_guardian?: {
@@ -387,6 +388,7 @@ export type CapitalTrade = {
   max_adv: number
   rr: number
   lots: number
+  trend_runner_lots?: number
   qty: number
   vix_chg: number
   initial_sl: number

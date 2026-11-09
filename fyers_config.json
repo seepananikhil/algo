@@ -14,7 +14,7 @@
   "hero_zero_live_trading": false,
   "midpoint_live_trading": false,
   "live_trading": false,
-  "daily_loss_limit": 2000,
+  "daily_loss_limit": 2500,
   "strike_offset": 100,
   "option_target_pct": 15,
   "lots": 1,
@@ -34,7 +34,7 @@
   "hourly_trend_lots": 1,
   "trend_runner_paper_trading": true,
   "trend_runner_live_trading": false,
-  "trend_runner_lots": 3,
+  "trend_runner_lots": 1,
   "broker": "KOTAK_NEO",
   "kotak_neo": {
     "consumer_key": "1deb9014-b218-43d4-9c52-26b2a8504890",
