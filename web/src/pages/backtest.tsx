@@ -209,7 +209,7 @@ export function BacktestPage() {
   }, [data?.trades])
 
   return (
-    <div className="flex flex-col gap-4 max-w-[1600px] mx-auto">
+    <div className="flex flex-col gap-4 w-full">
       {/* 1. UNIFIED COMMAND TOOLBAR (Combines Title, Strategy, Index, Year & Sync) */}
       <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/75 p-3.5 sm:p-4 shadow-xs backdrop-blur-md">
         {/* Top Tier: Strategy Label, Details Pill & Sync Button */}
@@ -268,8 +268,8 @@ export function BacktestPage() {
                 className={cn(
                   "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
                   mainStrategy === "master_portfolio"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
+                    ? "bg-purple-600 text-white shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-semibold"
                 )}
               >
                 <span>👑</span>
@@ -309,7 +309,7 @@ export function BacktestPage() {
                 onClick={() => { setPicked(null); setSubSymbol("all"); localStorage.setItem("backtest_sub_symbol", "all") }}
                 className={cn(
                   "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer",
-                  subSymbol === "all" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  subSymbol === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
                 🌐 ALL
@@ -318,7 +318,7 @@ export function BacktestPage() {
                 onClick={() => { setPicked(null); setSubSymbol("nifty"); localStorage.setItem("backtest_sub_symbol", "nifty") }}
                 className={cn(
                   "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer",
-                  subSymbol === "nifty" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  subSymbol === "nifty" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
                 NIFTY
@@ -327,7 +327,7 @@ export function BacktestPage() {
                 onClick={() => { setPicked(null); setSubSymbol("sensex"); localStorage.setItem("backtest_sub_symbol", "sensex") }}
                 className={cn(
                   "px-2.5 py-1.5 text-xs font-medium rounded-lg transition-all cursor-pointer",
-                  subSymbol === "sensex" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  subSymbol === "sensex" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
                 SENSEX
@@ -343,7 +343,7 @@ export function BacktestPage() {
                 onClick={() => { setYear(null); setPicked(null) }}
                 className={cn(
                   "px-2.5 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer",
-                  year === "all" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  year === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                 )}
               >
                 All (10Y)
@@ -354,7 +354,7 @@ export function BacktestPage() {
                   onClick={() => { setYear(y); setPicked(null) }}
                   className={cn(
                     "px-2 py-1 text-xs font-medium rounded-lg transition-all cursor-pointer",
-                    year === y ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                    year === y ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                   )}
                 >
                   {y}
@@ -454,7 +454,7 @@ export function BacktestPage() {
                     onClick={() => setAnalyticsView("curve")}
                     className={cn(
                       "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "curve" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      analyticsView === "curve" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
                     )}
                   >
                     <TrendingUp className="h-3.5 w-3.5 text-emerald-500" />
@@ -465,7 +465,7 @@ export function BacktestPage() {
                     onClick={() => setAnalyticsView("monthly")}
                     className={cn(
                       "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "monthly" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      analyticsView === "monthly" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
                     )}
                   >
                     <BarChart2 className="h-3.5 w-3.5 text-sky-500" />
@@ -476,7 +476,7 @@ export function BacktestPage() {
                     onClick={() => setAnalyticsView("streaks")}
                     className={cn(
                       "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "streaks" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      analyticsView === "streaks" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
                     )}
                   >
                     <Flame className="h-3.5 w-3.5 text-amber-500" />
@@ -487,7 +487,7 @@ export function BacktestPage() {
                     onClick={() => setAnalyticsView("calendar")}
                     className={cn(
                       "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-                      analyticsView === "calendar" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                      analyticsView === "calendar" ? "bg-background text-foreground shadow-xs font-semibold" : "text-muted-foreground hover:text-foreground font-semibold"
                     )}
                   >
                     <Calendar className="h-3.5 w-3.5 text-primary" />
@@ -507,7 +507,7 @@ export function BacktestPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-3 sm:p-5">
+            <CardContent className="p-3 sm:p-5 min-h-[380px]">
               {/* TAB 1: EQUITY CURVE */}
               {analyticsView === "curve" && (
                 <div className="flex flex-col gap-2">
@@ -622,7 +622,7 @@ export function BacktestPage() {
                   onClick={() => setFilter("all")}
                   className={cn(
                     "px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer",
-                    filter === "all" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                    filter === "all" ? "bg-background text-foreground shadow-2xs font-semibold" : "text-muted-foreground hover:text-foreground font-medium"
                   )}
                 >
                   All ({data?.trades?.length || 0})
@@ -631,7 +631,7 @@ export function BacktestPage() {
                   onClick={() => setFilter("wins")}
                   className={cn(
                     "px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer text-emerald-500",
-                    filter === "wins" ? "bg-background shadow-2xs font-bold" : "opacity-80 hover:opacity-100"
+                    filter === "wins" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100 font-medium"
                   )}
                 >
                   Wins ({s.wins || 0})
@@ -640,7 +640,7 @@ export function BacktestPage() {
                   onClick={() => setFilter("losses")}
                   className={cn(
                     "px-2.5 py-1 text-xs font-medium rounded-md transition-all cursor-pointer text-red-500",
-                    filter === "losses" ? "bg-background shadow-2xs font-bold" : "opacity-80 hover:opacity-100"
+                    filter === "losses" ? "bg-background shadow-2xs font-semibold" : "opacity-80 hover:opacity-100 font-medium"
                   )}
                 >
                   Losses ({s.losses || 0})
@@ -649,18 +649,18 @@ export function BacktestPage() {
             </CardHeader>
 
             <CardContent className="p-0">
-              <Table>
+              <Table className="table-fixed w-full">
                 <TableHeader>
                   <TableRow className="hover:bg-transparent">
-                    <TableHead className="w-[110px]">Date</TableHead>
-                    <TableHead className="w-[140px]">Side / Engine</TableHead>
-                    <TableHead>In</TableHead>
-                    <TableHead className="text-right">Entry</TableHead>
-                    <TableHead>Out</TableHead>
-                    <TableHead className="text-right">Exit</TableHead>
-                    <TableHead>Exit Reason</TableHead>
-                    <TableHead className="text-right">Points</TableHead>
-                    <TableHead className="text-right">Cumulative</TableHead>
+                    <TableHead className="w-[105px]">Date</TableHead>
+                    <TableHead className="w-[150px]">Side / Engine</TableHead>
+                    <TableHead className="w-[65px]">In</TableHead>
+                    <TableHead className="w-[85px] text-right">Entry</TableHead>
+                    <TableHead className="w-[65px]">Out</TableHead>
+                    <TableHead className="w-[85px] text-right">Exit</TableHead>
+                    <TableHead className="w-auto">Exit Reason</TableHead>
+                    <TableHead className="w-[95px] text-right">Points</TableHead>
+                    <TableHead className="w-[105px] text-right">Cumulative</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -671,33 +671,33 @@ export function BacktestPage() {
                       onClick={() => setPicked(t.date)}
                       title="Click to view 1-minute chart"
                     >
-                      <TableCell className="tabular-nums font-mono text-xs">{t.date}</TableCell>
-                      <TableCell>
-                        <div className="flex flex-col gap-0.5">
+                      <TableCell className="tabular-nums font-mono text-xs w-[105px]">{t.date}</TableCell>
+                      <TableCell className="w-[150px]">
+                        <div className="flex flex-col gap-0.5 max-w-[140px]">
                           <SideBadge side={t.side} />
                           {Boolean((t as any).strategy_label || (t as any).engine) && (
-                            <span className="text-[10px] text-foreground font-semibold tracking-tight">
+                            <span className="text-[10px] text-foreground font-semibold tracking-tight truncate">
                               {(t as any).strategy_label || (t as any).engine}
                             </span>
                           )}
                           {Boolean((t as any).trigger_reason || (t as any).trigger_label) && (
-                            <span className="text-[9px] text-muted-foreground leading-tight truncate max-w-[140px]" title={(t as any).trigger_reason || (t as any).trigger_label}>
+                            <span className="text-[9px] text-muted-foreground leading-tight truncate" title={(t as any).trigger_reason || (t as any).trigger_label}>
                               {(t as any).trigger_reason || (t as any).trigger_label}
                             </span>
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="tabular-nums text-xs">{t.entry}</TableCell>
-                      <TableCell className="text-right tabular-nums text-xs font-mono">{fmtNum(t.entry_price)}</TableCell>
-                      <TableCell className="tabular-nums text-xs">{t.exit}</TableCell>
-                      <TableCell className="text-right tabular-nums text-xs font-mono">{fmtNum(t.exit_price)}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">
+                      <TableCell className="tabular-nums text-xs w-[65px]">{t.entry}</TableCell>
+                      <TableCell className="text-right tabular-nums text-xs font-mono w-[85px]">{fmtNum(t.entry_price)}</TableCell>
+                      <TableCell className="tabular-nums text-xs w-[65px]">{t.exit}</TableCell>
+                      <TableCell className="text-right tabular-nums text-xs font-mono w-[85px]">{fmtNum(t.exit_price)}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground truncate max-w-0" title={t.lots && t.lots > 1 ? `${t.setup || "VIX TRAP"} (${t.lots}L) · ${prettyReason(t.reason)}` : t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}>
                         {t.lots && t.lots > 1 ? `${t.setup || "VIX TRAP"} (${t.lots}L) · ${prettyReason(t.reason)}` : t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}
                       </TableCell>
-                      <TableCell className={cn("text-right font-semibold tabular-nums text-xs font-mono", pnlClass(t.pnl_points))}>
+                      <TableCell className={cn("text-right font-semibold tabular-nums text-xs font-mono w-[95px]", pnlClass(t.pnl_points))}>
                         {fmtPts(t.pnl_points)}
                       </TableCell>
-                      <TableCell className="text-right tabular-nums text-xs font-mono text-muted-foreground">{fmtNum(t.equity)}</TableCell>
+                      <TableCell className="text-right tabular-nums text-xs font-mono text-muted-foreground w-[105px]">{fmtNum(t.equity)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
