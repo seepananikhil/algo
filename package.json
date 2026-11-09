@@ -4,21 +4,14 @@
   "private": true,
   "description": "AlgoNeo Automated Options Trading & Backtesting Terminal",
   "scripts": {
-    "update": "bash update.sh",
-    "update:full": "bash update.sh",
-    "deploy:vm": "bash deploy_vm.sh",
-    "restart": "sudo systemctl restart algo.service 2>/dev/null || pm2 restart algoneo",
-    "status": "sudo systemctl status algo.service 2>/dev/null || pm2 status",
-    "logs": "sudo journalctl -u algo.service -f -n 50 2>/dev/null || pm2 logs algoneo",
-    "stop": "pm2 stop algoneo",
+    "update": "git pull origin master && sudo systemctl restart algo.service",
+    "restart": "sudo systemctl restart algo.service",
+    "status": "sudo systemctl status algo.service",
+    "logs": "sudo journalctl -u algo.service -f -n 50",
+    "stop": "sudo systemctl stop algo.service",
     "build": "npm --prefix web run build",
     "setup": "python -m pip install -r requirements.txt && npm --prefix web install",
-    "setup:linux": "python3 -m pip install -r requirements.txt && npm --prefix web install",
     "server": "python app_server.py",
-    "server:linux": "python3 app_server.py",
-    "start": "python app_server.py",
-    "start:linux": "python3 app_server.py",
-    "pm2:start": "pm2 start ecosystem.config.cjs",
-    "deploy": "bash deploy.sh"
+    "start": "python app_server.py"
   }
 }
