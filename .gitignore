@@ -1,9 +1,42 @@
+# ==============================================================================
+# AlgoNeo Git Ignore Configuration
+# ==============================================================================
+
+# Private credentials and broker configurations
 neo_config.json
+fyers_config.json
+telegram_config.json
 *.token
 .kotak_neo/
+.env
+
+# Kill switches & flags
 STOP_TRADING
+
+# Logs & temp files
 *.log
+logs/
+app_server.log
+tmp/
+.tmp/
 __pycache__/
 *.pyc
-telegram_config.json
-.env
+
+# Virtual environments & node dependencies
+venv/
+.venv/
+node_modules/
+web/node_modules/
+
+# Live trading & ephemeral intraday captures
+captured_data/kotak/
+captured_data/fyers/
+captured_data/live/
+captured_data/risk_guardian_lock.json
+captured_data/technovusin_*/
+performance/live_*.json
+performance/live_*.csv
+
+# Build caches
+.parcel-cache/
+.eslintcache

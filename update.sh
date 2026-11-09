@@ -2,27 +2,28 @@
 set -e
 
 # ==============================================================================
-# AlgoNeo One-Command VM Updater
-# Usage on VM:
+# AlgoNeo Automated Daily Updater & Deployer
+# Usage:
 #   ./update.sh
 # ==============================================================================
 
 echo "=================================================================="
-echo "          🔄 Updating AlgoNeo to Latest Version"
+echo "          🔄 Auto-Syncing AlgoNeo to Latest Master"
 echo "=================================================================="
 
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$APP_DIR"
 
-# 1. Cleanly stash any local runtime changes (e.g. locally updated CSVs/caches)
-echo "[1/4] Stashing local runtime files..."
-git stash --include-untracked --quiet 2>/dev/null || git stash --quiet 2>/dev/null || true
+# 1. Fetch latest changes from GitHub
+echo "[1/4] Fetching latest commits from GitHub..."
+git fetch origin master
 
-# 2. Pull the latest commits from GitHub
-echo "[2/4] Pulling latest code from origin/master..."
-git pull origin master
+# 2. Hard sync to origin/master so local modifications never block updates
+# (Files in .gitignore like neo_config.json, tokens, and live data are 100% preserved)
+echo "[2/4] Resetting tracked files to origin/master..."
+git reset --hard origin/master
 
-# 3. Update dependencies if requirements or package files changed
+# 3. Update dependencies if changed
 if git diff --name-only HEAD@{1} HEAD 2>/dev/null | grep -E "(requirements.txt|package.json|web/package.json)" > /dev/null; then
     echo "📦 Detected dependency changes, installing..."
     if [ -d "venv" ]; then
@@ -43,13 +44,12 @@ if command -v systemctl &> /dev/null && systemctl is-active --quiet algo.service
     sudo systemctl restart algo.service
     echo "  ✅ Restarted systemd service: algo.service"
     sleep 2
-    sudo systemctl status algo.service --no-pager -n 7
+    sudo systemctl status algo.service --no-pager -n 5
 elif command -v pm2 &> /dev/null && pm2 list | grep -q "algoneo"; then
     pm2 restart algoneo
     echo "  ✅ Restarted PM2 daemon: algoneo"
 else
-    # Fallback restart via PID
-    echo "  Restarting app_server.py..."
+    echo "  Restarting app_server.py in background..."
     pkill -f "python.*app_server.py" 2>/dev/null || true
     sleep 1
     if [ -d "venv" ]; then
@@ -62,5 +62,5 @@ fi
 
 echo ""
 echo "=================================================================="
-echo "  🎉 Update Complete! Platform is live at: http://137.23.58.183:8090"
+echo "  🎉 Update Complete! Live at: http://137.23.58.183:8090"
 echo "=================================================================="
