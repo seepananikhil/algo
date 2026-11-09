@@ -53,5 +53,6 @@
   "sensex_runner_live_trading": false,
   "sensex_runner_lots": 1,
   "risk_guardian_enabled": true,
-  "risk_guardian_auto_close": true
+  "risk_guardian_auto_close": true,
+  "sizing_mode": "fixed"
 }

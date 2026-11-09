@@ -27,6 +27,7 @@ export type Status = {
   mode: "PAPER" | "LIVE"
   lots: number
   trend_runner_lots?: number
+  sizing_mode?: string
   daily_loss_limit: number | null
   kill_switch: boolean
   risk_guardian?: {
@@ -389,6 +390,7 @@ export type CapitalTrade = {
   rr: number
   lots: number
   trend_runner_lots?: number
+  sizing_mode?: string
   qty: number
   vix_chg: number
   initial_sl: number

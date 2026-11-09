@@ -195,6 +195,7 @@ HERO_ZERO_END = (15, 31)
 EDITABLE_SETTINGS = {
     "broker": (str, None, None),
     "lots": (int, 1, PAPER_LOTS),
+    "sizing_mode": (str, None, None),
     "daily_loss_limit": (int, 100, 100000),
     "strike_offset": (int, 0, 500),
     "option_target_pct": (int, 0, 200),
@@ -780,12 +781,13 @@ def trend_runner_forward_loop() -> None:
 
             from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
             if engine is None:
-                lots_cfg = int(cfg.get("trend_runner_lots", 3))
+                lots_cfg = int(cfg.get("trend_runner_lots", 1))
+                sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
                 engine = TrendRunnerPaperEngine(
                     sl_points=28.0,
                     sl_mode="fixed",
                     lots=lots_cfg,
-                    sizing_mode="fixed",
+                    sizing_mode=sizing_cfg,
                     reentry=True,
                     notify_telegram=True,
                 )
@@ -874,12 +876,13 @@ def sensex_runner_forward_loop() -> None:
             from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
             if engine is None:
                 lots_cfg = int(cfg.get("sensex_runner_lots", 1))
+                sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
                 engine = TrendRunnerPaperEngine(
                     symbol="SENSEX",
                     sl_points=120.0,
                     sl_mode="fixed",
                     lots=lots_cfg,
-                    sizing_mode="fixed",
+                    sizing_mode=sizing_cfg,
                     reentry=True,
                     notify_telegram=True,
                 )
@@ -1182,6 +1185,7 @@ def public_settings() -> dict:
     out = {k: cfg.get(k) for k in EDITABLE_SETTINGS}
     out["broker"] = cfg.get("broker", "KOTAK_NEO")
     out["lots"] = int(cfg.get("lots", PAPER_LOTS))
+    out["sizing_mode"] = str(cfg.get("sizing_mode", "fixed")).lower()
     out["daily_loss_limit"] = cfg.get("daily_loss_limit") if cfg.get("daily_loss_limit") is not None else 1000
     out["strike_offset"] = cfg.get("strike_offset") if cfg.get("strike_offset") is not None else 100
     out["option_target_pct"] = cfg.get("option_target_pct") if cfg.get("option_target_pct") is not None else 10

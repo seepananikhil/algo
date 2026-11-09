@@ -126,6 +126,7 @@ export function ConfigPage() {
     lots: 1,
     daily_loss_limit: 2500,
     minimum_live_funds: 10000,
+    sizing_mode: "fixed",
   })
   const [isLiveTrading, setIsLiveTrading] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
@@ -154,6 +155,7 @@ export function ConfigPage() {
           lots: sData.trend_runner_lots ?? sData.lots ?? 1,
           daily_loss_limit: sData.daily_loss_limit ?? 2500,
           minimum_live_funds: sData.minimum_live_funds ?? 10000,
+          sizing_mode: sData.sizing_mode || "fixed",
         })
         const live = Boolean(sData.trend_runner_live_trading || sData.midpoint_live_trading || sData.live_trading)
         setIsLiveTrading(live)
@@ -177,6 +179,7 @@ export function ConfigPage() {
           trend_runner_lots: Number(capitalSettings.lots),
           daily_loss_limit: Number(capitalSettings.daily_loss_limit),
           minimum_live_funds: Number(capitalSettings.minimum_live_funds),
+          sizing_mode: capitalSettings.sizing_mode,
         }),
       ])
       if (res.ok) {
@@ -553,6 +556,43 @@ export function ConfigPage() {
                   <p className="text-[11px] text-muted-foreground">
                     Orders reject if broker cash is below ₹{capitalSettings.minimum_live_funds.toLocaleString('en-IN')}
                   </p>
+                </div>
+              </div>
+
+              {/* High Conviction Sizing Mode Selector */}
+              <div className="rounded-lg border p-3.5 bg-muted/20 space-y-2">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-semibold text-foreground flex items-center gap-1.5">
+                      <Zap className="size-3.5 text-amber-400" />
+                      High-Conviction Sizing Strategy (1 vs 2 Lots)
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      {capitalSettings.sizing_mode === "dynamic"
+                        ? "Dynamic sizing active: Enters 1 lot by default, but automatically scales to 2 lots on A+ institutional confluence (India VIX surge ≥ +2.0% with candle body ≥ 80%)."
+                        : "Fixed sizing active: Strictly enters 1 lot on every trade regardless of conviction."}
+                    </p>
+                  </div>
+                  <div className="flex gap-1.5 shrink-0">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={capitalSettings.sizing_mode === "fixed" ? "default" : "outline"}
+                      className="h-8 text-xs font-medium"
+                      onClick={() => setCapitalSettings({ ...capitalSettings, sizing_mode: "fixed" })}
+                    >
+                      Fixed (1 Lot Always)
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant={capitalSettings.sizing_mode === "dynamic" ? "default" : "outline"}
+                      className="h-8 text-xs font-medium"
+                      onClick={() => setCapitalSettings({ ...capitalSettings, sizing_mode: "dynamic" })}
+                    >
+                      Dynamic (1 → 2 Lots)
+                    </Button>
+                  </div>
                 </div>
               </div>
             </CardContent>
