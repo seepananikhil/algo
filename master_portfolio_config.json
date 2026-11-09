@@ -4,8 +4,8 @@
   "max_trades_per_day": 2,
   "max_concurrent_positions": 1,
   "setups": {
-    "vix_master_morning": true,
-    "williams_afternoon": true
+    "trend_runner": true,
+    "vix_trap": true
   },
   "spot_ratchet_settings": {
     "initial_sl_pts": 28.0,
@@ -20,6 +20,29 @@
     "tier3_trigger_pts": 180.0,
     "tier3_lock_pts": 110.0,
     "tier4_trigger_pts": 230.0,
-    "tier4_lock_pts": 165.0
+    "tier4_lock_pts": 165.0,
+    "tier5_trigger_pts": 280.0,
+    "tier5_lock_pts": 220.0,
+    "tier6_trigger_pts": 340.0,
+    "tier6_lock_pts": 270.0
+  },
+  "sensex_spot_ratchet_settings": {
+    "initial_sl_pts": 100.0,
+    "tier0a_trigger_pts": 115.0,
+    "tier0a_lock_pts": -40.0,
+    "tier0b_breakeven_trigger_pts": 180.0,
+    "tier0b_breakeven_lock_pts": 15.0,
+    "tier1_trigger_pts": 240.0,
+    "tier1_lock_pts": 80.0,
+    "tier2_trigger_pts": 400.0,
+    "tier2_lock_pts": 200.0,
+    "tier3_trigger_pts": 600.0,
+    "tier3_lock_pts": 360.0,
+    "tier4_trigger_pts": 850.0,
+    "tier4_lock_pts": 550.0,
+    "tier5_trigger_pts": 1200.0,
+    "tier5_lock_pts": 850.0,
+    "tier6_trigger_pts": 1500.0,
+    "tier6_lock_pts": 1100.0
   }
 }

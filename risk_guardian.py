@@ -78,15 +78,29 @@ def get_guardian_config() -> dict:
 
 def is_risk_locked() -> tuple[bool, dict | None]:
     """Return (True, lock_data) if daily loss limit was breached today."""
+    today = today_str()
+    # Auto-clear any stale STOP_TRADING file from a previous session
+    if STOP_FILE.exists():
+        try:
+            mtime = datetime.fromtimestamp(STOP_FILE.stat().st_mtime, tz=IST)
+            if mtime.strftime("%Y-%m-%d") < today:
+                STOP_FILE.unlink(missing_ok=True)
+                logger.info(f"🛡️ Auto-cleared stale STOP_TRADING file from {mtime.strftime('%Y-%m-%d')} for new trading day {today}")
+        except Exception:
+            pass
+
     if not RISK_LOCK_FILE.exists():
         return False, None
     try:
         data = json.loads(RISK_LOCK_FILE.read_text(encoding="utf-8"))
-        if str(data.get("date")) == today_str():
+        if str(data.get("date")) == today:
             return True, data
         else:
             # Stale lock from previous day, auto-clear
             RISK_LOCK_FILE.unlink(missing_ok=True)
+            if STOP_FILE.exists():
+                STOP_FILE.unlink(missing_ok=True)
+            logger.info(f"🛡️ Auto-cleared stale RISK_LOCK from {data.get('date')} for new trading day {today}")
             return False, None
     except Exception:
         return False, None

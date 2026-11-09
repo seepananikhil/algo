@@ -96,10 +96,10 @@ jobs:
 
       - name: Inspect Changed Data Files
         run: |
-          git status --short historical_data/ options_data/ performance/ captured_data/
+          git status --short historical_data/ options_data/ performance/
 
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
           commit_message: "chore(data): automated daily update of spot & options OHLC data and master backtests"
-          file_pattern: "historical_data/** options_data/** paper/** performance/** captured_data/**"
+          file_pattern: "historical_data/** options_data/** paper/** performance/**"

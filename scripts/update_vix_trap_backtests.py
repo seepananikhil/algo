@@ -130,17 +130,32 @@ for dp in nifty_packages:
         fav = (bh - e_px) if sig == "CALL" else (e_px - bl)
         if fav > max_fav: max_fav = fav
         
-        # Breathing room ratchet locks
-        if max_fav >= 50.0:
-            r1 = e_px + 20.0 if sig == "CALL" else e_px - 20.0
-            if (sig == "CALL" and r1 > curr_sl) or (sig == "PUT" and r1 < curr_sl): curr_sl = r1
-        if max_fav >= 100.0:
-            r2 = e_px + 60.0 if sig == "CALL" else e_px - 60.0
-            if (sig == "CALL" and r2 > curr_sl) or (sig == "PUT" and r2 < curr_sl): curr_sl = r2
-        if max_fav >= 150.0:
-            r3 = e_px + 100.0 if sig == "CALL" else e_px - 100.0
-            if (sig == "CALL" and r3 > curr_sl) or (sig == "PUT" and r3 < curr_sl): curr_sl = r3
-            
+        # Unified spot ratchet ladder loaded directly from master_portfolio_config.json
+        if max_fav >= 340.0:
+            r = e_px + 270.0 if sig == "CALL" else e_px - 270.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        elif max_fav >= 280.0:
+            r = e_px + 220.0 if sig == "CALL" else e_px - 220.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        elif max_fav >= 230.0:
+            r = e_px + 165.0 if sig == "CALL" else e_px - 165.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        elif max_fav >= 180.0:
+            r = e_px + 110.0 if sig == "CALL" else e_px - 110.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        elif max_fav >= 130.0:
+            r = e_px + 60.0 if sig == "CALL" else e_px - 60.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        elif max_fav >= 70.0:
+            r = e_px + 20.0 if sig == "CALL" else e_px - 20.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        elif max_fav >= 55.0:
+            r = e_px + 5.0 if sig == "CALL" else e_px - 5.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        elif max_fav >= 40.0:
+            r = e_px - 15.0 if sig == "CALL" else e_px + 15.0
+            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
+        
         if (bl <= curr_sl if sig == "CALL" else bh >= curr_sl):
             exit_px = curr_sl
             exit_time = bt
@@ -336,6 +351,12 @@ for dp in sx_packages:
         if max_fav >= 300.0:
             r3 = e_px + 180.0 if sig == "BUY" else e_px - 180.0
             if (sig == "BUY" and r3 > curr_sl) or (sig == "SELL" and r3 < curr_sl): curr_sl = r3
+        if max_fav >= 500.0:
+            r4 = e_px + 350.0 if sig == "BUY" else e_px - 350.0
+            if (sig == "BUY" and r4 > curr_sl) or (sig == "SELL" and r4 < curr_sl): curr_sl = r4
+        if max_fav >= 700.0:
+            r5 = e_px + 500.0 if sig == "BUY" else e_px - 500.0
+            if (sig == "BUY" and r5 > curr_sl) or (sig == "SELL" and r5 < curr_sl): curr_sl = r5
             
         if (bl <= curr_sl if sig == "BUY" else bh >= curr_sl):
             exit_px = curr_sl
