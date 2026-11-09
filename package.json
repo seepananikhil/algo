@@ -11,6 +11,8 @@
     "server:linux": "python3 app_server.py",
     "start": "npm --prefix web run build && python app_server.py",
     "start:linux": "npm --prefix web run build && python3 app_server.py",
+    "update": "bash update.sh",
+    "deploy:vm": "bash deploy_vm.sh",
     "pm2:start": "npm --prefix web run build && pm2 start ecosystem.config.cjs",
     "pm2:restart": "pm2 restart algoneo",
     "pm2:stop": "pm2 stop algoneo",
