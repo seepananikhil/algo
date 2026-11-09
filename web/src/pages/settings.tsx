@@ -1,14 +1,12 @@
 import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { toast } from "sonner"
-import { AlertTriangle, Banknote, Save, Sliders, ArrowRight, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Banknote, Save, Sliders, ArrowRight } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import { Badge } from "@/components/ui/badge"
 import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
@@ -33,8 +31,6 @@ export function SettingsPage() {
   })
   const [kotakTotp, setKotakTotp] = useState("")
   const [kotakLoggingIn, setKotakLoggingIn] = useState(false)
-  const [confirmOpen, setConfirmOpen] = useState(false)
-  const [typed, setTyped] = useState("")
   const [restart, setRestart] = useState(false)
   const [funds, setFunds] = useState<FundsStatus | null>(null)
   const [fundsLoading, setFundsLoading] = useState(false)
@@ -96,22 +92,6 @@ export function SettingsPage() {
     }
   }
 
-  function toggleLiveMode(enabled: boolean) {
-    if (enabled) {
-      setConfirmOpen(true)
-    } else {
-      save({ trend_runner_live_trading: false, midpoint_live_trading: false }, "Switched to PAPER trading")
-    }
-  }
-
-  async function confirmLive() {
-    if (typed !== "LIVE") return
-    if (await save({ trend_runner_live_trading: true, midpoint_live_trading: true, confirm: typed }, "LIVE trading enabled!")) {
-      setConfirmOpen(false)
-      setTyped("")
-    }
-  }
-
   async function checkFunds() {
     setFundsLoading(true)
     try {
@@ -125,16 +105,15 @@ export function SettingsPage() {
 
   if (!data) return null
   const activeBroker = "KOTAK_NEO"
-  const isLiveTrading = Boolean(data.trend_runner_live_trading || data.midpoint_live_trading || data.live_trading)
 
   return (
     <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4 md:p-8 pt-6">
       {/* Top Title Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">System Settings</h1>
+          <h1 className="text-2xl font-bold tracking-tight">Broker &amp; Account Setup</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            Broker connectivity, capital limits, risk parameters, and live trading safeguards.
+            Kotak Neo API credentials, authentication, session tokens, and broker margin balance.
           </p>
         </div>
         <Link to="/config">
@@ -295,39 +274,7 @@ export function SettingsPage() {
         </Card>
       )}
 
-      {/* Trading Mode & Live Switch Card */}
-      <Card className={isLiveTrading ? "border-red-600/70 bg-red-950/10" : undefined}>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-lg">Execution Mode</CardTitle>
-              <CardDescription>
-                Toggle between simulated Paper trading and Real Live order placement.
-              </CardDescription>
-            </div>
-            <Badge variant={isLiveTrading ? "destructive" : "secondary"}>
-              {isLiveTrading ? "🔥 LIVE TRADING" : "🛡️ PAPER SIMULATION"}
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center justify-between gap-4 rounded-lg border p-4 bg-card">
-            <div className="space-y-0.5">
-              <div className={isLiveTrading ? "font-bold text-red-500 text-base" : "font-semibold text-foreground text-base"}>
-                Apex Duo · {isLiveTrading ? "LIVE (Real Money)" : "PAPER (Simulated)"}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Routes automated signals directly to your active Kotak Neo broker account.
-              </p>
-            </div>
-            <Switch
-              checked={isLiveTrading}
-              onCheckedChange={toggleLiveMode}
-              aria-label="Apex Duo live trading switch"
-            />
-          </div>
-        </CardContent>
-      </Card>
+      
 
       {/* Strategy, Lot Sizing & Capital Guardian Link Card */}
       <Card className="border-sky-500/30 bg-sky-500/5">
@@ -350,33 +297,7 @@ export function SettingsPage() {
       </Card>
 
       {/* Confirmation Dialog for LIVE Trading */}
-      <Dialog open={confirmOpen} onOpenChange={(open) => { setConfirmOpen(open); if (!open) setTyped("") }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle className="text-red-500 flex items-center gap-2">
-              <ShieldAlert className="size-5" />
-              Enable LIVE Trading with Real Capital?
-            </DialogTitle>
-            <DialogDescription>
-              This will route all incoming automated strategy signals directly to your active Kotak Neo account with real capital.
-              Type <strong>LIVE</strong> below to confirm.
-            </DialogDescription>
-          </DialogHeader>
-          <Input
-            autoFocus
-            value={typed}
-            onChange={(e) => setTyped(e.target.value)}
-            placeholder="Type LIVE to confirm"
-            className="font-mono tracking-wider text-center font-bold"
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
-            <Button variant="destructive" disabled={typed !== "LIVE"} onClick={confirmLive}>
-              Enable LIVE Trading
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      
     </div>
   )
 }

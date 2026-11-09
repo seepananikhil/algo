@@ -129,7 +129,9 @@ export default function App() {
                       <Route path="backtest" element={<BacktestPage />} />
                       <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
                       <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
+                      <Route path="broker" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
                       <Route path="config" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
+                      <Route path="strategy" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
                       <Route path="strategy-info" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>

@@ -13,8 +13,8 @@ const nav = [
   { to: "/day", label: "Day viewer", icon: CalendarDays },
   { to: "/paper", label: "Paper P&L", icon: Wallet },
   { to: "/backtest", label: "Backtest", icon: LineChart },
-  { to: "/config", label: "Config", icon: Sliders },
-  { to: "/settings", label: "Settings", icon: SettingsIcon },
+  { to: "/config", label: "Strategy", icon: Sliders },
+  { to: "/settings", label: "Broker", icon: SettingsIcon },
 ]
 
 function Dot({ ok }: { ok: boolean }) {

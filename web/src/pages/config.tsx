@@ -20,6 +20,8 @@ import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { cn } from "@/lib/utils"
 import { getJSON, postJSON, type Settings } from "@/lib/api"
 import { StrategyInfoPage } from "./strategy-info"
 
@@ -125,6 +127,9 @@ export function ConfigPage() {
     daily_loss_limit: 2500,
     minimum_live_funds: 10000,
   })
+  const [isLiveTrading, setIsLiveTrading] = useState(false)
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [typed, setTyped] = useState("")
 
   useEffect(() => {
     fetchConfig()
@@ -150,6 +155,8 @@ export function ConfigPage() {
           daily_loss_limit: sData.daily_loss_limit ?? 2500,
           minimum_live_funds: sData.minimum_live_funds ?? 10000,
         })
+        const live = Boolean(sData.trend_runner_live_trading || sData.midpoint_live_trading || sData.live_trading)
+        setIsLiveTrading(live)
       } catch {}
     } catch {
       toast.error("Failed to load portfolio configuration. Using defaults.")
@@ -189,6 +196,36 @@ export function ConfigPage() {
       toast.error(e instanceof Error ? e.message : "Error saving configuration")
     } finally {
       setSaving(false)
+    }
+  }
+
+  function toggleLiveMode(enabled: boolean) {
+    if (enabled) {
+      setConfirmOpen(true)
+    } else {
+      postJSON("/api/settings", { trend_runner_live_trading: false, midpoint_live_trading: false })
+        .then(() => {
+          setIsLiveTrading(false)
+          toast.success("Switched to PAPER simulation mode")
+        })
+        .catch((err) => toast.error(String(err)))
+    }
+  }
+
+  async function confirmLive() {
+    if (typed !== "LIVE") return
+    try {
+      await postJSON("/api/settings", {
+        trend_runner_live_trading: true,
+        midpoint_live_trading: true,
+        confirm: typed,
+      })
+      setIsLiveTrading(true)
+      setConfirmOpen(false)
+      setTyped("")
+      toast.success("🔥 LIVE TRADING ENABLED - Real orders active on Kotak Neo")
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err))
     }
   }
 
@@ -283,6 +320,45 @@ export function ConfigPage() {
         </TabsList>
 
         <TabsContent value="portfolio" className="space-y-6">
+          {/* Section 0: Execution Mode (Paper vs Live Switch) */}
+          <Card className={isLiveTrading ? "border-red-600/70 bg-red-950/10 shadow-lg" : undefined}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base flex items-center gap-2">
+                    <Zap className={cn("size-4", isLiveTrading ? "text-red-500" : "text-sky-400")} />
+                    Strategy Execution Mode
+                  </CardTitle>
+                  <CardDescription>
+                    Toggle between risk-free Paper Simulation and Real Money Execution on Kotak Neo.
+                  </CardDescription>
+                </div>
+                <Badge variant={isLiveTrading ? "destructive" : "secondary"} className="font-mono text-xs">
+                  {isLiveTrading ? "🔥 LIVE TRADING" : "🛡️ PAPER SIMULATION"}
+                </Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between gap-4 rounded-lg border p-4 bg-card/60">
+                <div className="space-y-0.5">
+                  <div className={isLiveTrading ? "font-bold text-red-500 text-base" : "font-semibold text-foreground text-base"}>
+                    Apex Duo · {isLiveTrading ? "LIVE (Real Money Orders Active)" : "PAPER (Simulated Forward Testing)"}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {isLiveTrading
+                      ? "Routes automated trade signals directly to your active Kotak Neo account."
+                      : "Simulates orders with zero financial risk. Perfect for forward verification."}
+                  </p>
+                </div>
+                <Switch
+                  checked={isLiveTrading}
+                  onCheckedChange={toggleLiveMode}
+                  aria-label="Apex Duo live trading switch"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
           {/* Section 1: Portfolio Orchestration Controls */}
           <Card>
             <CardHeader className="pb-3">
@@ -928,6 +1004,27 @@ export function ConfigPage() {
           <StrategyInfoPage />
         </TabsContent>
       </Tabs>
+      {/* Safety Confirmation Dialog for Live Trading */}
+      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Enable LIVE Trading?</DialogTitle>
+            <DialogDescription>
+              Orders will execute with REAL CAPITAL on Kotak Neo. Ensure API credentials and margin are active.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-live">Type "LIVE" to confirm:</Label>
+            <Input id="confirm-live" value={typed} onChange={(e) => setTyped(e.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConfirmOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={confirmLive} disabled={typed !== "LIVE"}>
+              Enable LIVE Trading
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
