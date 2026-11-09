@@ -9,18 +9,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import {  } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
 
 type Form = {
-  lots: string
   daily_loss_limit: string
-  strike_offset: string
-  option_target_pct: string
   minimum_live_funds: string
-  trend_runner_lots: string
 }
 
 type KotakForm = {
@@ -53,12 +48,8 @@ export function SettingsPage() {
   useEffect(() => {
     if (data && !form) {
       setForm({
-        lots: String(data.trend_runner_lots ?? data.lots ?? 1),
         daily_loss_limit: String(data.daily_loss_limit ?? 5000),
-        strike_offset: String(data.strike_offset ?? 100),
-        option_target_pct: String(data.option_target_pct ?? 0),
         minimum_live_funds: String(data.minimum_live_funds ?? 25000),
-        trend_runner_lots: String(data.trend_runner_lots ?? data.lots ?? 1),
       })
       setKotakForm({
         consumer_key: "",
@@ -88,7 +79,6 @@ export function SettingsPage() {
     save({
       daily_loss_limit: Number(form.daily_loss_limit),
       minimum_live_funds: Number(form.minimum_live_funds),
-      option_target_pct: Number(form.option_target_pct),
     }, "Risk & capital safeguards saved")
   }
 
@@ -402,19 +392,7 @@ export function SettingsPage() {
               <p className="text-[11px] text-muted-foreground">Current threshold: ₹{minimumFunds}. Orders reject if balance falls below.</p>
             </div>
 
-            <div className="grid gap-1.5">
-              <Label htmlFor="otp">Option Profit Target (% of Premium, 0 = off)</Label>
-              <Input
-                id="otp"
-                type="number"
-                min={0}
-                max={200}
-                step={5}
-                value={form.option_target_pct}
-                onChange={(e) => setForm({ ...form, option_target_pct: e.target.value })}
-              />
-              <p className="text-[11px] text-muted-foreground">Keep 0 to rely on the dynamic spot points ratchet ladder</p>
-            </div>
+
           </div>
 
           {/* Quick Link to Modular Strategy Setup */}
