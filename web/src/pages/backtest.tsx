@@ -281,14 +281,14 @@ const tooltip = {
 
 
 
-type MainStrategy = "master_portfolio" | "vix_master" | "gap_williams" | "trend_runner" | "vix_trap"
+type MainStrategy = "master_portfolio" | "trend_runner" | "vix_trap"
 type SubSymbol = "all" | "nifty" | "sensex"
 
 export function BacktestPage() {
   const [mainStrategy, setMainStrategy] = useState<MainStrategy>(() => {
-    const saved = localStorage.getItem("backtest_main_strategy") as MainStrategy
-    if (saved === "trend_runner" || saved === "vix_trap") return saved
-    return "vix_master"
+    const saved = localStorage.getItem("backtest_main_strategy")
+    if (saved === "trend_runner" || saved === "vix_trap" || saved === "master_portfolio") return saved
+    return "master_portfolio"
   })
 
   const [subSymbol, setSubSymbol] = useState<SubSymbol>(() => {
@@ -302,14 +302,8 @@ export function BacktestPage() {
       if (subSymbol === "sensex") return "/api/backtest?strategy=master_portfolio_sensex"
       if (subSymbol === "nifty") return "/api/backtest?strategy=master_portfolio_nifty"
       return "/api/backtest?strategy=master_portfolio_all"
-    } else if (mainStrategy === "gap_williams") {
-      if (subSymbol === "sensex") return "/api/backtest?strategy=gap_and_go_sensex"
-      if (subSymbol === "nifty") return "/api/backtest?strategy=gap_and_go_nifty"
-      return "/api/backtest?strategy=gap_and_go_all"
-    } else if (mainStrategy === "vix_master") {
-      if (subSymbol === "nifty") return "/api/backtest?strategy=vix_master_nifty"
-      if (subSymbol === "sensex") return "/api/backtest?strategy=vix_master_sensex"
-      return "/api/backtest?strategy=vix_master_all"
+
+
     } else if (mainStrategy === "trend_runner") {
       if (subSymbol === "nifty") return "/api/backtest?strategy=trend_runner"
       if (subSymbol === "sensex") return "/api/backtest?strategy=sensex_runner"
@@ -326,14 +320,8 @@ export function BacktestPage() {
       if (subSymbol === "sensex") return "master_portfolio_sensex"
       if (subSymbol === "all") return "master_portfolio_all"
       return "master_portfolio_nifty"
-    } else if (mainStrategy === "gap_williams") {
-      if (subSymbol === "sensex") return "gap_and_go_sensex"
-      if (subSymbol === "all") return "gap_and_go_all"
-      return "gap_and_go_nifty"
-    } else if (mainStrategy === "vix_master") {
-      if (subSymbol === "sensex") return "vix_master_sensex"
-      if (subSymbol === "all") return "vix_master_all"
-      return "vix_master_nifty"
+
+
     } else if (mainStrategy === "trend_runner") {
       if (subSymbol === "sensex") return "sensex_runner"
       if (subSymbol === "all") return "trend_runner_all"
@@ -525,33 +513,7 @@ export function BacktestPage() {
           )}
         >
           <span>👑</span>
-          <span>Master Suite (VIX + Williams)</span>
-        </button>
-
-        <button
-          onClick={() => { setPicked(null); setMainStrategy("vix_master"); localStorage.setItem("backtest_main_strategy", "vix_master") }}
-          className={cn(
-            "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-            mainStrategy === "vix_master"
-              ? "bg-emerald-600 text-white shadow-sm"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
-          )}
-        >
-          <span>⚡</span>
-          <span>VIX Master</span>
-        </button>
-
-        <button
-          onClick={() => { setPicked(null); setMainStrategy("gap_williams"); localStorage.setItem("backtest_main_strategy", "gap_williams") }}
-          className={cn(
-            "px-4 py-2 text-xs sm:text-sm font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
-            mainStrategy === "gap_williams"
-              ? "bg-amber-600 text-white shadow-sm"
-              : "text-muted-foreground hover:text-foreground hover:bg-muted"
-          )}
-        >
-          <span>🎯</span>
-          <span>Gap & Go Williams</span>
+          <span>Apex Duo (Trend + Trap)</span>
         </button>
 
         <button
@@ -563,7 +525,8 @@ export function BacktestPage() {
               : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
         >
-          <span>Trend Runner</span>
+          <span>⚡</span>
+          <span>Trend Runner (15m ORB)</span>
         </button>
 
         <button
@@ -575,7 +538,8 @@ export function BacktestPage() {
               : "text-muted-foreground hover:text-foreground hover:bg-muted"
           )}
         >
-          <span>VIX Trap</span>
+          <span>🪤</span>
+          <span>VIX Trap (Divergence)</span>
         </button>
       </div>
 
@@ -647,11 +611,11 @@ export function BacktestPage() {
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border/40">
         <div>
                     <h1 className="text-xl font-bold tracking-tight">
-            {mainStrategy === "vix_master"
-              ? `⚡ VIX Master Strategy · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`
+            {mainStrategy === "master_portfolio"
+              ? `👑 Apex Duo (Trend + Trap) · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`
               : mainStrategy === "trend_runner"
-              ? `Trend Runner Breakout · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`
-              : `VIX Trap Divergence · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`}
+              ? `⚡ Trend Runner (15m ORB) · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`
+              : `🪤 VIX Trap (Divergence) · ${subSymbol === "all" ? "Combined Portfolio (Nifty + Sensex)" : subSymbol === "nifty" ? "Nifty 50" : "Sensex"}`}
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5 min-h-[20px]">
             {data
@@ -1719,8 +1683,13 @@ export function BacktestPage() {
                     <div className="flex flex-col gap-0.5">
                       <SideBadge side={t.side} />
                       {Boolean((t as any).strategy_label || (t as any).engine) && (
-                        <span className="text-[10px] text-muted-foreground font-semibold tracking-tight">
+                        <span className="text-[10px] text-foreground font-semibold tracking-tight">
                           {(t as any).strategy_label || (t as any).engine}
+                        </span>
+                      )}
+                      {Boolean((t as any).trigger_reason || (t as any).trigger_label) && (
+                        <span className="text-[9px] text-muted-foreground leading-tight">
+                          {(t as any).trigger_reason || (t as any).trigger_label}
                         </span>
                       )}
                     </div>

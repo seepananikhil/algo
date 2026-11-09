@@ -2,6 +2,7 @@ import subprocess
 import sys
 import json
 import urllib.request
+import shutil
 from datetime import datetime
 from pathlib import Path
 import pandas as pd
@@ -99,8 +100,22 @@ def update_trading_days_cache():
     out_file.write_text(json.dumps(days))
     print(f"Updated trading days cache ({len(days)} days).")
 
+def rebuild_parquet_catalogs() -> bool:
+    """Rebuild DuckDB options parquet catalogs for Nifty and Sensex."""
+    script = ROOT / "scripts" / "rebuild_parquet_catalogs.py"
+    if not script.exists():
+        return True
+    print("Rebuilding DuckDB Options Parquet Catalogs...")
+    res = subprocess.run([sys.executable, str(script)], capture_output=True, text=True)
+    if res.returncode != 0:
+        print(f"Warning during parquet catalog build: {res.stderr}")
+        return False
+    print("DuckDB Options Parquet Catalogs rebuilt successfully.")
+    return True
+
 def run_backtest_pipeline() -> bool:
-    """Run Trend Runner (Nifty & Sensex) and Midpoint backtests to regenerate master trade performance logs."""
+    """Run all strategy backtest engines (Trend Runner, VIX Trap, Apex Duo, Midpoint)."""
+    # 1. Nifty Trend Runner
     print("Executing Nifty 10-year Trend Runner backtest engine...")
     cmd1 = [sys.executable, str(ROOT / "run_10y_backtest.py")]
     res1 = subprocess.run(cmd1, capture_output=True, text=True)
@@ -109,6 +124,13 @@ def run_backtest_pipeline() -> bool:
         return False
     print("Nifty Trend Runner 10-Year Backtest completed.")
 
+    # Mirror to vix_trend_runner_trades.csv for combined portfolio
+    nifty_10y = ROOT / "performance" / "nifty_10y_backtest_trades.csv"
+    vix_file = ROOT / "performance" / "vix_trend_runner_trades.csv"
+    if nifty_10y.exists():
+        shutil.copy2(nifty_10y, vix_file)
+
+    # 2. Sensex Trend Runner
     print("Executing Sensex Multi-Year Trend Runner backtest engine...")
     cmd_s = [sys.executable, str(ROOT / "run_sensex_multiyear_trend_backtest.py")]
     res_s = subprocess.run(cmd_s, capture_output=True, text=True)
@@ -117,6 +139,27 @@ def run_backtest_pipeline() -> bool:
         return False
     print("Sensex Trend Runner Multi-Year Backtest completed.")
 
+    # 3. VIX Trap (Divergence) for Nifty and Sensex
+    vix_trap_script = ROOT / "scripts" / "update_vix_trap_backtests.py"
+    if vix_trap_script.exists():
+        print("Executing VIX Trap (Divergence) multi-year backtest engine...")
+        res_trap = subprocess.run([sys.executable, str(vix_trap_script)], capture_output=True, text=True)
+        if res_trap.returncode != 0:
+            print("VIX Trap backtest failed:", res_trap.stderr)
+            return False
+        print("VIX Trap Backtests completed.")
+
+    # 4. Master Portfolio (Apex Duo)
+    master_script = ROOT / "scripts" / "run_master_portfolio_backtest.py"
+    if master_script.exists():
+        print("Executing Master Portfolio (Apex Duo) backtest engine...")
+        res_m = subprocess.run([sys.executable, str(master_script)], capture_output=True, text=True)
+        if res_m.returncode != 0:
+            print("Master Portfolio backtest completed with warnings:", res_m.stderr)
+        else:
+            print("Master Portfolio (Apex Duo) Backtest completed.")
+
+    # 5. Midpoint Strategy
     print("Executing 10-year Midpoint backtest engine...")
     cmd2 = [sys.executable, str(ROOT / "run_10y_midpoint_backtest.py")]
     res2 = subprocess.run(cmd2, capture_output=True, text=True)
@@ -124,6 +167,7 @@ def run_backtest_pipeline() -> bool:
         print("Midpoint backtest failed:", res2.stderr)
         return False
     print("Midpoint Strategy 10-Year Backtest completed.")
+
     return True
 
 def main():
@@ -133,9 +177,10 @@ def main():
     sync_technovusin_repo()
     update_vix_data()
     update_trading_days_cache()
+    rebuild_parquet_catalogs()
     success = run_backtest_pipeline()
     if success:
-        print("\nAll historical data and 10-year backtests are 100% up to date!")
+        print("\nAll historical data, options parquet catalogs, and 10-year backtests are 100% up to date!")
     else:
         print("\nUpdate completed with errors.")
 

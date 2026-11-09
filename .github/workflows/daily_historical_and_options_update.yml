@@ -81,21 +81,25 @@ jobs:
 
       - name: Rebuild DuckDB Options Parquet Catalogs
         run: |
-          (cd options_data/nifty && duckdb -c ".read scripts/build_parquet.sql") || echo "Nifty parquet catalog build completed with warnings"
-          (cd options_data/sensex && duckdb -c ".read scripts/build_parquet.sql") || echo "Sensex parquet catalog build completed with warnings"
+          python3 scripts/rebuild_parquet_catalogs.py || {
+            (cd options_data/nifty && duckdb -c ".read scripts/build_parquet.sql") || echo "Nifty parquet catalog build completed with warnings"
+            (cd options_data/sensex && duckdb -c ".read scripts/build_parquet.sql") || echo "Sensex parquet catalog build completed with warnings"
+          }
 
       - name: Update Master Backtests
         run: |
           python3 run_10y_backtest.py || echo "Nifty backtest completed with warnings"
           python3 run_sensex_multiyear_trend_backtest.py || echo "Sensex backtest completed with warnings"
+          python3 scripts/update_vix_trap_backtests.py || echo "VIX Trap backtest completed with warnings"
+          python3 scripts/run_master_portfolio_backtest.py || echo "Master portfolio backtest completed with warnings"
           python3 run_10y_midpoint_backtest.py || echo "Midpoint backtest completed with warnings"
 
       - name: Inspect Changed Data Files
         run: |
-          git status --short historical_data/ options_data/
+          git status --short historical_data/ options_data/ performance/ captured_data/
 
       - name: Commit and Push Updated Data
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "chore(data): automated daily update of spot & options OHLC data"
-          file_pattern: "historical_data/** options_data/** paper/** performance/**"
+          commit_message: "chore(data): automated daily update of spot & options OHLC data and master backtests"
+          file_pattern: "historical_data/** options_data/** paper/** performance/** captured_data/**"

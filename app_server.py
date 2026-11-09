@@ -89,6 +89,21 @@ OPTION_PAPER_EVENT_FILE = KEY_LEVEL_DIR / "key_level_option_paper_events.csv"
 HOST, PORT = os.environ.get("HOST", "0.0.0.0"), int(os.environ.get("PORT", "8090"))
 IST = timezone(timedelta(hours=5, minutes=30))
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+def is_kill_switch_active() -> bool:
+    """Return True if kill switch is active today. Auto-resets stale halts from previous days."""
+    if not STOP_FILE.exists():
+        return False
+    try:
+        mtime = datetime.fromtimestamp(STOP_FILE.stat().st_mtime, tz=IST)
+        today = datetime.now(IST).date()
+        if mtime.date() < today:
+            STOP_FILE.unlink(missing_ok=True)
+            print(f"[{datetime.now(IST):%Y-%m-%d %H:%M:%S}] Auto-cleared stale STOP_TRADING file from {mtime.date()} for new trading day {today}")
+            return False
+    except Exception:
+        pass
+    return True
 _token_cache = {"at": 0.0, "mtime": None, "value": None}
 _master_cache = {"mtime": None, "df": None}
 _option_master_cache = {"date": None, "df": None}
@@ -692,12 +707,56 @@ def scalper_forward_loop() -> None:
         time.sleep(3)
 
 
+import collections
+
+ENGINE_TELEMETRY_LOGS = collections.deque(maxlen=300)
+ENGINE_LIVE_STATE = {
+    "nifty": {
+        "status": "INITIALIZING",
+        "last_updated": "",
+        "bar_time": "",
+        "spot": 0.0,
+        "or_high": 0.0,
+        "or_low": 0.0,
+        "or_range": 0.0,
+        "in_position": False,
+        "active_position": None,
+        "trades_today": 0,
+        "vix_chg": 0.0,
+    },
+    "sensex": {
+        "status": "INITIALIZING",
+        "last_updated": "",
+        "bar_time": "",
+        "spot": 0.0,
+        "or_high": 0.0,
+        "or_low": 0.0,
+        "or_range": 0.0,
+        "in_position": False,
+        "active_position": None,
+        "trades_today": 0,
+        "vix_chg": 0.0,
+    }
+}
+
+def log_engine_telemetry(symbol: str, engine: str, level: str, message: str) -> None:
+    now_str = datetime.now(IST).strftime("%H:%M:%S")
+    entry = {
+        "time": now_str,
+        "symbol": symbol.upper(),
+        "engine": engine,
+        "level": level,
+        "message": message,
+    }
+    ENGINE_TELEMETRY_LOGS.append(entry)
+
 def trend_runner_forward_loop() -> None:
     """Continuously monitor today's live 1-min stream for Trend Catcher (VIX Runner) setups."""
     today_str = today()
     live_file = LIVE_DIR / f"nifty_1min_{today_str}.csv"
     engine = None
     last_processed_5m = ""
+    last_processed_1m = ""
 
     while True:
         try:
@@ -712,6 +771,7 @@ def trend_runner_forward_loop() -> None:
                 live_file = LIVE_DIR / f"nifty_1min_{today_str}.csv"
                 engine = None
                 last_processed_5m = ""
+                last_processed_1m = ""
 
             if not live_file.exists():
                 time.sleep(5)
@@ -731,23 +791,52 @@ def trend_runner_forward_loop() -> None:
                     lots=lots_cfg,
                     sizing_mode="fixed",
                     reentry=True,
+                    notify_telegram=True,
                 )
                 engine.current_day_str = today_str
+                log_engine_telemetry("NIFTY", "Apex Duo", "SYSTEM", "Nifty Forward Engine active and listening.")
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
                 time.sleep(5)
                 continue
 
+            latest_1m = df1.iloc[-1]
+            t1m = str(latest_1m.get("timestamp", ""))[-8:-3]
+            c1m = float(latest_1m.get("close", 0.0))
+            now_hms = datetime.now(IST).strftime("%H:%M:%S")
+
+            ENGINE_LIVE_STATE["nifty"].update({
+                "status": "IN_POSITION" if engine.active_position else ("ACTIVE_EVALUATING" if t1m >= "09:30" else "BUILDING_OR"),
+                "last_updated": now_hms,
+                "bar_time": t1m,
+                "spot": c1m,
+                "or_high": round(or_high, 2),
+                "or_low": round(or_low, 2),
+                "or_range": round(or_range, 2),
+                "in_position": engine.active_position is not None,
+                "active_position": engine.active_position,
+                "trades_today": engine.trades_today,
+            })
+
+            if t1m != last_processed_1m:
+                last_processed_1m = t1m
+                dist_h = or_high - c1m
+                dist_l = c1m - or_low
+                status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else ("Above OR High" if c1m > or_high else "Below OR Low")
+                log_engine_telemetry("NIFTY", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc}")
+
             latest_bar = df5.iloc[-1]
             curr_5m_time = str(latest_bar.get("time_str", ""))
 
             if curr_5m_time != last_processed_5m:
                 vix_chg = get_vix_change_pct(today_str)
+                ENGINE_LIVE_STATE["nifty"]["vix_chg"] = round(vix_chg, 2)
                 res = engine.evaluate_bar(latest_bar, or_high, or_low, or_range, vix_chg)
                 last_processed_5m = curr_5m_time
                 if res:
                     print(f"[{datetime.now(IST):%H:%M:%S}] [Trend Catcher LIVE PAPER] Position Event: {res}")
+                    log_engine_telemetry("NIFTY", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
         except Exception:
             pass
@@ -760,6 +849,7 @@ def sensex_runner_forward_loop() -> None:
     live_file = LIVE_DIR / f"sensex_1min_{today_str}.csv"
     engine = None
     last_processed_5m = ""
+    last_processed_1m = ""
 
     while True:
         try:
@@ -774,6 +864,7 @@ def sensex_runner_forward_loop() -> None:
                 live_file = LIVE_DIR / f"sensex_1min_{today_str}.csv"
                 engine = None
                 last_processed_5m = ""
+                last_processed_1m = ""
 
             if not live_file.exists():
                 time.sleep(5)
@@ -794,29 +885,56 @@ def sensex_runner_forward_loop() -> None:
                     lots=lots_cfg,
                     sizing_mode="fixed",
                     reentry=True,
+                    notify_telegram=True,
                 )
                 engine.current_day_str = today_str
+                log_engine_telemetry("SENSEX", "Apex Duo", "SYSTEM", "Sensex Forward Engine active and listening.")
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
                 time.sleep(5)
                 continue
 
+            latest_1m = df1.iloc[-1]
+            t1m = str(latest_1m.get("timestamp", ""))[-8:-3]
+            c1m = float(latest_1m.get("close", 0.0))
+            now_hms = datetime.now(IST).strftime("%H:%M:%S")
+
+            ENGINE_LIVE_STATE["sensex"].update({
+                "status": "IN_POSITION" if engine.active_position else ("ACTIVE_EVALUATING" if t1m >= "09:30" else "BUILDING_OR"),
+                "last_updated": now_hms,
+                "bar_time": t1m,
+                "spot": c1m,
+                "or_high": round(or_high, 2),
+                "or_low": round(or_low, 2),
+                "or_range": round(or_range, 2),
+                "in_position": engine.active_position is not None,
+                "active_position": engine.active_position,
+                "trades_today": engine.trades_today,
+            })
+
+            if t1m != last_processed_1m:
+                last_processed_1m = t1m
+                dist_h = or_high - c1m
+                dist_l = c1m - or_low
+                status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else ("Above OR High" if c1m > or_high else "Below OR Low")
+                log_engine_telemetry("SENSEX", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc}")
+
             latest_bar = df5.iloc[-1]
             curr_5m_time = str(latest_bar.get("time_str", ""))
 
             if curr_5m_time != last_processed_5m:
                 vix_chg = get_vix_change_pct(today_str)
+                ENGINE_LIVE_STATE["sensex"]["vix_chg"] = round(vix_chg, 2)
                 res = engine.evaluate_bar(latest_bar, or_high, or_low, or_range, vix_chg)
                 last_processed_5m = curr_5m_time
                 if res:
                     print(f"[{datetime.now(IST):%H:%M:%S}] [Sensex Trend Runner LIVE PAPER] Position Event: {res}")
+                    log_engine_telemetry("SENSEX", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
         except Exception:
             pass
         time.sleep(5)
-
-
 
 
 def history_mtime() -> tuple:
@@ -907,25 +1025,51 @@ def load_technovusin_day(date_str: str, symbol: str = "NIFTY") -> pd.DataFrame:
 
 def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
     sym = str(symbol or "NIFTY").strip().upper()
-    if sym == "SENSEX":
-        # 1. Live captured file
-        path = LIVE_DIR / f"sensex_1min_{date}.csv"
-        if path.exists():
-            try:
-                df = pd.read_csv(path)
-                if not df.empty and "timestamp" in df.columns:
-                    df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-                    df = df.dropna(subset=["timestamp"])
-                    return df
-            except Exception:
-                pass
+    is_sx = (sym == "SENSEX")
+    prefix = "SENSEX" if is_sx else "NIFTY50"
+    subdir = "sensex" if is_sx else "nifty50"
+    live_prefix = "sensex" if is_sx else "nifty"
 
-        # 2. Technovusin Sensex archive (2023 - 2026)
-        tech_df = load_technovusin_day(date, symbol="SENSEX")
-        if not tech_df.empty:
-            return tech_df
+    candidates = []
 
-        # 3. Fallback Yahoo 2m / 5m
+    # 1. Technovusin archive (10-Year 1-min dataset, complete 375 bars/day)
+    tech_df = load_technovusin_day(date, symbol=sym)
+    if not tech_df.empty:
+        candidates.append((len(tech_df), tech_df))
+
+    # 2. Historical data daily CSVs (automated daily sync)
+    year, month = date[:4], date[5:7]
+    hist_path = ROOT / "historical_data" / subdir / "1min" / year / month / f"{prefix}_1min_{date}.csv"
+    if hist_path.exists():
+        try:
+            hdf = pd.read_csv(hist_path)
+            ts_c = "Timestamp" if "Timestamp" in hdf.columns else "timestamp"
+            hdf["timestamp"] = pd.to_datetime(hdf[ts_c], errors="coerce")
+            hdf = hdf.dropna(subset=["timestamp"])
+            hdf.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}, inplace=True)
+            candidates.append((len(hdf), hdf))
+        except Exception:
+            pass
+
+    # 3. Live capture file (today's active trading or live forward tests)
+    path = LIVE_DIR / f"{live_prefix}_1min_{date}.csv"
+    if path.exists():
+        try:
+            ldf = pd.read_csv(path)
+            if not ldf.empty and "timestamp" in ldf.columns:
+                ldf["timestamp"] = pd.to_datetime(ldf["timestamp"], errors="coerce")
+                ldf = ldf.dropna(subset=["timestamp"])
+                candidates.append((len(ldf), ldf))
+        except Exception:
+            pass
+
+    # If any 1-minute candidates found, return the one with the MOST bars (prevents partial 91-bar files from masking full 375-bar days)
+    if candidates:
+        candidates.sort(key=lambda x: x[0], reverse=True)
+        return candidates[0][1]
+
+    # 4. Fallback Yahoo 2m / 5m for Sensex
+    if is_sx:
         for yf in ["sensex_yahoo_2m.csv", "sensex_yahoo_5m.csv"]:
             yp = ROOT / "captured_data" / yf
             if yp.exists():
@@ -938,44 +1082,24 @@ def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
                 except Exception:
                     pass
 
-        return pd.DataFrame()
+    # 5. Fallback legacy Fyers master archive / 5min for Nifty
+    if not is_sx:
+        m = master()
+        if not m.empty:
+            master_day = m[m["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+            if not master_day.empty:
+                return master_day
 
-    # 1. Check live capture file (today's active trading)
-    path = LIVE_DIR / f"nifty_1min_{date}.csv"
-    if path.exists():
-        try:
-            df = pd.read_csv(path)
-            if not df.empty and "timestamp" in df.columns:
-                df["timestamp"] = pd.to_datetime(df["timestamp"], errors="coerce")
-                df = df.dropna(subset=["timestamp"])
-                return df
-        except Exception:
-            pass
-
-    # 2. Check 10-Year Technovusin dataset (covers 2017 to 2026 seamlessly)
-    tech_df = load_technovusin_day(date)
-    if not tech_df.empty:
-        return tech_df
-
-    # 3. Check legacy Fyers master archive
-    m = master()
-    master_day = pd.DataFrame()
-    if not m.empty:
-        master_day = m[m["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
-        if not master_day.empty:
-            return master_day
-
-    # 4. Check 5min fallback
-    n5_path = ROOT / "captured_data" / "fyers" / "nifty_5min.csv"
-    if n5_path.exists():
-        try:
-            n5 = pd.read_csv(n5_path)
-            n5["timestamp"] = pd.to_datetime(n5["timestamp"])
-            day_n5 = n5[n5["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
-            if not day_n5.empty:
-                return day_n5
-        except Exception:
-            pass
+        n5_path = ROOT / "captured_data" / "fyers" / "nifty_5min.csv"
+        if n5_path.exists():
+            try:
+                n5 = pd.read_csv(n5_path)
+                n5["timestamp"] = pd.to_datetime(n5["timestamp"])
+                day_n5 = n5[n5["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+                if not day_n5.empty:
+                    return day_n5
+            except Exception:
+                pass
 
     return pd.DataFrame()
 
@@ -1341,7 +1465,7 @@ def manual_trading_snapshot() -> dict:
     return {
         "updated_at": now.isoformat(timespec="seconds"),
         "order_window_open": is_market_weekday(now) and datetime.strptime("09:15", "%H:%M").time() <= now.time() <= datetime.strptime("15:30", "%H:%M").time(),
-        "kill_switch": STOP_FILE.exists(),
+        "kill_switch": is_kill_switch_active(),
         "account_pnl": {
             "realized": _manual_number(overall.get("pl_realized")),
             "unrealized": _manual_number(overall.get("pl_unrealized")),
@@ -1581,7 +1705,7 @@ def submit_scalp_order(body: dict) -> dict:
             f"Risk Guardian Active: Max daily loss limit of Rs. {lim:,.0f} breached today (P&L: Rs. {pnl_val:+,.2f}). Trading locked and new positions will be auto-closed.",
             409,
         )
-    if STOP_FILE.exists():
+    if is_kill_switch_active():
         raise ManualTradeError("Emergency kill switch is active; new scalp orders are blocked.", 409)
 
     req_tp = body.get("tp") if body.get("tp") is not None else body.get("tgt_pts")
@@ -1677,7 +1801,7 @@ def submit_manual_order(body: dict) -> dict:
                 f"Risk Guardian Active: Max daily loss limit of Rs. {lim:,.0f} breached today (P&L: Rs. {pnl_val:+,.2f}). Trading locked and new positions will be auto-closed.",
                 409,
             )
-        if STOP_FILE.exists():
+        if is_kill_switch_active():
             raise ManualTradeError("Kill switch is on; new manual buys are blocked.", 409)
 
     from broker import get_active_broker
@@ -2232,7 +2356,7 @@ def status() -> dict:
         "mode": "LIVE" if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or cfg.get("hero_zero_live_trading") or cfg.get("key_levels_live_trading") or cfg.get("scalper_live_trading") or auto_live_started else "PAPER",
         "lots": int(cfg.get("lots", PAPER_LOTS)) if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or auto_live_started else PAPER_LOTS,
         "daily_loss_limit": cfg.get("daily_loss_limit", 2000),
-        "kill_switch": STOP_FILE.exists(),
+        "kill_switch": is_kill_switch_active(),
         "risk_guardian": (lambda: (__import__("risk_guardian").check_and_enforce_guardian()))(),
         "last_tick": last_tick,
         "sensex_last_tick": sensex_last_tick,
@@ -3315,6 +3439,8 @@ def master_portfolio_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> li
                 else:
                     label = "VIX Master"
             
+            trig_label = str(r.get("trigger_label") or f"[{label}] BUY {side}")
+            trig_reason = str(r.get("trigger_reason") or label)
             out.append({
                 "side": side,
                 "entry": str(r.get("entry_time", ""))[:5],
@@ -3330,7 +3456,8 @@ def master_portfolio_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> li
                 "stage": stage,
                 "engine": engine,
                 "strategy_label": label,
-                "trigger_label": f"[{label}] {side} Trigger"
+                "trigger_label": trig_label,
+                "trigger_reason": trig_reason
             })
     return out
 
@@ -3955,6 +4082,8 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
                 "lots": int(r.get("total_lots") or 1),
                 "engine": str(r.get("engine") or r.get("origin") or ""),
                 "strategy_label": str(r.get("strategy_label") or ""),
+                "trigger_label": str(r.get("trigger_label") or ""),
+                "trigger_reason": str(r.get("trigger_reason") or ""),
                 "stage": str(r.get("stage") or ""),
                 "equity": round(equity, 2),
                 "drawdown": round(equity - peak, 2),
@@ -4820,6 +4949,8 @@ def kotak_live_trades() -> list:
             for pos in pos_data.get("open_positions", []):
                 s = str(pos.get("symbol", "")).strip()
                 open_pos_map[s] = pos
+                open_pos_map[clean_option_symbol(s)] = pos
+                open_pos_map[s.replace(" ", "")] = pos
 
         # Reconstruct distinct round-trip trades using FIFO matching
         for sym, ords in by_symbol.items():
@@ -4882,9 +5013,11 @@ def kotak_live_trades() -> list:
             # Remaining unclosed buys are active open positions!
             for b in buys:
                 if b["qty"] > 0:
-                    pos_info = open_pos_map.get(sym, {})
-                    cur_ltp = float(pos_info.get("ltp") or b["price"])
-                    unrealized = round((cur_ltp - b["price"]) * b["qty"], 2)
+                    pos_info = open_pos_map.get(sym) or open_pos_map.get(readable_name) or open_pos_map.get(sym.replace(" ", "")) or {}
+                    cur_ltp = float(pos_info.get("ltp") or 0.0)
+                    if cur_ltp <= 0:
+                        cur_ltp = float(pos_info.get("buy_avg") or b["price"])
+                    unrealized = float(pos_info.get("unrealized_pnl") if pos_info.get("unrealized_pnl") is not None else round((cur_ltp - b["price"]) * b["qty"], 2))
                     pts = round(cur_ltp - b["price"], 2)
 
                     t_info = targets.get(sym) or targets.get(readable_name) or {}
@@ -5330,6 +5463,13 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(read_csv_rows(LIVE_DIR / "paper_trades.csv"))
             else:
                 self._json(trend_runner_live_paper_trades())
+        elif url.path in ("/api/strategy-telemetry", "/api/engine-logs"):
+            self._json({
+                "ok": True,
+                "now": datetime.now(IST).strftime("%H:%M:%S"),
+                "state": ENGINE_LIVE_STATE,
+                "logs": list(reversed(ENGINE_TELEMETRY_LOGS))
+            })
         elif url.path == "/api/log":
             n = min(int(q.get("lines", ["200"])[0]), 2000)
             self._json(today_log(LIVE_DIR / "capture.log", n))
@@ -5432,10 +5572,8 @@ class Handler(BaseHTTPRequestHandler):
                         "max_trades_per_day": 2,
                         "max_concurrent_positions": 1,
                         "setups": {
-                            "vix_master_morning": True,
-                            "vix_master_afternoon": True,
-                            "gap_and_go_morning": True,
-                            "williams_afternoon": True
+                            "trend_runner": True,
+                            "vix_trap": True
                         },
                         "spot_ratchet_settings": {
                             "initial_sl_pts": 28.0,
@@ -5505,6 +5643,12 @@ class Handler(BaseHTTPRequestHandler):
             target = (root / path.lstrip("/")).resolve()
             is_spa_fallback = False
             if root not in target.parents or not target.is_file():
+                if path.startswith("/assets/") or any(path.endswith(ext) for ext in (".js", ".css", ".map", ".woff", ".woff2", ".png", ".jpg", ".svg", ".ico")):
+                    self.send_response(404)
+                    self.send_header("Content-Type", "text/plain")
+                    self.end_headers()
+                    self.wfile.write(b"Asset not found")
+                    return
                 target = root / "index.html"
                 is_spa_fallback = True
             body = target.read_bytes()
@@ -5650,7 +5794,7 @@ class Handler(BaseHTTPRequestHandler):
                 if "setups" in body and isinstance(body["setups"], dict):
                     if "setups" not in curr:
                         curr["setups"] = {}
-                    for k in ("vix_master_morning", "vix_master_afternoon", "gap_and_go_morning", "williams_afternoon"):
+                    for k in ("trend_runner", "vix_trap", "williams_fractal", "vix_master_morning", "vix_master_afternoon", "gap_and_go_morning", "williams_afternoon"):
                         if k in body["setups"]:
                             curr["setups"][k] = bool(body["setups"][k])
                 if "spot_ratchet_settings" in body and isinstance(body["spot_ratchet_settings"], dict):
@@ -5659,6 +5803,14 @@ class Handler(BaseHTTPRequestHandler):
                     for k, val in body["spot_ratchet_settings"].items():
                         try:
                             curr["spot_ratchet_settings"][k] = float(val)
+                        except (ValueError, TypeError):
+                            pass
+                if "sensex_spot_ratchet_settings" in body and isinstance(body["sensex_spot_ratchet_settings"], dict):
+                    if "sensex_spot_ratchet_settings" not in curr:
+                        curr["sensex_spot_ratchet_settings"] = {}
+                    for k, val in body["sensex_spot_ratchet_settings"].items():
+                        try:
+                            curr["sensex_spot_ratchet_settings"][k] = float(val)
                         except (ValueError, TypeError):
                             pass
                 p.write_text(json.dumps(curr, indent=2) + "\n", encoding="utf-8")

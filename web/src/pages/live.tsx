@@ -13,6 +13,7 @@ import {
   ShieldCheck,
   ShieldAlert,
   Zap,
+  Activity,
   TrendingUp,
   Loader2,
   PanelRightClose,
@@ -20,6 +21,7 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   ChevronDown,
+  Check,
 } from "lucide-react"
 import { CandleChart } from "@/components/candle-chart"
 import { Button } from "@/components/ui/button"
@@ -64,17 +66,269 @@ function toRuleTrade(trade: OptionTrade): RuleTrade {
   }
 }
 
+
+// ----------------------------------------------------------------------
+// Dedicated Interactive Active Trade Card Component with Direct TP & TL
+// ----------------------------------------------------------------------
+function ActiveTradeCard({
+  trade,
+  onUpdateTpTl,
+  onSquareOff,
+}: {
+  trade: OptionTrade
+  onUpdateTpTl: (trade: OptionTrade, tp: number, tl: number) => Promise<void>
+  onSquareOff: (trade: OptionTrade) => void
+}) {
+  const sym = trade.option || trade.symbol
+  const isSensex = (trade.symbol || trade.option || "").toUpperCase().includes("SENSEX")
+  const [tpVal, setTpVal] = useState<number>(() => trade.tp_pts || 0)
+  const [tlVal, setTlVal] = useState<number>(() => trade.tl_pts || 0)
+  const [isBusy, setIsBusy] = useState(false)
+  const [justSaved, setJustSaved] = useState(false)
+
+  // Sync with live trades polling updates
+  useEffect(() => {
+    if (trade.tp_pts !== undefined) setTpVal(trade.tp_pts || 0)
+    if (trade.tl_pts !== undefined) setTlVal(trade.tl_pts || 0)
+  }, [trade.tp_pts, trade.tl_pts])
+
+  const pnl = trade.option_pnl_rs ?? trade.pnl_rs ?? (trade.futures_pnl_rs ?? 0)
+  const pts = trade.nifty_points ?? trade.pnl_points ?? 0
+  const isProfitable = pnl >= 0
+  const entryPx = Number(trade.buy_price || trade.spot_at_entry || trade.nifty_in || 0)
+  const curLtp = Number(trade.sell_price || (trade.buy_price ? trade.buy_price + pts : 0))
+
+  const targetPx = tpVal > 0 && entryPx > 0 ? (entryPx + tpVal).toFixed(1) : null
+  const stopPx = tlVal > 0 && entryPx > 0 ? Math.max(0.05, entryPx - tlVal).toFixed(1) : null
+
+  const handleSave = async (newTp = tpVal, newTl = tlVal) => {
+    setIsBusy(true)
+    try {
+      await onUpdateTpTl(trade, newTp, newTl)
+      setJustSaved(true)
+      setTimeout(() => setJustSaved(false), 2000)
+    } finally {
+      setIsBusy(false)
+    }
+  }
+
+  const tpPresets = isSensex ? [40, 80, 120, 200] : [10, 20, 30, 50]
+  const tlPresets = isSensex ? [20, 40, 60, 100] : [5, 10, 15, 25]
+
+  return (
+    <div className="p-3 rounded-lg border border-border bg-card shadow-2xs hover:border-border/80 transition-all space-y-2.5">
+      {/* Header: Option Symbol + Side Badge + Realtime PnL + Square Off */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-bold text-xs text-foreground truncate font-sans">
+            {sym}
+          </span>
+          <span
+            className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase shrink-0 ${
+              trade.side === "CALL" || trade.side === "BUY"
+                ? "bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-600/40"
+                : "bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-600/40"
+            }`}
+          >
+            {trade.side}
+          </span>
+          <span className="text-[10px] text-muted-foreground font-mono">
+            ({trade.qty || 1} qty)
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="text-right">
+            <div className={`text-xs font-bold font-mono ${isProfitable ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+              {isProfitable ? "+" : ""}{fmtRs(pnl)}
+            </div>
+            <div className="text-[9px] text-muted-foreground font-mono">
+              {pts >= 0 ? `+${pts}` : pts} pt
+            </div>
+          </div>
+
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-6 text-[10px] px-2 border-rose-400/50 text-rose-700 hover:bg-rose-50 hover:text-rose-800 dark:border-rose-500/40 dark:text-rose-400 font-semibold cursor-pointer"
+            onClick={() => onSquareOff(trade)}
+            title="Square Off Position Immediately"
+          >
+            Square Off
+          </Button>
+        </div>
+      </div>
+
+      {/* Entry & LTP Summary Row */}
+      <div className="flex items-center justify-between text-[11px] font-mono px-2 py-1 rounded bg-muted/40 border border-border/60">
+        <div>
+          <span className="text-muted-foreground text-[10px]">Entry: </span>
+          <span className="font-bold text-foreground">₹{entryPx.toFixed(1)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground text-[10px]">LTP: </span>
+          <span className="font-bold text-foreground">₹{curLtp > 0 ? curLtp.toFixed(1) : entryPx.toFixed(1)}</span>
+        </div>
+        <div>
+          <span className="text-muted-foreground text-[10px]">Time: </span>
+          <span className="text-muted-foreground">{trade.entry || "09:30"}</span>
+        </div>
+      </div>
+
+      {/* Interactive Bracket Inputs: TP & TL */}
+      <div className="space-y-1.5 pt-0.5">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+            <Zap className="w-3 h-3 text-amber-500" /> Bracket Targets
+          </span>
+          {justSaved && (
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-0.5 animate-fadeIn">
+              <Check className="w-3 h-3" /> Saved
+            </span>
+          )}
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          {/* Target Profit (TP) */}
+          <div className="p-1.5 rounded-md bg-emerald-500/5 border border-emerald-500/30 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
+                TP (Target)
+              </span>
+              {targetPx && (
+                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold" title={`Target Price: ₹${targetPx}`}>
+                  🎯 ₹{targetPx}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={500}
+                step={isSensex ? 10 : 5}
+                value={tpVal === 0 ? "" : tpVal}
+                placeholder="0 pt"
+                onChange={(e) => setTpVal(Math.max(0, parseFloat(e.target.value) || 0))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave()
+                }}
+                className="w-full px-1.5 py-0.5 rounded font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-background border border-border focus:outline-none focus:ring-1 focus:ring-emerald-500"
+              />
+              <span className="text-[10px] text-muted-foreground font-mono">pt</span>
+            </div>
+            {/* Quick chips */}
+            <div className="flex items-center gap-1 pt-0.5">
+              {tpPresets.map((pts) => (
+                <button
+                  key={pts}
+                  type="button"
+                  onClick={() => {
+                    setTpVal(pts)
+                    handleSave(pts, tlVal)
+                  }}
+                  className={`text-[9px] font-mono px-1 py-0.2 rounded border transition-colors cursor-pointer ${
+                    tpVal === pts
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : "bg-muted/60 text-muted-foreground border-border hover:bg-emerald-500/20 hover:text-emerald-600"
+                  }`}
+                >
+                  +{pts}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Target Loss / Stop Loss (TL) */}
+          <div className="p-1.5 rounded-md bg-rose-500/5 border border-rose-500/30 space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">
+                TL (Stop Loss)
+              </span>
+              {stopPx && (
+                <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400 font-bold" title={`Stop Price: ₹${stopPx}`}>
+                  🛑 ₹{stopPx}
+                </span>
+              )}
+            </div>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min={0}
+                max={500}
+                step={isSensex ? 10 : 5}
+                value={tlVal === 0 ? "" : tlVal}
+                placeholder="0 pt"
+                onChange={(e) => setTlVal(Math.max(0, parseFloat(e.target.value) || 0))}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") handleSave()
+                }}
+                className="w-full px-1.5 py-0.5 rounded font-mono font-bold text-xs text-rose-600 dark:text-rose-400 bg-background border border-border focus:outline-none focus:ring-1 focus:ring-rose-500"
+              />
+              <span className="text-[10px] text-muted-foreground font-mono">pt</span>
+            </div>
+            {/* Quick chips */}
+            <div className="flex items-center gap-1 pt-0.5">
+              {tlPresets.map((pts) => (
+                <button
+                  key={pts}
+                  type="button"
+                  onClick={() => {
+                    setTlVal(pts)
+                    handleSave(tpVal, pts)
+                  }}
+                  className={`text-[9px] font-mono px-1 py-0.2 rounded border transition-colors cursor-pointer ${
+                    tlVal === pts
+                      ? "bg-rose-600 text-white border-rose-600"
+                      : "bg-muted/60 text-muted-foreground border-border hover:bg-rose-500/20 hover:text-rose-600"
+                  }`}
+                >
+                  -{pts}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Update Button */}
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          disabled={isBusy}
+          onClick={() => handleSave()}
+          className="w-full h-6 text-[10px] font-bold border-border bg-muted/40 hover:bg-muted text-foreground flex items-center justify-center gap-1 cursor-pointer"
+        >
+          {isBusy ? (
+            <>
+              <Loader2 className="w-3 h-3 animate-spin" /> Saving Bracket...
+            </>
+          ) : justSaved ? (
+            <>
+              <Check className="w-3 h-3 text-emerald-500" /> Saved to Kotak & Sentinel
+            </>
+          ) : (
+            <>
+              Update TP / TL Bracket
+            </>
+          )}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
 export function LivePage() {
   const { status, reload: reloadStatus } = useStatus()
   const today = status?.now?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
 
   // Chart view: SENSEX, NIFTY, or DUAL split
   const [activeChart, setActiveChart] = useState<"SENSEX" | "NIFTY" | "DUAL">("SENSEX")
-  const [selectedTrade, setSelectedTrade] = useState<OptionTrade | null>(null)
+  const [, setSelectedTrade] = useState<OptionTrade | null>(null)
 
   // Side Panel state: open / collapsed, and active tab
   const [isSidePanelOpen, setIsSidePanelOpen] = useState(false)
-  const [sideTab, setSideTab] = useState<"ACTIVE" | "CLOSED" | "SUMMARY">("ACTIVE")
+  const [sideTab, setSideTab] = useState<"ACTIVE" | "CLOSED" | "ENGINES" | "SUMMARY">("ACTIVE")
 
   // Scalp Widget State
   const [showScalpBar, setShowScalpBar] = useState(true)
@@ -87,12 +341,14 @@ export function LivePage() {
   const [scalpBusy, setScalpBusy] = useState(false)
   // Default position: within chart canvas, cleanly ABOVE the bottom x-axis (time scale)
   const [scalpPos, setScalpPos] = useState<{ x: number; y: number }>(() => {
-    if (typeof window === "undefined") return { x: 820, y: 780 }
-    const x = Math.max(70, window.innerWidth - 85 - 350)
-    const y = Math.max(110, window.innerHeight - 56 - 42)
+    if (typeof window === "undefined") return { x: 500, y: 780 }
+    const widgetW = 270
+    const x = Math.max(70, Math.round((window.innerWidth - widgetW) / 2))
+    const y = Math.max(110, window.innerHeight - 56 - 44)
     return { x, y }
   })
   const [isDraggingScalp, setIsDraggingScalp] = useState(false)
+  const [hasDraggedMinScalp, setHasDraggedMinScalp] = useState(false)
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [isScalpMinimized, setIsScalpMinimized] = useState(true)
 
@@ -121,9 +377,16 @@ export function LivePage() {
   // Drag handlers for floating scalper
   const handleDragStart = (e: React.MouseEvent) => {
     setIsDraggingScalp(true)
+    setHasDraggedMinScalp(true)
+    const el = (e.currentTarget as HTMLElement).closest(".fixed") as HTMLElement
+    const rect = el ? el.getBoundingClientRect() : { left: scalpPos.x, top: scalpPos.y }
     setDragOffset({
-      x: e.clientX - scalpPos.x,
-      y: e.clientY - scalpPos.y,
+      x: e.clientX - rect.left,
+      y: e.clientY - rect.top,
+    })
+    setScalpPos({
+      x: rect.left,
+      y: rect.top,
     })
   }
 
@@ -131,8 +394,8 @@ export function LivePage() {
     (e: MouseEvent) => {
       if (!isDraggingScalp) return
       const sidePanelW = isSidePanelOpen ? (window.innerWidth >= 1024 ? 384 : 320) : 0
-      const widgetW = isScalpMinimized ? 440 : 315
-      const widgetH = isScalpMinimized ? 42 : 310
+      const widgetW = isScalpMinimized ? 270 : 315
+      const widgetH = isScalpMinimized ? 40 : 310
 
       const minX = 70
       const maxX = Math.max(minX, window.innerWidth - sidePanelW - 75 - widgetW)
@@ -151,7 +414,7 @@ export function LivePage() {
   useEffect(() => {
     setScalpPos((pos) => {
       const sidePanelW = isSidePanelOpen ? (window.innerWidth >= 1024 ? 384 : 320) : 0
-      const widgetW = isScalpMinimized ? 440 : 315
+      const widgetW = isScalpMinimized ? 270 : 315
       const rightLimit = window.innerWidth - sidePanelW - 75 - widgetW
       if (pos.x > rightLimit) {
         return { ...pos, x: Math.max(70, rightLimit) }
@@ -181,6 +444,14 @@ export function LivePage() {
   const [exitAllConfirmOpen, setExitAllConfirmOpen] = useState(false)
   const [exitAllBusy, setExitAllBusy] = useState(false)
 
+  // Strategy Engines Live Telemetry & Heartbeat
+  const strategyTelemetry = usePoll<{
+    ok: boolean
+    now: string
+    state: Record<string, any>
+    logs: Array<{ time: string; symbol: string; engine: string; level: string; message: string }>
+  }>("/api/strategy-telemetry", 2000)
+
   // Polling feeds: Day candle data
   const niftyDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=NIFTY&full=1` : null, 2500)
   const sensexDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=SENSEX&full=1` : null, 2500)
@@ -204,8 +475,13 @@ export function LivePage() {
   // Polling feeds: All strategy paper trades & live broker positions
   const liveTradesPoll = usePoll<OptionTrade[]>("/api/trades", 2500)
 
+  const lastKnownTradesRef = useRef<OptionTrade[]>([])
   const rawTrades = useMemo(() => {
-    return liveTradesPoll.data ?? []
+    if (liveTradesPoll.data && liveTradesPoll.data.length > 0) {
+      lastKnownTradesRef.current = liveTradesPoll.data
+      return liveTradesPoll.data
+    }
+    return liveTradesPoll.data ?? lastKnownTradesRef.current
   }, [liveTradesPoll.data])
 
   const counts = useMemo(() => {
@@ -290,11 +566,17 @@ export function LivePage() {
 
   const strikeChoices = useMemo(() => {
     const arr: number[] = []
-    for (let i = -3; i <= 3; i++) {
+    // Wide strike range: 25 strikes below to 25 strikes above ATM (51 strikes total!)
+    for (let i = -25; i <= 25; i++) {
       arr.push(currentAtmStrike + i * strikeStep)
     }
+    // If user typed a custom strike outside this range, include it dynamically
+    if (customStrike && !arr.includes(customStrike)) {
+      arr.push(customStrike)
+      arr.sort((a, b) => a - b)
+    }
     return arr
-  }, [currentAtmStrike, strikeStep])
+  }, [currentAtmStrike, strikeStep, customStrike])
 
   // Check if there is an active running position for the selected scalp spot
   const activeSpotTrade = useMemo(() => {
@@ -376,19 +658,26 @@ export function LivePage() {
   }
 
   // Update TP/TL on active position
-  const handleUpdateActiveTpTl = async (tradeToUpdate = activeSpotTrade) => {
+  const handleUpdateActiveTpTl = async (
+    tradeToUpdate = activeSpotTrade,
+    overrideTp?: number,
+    overrideTl?: number
+  ) => {
     if (!tradeToUpdate) return
     setScalpBusy(true)
     try {
       const sym = tradeToUpdate.raw_symbol || tradeToUpdate.option || tradeToUpdate.symbol
+      const tp = overrideTp !== undefined ? overrideTp : scalpTp
+      const tl = overrideTl !== undefined ? overrideTl : scalpTs
+      const isSensex = (sym || "").toUpperCase().includes("SENSEX")
       const res = await postJSON<{ ok: boolean; message?: string }>("/api/update-tp-tl", {
         symbol: sym,
-        tp_pts: scalpTp,
-        tl_pts: scalpTs,
-        entry_price: tradeToUpdate.buy_price || tradeToUpdate.nifty_in || 0,
-        qty: tradeToUpdate.qty || 65,
+        tp_pts: tp,
+        tl_pts: tl,
+        entry_price: tradeToUpdate.buy_price || tradeToUpdate.spot_at_entry || tradeToUpdate.nifty_in || 0,
+        qty: tradeToUpdate.qty || (isSensex ? 20 : 65),
       })
-      toast.success(res.message || `Updated TP/TL for ${sym}`)
+      toast.success(res.message || `Updated TP/TL for ${tradeToUpdate.option || sym} (TP: +${tp}pt | TL: -${tl}pt)`)
       liveTradesPoll.reload()
     } catch (err) {
       toast.error(`Update TP/TL failed: ${err instanceof Error ? err.message : String(err)}`)
@@ -396,6 +685,8 @@ export function LivePage() {
       setScalpBusy(false)
     }
   }
+
+
 
   // Square off single position handler (Dialog confirm)
   const handleSquareOffPosition = async () => {
@@ -504,6 +795,32 @@ export function LivePage() {
 
         {/* Center / Right: Scalper Toggle, Chart Switcher, Side Panel Toggle */}
         <div className="flex items-center space-x-2.5">
+          {/* Strategy Engines Side Panel Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isSidePanelOpen && sideTab === "ENGINES") {
+                setIsSidePanelOpen(false)
+              } else {
+                setIsSidePanelOpen(true)
+                setSideTab("ENGINES")
+              }
+            }}
+            className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-bold text-xs border shadow-xs cursor-pointer ${
+              isSidePanelOpen && sideTab === "ENGINES"
+                ? "bg-emerald-500/25 border-emerald-500 text-emerald-400 ring-1 ring-emerald-500/40"
+                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+            }`}
+            title="Toggle Engines Side Panel"
+          >
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+            </span>
+            <Activity className="w-3.5 h-3.5" />
+            <span>Engines</span>
+          </button>
+
           {/* Scalper Toggle Button */}
           <button
             onClick={() => setShowScalpBar(!showScalpBar)}
@@ -719,8 +1036,16 @@ export function LivePage() {
         isScalpMinimized ? (
           /* MINIMIZED FLOATING PILL */
           <div
-            style={{ left: `${scalpPos.x}px`, top: `${scalpPos.y}px` }}
-            className="fixed z-40 flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/95 dark:bg-card/95 border border-border shadow-xl backdrop-blur-md cursor-grab active:cursor-grabbing select-none transition-shadow hover:shadow-primary/10 ring-1 ring-border/50 animate-fadeIn text-xs"
+            style={
+              hasDraggedMinScalp
+                ? { left: `${scalpPos.x}px`, top: `${scalpPos.y}px` }
+                : {
+                    left: isSidePanelOpen ? "calc((100vw - 384px) / 2)" : "50%",
+                    transform: "translateX(-50%)",
+                    bottom: "38px",
+                  }
+            }
+            className="fixed z-40 flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/95 dark:bg-card/95 border border-border shadow-xl backdrop-blur-md cursor-grab active:cursor-grabbing select-none transition-all opacity-95 hover:opacity-100 hover:shadow-primary/10 ring-1 ring-border/50 animate-fadeIn text-xs"
             onMouseDown={handleDragStart}
           >
             <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
@@ -741,9 +1066,47 @@ export function LivePage() {
               <span className="text-muted-foreground font-mono font-normal">({scalpLots}L)</span>
             </button>
 
-            <span className="font-mono font-bold text-xs bg-muted px-1.5 py-0.5 rounded border border-border/60">
-              {activeStrike} {scalpOptionType}
-            </span>
+            {/* Minimized Strike Stepper & Dropdown */}
+            <div className="flex items-center gap-0.5 bg-muted/80 px-1 py-0.5 rounded border border-border/70 shadow-2xs">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCustomStrike(activeStrike - strikeStep)
+                }}
+                className="px-1 text-[11px] text-muted-foreground hover:text-foreground font-bold hover:bg-muted rounded cursor-pointer"
+                title={`Strike down (-${strikeStep} pt)`}
+              >
+                -
+              </button>
+              <select
+                value={activeStrike}
+                onChange={(e) => {
+                  e.stopPropagation()
+                  setCustomStrike(Number(e.target.value))
+                }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-transparent font-mono font-bold text-xs text-foreground focus:outline-none cursor-pointer text-center px-0.5"
+                title="Select Any Strike Price"
+              >
+                {strikeChoices.map((stk) => (
+                  <option key={stk} value={stk} className="bg-popover text-popover-foreground">
+                    {stk} {stk === currentAtmStrike ? "(ATM)" : stk > currentAtmStrike ? `(+${stk - currentAtmStrike})` : `(${stk - currentAtmStrike})`}
+                  </option>
+                ))}
+              </select>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setCustomStrike(activeStrike + strikeStep)
+                }}
+                className="px-1 text-[11px] text-muted-foreground hover:text-foreground font-bold hover:bg-muted rounded cursor-pointer"
+                title={`Strike up (+${strikeStep} pt)`}
+              >
+                +
+              </button>
+            </div>
 
             {activeSpotTrade && (
               <span className={`font-mono text-xs font-bold ${pnlClass(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}`}>
@@ -751,57 +1114,6 @@ export function LivePage() {
                 {fmtRs(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}
               </span>
             )}
-
-            {/* Inline TP & TL Inputs */}
-            <div className="flex items-center gap-1 border-l border-border pl-1.5 ml-0.5">
-              <span className="text-[10px] font-bold text-emerald-500" title="Target Profit in Points">TP</span>
-              <input
-                type="number"
-                min={0}
-                max={500}
-                step={scalpSpot === "SENSEX" ? 10 : 5}
-                value={scalpTp === 0 ? "" : scalpTp}
-                placeholder="0"
-                onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  e.stopPropagation()
-                  setScalpTp(Math.max(0, parseFloat(e.target.value) || 0))
-                }}
-                className="w-9 px-1 py-0.5 rounded text-center font-mono font-bold text-emerald-600 dark:text-emerald-400 bg-muted/70 border border-border/80 text-[11px] focus:outline-none focus:ring-1 focus:ring-emerald-500 placeholder:text-muted-foreground/40"
-                title="Target Profit (TP in pts)"
-              />
-              <span className="text-[10px] font-bold text-rose-500 ml-0.5" title="Target / Stop Loss in Points">TL</span>
-              <input
-                type="number"
-                min={0}
-                max={500}
-                step={scalpSpot === "SENSEX" ? 10 : 5}
-                value={scalpTs === 0 ? "" : scalpTs}
-                placeholder="0"
-                onClick={(e) => e.stopPropagation()}
-                onMouseDown={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  e.stopPropagation()
-                  setScalpTs(Math.max(0, parseFloat(e.target.value) || 0))
-                }}
-                className="w-9 px-1 py-0.5 rounded text-center font-mono font-bold text-rose-600 dark:text-rose-400 bg-muted/70 border border-border/80 text-[11px] focus:outline-none focus:ring-1 focus:ring-rose-500 placeholder:text-muted-foreground/40"
-                title="Target Loss / Stop Loss (TL in pts)"
-              />
-              {activeSpotTrade && (scalpTp > 0 || scalpTs > 0) && (
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleUpdateActiveTpTl(activeSpotTrade)
-                  }}
-                  className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-primary text-primary-foreground hover:bg-primary/90 transition-colors shadow-2xs ml-0.5"
-                  title="Apply TP/TL to Active Position"
-                >
-                  Set
-                </button>
-              )}
-            </div>
 
             <div className="flex items-center gap-1.5 border-l border-border pl-1.5 ml-0.5">
               <button
@@ -895,11 +1207,16 @@ export function LivePage() {
                 <button
                   type="button"
                   onClick={() => {
-                    setScalpPos((pos) => ({
-                      ...pos,
-                      y: Math.max(110, window.innerHeight - 56 - 42),
-                    }))
-                    setIsScalpMinimized(true)
+                    setScalpPos((_pos) => {
+                      const sideW = isSidePanelOpen ? (window.innerWidth >= 1024 ? 384 : 320) : 0
+                      const widgetW = 270
+                      const centerX = Math.max(70, Math.round((window.innerWidth - sideW - widgetW) / 2))
+                      return {
+                        x: centerX,
+                        y: Math.max(110, window.innerHeight - 56 - 44),
+                      }
+                    })
+                    setHasDraggedMinScalp(false); setIsScalpMinimized(true)
                   }}
                   className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground cursor-pointer"
                   title="Minimize to Pill"
@@ -969,21 +1286,40 @@ export function LivePage() {
 
               {/* Row 2: Strike Selector & CE / PE Toggle */}
               <div className="flex items-center justify-between gap-1.5">
-                {/* Strike Selector */}
+                {/* Strike Selector: 51 Strikes Dropdown + Direct Number Input + ATM Button */}
                 <div className="flex items-center space-x-1.5 flex-1 min-w-0">
                   <span className="text-muted-foreground font-semibold shrink-0 text-[11px]">Strike:</span>
                   <select
                     value={activeStrike}
                     onChange={(e) => setCustomStrike(Number(e.target.value))}
                     className="w-full bg-background border border-border rounded px-1.5 py-0.5 font-mono font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer h-7 text-xs shadow-2xs"
-                    title="Select Strike / Spot Price"
+                    title="Select Strike Price"
                   >
                     {strikeChoices.map((stk) => (
                       <option key={stk} value={stk}>
-                        {stk} {stk === currentAtmStrike ? "(ATM)" : stk > currentAtmStrike ? `(+${stk - currentAtmStrike})` : `(${stk - currentAtmStrike})`}
+                        {stk} {stk === currentAtmStrike ? "★ (ATM)" : stk > currentAtmStrike ? `(+${stk - currentAtmStrike})` : `(${stk - currentAtmStrike})`}
                       </option>
                     ))}
                   </select>
+                  <input
+                    type="number"
+                    step={strikeStep}
+                    value={activeStrike}
+                    onChange={(e) => setCustomStrike(Number(e.target.value))}
+                    className="w-20 bg-background border border-border rounded px-1 py-0.5 font-mono font-bold text-foreground text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary h-7 shadow-2xs"
+                    title="Or type any custom strike directly"
+                    placeholder="Strike"
+                  />
+                  {customStrike !== null && customStrike !== currentAtmStrike && (
+                    <button
+                      type="button"
+                      onClick={() => setCustomStrike(null)}
+                      className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground h-7 border border-border cursor-pointer shrink-0"
+                      title="Reset to ATM Strike"
+                    >
+                      ATM
+                    </button>
+                  )}
                 </div>
 
                 {/* Option Type: CE / PE Toggle Buttons */}
@@ -1304,20 +1640,7 @@ export function LivePage() {
                       )
                     })()}
 
-                    {/* Focused Trade badge */}
-                    {selectedTrade && (selectedTrade.symbol?.toUpperCase().includes("SENSEX") || selectedTrade.symbol?.includes("BSESN")) && (
-                      <span className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:border-blue-500/50 dark:text-blue-300 font-medium flex items-center gap-1.5 animate-fadeIn truncate">
-                        <Target className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
-                        <span className="truncate">Focused: {selectedTrade.option || selectedTrade.strategy} ({selectedTrade.side})</span>
-                        <button 
-                          onClick={() => setSelectedTrade(null)}
-                          className="ml-1 text-blue-600 hover:text-blue-900 dark:text-blue-300 dark:hover:text-white shrink-0"
-                          title="Clear Focus"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    )}
+                    
                   </div>
 
                   {/* Right: Side Panel Toggle Button */}
@@ -1382,20 +1705,7 @@ export function LivePage() {
                       )
                     })()}
 
-                    {/* Focused Trade badge */}
-                    {selectedTrade && (!selectedTrade.symbol || selectedTrade.symbol?.toUpperCase().includes("NIFTY") || selectedTrade.symbol?.includes("NSEI")) && (
-                      <span className="text-[11px] px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/60 dark:border-blue-500/50 dark:text-blue-300 font-medium flex items-center gap-1.5 animate-fadeIn truncate">
-                        <Target className="w-3 h-3 text-blue-600 dark:text-blue-400 shrink-0" />
-                        <span className="truncate">Focused: {selectedTrade.option || selectedTrade.strategy} ({selectedTrade.side})</span>
-                        <button 
-                          onClick={() => setSelectedTrade(null)}
-                          className="ml-1 text-blue-600 hover:text-blue-900 dark:text-blue-300 dark:hover:text-white shrink-0"
-                          title="Clear Focus"
-                        >
-                          <X className="w-3 h-3" />
-                        </button>
-                      </span>
-                    )}
+                    
                   </div>
 
                   {/* Right: Side Panel Toggle Button */}
@@ -1462,6 +1772,17 @@ export function LivePage() {
                 >
                   <Clock className="w-2.5 h-2.5 text-muted-foreground" />
                   <span>Closed ({closedTrades.length})</span>
+                </button>
+                <button
+                  onClick={() => setSideTab("ENGINES")}
+                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 ${
+                    sideTab === "ENGINES"
+                      ? "bg-background text-foreground shadow-xs font-bold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Activity className="w-2.5 h-2.5 text-emerald-500" />
+                  <span>Engines</span>
                 </button>
                 <button
                   onClick={() => setSideTab("SUMMARY")}
@@ -1533,128 +1854,23 @@ export function LivePage() {
               {/* TAB 1: ACTIVE */}
               {sideTab === "ACTIVE" && (
                 <div className="p-3 space-y-2.5">
-                  {openTrades.length === 0 ? (
+                                    {openTrades.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground px-4">
                       <ShieldCheck className="w-9 h-9 mb-2 text-muted-foreground/50" />
                       <div className="text-xs font-semibold text-foreground">No Active Positions</div>
                       <div className="text-[11px] mt-1 text-muted-foreground">Use the Fast Scalper or automated triggers</div>
                     </div>
                   ) : (
-                    openTrades.map((trade, idx) => {
-                      const isSelected = selectedTrade === trade || (selectedTrade && selectedTrade.entry === trade.entry && selectedTrade.option === trade.option)
-                      const pnl = trade.option_pnl_rs ?? trade.pnl_rs ?? (trade.futures_pnl_rs ?? 0)
-                      const pts = trade.nifty_points ?? trade.pnl_points ?? 0
-                      const isProfitable = pnl >= 0
-
-                      return (
-                        <div
-                          key={`active-card-${idx}`}
-                          onClick={() => handleSelectTrade(trade)}
-                          className={`p-3 rounded-lg border cursor-pointer transition-all ${
-                            isSelected
-                              ? "bg-primary/5 border-primary shadow-xs ring-1 ring-primary dark:bg-primary/10"
-                              : "bg-card border-border hover:bg-muted/30 shadow-2xs"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between mb-1">
-                            <span className="font-bold text-xs text-foreground font-sans">
-                              {trade.option || trade.symbol}
-                            </span>
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                              trade.side === "CALL" || trade.side === "BUY"
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300 dark:bg-emerald-950 dark:text-emerald-400 dark:border-emerald-600/40"
-                                : "bg-rose-100 text-rose-800 border border-rose-300 dark:bg-rose-950 dark:text-rose-400 dark:border-rose-600/40"
-                            }`}>
-                              {trade.side}
-                            </span>
-                          </div>
-
-                          <div className="flex items-center justify-between text-[11px] text-muted-foreground mb-2">
-                            <span>{trade.strategy}</span>
-                            <span className="font-mono text-[10px]">{trade.entry || "09:30"}</span>
-                          </div>
-
-                          <div className="grid grid-cols-3 gap-1 py-1.5 px-2 bg-muted/40 rounded border border-border/60 text-[10px] font-mono mb-2">
-                            <div>
-                              <span className="text-muted-foreground block text-[9px] uppercase">Entry</span>
-                              <span className="font-bold text-foreground">
-                                {Number(trade.spot_at_entry || trade.nifty_in || trade.buy_price || 0).toFixed(1)}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground block text-[9px] uppercase">SL / TL</span>
-                              <span className="font-bold text-rose-600 dark:text-rose-400">
-                                {trade.sl != null && !Number.isNaN(Number(trade.sl)) && Number(trade.sl) > 0 ? Number(trade.sl).toFixed(1) : (trade.tl_pts ? `-${trade.tl_pts}pt` : "-")}
-                              </span>
-                            </div>
-                            <div>
-                              <span className="text-muted-foreground block text-[9px] uppercase">Target / TP</span>
-                              <span className="font-bold text-emerald-600 dark:text-emerald-400">
-                                {trade.target != null && !Number.isNaN(Number(trade.target)) && Number(trade.target) > 0 ? Number(trade.target).toFixed(1) : (trade.tp_pts ? `+${trade.tp_pts}pt` : "-")}
-                              </span>
-                            </div>
-                          </div>
-
-                          <div className="flex items-center justify-between pt-1">
-                            <div>
-                              <div className={`text-sm font-bold font-mono ${isProfitable ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
-                                {isProfitable ? "+" : ""}{fmtRs(pnl)}
-                              </div>
-                              <div className="text-[10px] text-muted-foreground font-mono">
-                                {pts >= 0 ? `+${pts}` : pts} pts
-                              </div>
-                            </div>
-
-                            <div className="flex items-center space-x-1.5">
-                              {isSelected ? (
-                                <span className="text-[10px] px-2 py-0.5 rounded bg-primary text-primary-foreground font-semibold flex items-center gap-1 shadow-xs">
-                                  <Target className="w-3 h-3" /> Focused
-                                </span>
-                              ) : (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 text-[10px] px-2 text-muted-foreground hover:text-foreground"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleSelectTrade(trade)
-                                  }}
-                                >
-                                  Focus
-                                </Button>
-                              )}
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[10px] px-2 border-emerald-500/50 hover:bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-semibold"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (trade.tp_pts) setScalpTp(trade.tp_pts)
-                                  if (trade.tl_pts) setScalpTs(trade.tl_pts)
-                                  setShowScalpBar(true)
-                                  setIsScalpMinimized(false)
-                                  toast.info(`Loaded TP/TL settings for ${trade.option || trade.symbol}`)
-                                }}
-                                title="Adjust TP/TL in Scalper"
-                              >
-                                TP/TL
-                              </Button>
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-6 text-[11px] px-2 border-rose-300 text-rose-700 hover:bg-rose-50 hover:text-rose-800 dark:border-rose-500/40 dark:text-rose-400 font-semibold"
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  setExitTarget(trade)
-                                }}
-                              >
-                                Square Off
-                              </Button>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    })
+                    openTrades.map((trade, idx) => (
+                      <ActiveTradeCard
+                        key={`active-trade-${idx}-${trade.option || trade.symbol}`}
+                        trade={trade}
+                        onUpdateTpTl={async (t: OptionTrade, tp: number, tl: number) => {
+                          await handleUpdateActiveTpTl(t, tp, tl)
+                        }}
+                        onSquareOff={(t: OptionTrade) => setExitTarget(t)}
+                      />
+                    ))
                   )}
                 </div>
               )}
@@ -1712,6 +1928,105 @@ export function LivePage() {
                       )
                     })
                   )}
+                </div>
+              )}
+
+              {/* TAB: ENGINES TELEMETRY & BAR AUDIT */}
+              {sideTab === "ENGINES" && (
+                <div className="p-3 space-y-3">
+                  {/* Status Banner */}
+                  <div className="p-2.5 rounded-lg border border-emerald-500/30 bg-emerald-500/10 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-2 w-2">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                      </span>
+                      <span className="font-bold text-xs text-foreground">Apex Engines Active</span>
+                    </div>
+                    <span className="text-[10px] font-mono text-muted-foreground">{strategyTelemetry.data?.now}</span>
+                  </div>
+
+                  {/* NIFTY Mini Card */}
+                  <div className="p-2.5 rounded-lg border bg-muted/30 space-y-1.5 text-xs font-mono">
+                    <div className="flex items-center justify-between font-sans">
+                      <span className="font-bold text-sky-400">NSE NIFTY</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/30">
+                        {strategyTelemetry.data?.state?.nifty?.status || "MONITORING"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Spot LTP:</span>
+                      <span className="text-foreground font-bold">{strategyTelemetry.data?.state?.nifty?.spot ? strategyTelemetry.data.state.nifty.spot.toLocaleString("en-IN") : "--"}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>15m OR:</span>
+                      <span className="text-foreground">{strategyTelemetry.data?.state?.nifty?.or_low || "--"} – {strategyTelemetry.data?.state?.nifty?.or_high || "--"}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>OR Width:</span>
+                      <span className="text-sky-400">{strategyTelemetry.data?.state?.nifty?.or_range ? `${strategyTelemetry.data.state.nifty.or_range} pt` : "--"}</span>
+                    </div>
+                  </div>
+
+                  {/* SENSEX Mini Card */}
+                  <div className="p-2.5 rounded-lg border bg-muted/30 space-y-1.5 text-xs font-mono">
+                    <div className="flex items-center justify-between font-sans">
+                      <span className="font-bold text-purple-400">BSE SENSEX</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-purple-500/10 text-purple-400 border border-purple-500/30">
+                        {strategyTelemetry.data?.state?.sensex?.status || "MONITORING"}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Spot LTP:</span>
+                      <span className="text-foreground font-bold">{strategyTelemetry.data?.state?.sensex?.spot ? strategyTelemetry.data.state.sensex.spot.toLocaleString("en-IN") : "--"}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>15m OR:</span>
+                      <span className="text-foreground">{strategyTelemetry.data?.state?.sensex?.or_low || "--"} – {strategyTelemetry.data?.state?.sensex?.or_high || "--"}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>OR Width:</span>
+                      <span className="text-sky-400">{strategyTelemetry.data?.state?.sensex?.or_range ? `${strategyTelemetry.data.state.sensex.or_range} pt` : "--"}</span>
+                    </div>
+                  </div>
+
+                  {/* VIX Bias */}
+                  <div className="p-2 rounded-lg border bg-muted/20 flex items-center justify-between text-xs">
+                    <span className="text-muted-foreground">India VIX Bias:</span>
+                    <span className={`font-mono font-bold ${Number(strategyTelemetry.data?.state?.nifty?.vix_chg ?? 0) <= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                      {strategyTelemetry.data?.state?.nifty?.vix_chg ? `${strategyTelemetry.data.state.nifty.vix_chg > 0 ? "+" : ""}${strategyTelemetry.data.state.nifty.vix_chg}%` : "0.0%"}
+                    </span>
+                  </div>
+
+                  {/* Live Activity Log */}
+                  <div className="space-y-1 pt-1">
+                    <div className="text-[11px] font-semibold text-muted-foreground flex items-center justify-between">
+                      <span>Recent Live Evaluations</span>
+                      <span className="text-[10px] text-emerald-400 font-mono">● 2s</span>
+                    </div>
+                    <div className="max-h-[300px] overflow-y-auto space-y-1.5 rounded-lg border bg-muted/20 p-2 font-mono text-[11px]">
+                      {strategyTelemetry.data?.logs?.length ? (
+                        strategyTelemetry.data.logs.slice(0, 30).map((log: any, i: number) => (
+                          <div key={i} className="border-b border-border/40 pb-1.5 last:border-0 last:pb-0">
+                            <div className="flex items-center gap-1.5 text-[10px]">
+                              <span className="text-muted-foreground font-bold">[{log.time}]</span>
+                              <span className={`px-1 rounded font-bold ${log.symbol === "NIFTY" ? "bg-sky-500/20 text-sky-400" : "bg-purple-500/20 text-purple-400"}`}>
+                                {log.symbol}
+                              </span>
+                              <span className={log.level === "SIGNAL" ? "text-amber-400 font-bold" : "text-muted-foreground"}>
+                                {log.level}
+                              </span>
+                            </div>
+                            <div className={`text-[11px] mt-0.5 leading-snug ${log.level === "SIGNAL" ? "text-amber-400 font-bold" : "text-foreground"}`}>
+                              {log.message}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-muted-foreground text-center py-4">Listening for bars...</div>
+                      )}
+                    </div>
+                  </div>
                 </div>
               )}
 
@@ -1929,6 +2244,8 @@ export function LivePage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      
     </div>
   )
 }

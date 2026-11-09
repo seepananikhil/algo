@@ -361,7 +361,7 @@ export function SettingsPage() {
           <div className="flex items-center justify-between gap-4 rounded-lg border p-4 bg-card">
             <div className="space-y-0.5">
               <div className={isLiveTrading ? "font-bold text-red-500 text-base" : "font-semibold text-foreground text-base"}>
-                Master Portfolio · {isLiveTrading ? "LIVE (Real Money)" : "PAPER (Simulated)"}
+                Apex Duo · {isLiveTrading ? "LIVE (Real Money)" : "PAPER (Simulated)"}
               </div>
               <p className="text-xs text-muted-foreground">
                 Routes signals to active broker ({activeBroker}) at {form.lots} lot{Number(form.lots) === 1 ? "" : "s"} per trade.
@@ -370,7 +370,7 @@ export function SettingsPage() {
             <Switch
               checked={isLiveTrading}
               onCheckedChange={toggleLiveMode}
-              aria-label="Master Portfolio live trading switch"
+              aria-label="Apex Duo live trading switch"
             />
           </div>
         </CardContent>
@@ -430,7 +430,7 @@ export function SettingsPage() {
                     Modular Strategy Setups &amp; Spot Ratchet Ladder
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    Independently enable/disable VIX Morning, VIX Afternoon, Gap-and-Go, or Williams Fractal.
+                    Independently enable/disable Trend Runner and VIX Trap engines.
                   </p>
                 </div>
                 <Link to="/config">
@@ -518,7 +518,7 @@ export function SettingsPage() {
               Enable LIVE Trading with Real Capital?
             </DialogTitle>
             <DialogDescription>
-              This will route all incoming Master Portfolio signals ({form.lots} lot{Number(form.lots) === 1 ? "" : "s"}) directly to your active {activeBroker} account.
+              This will route all incoming Apex Duo signals ({form.lots} lot{Number(form.lots) === 1 ? "" : "s"}) directly to your active {activeBroker} account.
               Type <strong>LIVE</strong> below to confirm.
             </DialogDescription>
           </DialogHeader>

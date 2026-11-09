@@ -12,6 +12,10 @@ TOKEN_FILE = ROOT / "captured_data" / "fyers" / "fyers_access_token.json"
 TMP_DIR = ROOT / ".tmp"
 
 
+# Persistent caches to prevent UI MTM flickering during intermittent broker quote drops
+_last_positions_cache: dict = {}
+_last_known_ltps: dict = {}
+
 def get_active_broker() -> str:
     """Return 'KOTAK_NEO' (sole active broker)."""
     return "KOTAK_NEO"
@@ -81,6 +85,7 @@ def get_all_broker_status() -> dict:
 
 
 def kotak_positions() -> dict:
+    global _last_positions_cache
     from kotak_orders import get_kotak_client, kotak_token_status
     status = kotak_token_status()
     if not status.get("valid"):
@@ -93,6 +98,8 @@ def kotak_positions() -> dict:
         resp = client.positions()
         if not isinstance(resp, dict) or resp.get("stat") != "ok":
             err = resp.get("errMsg") or resp.get("stat") or "Failed to fetch Kotak positions"
+            if _last_positions_cache.get("ok"):
+                return _last_positions_cache
             return {"ok": False, "error": str(err), "open_positions": [], "closed_positions": [], "summary": {}}
 
         rows = resp.get("data") or []
@@ -181,6 +188,7 @@ def kotak_positions() -> dict:
                                 ltp_val = 0.0
                             if t and ltp_val > 0:
                                 quotes_map[t] = ltp_val
+                                _last_known_ltps[t] = ltp_val
             except Exception:
                 pass
 
@@ -188,8 +196,11 @@ def kotak_positions() -> dict:
         for p in open_pos:
             tok = str(p.get("tok", ""))
             net_qty = p["net_qty"]
-            ltp = quotes_map.get(tok) or (p["buy_avg"] if net_qty > 0 else p["sell_avg"])
+            # Fall back to last known live market LTP to prevent MTM flickering to zero on dropped ticks
+            ltp = quotes_map.get(tok) or _last_known_ltps.get(tok) or _last_known_ltps.get(p["symbol"]) or (p["buy_avg"] if net_qty > 0 else p["sell_avg"])
             p["ltp"] = round(ltp, 2)
+            _last_known_ltps[tok] = ltp
+            _last_known_ltps[p["symbol"]] = ltp
 
             if net_qty > 0:
                 cur_val = round(net_qty * ltp, 2)
@@ -210,7 +221,7 @@ def kotak_positions() -> dict:
         open_pos.sort(key=lambda x: str(x.get("symbol", "")))
         closed_pos.sort(key=lambda x: str(x.get("symbol", "")))
 
-        return {
+        result = {
             "ok": True,
             "broker": "KOTAK_NEO",
             "open_positions": open_pos,
@@ -225,7 +236,11 @@ def kotak_positions() -> dict:
                 "current_value": round(tot_open_val, 2),
             },
         }
+        _last_positions_cache = result
+        return result
     except Exception as exc:
+        if _last_positions_cache.get("ok"):
+            return _last_positions_cache
         return {"ok": False, "error": f"Error parsing Kotak positions: {exc}", "open_positions": [], "closed_positions": [], "summary": {}}
 
 
