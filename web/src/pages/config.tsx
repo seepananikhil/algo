@@ -1000,7 +1000,7 @@ export function ConfigPage() {
           </Card>
         </TabsContent>
 
-        <TabsContent value="reference" className="mt-6">
+        <TabsContent value="strategy_info" className="mt-6">
           <StrategyInfoPage />
         </TabsContent>
       </Tabs>
