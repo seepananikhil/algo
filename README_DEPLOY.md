@@ -1,6 +1,6 @@
 # 🚀 AlgoNeo — Cloud VM Deployment & Operations Guide
 
-This guide walks you step-by-step through deploying and managing the **AlgoNeo Trading Platform** on your remote Linux Cloud VM (Ubuntu / Debian VPS, AWS EC2, GCP, Azure, or Hetzner).
+This guide walks you step-by-step through deploying and managing the **AlgoNeo Trading Platform** on your remote Linux Cloud VM (Ubuntu / Debian VPS, AWS EC2, GCP Compute Engine, Azure VM, Hetzner, or DigitalOcean).
 
 ---
 
@@ -9,16 +9,16 @@ This guide walks you step-by-step through deploying and managing the **AlgoNeo T
 - **OS**: Ubuntu 22.04 LTS / 24.04 LTS (Recommended) or Debian
 - **Server Ports Required**: 
   - `22` (SSH Access)
-  - `8090` (AlgoNeo Web Dashboard & API)
-- **Runtime Dependencies**: Python 3.10+, Node.js 18+ (Node 20 LTS recommended), Git, PM2
+  - `8090` (AlgoNeo Web Dashboard & REST API)
+- **Runtime Dependencies**: Python 3.10+, Node.js 20 LTS, Git
 
 ---
 
 ## Step 1: Connect to Your VM via SSH
 
-Open PowerShell (Windows) or Terminal (Mac/Linux) on your computer and connect to your VM:
+Open PowerShell (Windows) or Terminal (Mac/Linux) on your computer:
 
-### A. Using SSH Key (Standard Cloud VMs / AWS / GCP)
+### A. Using SSH Key (AWS / GCP / Cloud VPS)
 ```bash
 ssh -i /path/to/your-key.pem ubuntu@YOUR_VM_IP
 ```
@@ -27,29 +27,23 @@ ssh -i /path/to/your-key.pem ubuntu@YOUR_VM_IP
 ```bash
 ssh ubuntu@YOUR_VM_IP
 ```
-*(Replace `YOUR_VM_IP` with your actual server IP)*
+*(Replace `YOUR_VM_IP` with your actual server IP).*
 
 ---
 
-## Step 2: First-Time Server Setup (Run once on VM)
+## Step 2: System Preparation (Run once on VM)
 
-Once logged into your VM terminal, install the necessary tools:
+Once logged into your VM terminal, install the runtime tools:
 
 ```bash
-# 1. Update package lists
-sudo apt update && sudo apt upgrade -y
+# 1. Update package lists & install build tools
+sudo apt update && sudo apt install -y git python3 python3-pip python3-venv curl build-essential
 
-# 2. Install Git, Python3, and venv tooling
-sudo apt install -y git python3 python3-pip python3-venv curl build-essential
-
-# 3. Install Node.js 20 LTS & npm
+# 2. Install Node.js 20 LTS & npm
 curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
 sudo apt install -y nodejs
 
-# 4. Install PM2 (Process Manager for 24/7 reliability & auto-restart)
-sudo npm install -g pm2
-
-# 5. Open Port 8090 in Ubuntu firewall (if UFW is active)
+# 3. Allow port 8090 in Ubuntu firewall (if UFW is active)
 sudo ufw allow 8090/tcp
 sudo ufw allow 22/tcp
 ```
@@ -59,22 +53,18 @@ sudo ufw allow 22/tcp
 
 ---
 
-## Step 3: Clone the Repository & Configure Broker Keys
+## Step 3: Clone Code & Configure Broker Credentials
 
-### 1. Clone the Codebase
 ```bash
 cd ~
-git clone https://github.com/your-username/algo.git algo
+git clone https://github.com/seepananikhil/algo.git algo
 cd algo
-```
-*(If already cloned, simply run `cd ~/algo`)*
 
-### 2. Configure Kotak Neo API Credentials
-Create your private `neo_config.json`:
-```bash
+# Configure your Kotak Neo API keys:
 cp neo_config.example.json neo_config.json
 nano neo_config.json
 ```
+
 Fill in your credentials:
 ```json
 {
@@ -83,6 +73,7 @@ Fill in your credentials:
   "neo_fin_key": "YOUR_KOTAK_FIN_KEY",
   "mobile_number": "+91XXXXXXXXXX",
   "ucc": "YOUR_UCC_CLIENT_CODE",
+  "totp_secret": "YOUR_TOTP_SECRET_FOR_AUTOLOGIN",
   "mpin": "YOUR_6_DIGIT_MPIN"
 }
 ```
@@ -90,86 +81,62 @@ Fill in your credentials:
 
 ---
 
-## Step 4: One-Click Production Deployment
+## Step 4: Start Platform & Auto-Configure Services
 
-We have included an automated deployment script [`deploy.sh`](file:///d:/nikhil/algo/deploy.sh) that:
-1. Creates the Python virtual environment (`./venv`)
-2. Installs all Python dependencies from `requirements.txt`
-3. Installs frontend packages and builds the production React assets (`npm run build`)
-4. Starts the server with **PM2** so it stays online 24/7 and auto-restarts if rebooted.
+Run a single command:
 
-Run:
 ```bash
-chmod +x deploy.sh update.sh
-./deploy.sh
+npm start
 ```
 
-### Enable Auto-Start on System Boot
-To ensure AlgoNeo starts automatically if the server reboots:
-```bash
-pm2 save
-sudo env PATH=$PATH:/usr/bin pm2 startup systemd -u ubuntu --hp /home/ubuntu
-```
+### What `npm start` Does Automatically:
+1. Installs `/etc/systemd/system/algo.service` with `Restart=always` (auto-recovers from crashes in 5 seconds).
+2. Enables systemd boot persistence (`WantedBy=multi-user.target`) so **all services automatically start upon server reboot or power cycle**.
+3. Configures `algo-sync.timer` to backup your trades to GitHub daily at **15:35 & 16:35 IST**.
+4. Starts the master trading engine 24/7 in the background (survives SSH disconnect).
+5. Runs the post-start preflight check and displays the health diagnostic table in your terminal.
+6. Prints your direct Dashboard URL (`http://YOUR_VM_IP:8090`).
 
 ---
 
-## Step 5: Access the Web Dashboard
+## Step 5: (Optional) Connect GitHub Actions Runner
 
-Open your browser on your laptop or phone:
-```text
-http://YOUR_VM_IP:8090
-```
-*(Example: `http://YOUR_VM_IP:8090`)*
-
-You will see the full AlgoNeo Dashboard:
-- **Strategy Tab**: Switch between Paper / Live mode, configure Sizing (Fixed 1 Lot vs Dynamic Pyramiding), and inspect the Capital Guardian.
-- **Broker Tab**: Verify your live Kotak Neo / Fyers broker connectivity and token status.
+To run daily post-market historical updates and backtests directly on your VM:
+1. Open your browser: `https://github.com/seepananikhil/algo/settings/actions/runners/new`
+2. Copy the token string shown after `--token`.
+3. In your VM terminal, run:
+   ```bash
+   npm run setup:runner <PASTE_YOUR_TOKEN>
+   ```
 
 ---
 
-## 🔄 Day-to-Day Operations & Updates
+## 🔄 Day-to-Day VM Operations
 
-### 1. Instant 2-Second Update
-Whenever you push new changes or fixes to GitHub, update your VM with:
-```bash
-cd ~/algo
-npm run update
-```
-*(This pulls latest commits and restarts PM2 in ~2 seconds without rebuilding).*
-
-For a full update with dependency checks:
-```bash
-npm run update:full
-```
-
----
-
-### 2. Monitoring & Useful npm Shortcuts
-
-| Task | npm Shortcut | Direct PM2 Command |
+| Task | Command | What It Does |
 | :--- | :--- | :--- |
-| **Instant Update (Pull & Reload)** | `npm run update` | `git pull && pm2 restart algoneo` |
-| **Full Update (With Dependency Checks)** | `npm run update:full` | `./update.sh` |
-| **View Live Real-Time Logs** | `npm run logs` | `pm2 logs algoneo` |
-| **Check Process Status** | `npm run status` | `pm2 status` |
-| **Restart Platform** | `npm run restart` | `pm2 restart algoneo` |
-| **Stop Platform** | `npm run stop` | `pm2 stop algoneo` |
+| **Pull Updates** | `npm run update` | Pulls latest code and restarts platform in < 2 seconds. |
+| **Verify Health** | `npm run check` | Checks broker session, margin balance, feed freshness, and services. |
+| **Live Logs** | `npm run logs` | Streams live console telemetry and strategy decisions via `journalctl`. |
+| **Sync Trades** | `npm run sync` | Immediately commits and pushes trade logs & signals to GitHub. |
+| **Restart Platform** | `npm run restart` | Restarts the background trading daemon. |
+| **Check Status** | `npm run status` | Displays systemd daemon status and memory usage. |
+| **Stop Platform** | `npm run stop` | Safely halts trading engine and background processes. |
 
 ---
 
 ## 🛠️ Troubleshooting
 
-### 1. Dashboard not opening at `http://YOUR_VM_IP:8090`?
-- Verify the server is running: `pm2 status`
-- Check firewall status: `sudo ufw status`
-- Check your cloud provider security group (ensure TCP `8090` is open for `0.0.0.0/0`).
-- Test locally on the VM: `curl -I http://localhost:8090`
-
-### 2. Node or NPM Build Memory Limit on Small 1GB RAM VPS
-If your VM has 1GB RAM, create a swap file so frontend build never runs out of memory:
-```bash
-sudo fallocate -l 2G /swapfile
-sudo chmod 600 /swapfile
-sudo mkswap /swapfile
-sudo swapon /swapfile
-```
+- **Web Dashboard not reachable at `http://YOUR_VM_IP:8090`?**
+  - Run `npm run check` to verify port 8090 is listening and broker token is valid.
+  - Verify service status: `npm run status`
+  - Check firewall: `sudo ufw status`
+  - Ensure cloud provider security group permits inbound TCP traffic on port `8090` from `0.0.0.0/0`.
+- **View Recent Errors in Logs:**
+  ```bash
+  npm run logs
+  ```
+- **Force Restart All Services:**
+  ```bash
+  npm run restart
+  ```
