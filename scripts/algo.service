@@ -1,0 +1,19 @@
+[Unit]
+Description=AlgoNeo Automated Options Trading Platform & API Server
+After=network.target network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/home/ubuntu/algo
+ExecStart=/usr/bin/python3 app_server.py
+Restart=always
+RestartSec=5s
+Environment=PYTHONUNBUFFERED=1
+LimitNOFILE=65536
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
