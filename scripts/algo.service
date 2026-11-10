@@ -8,6 +8,7 @@ Type=simple
 User=ubuntu
 WorkingDirectory=/home/ubuntu/algo
 ExecStart=/usr/bin/python3 app_server.py
+ExecStartPost=/bin/bash -c "sleep 2 && /usr/bin/python3 scripts/preflight_check.py || true"
 Restart=always
 RestartSec=5s
 Environment=PYTHONUNBUFFERED=1

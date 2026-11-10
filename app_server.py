@@ -5962,6 +5962,16 @@ if __name__ == "__main__":
     except Exception as exc:
         print(f"Error launching risk guardian: {exc}")
     threading.Thread(target=sensex_runner_forward_loop, daemon=True, name="sensex-runner-forward").start()
+
+    def _post_start_check():
+        time.sleep(2.0)
+        try:
+            from scripts.preflight_check import run_check
+            run_check()
+        except Exception as err:
+            print(f"[Post-Start Check Error]: {err}")
+    threading.Thread(target=_post_start_check, daemon=True, name="post-start-check").start()
+
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print(f"Dashboard: http://{HOST}:{PORT}/  (Ctrl+C to stop)")
     while True:

@@ -35,6 +35,7 @@ Type=simple
 User=${CURRENT_USER}
 WorkingDirectory=${APP_DIR}
 ExecStart=${PYTHON_BIN} app_server.py
+ExecStartPost=/bin/bash -c "sleep 2 && ${PYTHON_BIN} scripts/preflight_check.py || true"
 Restart=always
 RestartSec=5s
 Environment=PYTHONUNBUFFERED=1
