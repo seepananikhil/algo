@@ -17,6 +17,6 @@
     "build": "npm --prefix web run build",
     "setup": "python -m pip install -r requirements.txt && npm --prefix web install",
     "server": "python app_server.py",
-    "start": "python app_server.py"
+    "start": "bash scripts/start.sh"
   }
 }
