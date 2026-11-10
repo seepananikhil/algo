@@ -747,6 +747,23 @@ def log_engine_telemetry(symbol: str, engine: str, level: str, message: str) -> 
     }
     ENGINE_TELEMETRY_LOGS.append(entry)
 
+def log_live_order_event(action: str, symbol: str, qty: int, order_id: str, fill_price: float = 0.0, reason: str = "", mode: str = "LIVE", trade_pnl_rs: float = 0.0) -> None:
+    try:
+        now = datetime.now(IST)
+        d_str = now.strftime("%Y-%m-%d")
+        t_str = now.strftime("%H:%M:%S")
+        LIVE_DIR.mkdir(parents=True, exist_ok=True)
+        fpath = LIVE_DIR / f"live_orders_{d_str}.csv"
+        new = not fpath.exists()
+        with fpath.open("a", newline="", encoding="utf-8") as f:
+            w = csv.writer(f)
+            if new:
+                w.writerow(["time", "action", "symbol", "qty", "order_id", "fill_price", "index_price", "reason", "trade_pnl_rs", "day_pnl_rs", "mode"])
+            w.writerow([t_str, action, symbol, qty, order_id, fill_price, "", reason, trade_pnl_rs, "", mode])
+        log_engine_telemetry("ORDER", "LIVE BROKER", "ORDER", f"[{mode}] {action} {qty}x {symbol} @ {fill_price:.2f} (Order #{order_id})")
+    except Exception as exc:
+        print(f"Error logging live order event: {exc}")
+
 def trend_runner_forward_loop() -> None:
     """Continuously monitor today's live 1-min stream for Trend Catcher (VIX Runner) setups."""
     today_str = today()
@@ -1825,6 +1842,7 @@ def submit_manual_order(body: dict) -> dict:
         ex_seg = "bse_fo" if ("SENSEX" in raw_symbol.upper() or contract.get("index_symbol") == "SENSEX") else "nse_fo"
         try:
             order_id, fill_price = place_kotak_order(symbol=raw_symbol, qty=quantity, side=side_val, product=product, exchange_segment=ex_seg)
+            log_live_order_event(action, raw_symbol, quantity, order_id, fill_price, "MANUAL_ORDER", "LIVE")
             return {
                 "ok": True,
                 "order_id": order_id,
@@ -1969,6 +1987,7 @@ def exit_position(body: dict) -> dict:
                         if ord_st in ("complete", "trd", "traded", "filled", "open"):
                             clear_scalp_target(clean_sym)
                             clear_scalp_target(symbol)
+                            log_live_order_event("SELL" if tt == "S" else "BUY", clean_sym, exit_qty, order_id, 0.0, "POSITION_EXIT", "LIVE")
                             return {"ok": True, "symbol": clean_sym, "qty": exit_qty, "order_id": order_id, "status": ord_st}
             except ManualTradeError:
                 raise
