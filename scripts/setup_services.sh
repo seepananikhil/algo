@@ -22,6 +22,9 @@ PYTHON_BIN=$(which python3 || echo "/usr/bin/python3")
 chmod +x "${APP_DIR}/scripts/sync_trades.sh"
 chmod +x "${APP_DIR}/scripts/setup_services.sh" 2>/dev/null || true
 
+# Set server timezone to Indian Standard Time (IST) if possible
+sudo timedatectl set-timezone Asia/Kolkata 2>/dev/null || true
+
 # 1. Install algo.service (Core Trading Engine & Dashboard)
 echo "  1️⃣  Installing /etc/systemd/system/algo.service..."
 cat <<EOF | sudo tee /etc/systemd/system/algo.service > /dev/null
@@ -75,13 +78,18 @@ Requires=algo-sync.service
 
 [Timer]
 Unit=algo-sync.service
-OnCalendar=Mon..Fri *-*-* 15:35:00
-OnCalendar=Mon..Fri *-*-* 16:35:00
+OnCalendar=Mon..Fri *-*-* 15:35:00 Asia/Kolkata
+OnCalendar=Mon..Fri *-*-* 16:35:00 Asia/Kolkata
 Persistent=true
 
 [Install]
 WantedBy=timers.target
 EOF
+
+# Optional fallback crontab registration
+mkdir -p "${APP_DIR}/logs"
+CRON_CMD="35 15,16 * * 1-5 cd ${APP_DIR} && /bin/bash scripts/sync_trades.sh >> ${APP_DIR}/logs/cron_sync.log 2>&1"
+(crontab -l 2>/dev/null | grep -v "sync_trades.sh" || true; echo "$CRON_CMD") | crontab - 2>/dev/null || true
 
 # 4. Reload systemd daemon
 echo "  4️⃣  Reloading systemd daemon..."

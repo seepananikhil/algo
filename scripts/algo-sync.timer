@@ -4,8 +4,8 @@ Requires=algo-sync.service
 
 [Timer]
 Unit=algo-sync.service
-OnCalendar=Mon..Fri *-*-* 15:35:00
-OnCalendar=Mon..Fri *-*-* 16:35:00
+OnCalendar=Mon..Fri *-*-* 15:35:00 Asia/Kolkata
+OnCalendar=Mon..Fri *-*-* 16:35:00 Asia/Kolkata
 Persistent=true
 
 [Install]
