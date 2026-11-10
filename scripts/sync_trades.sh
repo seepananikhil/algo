@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ==============================================================================
-# AlgoNeo — End-of-Day Trade & Performance Git Synchronizer
+# AlgoNeo — Two-Way Trade Ledger & Data Git Synchronizer
 # Usage:
 #   npm run sync
 #   or: bash scripts/sync_trades.sh
@@ -12,10 +12,14 @@ cd "$APP_DIR"
 
 TODAY=$(date +%Y-%m-%d)
 echo "=================================================================="
-echo "  📦 Syncing Trade Ledgers & Performance to GitHub ($TODAY)"
+echo "  🔄 Two-Way Git Sync: Trade Ledgers & Remote Data ($TODAY)"
 echo "=================================================================="
 
-# 1. Stage trade ledgers, signals, and live orders
+# 1. Always pull latest remote commits & data first (options, parquet, code fixes)
+echo "  📥 Pulling latest remote data from origin/master (rebase)..."
+git pull --rebase --autostash origin master
+
+# 2. Stage local trade ledgers, signals, and live orders
 # Using -f ensures files inside captured_data/fyers/ are added even if parent folder is ignored
 git add -f performance/*trades*.csv 2>/dev/null || true
 git add -f performance/*paper*.csv 2>/dev/null || true
@@ -23,26 +27,26 @@ git add -f captured_data/fyers/live/live_orders_*.csv 2>/dev/null || true
 git add -f captured_data/fyers/live/*paper*.csv 2>/dev/null || true
 git add -f captured_data/fyers/live/*signals*.csv 2>/dev/null || true
 
-# 2. Check if there are staged changes
+# 3. Check if there are local staged changes to commit
 if git diff --cached --quiet; then
-    echo "  ℹ️  No new trade records or changes to commit for today."
+    echo "  ℹ️  No new local trade logs to commit."
+    echo "  ✅ System is fully synchronized with latest GitHub data!"
     exit 0
 fi
 
-# 3. Pull latest remote changes first to prevent push rejection
-echo "  🔄 Pulling latest remote changes (rebase)..."
-git pull --rebase origin master
-
-# 4. Commit with timestamp
+# 4. Commit local trade logs with timestamp
 COMMIT_MSG="chore(trades): backup daily paper & live trade logs ($TODAY)"
+echo "  📝 Committing daily trade records..."
 git commit -m "$COMMIT_MSG"
 
-# 5. Push to GitHub
+# 5. Push committed trade logs to GitHub
 echo "  🚀 Pushing trade ledger to GitHub origin/master..."
 git push origin master
 
 echo ""
 echo "=================================================================="
-echo "  ✅ All trades safely backed up to GitHub!"
+echo "  ✅ Two-Way Sync Complete!"
+echo "  - Local trade logs pushed to GitHub"
+echo "  - Latest remote historical & options data retrieved"
 echo "  View on GitHub: https://github.com/seepananikhil/algo"
 echo "=================================================================="

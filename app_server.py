@@ -207,17 +207,19 @@ def run_git_trades_sync(reason: str = "manual") -> dict:
                 _last_git_sync = {"status": "ok" if ok else "error", "last_sync": now_str, "message": out[-300:] if out else "Sync finished"}
                 return {"ok": ok, "message": _last_git_sync["message"]}
 
+            # Always pull latest remote data & backtests first
+            subprocess.run(["git", "pull", "--rebase", "--autostash", "origin", "master"], cwd=ROOT, check=False)
+
             subprocess.run(["git", "add", "-f", "performance/*trades*.csv", "captured_data/fyers/live/live_orders_*.csv", "captured_data/fyers/live/*paper*.csv", "captured_data/fyers/live/*signals*.csv"], cwd=ROOT, check=False)
             diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT)
             if diff.returncode == 0:
-                _last_git_sync = {"status": "ok", "last_sync": now_str, "message": "No new trade logs to commit today"}
+                _last_git_sync = {"status": "ok", "last_sync": now_str, "message": "Synced latest data from GitHub (no new local trades)"}
                 return {"ok": True, "message": _last_git_sync["message"]}
 
-            subprocess.run(["git", "pull", "--rebase", "origin", "master"], cwd=ROOT, check=False)
             commit_res = subprocess.run(["git", "commit", "-m", f"chore(trades): backup daily paper & live trade logs ({today_str})"], cwd=ROOT, capture_output=True, text=True)
             push_res = subprocess.run(["git", "push", "origin", "master"], cwd=ROOT, capture_output=True, text=True)
             ok = (push_res.returncode == 0)
-            msg = "Trade ledger backed up to GitHub" if ok else (push_res.stderr or commit_res.stderr or "Push failed")
+            msg = "Trades pushed to GitHub & latest remote data retrieved" if ok else (push_res.stderr or commit_res.stderr or "Push failed")
             _last_git_sync = {"status": "ok" if ok else "error", "last_sync": now_str, "message": msg}
             return {"ok": ok, "message": msg}
 
