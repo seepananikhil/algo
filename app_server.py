@@ -182,6 +182,76 @@ def daily_backtest_sync_loop() -> None:
             pass
         time.sleep(30)
 
+_last_git_sync = {
+    "status": "idle",
+    "last_sync": None,
+    "message": "Ready to backup trades",
+    "scheduled_tag": None,
+}
+
+def run_git_trades_sync(reason: str = "manual") -> dict:
+    """Commit and push forward paper trades, live orders, and signals to origin/master."""
+    global _last_git_sync
+    import subprocess
+    today_str = today()
+    now_str = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+    script_path = ROOT / "scripts" / "sync_trades.sh"
+
+    try:
+        if os.name == "nt":
+            git_bash = Path("C:/Program Files/Git/bin/bash.exe")
+            if git_bash.exists() and script_path.exists():
+                proc = subprocess.run([str(git_bash), str(script_path)], cwd=ROOT, capture_output=True, text=True, timeout=90)
+                out = (proc.stdout + "\n" + proc.stderr).strip()
+                ok = (proc.returncode == 0)
+                _last_git_sync = {"status": "ok" if ok else "error", "last_sync": now_str, "message": out[-300:] if out else "Sync finished"}
+                return {"ok": ok, "message": _last_git_sync["message"]}
+
+            subprocess.run(["git", "add", "-f", "performance/*trades*.csv", "captured_data/fyers/live/live_orders_*.csv", "captured_data/fyers/live/*paper*.csv", "captured_data/fyers/live/*signals*.csv"], cwd=ROOT, check=False)
+            diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT)
+            if diff.returncode == 0:
+                _last_git_sync = {"status": "ok", "last_sync": now_str, "message": "No new trade logs to commit today"}
+                return {"ok": True, "message": _last_git_sync["message"]}
+
+            subprocess.run(["git", "pull", "--rebase", "origin", "master"], cwd=ROOT, check=False)
+            commit_res = subprocess.run(["git", "commit", "-m", f"chore(trades): backup daily paper & live trade logs ({today_str})"], cwd=ROOT, capture_output=True, text=True)
+            push_res = subprocess.run(["git", "push", "origin", "master"], cwd=ROOT, capture_output=True, text=True)
+            ok = (push_res.returncode == 0)
+            msg = "Trade ledger backed up to GitHub" if ok else (push_res.stderr or commit_res.stderr or "Push failed")
+            _last_git_sync = {"status": "ok" if ok else "error", "last_sync": now_str, "message": msg}
+            return {"ok": ok, "message": msg}
+
+        if script_path.exists():
+            proc = subprocess.run(["bash", str(script_path)], cwd=ROOT, capture_output=True, text=True, timeout=90)
+            out = (proc.stdout + "\n" + proc.stderr).strip()
+            ok = (proc.returncode == 0)
+            msg = out[-300:] if out else ("Trades backed up to GitHub" if ok else "Sync script error")
+            _last_git_sync = {"status": "ok" if ok else "error", "last_sync": now_str, "message": msg}
+            return {"ok": ok, "message": msg}
+        else:
+            _last_git_sync = {"status": "error", "last_sync": now_str, "message": "scripts/sync_trades.sh not found"}
+            return {"ok": False, "message": "scripts/sync_trades.sh not found"}
+    except Exception as exc:
+        _last_git_sync = {"status": "error", "last_sync": now_str, "message": str(exc)}
+        return {"ok": False, "message": str(exc)}
+
+def daily_trade_git_sync_loop() -> None:
+    """Auto-backup trades to GitHub at 15:35 and 16:35 IST every market weekday."""
+    while True:
+        try:
+            now = datetime.now(IST)
+            if now.weekday() < 5:
+                if (now.hour == 15 and now.minute == 35) or (now.hour == 16 and now.minute == 35):
+                    today_str = now.strftime("%Y-%m-%d")
+                    tag = f"{today_str}_{now.hour}_{now.minute}"
+                    if _last_git_sync.get("scheduled_tag") != tag:
+                        _last_git_sync["scheduled_tag"] = tag
+                        print(f"[{now.strftime('%H:%M:%S')}] 🚀 [Auto-Sync] Committing and pushing trade records to GitHub...")
+                        run_git_trades_sync(reason=f"auto_{now.hour}{now.minute}")
+        except Exception:
+            pass
+        time.sleep(25)
+
 _login_proc = {"proc": None}
 _capture = {"auto_started": None, "stopped_by_user": None}
 AUTO_START_WINDOW = ("09:00", "15:29")
@@ -5498,6 +5568,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(trigger_backtest_sync(reason="manual"))
         elif url.path == "/api/backtest/sync/status":
             return self._json(_sync_state)
+        elif url.path in ("/api/sync-status", "/api/trades/sync/status"):
+            return self._json(_last_git_sync)
         elif url.path == "/api/backtest":
             strategy = q.get("strategy", ["trend_runner_10y"])[0].lower()
             if strategy in ("", "trend_runner_10y", "10y", "10year", "trend_10y", "trend_runner", "vix_trend", "trend_expansion"):
@@ -5785,6 +5857,8 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/kill-switch/off":
             STOP_FILE.unlink(missing_ok=True)
             self._json({"kill_switch": False})
+        elif url.path in ("/api/sync-trades", "/api/trades/sync"):
+            self._json(run_git_trades_sync(reason="manual_ui"))
         elif url.path == "/api/capture/start":
             self._json(start_capture())
         elif url.path == "/api/capture/stop":
@@ -5878,6 +5952,7 @@ if __name__ == "__main__":
     threading.Thread(target=sensex_expiry_collector_loop, daemon=True, name="sensex-expiry-collector").start()
     threading.Thread(target=auto_start_loop, daemon=True).start()
     threading.Thread(target=daily_backtest_sync_loop, daemon=True, name="daily-backtest-sync").start()
+    threading.Thread(target=daily_trade_git_sync_loop, daemon=True, name="daily-trade-git-sync").start()
     threading.Thread(target=scalper_forward_loop, daemon=True, name="micro-scalper-forward").start()
     threading.Thread(target=scalp_tp_tl_sentinel_loop, daemon=True, name="scalp-tp-tl-sentinel").start()
     threading.Thread(target=trend_runner_forward_loop, daemon=True, name="trend-runner-forward").start()

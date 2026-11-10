@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
-import { X } from "lucide-react"
+import { GitCommit, RefreshCw, X } from "lucide-react"
+import { toast } from "sonner"
 import { DayDetail, FillsTable } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
@@ -10,7 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { StatCard } from "@/components/common"
 import { PnlCalendar } from "@/components/pnl-calendar"
 import { StrategyStreakSummary } from "@/components/strategy-streak-summary"
-import { fmtNum, fmtRs, optionPaperTradeToFill, pnlClass, usePoll, type CapitalReport, type KeyLevelReport, type OptionPaperTrade, type OptionTrade, type PaperReport } from "@/lib/api"
+import { fmtNum, fmtRs, optionPaperTradeToFill, pnlClass, postJSON, usePoll, type CapitalReport, type KeyLevelReport, type OptionPaperTrade, type OptionTrade, type PaperReport } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
 const axis = { stroke: "var(--muted-foreground)", fontSize: 11, tickLine: false, axisLine: false }
@@ -104,9 +105,19 @@ function CapitalDayPanel({ date, trades, onClose, strategy = "all" }: {
             <TableBody>{trades.map((trade, index) => (
               <TableRow key={`${trade.mode}-${trade.option}-${trade.entry}-${index}`} className="bg-transparent hover:bg-muted/20">
                 <TableCell>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
-                    {trade.option}
+                    <span className="font-semibold">{trade.option}</span>
+                    {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        LIVE
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        PAPER
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">
                     {(trade.mode || "").includes("SENSEX")
@@ -166,9 +177,19 @@ function StrategyTradesTable({ title, trades, onPick }: { title: string; trades:
               <TableRow key={`${trade.date}-${trade.entry}-${index}`} className={cn("bg-transparent hover:bg-muted/20", onPick && "cursor-pointer")} onClick={() => onPick?.(trade.date)}>
                 <TableCell className={cn("font-medium tabular-nums", onPick && "text-primary underline-offset-4 hover:underline")}>{trade.date}</TableCell>
                 <TableCell>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
-                    {trade.option}
+                    <span className="font-semibold">{trade.option}</span>
+                    {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
+                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        LIVE
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                        PAPER
+                      </span>
+                    )}
                   </div>
                   <div className="text-xs text-muted-foreground">{trade.mode} · {trade.qty} qty</div>
                 </TableCell>
@@ -267,6 +288,54 @@ export function _KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
 export function PaperPage() {
   const [strategy, setStrategy] = useState<"trend_runner" | "sensex_runner" | "all">("trend_runner")
   const [picked, setPicked] = useState<string | null>(null)
+  const [syncing, setSyncing] = useState(false)
+
+  const handleSyncToGit = async () => {
+    setSyncing(true)
+    try {
+      const res = await postJSON<{ ok: boolean; message?: string }>("/api/sync-trades", {})
+      if (res.ok) {
+        toast.success("Trade logs synced to GitHub!", {
+          description: res.message || "Pushed to origin/master"
+        })
+      } else {
+        toast.error("Git sync failed", { description: res.message || "Check server logs" })
+      }
+    } catch (e: any) {
+      toast.error("Git sync error", { description: e.message })
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const pageHeader = (
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+      <div>
+        <div className="flex items-center gap-2">
+          <h1 className="text-xl font-bold tracking-tight">Trades & Performance</h1>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
+            Ledger
+          </span>
+        </div>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Consolidated execution ledger · Real-time broker orders & paper forward testing.
+        </p>
+      </div>
+      <div className="flex items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={handleSyncToGit}
+          disabled={syncing}
+          className="text-xs font-semibold gap-1.5 h-8 cursor-pointer shadow-xs hover:bg-muted/60"
+          title="Commit and push all today's trade records and signal logs to GitHub origin/master"
+        >
+          {syncing ? <RefreshCw className="size-3.5 animate-spin text-primary" /> : <GitCommit className="size-3.5 text-emerald-500" />}
+          {syncing ? "Backing up..." : "Sync to GitHub"}
+        </Button>
+      </div>
+    </div>
+  )
   const trendRunner = usePoll<PaperReport>(strategy === "trend_runner" ? "/api/paper-report?strategy=trend_runner" : null, 30000)
   const sensexRunner = usePoll<PaperReport>(strategy === "sensex_runner" ? "/api/paper-report?strategy=sensex_runner" : null, 30000)
   const capital = usePoll<CapitalReport>(strategy === "all" ? "/api/capital-report" : null, 30000)
@@ -304,10 +373,7 @@ export function PaperPage() {
       : []
     return (
       <div className="flex flex-col gap-4">
-        <div>
-          <h1 className="text-xl font-bold tracking-tight">Paper Trading</h1>
-          <p className="text-sm text-muted-foreground mt-0.5">Combined Trend Runner portfolio equity.</p>
-        </div>
+{pageHeader}
         {paperTabs}
         <div className="grid max-w-lg grid-cols-2 gap-3">
           <StatCard label="Starting capital" value={fmtRs(summary.starting_capital)} />
@@ -374,14 +440,7 @@ export function PaperPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-bold tracking-tight">Paper Trading</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          {strategy === "sensex_runner"
-            ? "Sensex Trend Runner paper execution."
-            : "Nifty 50 Trend Runner paper execution."}
-        </p>
-      </div>
+{pageHeader}
 
       {paperTabs}
 

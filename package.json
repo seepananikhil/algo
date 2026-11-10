@@ -6,6 +6,7 @@
   "scripts": {
     "update": "git pull origin master && sudo systemctl restart algo.service",
     "sync": "bash scripts/sync_trades.sh",
+    "setup:sync": "bash scripts/setup_sync_service.sh",
     "restart": "sudo systemctl restart algo.service",
     "status": "sudo systemctl status algo.service",
     "logs": "sudo journalctl -u algo.service -f -n 50",

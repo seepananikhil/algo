@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/auth"
 const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
   { to: "/day", label: "Day viewer", icon: CalendarDays },
-  { to: "/paper", label: "Paper P&L", icon: Wallet },
+  { to: "/paper", label: "Trades P&L", icon: Wallet },
   { to: "/backtest", label: "Backtest", icon: LineChart },
   { to: "/config", label: "Strategy", icon: Sliders },
   { to: "/settings", label: "Broker", icon: SettingsIcon },

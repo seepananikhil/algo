@@ -1,0 +1,14 @@
+[Unit]
+Description=AlgoNeo End-of-Day Trade Git Backup Service
+After=network.target
+
+[Service]
+Type=oneshot
+User=ubuntu
+WorkingDirectory=/home/ubuntu/algo
+ExecStart=/bin/bash /home/ubuntu/algo/scripts/sync_trades.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

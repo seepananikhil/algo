@@ -124,6 +124,16 @@ function ActiveTradeCard({
           <span className="font-bold text-xs text-foreground truncate font-sans">
             {sym}
           </span>
+          {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+              <span className="size-1 rounded-full bg-emerald-400 animate-pulse" />
+              LIVE
+            </span>
+          ) : (
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+              PAPER
+            </span>
+          )}
           <span
             className={`px-1.5 py-0.2 rounded text-[10px] font-bold uppercase shrink-0 ${
               trade.side === "CALL" || trade.side === "BUY"
@@ -1898,9 +1908,21 @@ export function LivePage() {
                           className="p-2.5 rounded-lg border border-border bg-card hover:bg-muted/30 cursor-pointer transition-all shadow-2xs"
                         >
                           <div className="flex items-center justify-between mb-1">
-                            <span className="font-bold text-xs text-foreground font-sans">
-                              {trade.option || trade.symbol}
-                            </span>
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span className="font-bold text-xs text-foreground truncate font-sans">
+                                {trade.option || trade.symbol}
+                              </span>
+                              {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
+                                  <span className="size-1 rounded-full bg-emerald-400 animate-pulse" />
+                                  LIVE
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+                                  PAPER
+                                </span>
+                              )}
+                            </div>
                             <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
                               trade.side === "CALL" || trade.side === "BUY"
                                 ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400"

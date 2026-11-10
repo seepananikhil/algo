@@ -492,7 +492,20 @@ export function FillsTable({ fills, signals = [], empty = "No option trades." }:
           return (
           <TableRow key={i} className="bg-transparent hover:bg-muted/20">
             <TableCell>
-              <div className="flex items-center gap-2"><SideBadge side={f.side} /> {f.option}</div>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <SideBadge side={f.side} />
+                <span className="font-semibold text-foreground">{f.option}</span>
+                {f.mode && f.mode.toUpperCase().includes("LIVE") ? (
+                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    LIVE
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
+                    PAPER
+                  </span>
+                )}
+              </div>
               <div className="text-xs text-muted-foreground">{f.qty} qty · {f.mode}</div>
             </TableCell>
             {fills.some((fill) => fill.level != null) && <TableCell className="text-right tabular-nums">{fmtNum(f.level)}</TableCell>}

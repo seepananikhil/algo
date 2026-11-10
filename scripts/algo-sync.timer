@@ -1,0 +1,12 @@
+[Unit]
+Description=Run AlgoNeo Trade Git Backup Daily at 15:35 and 16:35 IST
+Requires=algo-sync.service
+
+[Timer]
+Unit=algo-sync.service
+OnCalendar=Mon..Fri *-*-* 15:35:00
+OnCalendar=Mon..Fri *-*-* 16:35:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
