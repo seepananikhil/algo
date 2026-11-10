@@ -31,10 +31,21 @@ IST = timezone(timedelta(hours=5, minutes=30))
 
 
 def load_kotak_config() -> dict:
-    if not CONFIG_FILE.exists():
-        return {}
-    cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
-    return cfg.get("kotak_neo", {})
+    neo_config = ROOT / "neo_config.json"
+    if neo_config.exists():
+        try:
+            cfg = json.loads(neo_config.read_text(encoding="utf-8"))
+            if cfg.get("consumer_key") or cfg.get("mobile_number"):
+                return cfg
+        except Exception:
+            pass
+    if CONFIG_FILE.exists():
+        try:
+            cfg = json.loads(CONFIG_FILE.read_text(encoding="utf-8"))
+            return cfg.get("kotak_neo", {})
+        except Exception:
+            pass
+    return {}
 
 
 _KOTAK_CLIENT: Optional[NeoAPI] = None

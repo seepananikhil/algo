@@ -37,12 +37,14 @@ fi
 # Check if running in a Linux systemd environment (e.g. Cloud VM)
 if command -v systemctl &> /dev/null && [ -d /run/systemd/system ]; then
     # Ensure systemd services are installed and enabled
-    if [ ! -f /etc/systemd/system/algo.service ]; then
-        echo "  ℹ️  First-time setup: Installing systemd auto-boot services..."
-        bash "${APP_DIR}/scripts/setup_services.sh"
+    if [ ! -f /etc/systemd/system/algo.service ] || [ ! -f /etc/systemd/system/algo-sync.timer ]; then
+        echo "  ℹ️  Installing / updating systemd auto-boot services..."
+        sudo bash "${APP_DIR}/scripts/setup_services.sh"
     else
         echo "  🔄 Starting / Restarting background trading service..."
         sudo systemctl restart algo.service
+        sudo systemctl daemon-reload
+        sudo systemctl enable --now algo-sync.timer 2>/dev/null || true
         sudo systemctl restart algo-sync.timer 2>/dev/null || true
     fi
 
