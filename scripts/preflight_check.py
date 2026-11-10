@@ -77,10 +77,28 @@ def run_check():
     perf_dir.mkdir(parents=True, exist_ok=True)
     print(f"   {badge(True)} Data Directories: {live_dir.name}/, {perf_dir.name}/ present")
 
+    missing_pkgs = []
+    for pkg in ["pyotp", "pandas", "requests"]:
+        try:
+            __import__(pkg)
+        except ImportError:
+            missing_pkgs.append(pkg)
+    if missing_pkgs:
+        print(f"   {badge(False)} Missing dependencies: {', '.join(missing_pkgs)} (Run: pip install {' '.join(missing_pkgs)})")
+        overall_ok = False
+    else:
+        print(f"   {badge(True)} Core Dependencies: pandas, requests, pyotp installed")
+
     # 2. Broker Configuration & Credentials
     print(f"\n{BOLD}2. Broker Integration (Kotak Neo){RESET}")
-    from kotak_orders import load_kotak_config, available_kotak_funds, kotak_token_status
-    k_cfg = load_kotak_config()
+    k_cfg = {}
+    load_kotak_config, available_kotak_funds, kotak_token_status = None, None, None
+    try:
+        from kotak_orders import load_kotak_config, available_kotak_funds, kotak_token_status
+        k_cfg = load_kotak_config()
+    except Exception as exc:
+        print(f"   {badge(False)} Broker module load error: {exc}")
+        overall_ok = False
     neo_config = ROOT / "neo_config.json"
     if not k_cfg and neo_config.exists():
         try:

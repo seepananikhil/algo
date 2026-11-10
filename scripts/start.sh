@@ -10,11 +10,29 @@ set -e
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$APP_DIR"
 
-PYTHON_BIN=$(which python3 || echo "python")
+# Detect Python interpreter (prefer virtualenv if active/present)
+if [ -n "$VIRTUAL_ENV" ] && [ -f "$VIRTUAL_ENV/bin/python" ]; then
+    PYTHON_BIN="$VIRTUAL_ENV/bin/python"
+elif [ -f "${APP_DIR}/venv/bin/python" ]; then
+    PYTHON_BIN="${APP_DIR}/venv/bin/python"
+elif [ -f "${APP_DIR}/.venv/bin/python" ]; then
+    PYTHON_BIN="${APP_DIR}/.venv/bin/python"
+elif [ -f "$HOME/algo_venv/bin/python" ]; then
+    PYTHON_BIN="$HOME/algo_venv/bin/python"
+else
+    PYTHON_BIN=$(which python3 || echo "python")
+fi
 
 echo "=================================================================="
 echo "  🚀 Starting AlgoNeo Trading Platform & Services..."
+echo "  Using Python: $PYTHON_BIN"
 echo "=================================================================="
+
+# Auto-verify / install essential dependencies (pyotp, pandas, requests)
+if ! ${PYTHON_BIN} -c "import pyotp" &>/dev/null; then
+    echo "  📦 Installing missing dependency: pyotp..."
+    ${PYTHON_BIN} -m pip install pyotp || pip install pyotp || pip3 install pyotp || true
+fi
 
 # Check if running in a Linux systemd environment (e.g. Cloud VM)
 if command -v systemctl &> /dev/null && [ -d /run/systemd/system ]; then

@@ -12,7 +12,10 @@ from typing import Optional, Tuple
 # Prevent neo_api_client Windows file lock WinError 32 on midnight rotation
 os.environ["NEO_LOG_FILE_ENABLED"] = "false"
 
-import pyotp
+try:
+    import pyotp
+except ImportError:
+    pyotp = None
 
 try:
     from neo_api_client import NeoAPI
@@ -113,6 +116,8 @@ def kotak_login(
     # Generate or use TOTP
     active_totp = totp_code
     if not active_totp and totp_secret:
+        if pyotp is None:
+            return {"ok": False, "error": "pyotp library is not installed (run: pip install pyotp)"}
         try:
             clean_secret = totp_secret.replace(" ", "").strip().upper()
             active_totp = pyotp.TOTP(clean_secret).now()

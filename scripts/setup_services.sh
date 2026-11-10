@@ -16,7 +16,23 @@ echo "=================================================================="
 
 CURRENT_USER=$(whoami)
 APP_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_BIN=$(which python3 || echo "/usr/bin/python3")
+if [ -n "$VIRTUAL_ENV" ] && [ -f "$VIRTUAL_ENV/bin/python" ]; then
+    PYTHON_BIN="$VIRTUAL_ENV/bin/python"
+elif [ -f "${APP_DIR}/venv/bin/python" ]; then
+    PYTHON_BIN="${APP_DIR}/venv/bin/python"
+elif [ -f "${APP_DIR}/.venv/bin/python" ]; then
+    PYTHON_BIN="${APP_DIR}/.venv/bin/python"
+elif [ -f "$HOME/algo_venv/bin/python" ]; then
+    PYTHON_BIN="$HOME/algo_venv/bin/python"
+else
+    PYTHON_BIN=$(which python3 || echo "/usr/bin/python3")
+fi
+
+# Ensure essential dependencies are installed
+if ! ${PYTHON_BIN} -c "import pyotp" &>/dev/null; then
+    echo "  📦 Installing missing dependency: pyotp..."
+    ${PYTHON_BIN} -m pip install pyotp || pip install pyotp || true
+fi
 
 # Ensure executable permissions on all scripts
 chmod +x "${APP_DIR}/scripts/sync_trades.sh"
