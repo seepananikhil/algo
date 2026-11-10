@@ -9,6 +9,7 @@
     "sync": "bash scripts/sync_trades.sh",
     "setup:sync": "bash scripts/setup_sync_service.sh",
     "setup:services": "bash scripts/setup_services.sh",
+    "setup:runner": "bash scripts/setup_github_runner.sh",
     "restart": "sudo systemctl restart algo.service",
     "status": "sudo systemctl status algo.service",
     "logs": "sudo journalctl -u algo.service -f -n 50",

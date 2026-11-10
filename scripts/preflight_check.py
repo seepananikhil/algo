@@ -191,6 +191,14 @@ def run_check():
         res_timer = subprocess.run(["systemctl", "is-active", "algo-sync.timer"], capture_output=True, text=True)
         is_timer_active = (res_timer.stdout.strip() == "active")
         print(f"   {badge(is_timer_active)} algo-sync.timer (Daily Git Backup): {res_timer.stdout.strip().upper()}")
+
+        # Check GitHub Actions Runner service
+        runner_check = subprocess.run(["bash", "-c", "systemctl list-units --type=service --state=running | grep -i 'actions.runner' || true"], capture_output=True, text=True)
+        has_runner = bool(runner_check.stdout.strip())
+        if has_runner:
+            print(f"   {badge(True)} GitHub Actions Runner: ACTIVE (Connected to repo)")
+        else:
+            print(f"   {badge(None)} GitHub Actions Runner: Not active (run npm run setup:runner to connect)")
     else:
         print(f"   {badge(True)} Local Windows environment (Systemd checks skipped)")
 
