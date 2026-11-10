@@ -1,0 +1,2 @@
+date,trade_num,stage,side,option,entry_time,entry_price,sl_pts,initial_sl,target,vix_chg,lots,qty
+2026-10-29,1,STAGE1_TREND,LONG,SENSEX 73500 CE (ATM),09:52,73483.69,120.0,73363.69,UNCAPPED,-2.4,2,20

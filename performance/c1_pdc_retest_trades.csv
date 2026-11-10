@@ -1,0 +1,3 @@
+date,side,pdc,c1_color,c1_open,c1_high,c1_low,c1_close,retest_time,entry_time,exit_time,entry,stop,target,exit_price,pnl_points,bars_held,reason,month,equity,peak,drawdown
+2026-10-14,PUT,22721.95,RED,22715.75,22730.55,22664.95,22673.05,09:17,09:18,09:19,22708.05,22728.05,22673.05,22673.05,35.0,1,TARGET,2026-10,35.0,35.0,0.0
+2026-10-19,PUT,23146.15,RED,23150.85,23154.8,23074.6,23122.4,09:20,09:21,09:22,23124.6,23144.6,23089.6,23144.6,-20.0,1,STOP,2026-10,15.0,35.0,-20.0
