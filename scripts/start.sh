@@ -33,6 +33,10 @@ if ! ${PYTHON_BIN} -c "import pyotp" &>/dev/null; then
     echo "  📦 Installing missing dependency: pyotp..."
     ${PYTHON_BIN} -m pip install pyotp || pip install pyotp || pip3 install pyotp || true
 fi
+if ! ${PYTHON_BIN} -c "import neo_api_client" &>/dev/null; then
+    echo "  📦 Installing missing dependency: kotakneoapi..."
+    ${PYTHON_BIN} -m pip install kotakneoapi || pip install kotakneoapi || pip3 install kotakneoapi || true
+fi
 
 # Check if running in a Linux systemd environment (e.g. Cloud VM)
 if command -v systemctl &> /dev/null && [ -d /run/systemd/system ]; then

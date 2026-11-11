@@ -78,16 +78,16 @@ def run_check():
     print(f"   {badge(True)} Data Directories: {live_dir.name}/, {perf_dir.name}/ present")
 
     missing_pkgs = []
-    for pkg in ["pyotp", "pandas", "requests"]:
+    for pkg, mod in [("pyotp", "pyotp"), ("pandas", "pandas"), ("requests", "requests"), ("kotakneoapi", "neo_api_client")]:
         try:
-            __import__(pkg)
+            __import__(mod)
         except ImportError:
             missing_pkgs.append(pkg)
     if missing_pkgs:
         print(f"   {badge(False)} Missing dependencies: {', '.join(missing_pkgs)} (Run: pip install {' '.join(missing_pkgs)})")
         overall_ok = False
     else:
-        print(f"   {badge(True)} Core Dependencies: pandas, requests, pyotp installed")
+        print(f"   {badge(True)} Core Dependencies: pandas, requests, pyotp, kotakneoapi installed")
 
     # 2. Broker Configuration & Credentials
     print(f"\n{BOLD}2. Broker Integration (Kotak Neo){RESET}")
