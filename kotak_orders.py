@@ -131,6 +131,8 @@ def kotak_login(
             return {"ok": False, "error": "pyotp library is not installed (run: pip install pyotp)"}
         try:
             clean_secret = totp_secret.replace(" ", "").strip().upper()
+            if "YOUR_" in clean_secret or "_" in clean_secret:
+                return {"ok": False, "error": "Placeholder TOTP secret detected in neo_config.json. Please set your real TOTP key."}
             active_totp = pyotp.TOTP(clean_secret).now()
         except Exception as e:
             return {"ok": False, "error": f"Failed to generate TOTP from secret: {e}"}
