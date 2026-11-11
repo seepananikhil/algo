@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sliders, Sun, Wallet } from "lucide-react"
+import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sliders, Sun, Wallet, TrendingUp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -12,6 +12,7 @@ const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
   { to: "/day", label: "Day viewer", icon: CalendarDays },
   { to: "/paper", label: "Trades P&L", icon: Wallet },
+  { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },
   { to: "/backtest", label: "Backtest", icon: LineChart },
   { to: "/config", label: "Strategy", icon: Sliders },
   { to: "/settings", label: "Broker", icon: SettingsIcon },
@@ -78,10 +79,24 @@ export function Layout() {
             {error && <Badge variant="destructive" className="py-0 text-[10px]">Backend offline</Badge>}
             {status && (
               <>
-                <Badge variant="outline" className="gap-1 py-0 text-[11px]">
+                <NavLink
+                  to="/settings"
+                  title={status.token.valid ? "Kotak Neo session active · Click for account & margin" : "Kotak Neo offline · Click to log in"}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all select-none cursor-pointer",
+                    status.token.valid
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                      : "bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/25 animate-pulse"
+                  )}
+                >
                   <Dot ok={status.token.valid} />
-                  Kotak: {status.token.valid ? (status.token.greeting_name || "Connected") : "Offline"}
-                </Badge>
+                  <span>Kotak: {status.token.valid ? (status.token.greeting_name || "Connected") : "Offline"}</span>
+                  {!status.token.valid && (
+                    <span className="text-[9px] underline font-semibold ml-0.5">
+                      (Login)
+                    </span>
+                  )}
+                </NavLink>
                 <button
                   type="button"
                   onClick={async () => {

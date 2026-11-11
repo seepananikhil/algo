@@ -1304,13 +1304,24 @@ def public_settings() -> dict:
     out["live_trading"] = out["midpoint_live_trading"]
     out["capture_running"] = capture_running()
 
-    # Kotak Neo non-sensitive metadata for UI
-    k_cfg = cfg.get("kotak_neo", {})
+    # Kotak Neo metadata & session state for UI
+    try:
+        from kotak_orders import load_kotak_config, kotak_token_status
+        k_cfg = load_kotak_config()
+        ks = kotak_token_status(auto_login=False)
+    except Exception:
+        k_cfg = cfg.get("kotak_neo", {})
+        ks = {}
     out["kotak_mobile_number"] = k_cfg.get("mobile_number", "")
     out["kotak_ucc"] = k_cfg.get("ucc", "")
+    out["kotak_consumer_key"] = k_cfg.get("consumer_key", "")
     out["kotak_consumer_key_set"] = bool(k_cfg.get("consumer_key"))
     out["kotak_mpin_set"] = bool(k_cfg.get("mpin"))
-    out["kotak_totp_secret_set"] = bool(k_cfg.get("totp_secret"))
+    out["kotak_totp_secret_set"] = bool(k_cfg.get("totp_secret") or k_cfg.get("totp_key"))
+    out["kotak_session_valid"] = bool(ks.get("valid"))
+    out["kotak_greeting_name"] = ks.get("greeting_name", "")
+    out["kotak_logged_in_at"] = ks.get("logged_in_at", "")
+    out["kotak_reason"] = ks.get("reason", "")
     return out
 
 
@@ -2150,7 +2161,24 @@ def update_settings(body: dict) -> tuple:
             if "kotak_neo" not in cfg or not isinstance(cfg["kotak_neo"], dict):
                 cfg["kotak_neo"] = {}
             if value is not None and str(value).strip() != "":
-                cfg["kotak_neo"][field] = str(value).strip()
+                val_clean = str(value).strip()
+                cfg["kotak_neo"][field] = val_clean
+                try:
+                    neo_path = ROOT / "neo_config.json"
+                    neo_data = {}
+                    if neo_path.exists():
+                        try:
+                            neo_data = json.loads(neo_path.read_text(encoding="utf-8"))
+                        except Exception:
+                            pass
+                    neo_data[field] = val_clean
+                    if field == "totp_secret":
+                        neo_data["totp_key"] = val_clean
+                    elif field == "totp_key":
+                        neo_data["totp_secret"] = val_clean
+                    neo_path.write_text(json.dumps(neo_data, indent=2), encoding="utf-8")
+                except Exception as exc:
+                    print(f"Warning: could not write neo_config.json: {exc}")
         elif key in EDITABLE_SETTINGS:
             kind, lo, hi = EDITABLE_SETTINGS[key]
             if kind is bool:
@@ -5283,6 +5311,18 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/auth/status":
             return self._json({"authenticated": self._is_authenticated()})
 
+        # Public dashboard read routes for Swinger Engine
+        if url.path == "/api/swinger/portfolio":
+            from swinger_engine import load_portfolio, load_config
+            return self._json({"portfolio": load_portfolio(), "config": load_config()})
+        elif url.path == "/api/swinger/trades":
+            from swinger_engine import load_trades
+            return self._json(load_trades())
+        elif url.path == "/api/swinger/status":
+            from swinger_engine import load_config, load_portfolio
+            p = load_portfolio()
+            return self._json({"status": "running", "active_positions": len(p.get("positions", [])), "last_updated": p.get("last_updated")})
+
         if not self._is_authenticated():
             return self._json({"error": "unauthorized", "auth_required": True}, 401)
 
@@ -5787,6 +5827,11 @@ class Handler(BaseHTTPRequestHandler):
         if self.headers.get("X-Dashboard") != "1":
             return self._json({"error": "forbidden"}, 403)
 
+        if url.path == "/api/swinger/scan-now":
+            from swinger_engine import update_positions_and_scan
+            p = update_positions_and_scan()
+            return self._json({"ok": True, "portfolio": p})
+
         if url.path == "/api/auth/login":
             body = self._body()
             pin = str(body.get("pin", "")).strip()
@@ -5918,9 +5963,51 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json({"error": f"login start failed: {exc}"}, 500)
         elif url.path == "/api/kotak/login":
-            from kotak_orders import kotak_login
+            from kotak_orders import kotak_login, available_kotak_funds, kotak_token_status
             body = self._body()
             res = kotak_login(totp_code=body.get("totp"), mpin=body.get("mpin"))
+            if res.get("ok"):
+                funds = available_kotak_funds()
+                res["funds"] = funds.get("available_equity_funds", 0.0) if funds.get("ok") else 0.0
+                res["status"] = kotak_token_status(auto_login=False)
+                if is_market_weekday() and not capture_running():
+                    try:
+                        start_capture()
+                    except Exception:
+                        pass
+            self._json(res, 200 if res.get("ok") else 400)
+        elif url.path == "/api/kotak/save-and-login":
+            body = self._body()
+            from kotak_orders import load_kotak_config, kotak_login, available_kotak_funds, kotak_token_status
+            k_cfg = load_kotak_config()
+            for k in ["consumer_key", "mobile_number", "ucc", "mpin", "totp_secret", "totp_key"]:
+                if k in body and body[k]:
+                    k_cfg[k] = str(body[k]).strip()
+            if "totp_secret" in k_cfg:
+                k_cfg["totp_key"] = k_cfg["totp_secret"]
+            elif "totp_key" in k_cfg:
+                k_cfg["totp_secret"] = k_cfg["totp_key"]
+            try:
+                neo_path = ROOT / "neo_config.json"
+                neo_path.write_text(json.dumps(k_cfg, indent=2), encoding="utf-8")
+                cfg = read_config()
+                cfg["kotak_neo"] = k_cfg
+                write_config(cfg)
+            except Exception as exc:
+                print(f"Warning: could not write config files: {exc}")
+
+            totp = body.get("totp")
+            mpin = body.get("mpin") or k_cfg.get("mpin")
+            res = kotak_login(totp_code=totp, mpin=mpin)
+            if res.get("ok"):
+                funds = available_kotak_funds()
+                res["funds"] = funds.get("available_equity_funds", 0.0) if funds.get("ok") else 0.0
+                res["status"] = kotak_token_status(auto_login=False)
+                if is_market_weekday() and not capture_running():
+                    try:
+                        start_capture()
+                    except Exception:
+                        pass
             self._json(res, 200 if res.get("ok") else 400)
         elif url.path == "/api/risk-guardian/reset":
             if not self._is_local_client():
