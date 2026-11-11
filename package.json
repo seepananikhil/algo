@@ -5,7 +5,7 @@
   "description": "AlgoNeo Automated Options Trading & Backtesting Terminal",
   "scripts": {
     "update": "git pull origin master && sudo systemctl restart algo.service",
-    "check": "python scripts/preflight_check.py",
+    "check": "bash scripts/check.sh",
     "sync": "bash scripts/sync_trades.sh",
     "setup:sync": "bash scripts/setup_sync_service.sh",
     "setup:services": "bash scripts/setup_services.sh",
