@@ -107,7 +107,7 @@ def run_check():
             pass
 
     has_creds = bool(k_cfg.get("consumer_key") and k_cfg.get("mobile_number"))
-    has_totp = bool(k_cfg.get("totp_secret") and k_cfg.get("mpin"))
+    has_totp = bool((k_cfg.get("totp_secret") or k_cfg.get("totp_key")) and k_cfg.get("mpin"))
     if has_creds and has_totp:
         print(f"   {badge(True)} Credentials: Mobile + Consumer Key + TOTP + MPIN configured")
     else:

@@ -66,7 +66,7 @@ def get_kotak_client(token_data: Optional[dict] = None) -> Optional[NeoAPI]:
         return _KOTAK_CLIENT
 
     # Attempt automatic login if totp_secret is configured
-    if not status.get("valid") and k_cfg.get("totp_secret") and k_cfg.get("mpin"):
+    if not status.get("valid") and (k_cfg.get("totp_secret") or k_cfg.get("totp_key")) and k_cfg.get("mpin"):
         res = kotak_login()
         if res.get("ok") and _KOTAK_CLIENT is not None:
             return _KOTAK_CLIENT
@@ -111,7 +111,7 @@ def kotak_login(
     consumer_key = k_cfg.get("consumer_key", "")
     mobile = k_cfg.get("mobile_number", "")
     ucc = k_cfg.get("ucc", "")
-    totp_secret = k_cfg.get("totp_secret", "")
+    totp_secret = k_cfg.get("totp_secret", "") or k_cfg.get("totp_key", "")
     config_mpin = k_cfg.get("mpin", "")
 
     if not consumer_key or not mobile or not ucc:
