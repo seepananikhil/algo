@@ -217,7 +217,7 @@ def kotak_token_status(auto_login: bool = True) -> dict:
     # If token is expired / missing and auto_login is enabled, attempt automatic login
     if auto_login:
         k_cfg = load_kotak_config()
-        if k_cfg.get("totp_secret") and k_cfg.get("mpin"):
+        if (k_cfg.get("totp_secret") or k_cfg.get("totp_key")) and k_cfg.get("mpin"):
             now = time.time()
             if now - _LAST_KOTAK_LOGIN_ATTEMPT >= 120:  # 2 minute cooldown between retries
                 _LAST_KOTAK_LOGIN_ATTEMPT = now
