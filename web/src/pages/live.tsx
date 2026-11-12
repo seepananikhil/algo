@@ -467,49 +467,17 @@ export function LivePage() {
   const niftyDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=NIFTY&full=1` : null, 2500)
   const sensexDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=SENSEX&full=1` : null, 2500)
 
-  // Trade mode filter: "LIVE" (Kotak Neo real trades), "ALL", or "PAPER"
-  const [tradeMode, setTradeMode] = useState<"LIVE" | "ALL" | "PAPER">(() => {
-    try {
-      return (localStorage.getItem("trade_mode_filter") as "LIVE" | "ALL" | "PAPER") || "LIVE"
-    } catch {
-      return "LIVE"
-    }
-  })
-
-  const handleSetTradeMode = (m: "LIVE" | "ALL" | "PAPER") => {
-    setTradeMode(m)
-    try {
-      localStorage.setItem("trade_mode_filter", m)
-    } catch {}
-  }
-
-  // Polling feeds: All strategy paper trades & live broker positions
+  // Polling feeds: All strategy and broker positions
   const liveTradesPoll = usePoll<OptionTrade[]>("/api/trades", 2500)
 
   const lastKnownTradesRef = useRef<OptionTrade[]>([])
-  const rawTrades = useMemo(() => {
+  const tradesList = useMemo(() => {
     if (liveTradesPoll.data && liveTradesPoll.data.length > 0) {
       lastKnownTradesRef.current = liveTradesPoll.data
       return liveTradesPoll.data
     }
     return liveTradesPoll.data ?? lastKnownTradesRef.current
   }, [liveTradesPoll.data])
-
-  const counts = useMemo(() => {
-    const liveCount = rawTrades.filter((t) => t.mode?.includes("LIVE") || t.strategy === "kotak_live").length
-    const paperCount = rawTrades.length - liveCount
-    return { live: liveCount, paper: paperCount, total: rawTrades.length }
-  }, [rawTrades])
-
-  const tradesList = useMemo(() => {
-    if (tradeMode === "LIVE") {
-      return rawTrades.filter((t) => t.mode?.includes("LIVE") || t.strategy === "kotak_live")
-    }
-    if (tradeMode === "PAPER") {
-      return rawTrades.filter((t) => !t.mode?.includes("LIVE") && t.strategy !== "kotak_live")
-    }
-    return rawTrades
-  }, [rawTrades, tradeMode])
 
   // Partition into Active and Closed
   const openTrades = useMemo(() => {
@@ -1644,45 +1612,53 @@ export function LivePage() {
         {/* SIDE PANEL */}
         {isSidePanelOpen && (
           <aside className="w-80 lg:w-96 flex-none bg-card border-l border-border flex flex-col shadow-xs overflow-hidden z-10 animate-fadeIn">
-            {/* Header: Segmented Tabs & Close Button */}
+            {/* Header: Clean Segmented Tabs & Collapse Button */}
             <div className="flex-none p-2 border-b border-border bg-muted/30 flex items-center justify-between gap-1.5">
               <div className="flex items-center bg-muted/80 p-0.5 rounded-lg border border-border flex-1">
                 <button
                   onClick={() => setSideTab("ACTIVE")}
-                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 ${
+                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     sideTab === "ACTIVE"
                       ? "bg-background text-foreground shadow-xs font-bold"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <Radio className="w-2.5 h-2.5 text-emerald-500" />
-                  <span>Active ({openTrades.length})</span>
+                  <Radio className={`w-2.5 h-2.5 ${openTrades.length > 0 ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
+                  <span>Active</span>
+                  <span className={`px-1 py-0.2 rounded text-[9px] font-mono font-bold leading-none ${
+                    openTrades.length > 0 ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
+                  }`}>
+                    {openTrades.length}
+                  </span>
                 </button>
                 <button
                   onClick={() => setSideTab("CLOSED")}
-                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 ${
+                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     sideTab === "CLOSED"
                       ? "bg-background text-foreground shadow-xs font-bold"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <Clock className="w-2.5 h-2.5 text-muted-foreground" />
-                  <span>Closed ({closedTrades.length})</span>
+                  <span>Closed</span>
+                  <span className="px-1 py-0.2 rounded text-[9px] font-mono font-bold bg-muted text-muted-foreground leading-none">
+                    {closedTrades.length}
+                  </span>
                 </button>
                 <button
                   onClick={() => setSideTab("ENGINES")}
-                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 ${
+                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     sideTab === "ENGINES"
                       ? "bg-background text-foreground shadow-xs font-bold"
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
                   <Terminal className="w-2.5 h-2.5 text-emerald-500" />
-                  <span>Live Logs</span>
+                  <span>Logs</span>
                 </button>
                 <button
                   onClick={() => setSideTab("SUMMARY")}
-                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 ${
+                  className={`flex-1 py-1 text-[11px] font-semibold rounded transition-all flex items-center justify-center gap-1 cursor-pointer ${
                     sideTab === "SUMMARY"
                       ? "bg-background text-foreground shadow-xs font-bold"
                       : "text-muted-foreground hover:text-foreground"
@@ -1695,54 +1671,11 @@ export function LivePage() {
 
               <button
                 onClick={() => setIsSidePanelOpen(false)}
-                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted"
+                className="p-1.5 rounded-md text-muted-foreground hover:text-foreground hover:bg-muted cursor-pointer transition-colors"
                 title="Collapse Side Panel"
               >
                 <PanelRightClose className="w-4 h-4" />
               </button>
-            </div>
-
-            {/* Live vs Paper Feed Filter */}
-            <div className="flex-none px-2.5 py-1.5 bg-muted/20 border-b border-border/60 flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground font-semibold text-[10px] uppercase tracking-wider">Feed:</span>
-              <div className="flex items-center bg-muted/60 p-0.5 rounded-md border border-border/60">
-                <button
-                  type="button"
-                  onClick={() => handleSetTradeMode("LIVE")}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                    tradeMode === "LIVE"
-                      ? "bg-emerald-600 text-white shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Show only real Kotak Neo broker trades (Zero brokerage)"
-                >
-                  LIVE ({counts.live})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetTradeMode("ALL")}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                    tradeMode === "ALL"
-                      ? "bg-background text-foreground shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Show both Live Kotak and Paper trades"
-                >
-                  ALL ({counts.total})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSetTradeMode("PAPER")}
-                  className={`px-2 py-0.5 rounded text-[10px] font-bold transition-all cursor-pointer ${
-                    tradeMode === "PAPER"
-                      ? "bg-amber-600 text-white shadow-xs"
-                      : "text-muted-foreground hover:text-foreground"
-                  }`}
-                  title="Show simulated strategy paper trades only"
-                >
-                  PAPER ({counts.paper})
-                </button>
-              </div>
             </div>
 
             {/* TAB CONTENTS */}
@@ -1785,49 +1718,60 @@ export function LivePage() {
                       const pnl = trade.net_rs ?? trade.pnl_rs ?? 0
                       const pts = trade.nifty_points ?? trade.pnl_points ?? 0
                       const isProfitable = pnl >= 0
+                      const entryPx = Number(trade.buy_price || trade.spot_at_entry || trade.nifty_in || 0)
+                      const exitPx = Number(trade.sell_price || trade.nifty_out || 0)
 
                       return (
                         <div
                           key={`closed-card-${idx}`}
                           onClick={() => handleSelectTrade(trade)}
-                          className="p-2.5 rounded-lg border border-border bg-card hover:bg-muted/30 cursor-pointer transition-all shadow-2xs"
+                          className="p-2.5 rounded-lg border border-border bg-card hover:bg-muted/30 cursor-pointer transition-all shadow-2xs space-y-1.5"
                         >
-                          <div className="flex items-center justify-between mb-1">
+                          <div className="flex items-center justify-between">
                             <div className="flex items-center gap-1.5 min-w-0">
                               <span className="font-bold text-xs text-foreground truncate font-sans">
                                 {trade.option || trade.symbol}
                               </span>
                               {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 shrink-0">
-                                  <span className="size-1 rounded-full bg-emerald-400 animate-pulse" />
+                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shrink-0">
+                                  <span className="size-1 rounded-full bg-emerald-500" />
                                   LIVE
                                 </span>
                               ) : (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30 shrink-0">
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0">
                                   PAPER
                                 </span>
                               )}
                             </div>
-                            <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
                               trade.side === "CALL" || trade.side === "BUY"
-                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950 dark:text-emerald-400"
-                                : "bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950 dark:text-rose-400"
+                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
                             }`}>
                               {trade.side}
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1.5 font-mono">
-                            <span>{trade.entry || "09:30"} ➔ {trade.exit || "15:15"}</span>
-                            <span className="px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-sans text-[9px] uppercase">
-                              {trade.exit_reason || "Target"}
+                          <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
+                            <span>
+                              {entryPx > 0 ? `₹${entryPx.toFixed(1)}` : "--"} ➔ {exitPx > 0 ? `₹${exitPx.toFixed(1)}` : "--"}
+                            </span>
+                            <span className="text-[10px]">
+                              {trade.entry || "09:30"} ➔ {trade.exit || "15:15"}
                             </span>
                           </div>
 
-                          <div className="flex items-center justify-between pt-1 border-t border-border/40 font-mono">
-                            <span className="text-[10px] text-muted-foreground">
-                              {pts >= 0 ? `+${pts}` : pts} pts
-                            </span>
+                          <div className="flex items-center justify-between pt-1 border-t border-border/50 font-mono">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-muted-foreground">
+                                {pts >= 0 ? `+${pts}` : pts} pt
+                              </span>
+                              {trade.exit_reason && (
+                                <span className="px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-sans text-[9px] uppercase">
+                                  {trade.exit_reason}
+                                </span>
+                              )}
+                            </div>
                             <span className={`text-xs font-bold ${pnlClass(pnl)}`}>
                               {isProfitable ? "+" : ""}{fmtRs(pnl)}
                             </span>
