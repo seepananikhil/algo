@@ -169,6 +169,26 @@ def trigger_backtest_sync(reason: str = "manual") -> dict:
     threading.Thread(target=_worker, daemon=True).start()
     return {"ok": True, "running": True, "message": _sync_state["message"]}
 
+_last_swinger_run = {"last_run_date": None, "status": "idle"}
+
+def swinger_daily_cycle_loop() -> None:
+    """Automated daily Swinger scan and paper portfolio update at 15:25 IST on weekdays."""
+    while True:
+        try:
+            now = datetime.now(IST)
+            today_str = now.strftime("%Y-%m-%d")
+            # Run at 15:25 IST on market days (Monday to Friday)
+            if now.weekday() < 5 and (now.hour == 15 and now.minute >= 25):
+                if _last_swinger_run.get("last_run_date") != today_str:
+                    print(f"[{datetime.now(IST)}] [Swinger Scheduler] Triggering automated daily cycle for {today_str}...")
+                    from swinger_engine import update_positions_and_scan
+                    update_positions_and_scan()
+                    _last_swinger_run["last_run_date"] = today_str
+                    _last_swinger_run["status"] = f"Completed for {today_str}"
+        except Exception as exc:
+            print(f"[Swinger Scheduler Error]: {exc}")
+        time.sleep(30)
+
 def daily_backtest_sync_loop() -> None:
     """Trigger daily backtest sync after market close (16:35 IST on weekdays)."""
     while True:
@@ -5346,6 +5366,9 @@ class Handler(BaseHTTPRequestHandler):
             from swinger_engine import load_config, load_portfolio
             p = load_portfolio()
             return self._json({"status": "running", "active_positions": len(p.get("positions", [])), "last_updated": p.get("last_updated")})
+        elif url.path == "/api/swinger/daily-signals":
+            from swinger_engine import load_daily_signals
+            return self._json(load_daily_signals())
 
         if not self._is_authenticated():
             return self._json({"error": "unauthorized", "auth_required": True}, 401)
@@ -6035,14 +6058,15 @@ class Handler(BaseHTTPRequestHandler):
             self._json(res, 200 if res.get("ok") else 400)
         elif url.path == "/api/risk-guardian/reset":
             from risk_guardian import reset_risk_lock
-            reset_risk_lock()
+            res = reset_risk_lock()
             stop_file = ROOT / "STOP_TRADING"
             if stop_file.exists():
                 try:
                     stop_file.unlink(missing_ok=True)
                 except Exception:
                     pass
-            self._json({"ok": True, "message": "Risk Guardian lock and trading halt cleared successfully."})
+            base_amt = float(res.get("baseline_pnl", 0.0) if isinstance(res, dict) else 0.0)
+            self._json({"ok": True, "message": f"Risk Guardian reset! Baseline anchored at Rs. {base_amt:+,.2f}. Fresh buffer active."})
         elif url.path == "/api/risk-guardian/config":
             body = self._body()
             cfg = read_config()
@@ -6066,6 +6090,7 @@ if __name__ == "__main__":
     threading.Thread(target=hero_zero_capture_loop, daemon=True, name="hero-zero-capture").start()
     threading.Thread(target=sensex_expiry_collector_loop, daemon=True, name="sensex-expiry-collector").start()
     threading.Thread(target=auto_start_loop, daemon=True).start()
+    threading.Thread(target=swinger_daily_cycle_loop, daemon=True, name="swinger-daily-cycle").start()
     threading.Thread(target=daily_backtest_sync_loop, daemon=True, name="daily-backtest-sync").start()
     threading.Thread(target=daily_trade_git_sync_loop, daemon=True, name="daily-trade-git-sync").start()
     threading.Thread(target=scalper_forward_loop, daemon=True, name="micro-scalper-forward").start()

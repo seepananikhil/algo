@@ -30,6 +30,7 @@ ROOT = Path(__file__).resolve().parent
 CONFIG_FILE = ROOT / "fyers_config.json"
 RISK_LOCK_FILE = ROOT / "RISK_LOCK.json"
 STOP_FILE = ROOT / "STOP_TRADING"
+RISK_RESET_FILE = ROOT / "RISK_RESET.json"
 LOG_DIR = ROOT / "logs"
 LOG_DIR.mkdir(parents=True, exist_ok=True)
 LOG_FILE = LOG_DIR / "risk_guardian.log"
@@ -128,20 +129,48 @@ def lock_risk(limit: float, pnl: float, reason: str = "") -> dict:
 _MANUAL_RESET_TIMESTAMP: float = 0.0
 
 
-def reset_risk_lock() -> bool:
-    """Manually clear the risk lock and trading halts."""
+def get_reset_baseline() -> float:
+    """Get the P&L baseline from a manual circuit breaker reset today."""
+    today = today_str()
+    if not RISK_RESET_FILE.exists():
+        return 0.0
+    try:
+        data = json.loads(RISK_RESET_FILE.read_text(encoding="utf-8"))
+        if str(data.get("date")) == today:
+            return float(data.get("baseline_pnl", 0.0) or 0.0)
+        else:
+            RISK_RESET_FILE.unlink(missing_ok=True)
+    except Exception:
+        pass
+    return 0.0
+
+
+def reset_risk_lock() -> dict:
+    """Manually clear the risk lock, reset the baseline P&L to current P&L, and clear halts."""
     global _MANUAL_RESET_TIMESTAMP
     try:
         _MANUAL_RESET_TIMESTAMP = time.time()
+        today = today_str()
+        metrics = get_current_metrics()
+        curr_pnl = float(metrics.get("net_pnl", 0.0) or 0.0)
+
+        # Persist manual reset with current P&L as baseline
+        reset_data = {
+            "date": today,
+            "reset_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+            "baseline_pnl": curr_pnl,
+        }
+        RISK_RESET_FILE.write_text(json.dumps(reset_data, indent=2), encoding="utf-8")
+
         if RISK_LOCK_FILE.exists():
             RISK_LOCK_FILE.unlink(missing_ok=True)
         if STOP_FILE.exists():
             STOP_FILE.unlink(missing_ok=True)
-        logger.info("🛡️ [RISK GUARDIAN] Risk lock and STOP_TRADING cleared manually via Web UI.")
-        return True
+        logger.info(f"🛡️ [RISK GUARDIAN] Circuit breaker manually reset! New baseline P&L: Rs. {curr_pnl:+,.2f}. Fresh buffer allocated.")
+        return {"ok": True, "baseline_pnl": curr_pnl}
     except Exception as exc:
         logger.error(f"Failed to reset risk lock: {exc}")
-        return False
+        return {"ok": False, "error": str(exc)}
 
 
 def cancel_all_pending_orders() -> list:
@@ -278,6 +307,11 @@ def check_and_enforce_guardian() -> dict:
     net_pnl = metrics.get("net_pnl", 0.0)
     open_count = metrics.get("open_count", 0)
 
+    # Effective P&L relative to manual reset baseline (if reset today)
+    baseline_pnl = get_reset_baseline()
+    effective_pnl = net_pnl - baseline_pnl
+    remaining_buffer = max(0.0, limit + effective_pnl)
+
     # 1. POST-BREACH ENFORCEMENT: Locked mode
     if locked:
         closed_actions = []
@@ -293,26 +327,14 @@ def check_and_enforce_guardian() -> dict:
             "enabled": cfg["enabled"],
             "daily_loss_limit": limit,
             "current_pnl": net_pnl,
+            "effective_pnl": round(effective_pnl, 2),
+            "baseline_pnl": round(baseline_pnl, 2),
             "remaining_buffer": 0.0,
             "open_count": open_count,
             "lock_info": lock_data,
             "auto_closed": closed_actions,
             "cancelled_orders": cancelled_actions,
             "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
-        }
-
-    # If manually reset within the last 5 minutes, do not immediately re-lock
-    if time.time() - _MANUAL_RESET_TIMESTAMP < 300:
-        return {
-            "status": "ACTIVE",
-            "is_locked": False,
-            "enabled": cfg["enabled"],
-            "daily_loss_limit": limit,
-            "current_pnl": net_pnl,
-            "remaining_buffer": max(0.0, limit + net_pnl),
-            "open_count": open_count,
-            "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
-            "manual_override": True,
         }
 
     # 2. NORMAL MONITORING: Check if limit is breached
@@ -323,17 +345,19 @@ def check_and_enforce_guardian() -> dict:
             "enabled": False,
             "daily_loss_limit": limit,
             "current_pnl": net_pnl,
-            "remaining_buffer": max(0.0, limit + net_pnl),
+            "effective_pnl": round(effective_pnl, 2),
+            "baseline_pnl": round(baseline_pnl, 2),
+            "remaining_buffer": round(remaining_buffer, 2),
             "open_count": open_count,
             "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         }
 
-    # Check loss limit breach: e.g. net_pnl <= -2000
-    if net_pnl <= -limit:
+    # Check loss limit breach against effective P&L (post-reset or intraday)
+    if effective_pnl <= -limit:
         logger.critical(
-            f"🚨 [RISK GUARDIAN] LOSS LIMIT BREACH DETECTED! Current P&L: Rs. {net_pnl:+,.2f} <= Limit: -Rs. {limit:,.2f}"
+            f"🚨 [RISK GUARDIAN] LOSS LIMIT BREACH DETECTED! Effective Loss: Rs. {effective_pnl:+,.2f} <= Limit: -Rs. {limit:,.2f} (Net P&L: Rs. {net_pnl:+,.2f})"
         )
-        reason = f"Max daily loss limit of Rs. {limit:,.0f} breached (P&L: Rs. {net_pnl:,.2f})"
+        reason = f"Max daily loss limit of Rs. {limit:,.0f} breached (Net P&L: Rs. {net_pnl:,.2f}, Post-Reset: Rs. {effective_pnl:,.2f})"
         lock_info = lock_risk(limit=limit, pnl=net_pnl, reason=reason)
 
         closed_actions = []
@@ -348,6 +372,8 @@ def check_and_enforce_guardian() -> dict:
             "enabled": True,
             "daily_loss_limit": limit,
             "current_pnl": net_pnl,
+            "effective_pnl": round(effective_pnl, 2),
+            "baseline_pnl": round(baseline_pnl, 2),
             "remaining_buffer": 0.0,
             "open_count": open_count,
             "lock_info": lock_info,
@@ -357,14 +383,15 @@ def check_and_enforce_guardian() -> dict:
         }
 
     # Safe / Normal state
-    buffer_amt = max(0.0, limit + net_pnl)
     return {
         "status": "ACTIVE",
         "is_locked": False,
         "enabled": True,
         "daily_loss_limit": limit,
         "current_pnl": net_pnl,
-        "remaining_buffer": round(buffer_amt, 2),
+        "effective_pnl": round(effective_pnl, 2),
+        "baseline_pnl": round(baseline_pnl, 2),
+        "remaining_buffer": round(remaining_buffer, 2),
         "open_count": open_count,
         "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
     }

@@ -443,7 +443,7 @@ export function SettingsPage() {
             </Badge>
           </div>
           <CardDescription>
-            Monitors real-time intraday P&L. If daily loss breaches ₹{(status.status?.risk_guardian?.daily_loss_limit || data.daily_loss_limit || 2500).toLocaleString('en-IN')}, it automatically halts all trading.
+            Monitors real-time intraday P&L. If daily loss breaches ₹{(status.status?.risk_guardian?.daily_loss_limit || data?.daily_loss_limit || 2500).toLocaleString('en-IN')}, it automatically halts all trading.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
@@ -451,7 +451,7 @@ export function SettingsPage() {
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-400">
               <div className="text-xs">
                 <div className="font-bold">⚠️ Trading Halted: Daily Loss Limit Breached</div>
-                <div className="text-[11px] opacity-85 mt-0.5">{status.status.risk_guardian.lock_info?.reason || "Max daily loss limit reached. Positions squared off."}</div>
+                <div className="text-[11px] opacity-85 mt-0.5">{status.status?.risk_guardian?.lock_info?.reason || "Max daily loss limit reached. Positions squared off."}</div>
               </div>
               <Button
                 onClick={handleResetGuardian}

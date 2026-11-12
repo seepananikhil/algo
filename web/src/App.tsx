@@ -37,6 +37,7 @@ const PaperPage = lazyWithRetry(() => import("@/pages/paper").then(m => ({ defau
 const LoginPage = lazyWithRetry(() => import("@/pages/login").then(m => ({ default: m.LoginPage })))
 const SettingsPage = lazyWithRetry(() => import("@/pages/settings").then(m => ({ default: m.SettingsPage })))
 const ConfigPage = lazyWithRetry(() => import("@/pages/config").then(m => ({ default: m.ConfigPage })))
+const SwingerPage = lazyWithRetry(() => import("@/pages/swinger").then(m => ({ default: m.SwingerPage })))
 
 function PageFallback() {
   return (
@@ -126,6 +127,7 @@ export default function App() {
                       <Route path="manual" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
                       <Route path="day" element={<Suspense fallback={<PageFallback />}><DayPage /></Suspense>} />
                       <Route path="paper" element={<Suspense fallback={<PageFallback />}><PaperPage /></Suspense>} />
+                      <Route path="swinger" element={<Suspense fallback={<PageFallback />}><SwingerPage /></Suspense>} />
                       <Route path="backtest" element={<BacktestPage />} />
                       <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
                       <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />

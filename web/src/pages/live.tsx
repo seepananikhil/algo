@@ -792,10 +792,10 @@ export function LivePage() {
           {status?.risk_guardian?.is_locked ? (
             <div 
               className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-600 dark:text-rose-400 font-bold text-xs shadow-xs"
-              title={status.risk_guardian.lock_info?.reason || 'Max daily loss limit breached. All trades locked.'}
+              title={status?.risk_guardian?.lock_info?.reason || 'Max daily loss limit breached. All trades locked.'}
             >
               <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0 animate-pulse" />
-              <span>GUARDIAN LOCKED (-Rs. {(status.risk_guardian.daily_loss_limit || status.daily_loss_limit || 2000).toLocaleString('en-IN')})</span>
+              <span>GUARDIAN LOCKED (-Rs. {(status?.risk_guardian?.daily_loss_limit || status?.daily_loss_limit || 2000).toLocaleString('en-IN')})</span>
               <button
                 type="button"
                 onClick={handleResetGuardian}
@@ -809,10 +809,10 @@ export function LivePage() {
           ) : status?.risk_guardian?.enabled ? (
             <div 
               className="hidden sm:flex items-center space-x-1.5 px-2 py-0.5 rounded-md bg-muted/60 text-muted-foreground text-[11px] font-medium border border-border/50"
-              title={`Max Daily Loss: Rs. ${(status.risk_guardian.daily_loss_limit || 2000).toLocaleString('en-IN')} | Remaining Buffer: Rs. ${Math.max(0, status.risk_guardian.remaining_buffer || 0).toLocaleString('en-IN')}`}
+              title={`Max Daily Loss: Rs. ${(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')} | Remaining Buffer: Rs. ${Math.max(0, status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}`}
             >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-              <span>Loss Guard: Rs. {(status.risk_guardian.daily_loss_limit || 2000).toLocaleString('en-IN')}</span>
+              <span>Loss Guard: Rs. {(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')}</span>
             </div>
           ) : null}
 
@@ -1282,7 +1282,7 @@ export function LivePage() {
                   <div className="flex items-center gap-1.5">
                     <ShieldAlert className="w-4 h-4 shrink-0 text-rose-500 animate-pulse" />
                     <div className="leading-tight">
-                      <div>Daily Loss Limit Breached (-Rs. {(status.risk_guardian.daily_loss_limit || status.daily_loss_limit || 2000).toLocaleString('en-IN')})</div>
+                      <div>Daily Loss Limit Breached (-Rs. {(status?.risk_guardian?.daily_loss_limit || status?.daily_loss_limit || 2000).toLocaleString('en-IN')})</div>
                       <div className="text-[10px] font-normal opacity-90">Auto-closing active. New buys blocked.</div>
                     </div>
                   </div>
