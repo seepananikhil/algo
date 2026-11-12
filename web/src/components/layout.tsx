@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sliders, Sun, Wallet, TrendingUp } from "lucide-react"
+import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -14,8 +14,7 @@ const nav = [
   { to: "/paper", label: "Trades P&L", icon: Wallet },
   { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },
   { to: "/backtest", label: "Backtest", icon: LineChart },
-  { to: "/config", label: "Strategy", icon: Sliders },
-  { to: "/settings", label: "Broker", icon: SettingsIcon },
+  { to: "/settings", label: "Settings", icon: SettingsIcon },
 ]
 
 function Dot({ ok }: { ok: boolean }) {
@@ -80,7 +79,7 @@ export function Layout() {
             {status && (
               <>
                 <NavLink
-                  to="/settings"
+                  to="/settings?tab=broker"
                   title={status.token.valid ? "Kotak Neo session active · Click for account & margin" : "Kotak Neo offline · Click to log in"}
                   className={cn(
                     "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all select-none cursor-pointer",

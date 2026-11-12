@@ -117,7 +117,7 @@ const DEFAULT_CONFIG: PortfolioConfig = {
   sensex_spot_ratchet_settings: DEFAULT_SENSEX_RATCHET,
 }
 
-export function ConfigPage() {
+export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [config, setConfig] = useState<PortfolioConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -287,7 +287,7 @@ export function ConfigPage() {
   ].filter(Boolean).length
 
   return (
-    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-6xl mx-auto">
+    <div className={embedded ? "space-y-6 pt-1" : "flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-6xl mx-auto"}>
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
         <div>
@@ -305,13 +305,13 @@ export function ConfigPage() {
               {isSx ? "BSE SENSEX (~80,000 Index | Lot 10)" : "NSE NIFTY (~24,500 Index | Lot 65)"}
             </Badge>
           </div>
-          <h1 className="text-2xl md:text-3xl font-bold tracking-tight">Strategy Controls &amp; Portfolio</h1>
-          <p className="text-sm text-muted-foreground mt-1">
+          <h2 className="text-xl md:text-2xl font-bold tracking-tight">Strategy Setups &amp; Portfolio</h2>
+          <p className="text-xs md:text-sm text-muted-foreground mt-1">
             Configure execution mode (Paper/Live), Nifty lot sizing, Daily Loss circuit breakers, active strategy engines, and spot ratchet profit locking milestones.
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 shrink-0">
           <Button variant="outline" size="sm" onClick={resetToDefaults}>
             <RotateCcw className="size-3.5 mr-1.5" /> Reset Defaults
           </Button>

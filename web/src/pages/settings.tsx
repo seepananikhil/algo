@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { Link } from "react-router-dom"
+import { useSearchParams } from "react-router-dom"
+import { ConfigPage } from "./config"
 import { toast } from "sonner"
 import {
   AlertTriangle,
@@ -34,6 +35,11 @@ type KotakForm = {
 }
 
 export function SettingsPage() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const currentTab = searchParams.get("tab") === "strategy" ? "strategy" : "broker"
+  const handleTabChange = (t: "broker" | "strategy") => {
+    setSearchParams({ tab: t })
+  }
   const { data, reload } = usePoll<Settings>("/api/settings")
   const status = useStatus()
   const [kotakForm, setKotakForm] = useState<KotakForm>({
@@ -194,24 +200,50 @@ export function SettingsPage() {
   const isValid = Boolean(data.kotak_session_valid)
 
   return (
-    <div className="mx-auto flex max-w-3xl flex-col gap-6 p-4 md:p-8 pt-6">
-      {/* Top Title Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+    <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-8 pt-6">
+      {/* Top Title Banner & Tab Switcher */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Broker &amp; Account Setup</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Configure Kotak Neo API keys, perform 1-click morning authentication, and view real-time margin.
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings &amp; Configuration</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-1">
+            Manage Kotak Neo broker login, margin balances, and Apex Duo strategy setups in one place.
           </p>
         </div>
-        <Link to="/config">
-          <Button variant="outline" size="sm" className="gap-2">
-            <Sliders className="size-3.5 text-sky-400" />
-            Configure Strategy Setups &rarr;
-          </Button>
-        </Link>
+
+        {/* Tab Switcher: Broker vs Strategy */}
+        <div className="flex items-center p-1 bg-muted/80 rounded-xl border border-border/60 shrink-0 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => handleTabChange("broker")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              currentTab === "broker"
+                ? "bg-background text-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <ShieldCheck className="size-4 text-emerald-400" />
+            <span>Broker &amp; Account</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange("strategy")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              currentTab === "strategy"
+                ? "bg-background text-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Sliders className="size-4 text-sky-400" />
+            <span>Strategy Setups</span>
+          </button>
+        </div>
       </div>
 
-      {restart && (
+      {currentTab === "strategy" ? (
+        <ConfigPage embedded />
+      ) : (
+        <>
+        {restart && (
         <Alert>
           <AlertTriangle />
           <AlertTitle>Restart Required</AlertTitle>
@@ -493,35 +525,41 @@ export function SettingsPage() {
                   Remaining loss buffer: ₹{Math.max(0, status.status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
                 </span>
               </div>
-              <Link to="/config">
-                <Button variant="outline" size="sm" className="text-xs">
-                  Change Limit in Config
-                </Button>
-              </Link>
+              <Button
+                variant="outline"
+                size="sm"
+                className="text-xs cursor-pointer"
+                onClick={() => handleTabChange("strategy")}
+              >
+                Change Limit in Strategy &rarr;
+              </Button>
             </div>
           )}
         </CardContent>
       </Card>
 
-      {/* Strategy, Lot Sizing & Capital Guardian Link Card */}
+      {/* Strategy Setups Link Card */}
       <Card className="border-sky-500/30 bg-sky-500/5">
         <CardContent className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="font-semibold text-base text-foreground flex items-center gap-2">
               <Sliders className="size-4 text-sky-400" />
-              Strategy Setups, Lot Sizing &amp; Capital Guardian
+              Apex Duo Strategy Setups, Lot Sizing &amp; Spot Ratchet
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Configure Nifty lot sizing, Daily Loss Limits (₹2,500), and Spot Ratchet profit locking milestones on the Strategy Config page.
+              Configure Nifty lot sizing, Daily Loss Limits (₹2,500), and Spot Ratchet profit locking milestones in Strategy Setups.
             </p>
           </div>
-          <Link to="/config">
-            <Button className="gap-2 bg-sky-500 hover:bg-sky-600 text-white font-medium shrink-0">
-              Open Strategy Config <ArrowRight className="size-4" />
-            </Button>
-          </Link>
+          <Button
+            onClick={() => handleTabChange("strategy")}
+            className="gap-2 bg-sky-500 hover:bg-sky-600 text-white font-medium shrink-0 cursor-pointer"
+          >
+            Open Strategy Setups <ArrowRight className="size-4" />
+          </Button>
         </CardContent>
       </Card>
+        </>
+      )}
     </div>
   )
 }

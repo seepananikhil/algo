@@ -36,7 +36,6 @@ const DayPage = lazyWithRetry(() => import("@/pages/day").then(m => ({ default: 
 const PaperPage = lazyWithRetry(() => import("@/pages/paper").then(m => ({ default: m.PaperPage })))
 const LoginPage = lazyWithRetry(() => import("@/pages/login").then(m => ({ default: m.LoginPage })))
 const SettingsPage = lazyWithRetry(() => import("@/pages/settings").then(m => ({ default: m.SettingsPage })))
-const ConfigPage = lazyWithRetry(() => import("@/pages/config").then(m => ({ default: m.ConfigPage })))
 const SwingerPage = lazyWithRetry(() => import("@/pages/swinger").then(m => ({ default: m.SwingerPage })))
 
 function PageFallback() {
@@ -131,10 +130,10 @@ export default function App() {
                       <Route path="backtest" element={<BacktestPage />} />
                       <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
                       <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
-                      <Route path="broker" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
-                      <Route path="config" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
-                      <Route path="strategy" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
-                      <Route path="strategy-info" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
+                      <Route path="broker" element={<Navigate to="/settings?tab=broker" replace />} />
+                      <Route path="config" element={<Navigate to="/settings?tab=strategy" replace />} />
+                      <Route path="strategy" element={<Navigate to="/settings?tab=strategy" replace />} />
+                      <Route path="strategy-info" element={<Navigate to="/settings?tab=strategy" replace />} />
                       <Route path="*" element={<Navigate to="/" replace />} />
                     </Route>
                   </Routes>
