@@ -5,7 +5,6 @@ import {
   Radio,
   Clock,
   Target,
-  RefreshCw,
   X,
   Minus,
   GripVertical,
@@ -816,21 +815,7 @@ export function LivePage() {
             </div>
           ) : null}
 
-          {/* Quick Spot LTP Tickers */}
-          <div className="flex items-center space-x-3 border-l border-border pl-3 text-xs">
-            <div className="flex items-center space-x-1.5">
-              <span className="text-muted-foreground font-medium">NIFTY:</span>
-              <span className="font-mono font-bold text-foreground">
-                {niftyLtp.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
-              </span>
-            </div>
-            <div className="flex items-center space-x-1.5 border-l border-border pl-3">
-              <span className="text-muted-foreground font-medium">SENSEX:</span>
-              <span className="font-mono font-bold text-foreground">
-                {sensexLtp.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
-              </span>
-            </div>
-          </div>
+
 
         </div>
 
@@ -1055,20 +1040,7 @@ export function LivePage() {
             </button>
           </div>
 
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 text-muted-foreground hover:text-foreground"
-            onClick={() => {
-              reloadStatus()
-              liveTradesPoll.reload()
-              niftyDay.reload()
-              sensexDay.reload()
-            }}
-            title="Refresh feeds"
-          >
-            <RefreshCw className="h-3.5 w-3.5" />
-          </Button>
+
         </div>
       </header>
 
