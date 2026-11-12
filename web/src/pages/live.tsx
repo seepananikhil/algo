@@ -4,7 +4,6 @@ import { toast } from "sonner"
 import {
   Radio,
   Clock,
-  Target,
   RefreshCw,
   X,
   Minus,
@@ -18,8 +17,6 @@ import {
   Loader2,
   PanelRightClose,
   Maximize2,
-  ArrowUpRight,
-  ArrowDownRight,
   ChevronDown,
   Check,
   Terminal,
@@ -113,8 +110,6 @@ function ActiveTradeCard({
     }
   }
 
-  const tpPresets = isSensex ? [40, 80, 120, 200] : [10, 20, 30, 50]
-  const tlPresets = isSensex ? [20, 40, 60, 100] : [5, 10, 15, 25]
 
   return (
     <div className="p-3 rounded-lg border border-border bg-card shadow-2xs hover:border-border/80 transition-all space-y-2.5">
@@ -201,13 +196,11 @@ function ActiveTradeCard({
 
         <div className="grid grid-cols-2 gap-2">
           {/* Target Profit (TP) */}
-          <div className="p-1.5 rounded-md bg-emerald-500/5 border border-emerald-500/30 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 uppercase">
-                TP (Target)
-              </span>
+          <div className="p-2 rounded-lg bg-emerald-500/5 border border-emerald-500/20 space-y-1">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="font-bold text-emerald-600 dark:text-emerald-400">TP (Target)</span>
               {targetPx && (
-                <span className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 font-bold" title={`Target Price: ₹${targetPx}`}>
+                <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
                   🎯 ₹{targetPx}
                 </span>
               )}
@@ -221,43 +214,22 @@ function ActiveTradeCard({
                 value={tpVal === 0 ? "" : tpVal}
                 placeholder="0 pt"
                 onChange={(e) => setTpVal(Math.max(0, parseFloat(e.target.value) || 0))}
+                onBlur={() => handleSave()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave()
                 }}
-                className="w-full px-1.5 py-0.5 rounded font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-background border border-border focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                className="w-full px-2 py-0.5 rounded font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-background border border-border focus:outline-none focus:ring-1 focus:ring-emerald-500 h-6.5 text-center"
               />
               <span className="text-[10px] text-muted-foreground font-mono">pt</span>
-            </div>
-            {/* Quick chips */}
-            <div className="flex items-center gap-1 pt-0.5">
-              {tpPresets.map((pts) => (
-                <button
-                  key={pts}
-                  type="button"
-                  onClick={() => {
-                    setTpVal(pts)
-                    handleSave(pts, tlVal)
-                  }}
-                  className={`text-[9px] font-mono px-1 py-0.2 rounded border transition-colors cursor-pointer ${
-                    tpVal === pts
-                      ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-muted/60 text-muted-foreground border-border hover:bg-emerald-500/20 hover:text-emerald-600"
-                  }`}
-                >
-                  +{pts}
-                </button>
-              ))}
             </div>
           </div>
 
           {/* Target Loss / Stop Loss (TL) */}
-          <div className="p-1.5 rounded-md bg-rose-500/5 border border-rose-500/30 space-y-1">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-bold text-rose-600 dark:text-rose-400 uppercase">
-                TL (Stop Loss)
-              </span>
+          <div className="p-2 rounded-lg bg-rose-500/5 border border-rose-500/20 space-y-1">
+            <div className="flex items-center justify-between text-[10px]">
+              <span className="font-bold text-rose-600 dark:text-rose-400">TL (Stop)</span>
               {stopPx && (
-                <span className="text-[10px] font-mono text-rose-600 dark:text-rose-400 font-bold" title={`Stop Price: ₹${stopPx}`}>
+                <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
                   🛑 ₹{stopPx}
                 </span>
               )}
@@ -271,59 +243,26 @@ function ActiveTradeCard({
                 value={tlVal === 0 ? "" : tlVal}
                 placeholder="0 pt"
                 onChange={(e) => setTlVal(Math.max(0, parseFloat(e.target.value) || 0))}
+                onBlur={() => handleSave()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave()
                 }}
-                className="w-full px-1.5 py-0.5 rounded font-mono font-bold text-xs text-rose-600 dark:text-rose-400 bg-background border border-border focus:outline-none focus:ring-1 focus:ring-rose-500"
+                className="w-full px-2 py-0.5 rounded font-mono font-bold text-xs text-rose-600 dark:text-rose-400 bg-background border border-border focus:outline-none focus:ring-1 focus:ring-rose-500 h-6.5 text-center"
               />
               <span className="text-[10px] text-muted-foreground font-mono">pt</span>
-            </div>
-            {/* Quick chips */}
-            <div className="flex items-center gap-1 pt-0.5">
-              {tlPresets.map((pts) => (
-                <button
-                  key={pts}
-                  type="button"
-                  onClick={() => {
-                    setTlVal(pts)
-                    handleSave(tpVal, pts)
-                  }}
-                  className={`text-[9px] font-mono px-1 py-0.2 rounded border transition-colors cursor-pointer ${
-                    tlVal === pts
-                      ? "bg-rose-600 text-white border-rose-600"
-                      : "bg-muted/60 text-muted-foreground border-border hover:bg-rose-500/20 hover:text-rose-600"
-                  }`}
-                >
-                  -{pts}
-                </button>
-              ))}
             </div>
           </div>
         </div>
 
-        {/* Update Button */}
-        <Button
-          type="button"
-          size="sm"
-          variant="outline"
-          disabled={isBusy}
-          onClick={() => handleSave()}
-          className="w-full h-6 text-[10px] font-bold border-border bg-muted/40 hover:bg-muted text-foreground flex items-center justify-center gap-1 cursor-pointer"
-        >
+        {/* Clean Save Feedback */}
+        <div className="flex items-center justify-between text-[10px] text-muted-foreground px-1">
+          <span>Auto-saves on change or Enter</span>
           {isBusy ? (
-            <>
-              <Loader2 className="w-3 h-3 animate-spin" /> Saving Bracket...
-            </>
+            <span className="flex items-center gap-1 text-primary"><Loader2 className="w-3 h-3 animate-spin" /> Saving...</span>
           ) : justSaved ? (
-            <>
-              <Check className="w-3 h-3 text-emerald-500" /> Saved to Kotak & Sentinel
-            </>
-          ) : (
-            <>
-              Update TP / TL Bracket
-            </>
-          )}
-        </Button>
+            <span className="flex items-center gap-1 text-emerald-500 font-bold"><Check className="w-3 h-3" /> Saved to Kotak</span>
+          ) : null}
+        </div>
       </div>
     </div>
   )
@@ -836,7 +775,77 @@ export function LivePage() {
         </div>
 
         {/* Center / Right: Scalper Toggle, Chart Switcher, Side Panel Toggle */}
-        <div className="flex items-center space-x-2.5">
+        <div className="flex items-center space-x-2">
+          {/* Chart View Switcher */}
+          <div className="flex items-center bg-muted/70 p-0.5 rounded-lg border border-border">
+            <button
+              onClick={() => { setActiveChart("NIFTY"); setScalpSpot("NIFTY"); setSelectedTrade(null) }}
+              className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                activeChart === "NIFTY"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              NIFTY
+            </button>
+            <button
+              onClick={() => { setActiveChart("SENSEX"); setScalpSpot("SENSEX"); setSelectedTrade(null) }}
+              className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                activeChart === "SENSEX"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              SENSEX
+            </button>
+            <button
+              onClick={() => { setActiveChart("DUAL"); setSelectedTrade(null) }}
+              className={`px-2 py-0.5 text-xs font-semibold rounded-md transition-all cursor-pointer ${
+                activeChart === "DUAL"
+                  ? "bg-primary text-primary-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Dual
+            </button>
+          </div>
+
+          {/* Scalper Toggle Button */}
+          <button
+            onClick={() => setShowScalpBar(!showScalpBar)}
+            className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-bold text-xs border shadow-2xs cursor-pointer ${
+              showScalpBar
+                ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/30"
+                : "bg-muted text-muted-foreground border-border hover:text-foreground"
+            }`}
+            title="Toggle Fast Scalper"
+          >
+            <Zap className={`w-3.5 h-3.5 ${showScalpBar ? "fill-amber-500" : ""}`} />
+            <span>Scalper</span>
+          </button>
+
+          {/* Trades Side Panel Toggle */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isSidePanelOpen && sideTab === "ACTIVE") {
+                setIsSidePanelOpen(false)
+              } else {
+                setIsSidePanelOpen(true)
+                setSideTab("ACTIVE")
+              }
+            }}
+            className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-semibold text-xs border shadow-2xs cursor-pointer ${
+              isSidePanelOpen && sideTab === "ACTIVE"
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-muted text-muted-foreground border-border hover:text-foreground"
+            }`}
+            title="Toggle Open Trades & Positions Panel"
+          >
+            <Radio className="w-3 h-3 text-emerald-500" />
+            <span>Trades ({openTrades.length})</span>
+          </button>
+
           {/* Strategy Engines Side Panel Toggle */}
           <button
             type="button"
@@ -848,33 +857,15 @@ export function LivePage() {
                 setSideTab("ENGINES")
               }
             }}
-            className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-bold text-xs border shadow-xs cursor-pointer ${
+            className={`px-2 py-1 rounded-md transition-all flex items-center gap-1.5 font-medium text-xs border shadow-2xs cursor-pointer ${
               isSidePanelOpen && sideTab === "ENGINES"
-                ? "bg-emerald-500/25 border-emerald-500 text-emerald-400 ring-1 ring-emerald-500/40"
-                : "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+                ? "bg-emerald-500/20 border-emerald-500 text-emerald-400"
+                : "bg-muted/60 text-muted-foreground border-border hover:text-foreground"
             }`}
-            title="Toggle Live Logs & Engines Panel"
+            title="Toggle Live Logs & Engines"
           >
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
             <Terminal className="w-3.5 h-3.5" />
-            <span>Live Logs</span>
-          </button>
-
-          {/* Scalper Toggle Button */}
-          <button
-            onClick={() => setShowScalpBar(!showScalpBar)}
-            className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1.5 font-bold text-xs border shadow-xs ${
-              showScalpBar
-                ? "bg-amber-500/15 border-amber-500/40 text-amber-600 dark:text-amber-400 ring-1 ring-amber-500/30"
-                : "bg-muted text-muted-foreground border-border hover:text-foreground"
-            }`}
-            title="Toggle Fast Scalp Widget"
-          >
-            <Zap className={`w-3.5 h-3.5 ${showScalpBar ? "fill-amber-500" : ""}`} />
-            <span>Scalper</span>
+            <span>Logs</span>
           </button>
 
           {/* Session Net P&L Popover Trigger & Card */}
@@ -1022,39 +1013,7 @@ export function LivePage() {
             )}
           </div>
 
-          {/* Chart View Switcher */}
-          <div className="flex items-center bg-muted/70 p-0.5 rounded-lg border border-border">
-            <button
-              onClick={() => { setActiveChart("SENSEX"); setScalpSpot("SENSEX"); setSelectedTrade(null) }}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
-                activeChart === "SENSEX"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              SENSEX
-            </button>
-            <button
-              onClick={() => { setActiveChart("NIFTY"); setScalpSpot("NIFTY"); setSelectedTrade(null) }}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
-                activeChart === "NIFTY"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              NIFTY
-            </button>
-            <button
-              onClick={() => { setActiveChart("DUAL"); setSelectedTrade(null) }}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
-                activeChart === "DUAL"
-                  ? "bg-primary text-primary-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Dual Split
-            </button>
-          </div>
+
 
           <Button
             variant="ghost"
@@ -1073,10 +1032,10 @@ export function LivePage() {
         </div>
       </header>
 
-      {/* 1.5 FLOATING QUICK SCALP WIDGET (LARGER, COMFORTABLE WITH TP, TS & HIGH-VISIBILITY LOTS) */}
+      {/* 1.5 MODERN MINIMAL SCALPER WIDGET */}
       {showScalpBar && (
         isScalpMinimized ? (
-          /* MINIMIZED FLOATING PILL */
+          /* MINIMIZED FLOATING PILL - Ultra Clean */
           <div
             style={
               hasDraggedMinScalp
@@ -1084,10 +1043,10 @@ export function LivePage() {
                 : {
                     left: isSidePanelOpen ? "calc((100vw - 384px) / 2)" : "50%",
                     transform: "translateX(-50%)",
-                    bottom: "38px",
+                    bottom: "24px",
                   }
             }
-            className="fixed z-40 flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/95 dark:bg-card/95 border border-border shadow-xl backdrop-blur-md cursor-grab active:cursor-grabbing select-none transition-all opacity-95 hover:opacity-100 hover:shadow-primary/10 ring-1 ring-border/50 animate-fadeIn text-xs"
+            className="fixed z-40 flex items-center gap-2 px-3 py-1.5 rounded-full bg-card/95 border border-border shadow-xl backdrop-blur-md cursor-grab active:cursor-grabbing select-none transition-all text-xs ring-1 ring-border/50 animate-fadeIn"
             onMouseDown={handleDragStart}
           >
             <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
@@ -1095,60 +1054,14 @@ export function LivePage() {
               type="button"
               onClick={(e) => {
                 e.stopPropagation()
-                const nextSpot = scalpSpot === "NIFTY" ? "SENSEX" : "NIFTY"
-                setScalpSpot(nextSpot)
-                setCustomStrike(null)
-                if (activeChart !== "DUAL") setActiveChart(nextSpot)
+                setIsScalpMinimized(false)
               }}
-              className="font-bold text-foreground flex items-center gap-1 hover:text-primary transition-colors cursor-pointer px-1.5 py-0.5 rounded hover:bg-muted"
-              title="Click to toggle Spot (NIFTY ⮂ SENSEX)"
+              className="flex items-center gap-1.5 font-bold hover:text-primary transition-colors cursor-pointer"
             >
               <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-              <span>{scalpSpot}</span>
+              <span>{scalpSpot} {activeStrike} {scalpOptionType}</span>
               <span className="text-muted-foreground font-mono font-normal">({scalpLots}L)</span>
             </button>
-
-            {/* Minimized Strike Stepper & Dropdown */}
-            <div className="flex items-center gap-0.5 bg-muted/80 px-1 py-0.5 rounded border border-border/70 shadow-2xs">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setCustomStrike(activeStrike - strikeStep)
-                }}
-                className="px-1 text-[11px] text-muted-foreground hover:text-foreground font-bold hover:bg-muted rounded cursor-pointer"
-                title={`Strike down (-${strikeStep} pt)`}
-              >
-                -
-              </button>
-              <select
-                value={activeStrike}
-                onChange={(e) => {
-                  e.stopPropagation()
-                  setCustomStrike(Number(e.target.value))
-                }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-transparent font-mono font-bold text-xs text-foreground focus:outline-none cursor-pointer text-center px-0.5"
-                title="Select Any Strike Price"
-              >
-                {strikeChoices.map((stk) => (
-                  <option key={stk} value={stk} className="bg-popover text-popover-foreground">
-                    {stk} {stk === currentAtmStrike ? "(ATM)" : stk > currentAtmStrike ? `(+${stk - currentAtmStrike})` : `(${stk - currentAtmStrike})`}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setCustomStrike(activeStrike + strikeStep)
-                }}
-                className="px-1 text-[11px] text-muted-foreground hover:text-foreground font-bold hover:bg-muted rounded cursor-pointer"
-                title={`Strike up (+${strikeStep} pt)`}
-              >
-                +
-              </button>
-            </div>
 
             {activeSpotTrade && (
               <span className={`font-mono text-xs font-bold ${pnlClass(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}`}>
@@ -1157,206 +1070,149 @@ export function LivePage() {
               </span>
             )}
 
-            <div className="flex items-center gap-1.5 border-l border-border pl-1.5 ml-0.5">
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); handleScalpOrder("BUY", scalpOptionType) }}
+              disabled={scalpBusy || Boolean(status?.risk_guardian?.is_locked)}
+              className={`px-3 py-0.5 rounded text-[10px] font-bold text-white shadow-2xs cursor-pointer ${
+                scalpOptionType === "CE" ? "bg-emerald-600 hover:bg-emerald-700" : "bg-rose-600 hover:bg-rose-700"
+              }`}
+            >
+              BUY
+            </button>
+
+            {activeSpotTrade && (
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setScalpOptionType((t) => (t === "CE" ? "PE" : "CE"))
-                }}
-                className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer transition-colors ${
-                  scalpOptionType === "CE"
-                    ? "bg-emerald-600 text-white"
-                    : "bg-rose-600 text-white"
-                }`}
-                title="Click to toggle CE / PE"
-              >
-                {scalpOptionType}
-              </button>
-              <button
-                type="button"
-                onClick={(e) => { e.stopPropagation(); handleScalpOrder("BUY", scalpOptionType) }}
+                onClick={(e) => { e.stopPropagation(); handleScalpExit() }}
                 disabled={scalpBusy}
-                className="px-2.5 py-1 rounded text-[10px] font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs cursor-pointer"
-                title={`Buy ${scalpSpot} ${activeStrike} ${scalpOptionType}`}
+                className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs cursor-pointer"
               >
-                BUY
+                EXIT
               </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (activeSpotTrade) {
-                    handleScalpExit()
-                  } else {
-                    handleScalpOrder("SELL", scalpOptionType)
-                  }
-                }}
-                disabled={scalpBusy}
-                className="px-2.5 py-1 rounded text-[10px] font-bold bg-rose-600 hover:bg-rose-700 text-white shadow-2xs cursor-pointer"
-                title={activeSpotTrade ? "Square Off Position" : `Sell ${scalpSpot} ${activeStrike} ${scalpOptionType}`}
-              >
-                SELL
-              </button>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setScalpPos((pos) => {
-                    const sideW = isSidePanelOpen ? (window.innerWidth >= 1024 ? 384 : 320) : 0
-                    const maxX = Math.max(70, window.innerWidth - sideW - 80 - 285)
-                    const maxY = Math.max(105, window.innerHeight - 56 - 310)
-                    return {
-                      x: Math.min(pos.x, maxX),
-                      y: Math.min(pos.y, maxY),
-                    }
-                  })
-                  setIsScalpMinimized(false)
-                }}
-                className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground ml-0.5 cursor-pointer"
-                title="Expand Scalper"
-              >
-                <Maximize2 className="w-3 h-3" />
-              </button>
-            </div>
+            )}
+
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); setIsScalpMinimized(false) }}
+              className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground cursor-pointer"
+              title="Expand Scalper"
+            >
+              <Maximize2 className="w-3.5 h-3.5" />
+            </button>
           </div>
         ) : (
-          /* EXPANDED PRO FLOATING SCALPER PANEL (COMPACT 315px, SL/TP READY & KOTAK SYNC) */
+          /* EXPANDED PRO FLOATING SCALPER PANEL - Modern, Clean & High-Focus */
           <div
             style={{ left: `${scalpPos.x}px`, top: `${scalpPos.y}px` }}
-            className="fixed z-40 w-[315px] bg-card/95 dark:bg-card/95 backdrop-blur-md border border-border shadow-2xl rounded-xl overflow-hidden select-none animate-fadeIn transition-shadow hover:shadow-primary/10 ring-1 ring-border/50 text-xs"
+            className="fixed z-40 w-72 bg-card/95 backdrop-blur-md border border-border shadow-2xl rounded-2xl overflow-hidden select-none animate-fadeIn transition-shadow ring-1 ring-border/50 text-xs"
           >
             {/* Draggable Header */}
             <div
               onMouseDown={handleDragStart}
-              className="flex items-center justify-between px-3 py-1.5 bg-muted/60 dark:bg-muted/40 border-b border-border/70 cursor-grab active:cursor-grabbing"
+              className="flex items-center justify-between px-3 py-2 bg-muted/50 border-b border-border/70 cursor-grab active:cursor-grabbing"
             >
-              <div className="flex items-center space-x-1.5">
+              <div className="flex items-center gap-1.5">
                 <GripVertical className="w-3.5 h-3.5 text-muted-foreground" />
                 <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />
-                <span className="font-bold text-[11px] tracking-wider uppercase text-foreground">Scalper</span>
-                <span
-                  className="px-1.5 py-0.2 text-[9px] font-extrabold rounded bg-emerald-500/20 border border-emerald-500/50 text-emerald-600 dark:text-emerald-400 tracking-wide uppercase"
-                  title="All scalper orders are executed strictly as LIVE real orders on Kotak Neo (Zero Brokerage)."
-                >
-                  LIVE (Kotak)
-                </span>
-                <span className="text-[10px] font-mono font-bold text-foreground bg-muted px-1.5 py-0.2 rounded border border-border">
-                  {scalpSpot} {activeStrike} {scalpOptionType}
+                <span className="font-bold text-xs text-foreground">Fast Scalp</span>
+                <span className="text-[10px] font-mono text-muted-foreground">
+                  ({scalpSpot} {activeStrike} {scalpOptionType})
                 </span>
               </div>
-              <div className="flex items-center space-x-1">
+              <div className="flex items-center gap-1">
                 <button
                   type="button"
-                  onClick={() => {
-                    setScalpPos((_pos) => {
-                      const sideW = isSidePanelOpen ? (window.innerWidth >= 1024 ? 384 : 320) : 0
-                      const widgetW = 270
-                      const centerX = Math.max(70, Math.round((window.innerWidth - sideW - widgetW) / 2))
-                      return {
-                        x: centerX,
-                        y: Math.max(110, window.innerHeight - 56 - 44),
-                      }
-                    })
-                    setHasDraggedMinScalp(false); setIsScalpMinimized(true)
-                  }}
+                  onClick={() => setIsScalpMinimized(true)}
                   className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground cursor-pointer"
-                  title="Minimize to Pill"
+                  title="Minimize"
                 >
-                  <Minus className="w-3 h-3" />
+                  <Minus className="w-3.5 h-3.5" />
                 </button>
                 <button
                   type="button"
                   onClick={() => setShowScalpBar(false)}
                   className="p-1 hover:bg-muted rounded text-muted-foreground hover:text-foreground cursor-pointer"
-                  title="Close Scalper"
+                  title="Close"
                 >
-                  <X className="w-3 h-3" />
+                  <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             </div>
 
-            {/* Widget Content */}
-            <div className="p-2.5 space-y-2">
-              {status?.risk_guardian?.is_locked ? (
-                <div className="p-2 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-600 dark:text-rose-400 text-[11px] font-semibold flex items-center justify-between gap-1.5 shadow-xs">
-                  <div className="flex items-center gap-1.5">
-                    <ShieldAlert className="w-4 h-4 shrink-0 text-rose-500 animate-pulse" />
-                    <div className="leading-tight">
-                      <div>Daily Loss Limit Breached (-Rs. {(status?.risk_guardian?.daily_loss_limit || status?.daily_loss_limit || 2000).toLocaleString('en-IN')})</div>
-                      <div className="text-[10px] font-normal opacity-90">Auto-closing active. New buys blocked.</div>
-                    </div>
-                  </div>
+            {/* Widget Body */}
+            <div className="p-3 space-y-2.5">
+              {/* Guardian Locked Alert */}
+              {status?.risk_guardian?.is_locked && (
+                <div className="p-2 rounded-lg bg-rose-500/15 border border-rose-500/40 text-rose-500 text-[11px] font-semibold flex items-center justify-between">
+                  <span>Guardian Locked (-₹{(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')})</span>
                   <button
                     type="button"
                     onClick={handleResetGuardian}
                     disabled={resettingGuardian}
-                    className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide cursor-pointer shrink-0 transition-all active:scale-95"
-                    title="Reset lock and resume trading"
+                    className="px-2 py-0.5 rounded bg-rose-600 text-white font-bold text-[10px]"
                   >
-                    {resettingGuardian ? "…" : "Reset Lock"}
+                    Reset
                   </button>
-                </div>
-              ) : (
-                <div className="px-2 py-1 rounded bg-muted/40 border border-border/40 text-[10px] text-muted-foreground flex items-center justify-between">
-                  <span className="flex items-center gap-1">
-                    <ShieldCheck className="w-3 h-3 text-emerald-500" />
-                    <span>Risk Guard: -₹{(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')}</span>
-                  </span>
-                  <span className="font-mono text-amber-500 font-medium">
-                    Per-Trade SL: -₹{status?.risk_guardian?.per_trade_loss_limit || 650}/lot (-{status?.risk_guardian?.per_trade_loss_pct || 20}%) [Dynamic]
-                  </span>
                 </div>
               )}
 
-              {/* Row 1: Spot Selector (NIFTY vs SENSEX) */}
-              <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-muted/60 rounded-md border border-border">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScalpSpot("NIFTY")
-                    setCustomStrike(null)
-                    if (activeChart !== "DUAL") setActiveChart("NIFTY")
-                  }}
-                  className={`py-1 text-[11px] font-bold rounded transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
-                    scalpSpot === "NIFTY"
-                      ? "bg-primary text-primary-foreground shadow-2xs font-extrabold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                  title="Select NSE NIFTY"
-                >
-                  <span>NIFTY</span>
-                  <span className="font-mono text-[10px] opacity-85 font-normal">{Math.round(niftyLtp)}</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setScalpSpot("SENSEX")
-                    setCustomStrike(null)
-                    if (activeChart !== "DUAL") setActiveChart("SENSEX")
-                  }}
-                  className={`py-1 text-[11px] font-bold rounded transition-all text-center flex items-center justify-center gap-1.5 cursor-pointer ${
-                    scalpSpot === "SENSEX"
-                      ? "bg-primary text-primary-foreground shadow-2xs font-extrabold"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted"
-                  }`}
-                  title="Select BSE SENSEX"
-                >
-                  <span>SENSEX</span>
-                  <span className="font-mono text-[10px] opacity-85 font-normal">{Math.round(sensexLtp)}</span>
-                </button>
+              {/* Row 1: Clean Spot & Option Type Segmented Controls */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="flex p-0.5 bg-muted/70 rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => { setScalpSpot("NIFTY"); setCustomStrike(null); if (activeChart !== "DUAL") setActiveChart("NIFTY") }}
+                    className={`flex-1 py-1 text-center font-bold text-[11px] rounded-md transition-all cursor-pointer ${scalpSpot === "NIFTY" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    NIFTY
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setScalpSpot("SENSEX"); setCustomStrike(null); if (activeChart !== "DUAL") setActiveChart("SENSEX") }}
+                    className={`flex-1 py-1 text-center font-bold text-[11px] rounded-md transition-all cursor-pointer ${scalpSpot === "SENSEX" ? "bg-primary text-primary-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    SENSEX
+                  </button>
+                </div>
+
+                <div className="flex p-0.5 bg-muted/70 rounded-lg border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setScalpOptionType("CE")}
+                    className={`flex-1 py-1 text-center font-bold text-[11px] rounded-md transition-all cursor-pointer ${scalpOptionType === "CE" ? "bg-emerald-600 text-white shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    CE (Call)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setScalpOptionType("PE")}
+                    className={`flex-1 py-1 text-center font-bold text-[11px] rounded-md transition-all cursor-pointer ${scalpOptionType === "PE" ? "bg-rose-600 text-white shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    PE (Put)
+                  </button>
+                </div>
               </div>
 
-              {/* Row 2: Strike Selector & CE / PE Toggle */}
-              <div className="flex items-center justify-between gap-1.5">
-                {/* Strike Selector: 51 Strikes Dropdown + Direct Number Input + ATM Button */}
-                <div className="flex items-center space-x-1.5 flex-1 min-w-0">
-                  <span className="text-muted-foreground font-semibold shrink-0 text-[11px]">Strike:</span>
+              {/* Row 2: Strike Dropdown & Lots Stepper */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <div className="text-[10px] text-muted-foreground font-semibold flex items-center justify-between">
+                    <span>Strike</span>
+                    {customStrike !== null && customStrike !== currentAtmStrike && (
+                      <button
+                        type="button"
+                        onClick={() => setCustomStrike(null)}
+                        className="text-primary hover:underline cursor-pointer"
+                      >
+                        Reset ATM
+                      </button>
+                    )}
+                  </div>
                   <select
                     value={activeStrike}
                     onChange={(e) => setCustomStrike(Number(e.target.value))}
-                    className="w-full bg-background border border-border rounded px-1.5 py-0.5 font-mono font-bold text-foreground focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer h-7 text-xs shadow-2xs"
-                    title="Select Strike Price"
+                    className="w-full bg-background border border-border rounded-lg px-2 py-1 font-mono font-bold text-xs text-foreground focus:outline-none focus:ring-1 focus:ring-primary h-8 cursor-pointer"
                   >
                     {strikeChoices.map((stk) => (
                       <option key={stk} value={stk}>
@@ -1364,66 +1220,17 @@ export function LivePage() {
                       </option>
                     ))}
                   </select>
-                  <input
-                    type="number"
-                    step={strikeStep}
-                    value={activeStrike}
-                    onChange={(e) => setCustomStrike(Number(e.target.value))}
-                    className="w-20 bg-background border border-border rounded px-1 py-0.5 font-mono font-bold text-foreground text-xs text-center focus:outline-none focus:ring-1 focus:ring-primary h-7 shadow-2xs"
-                    title="Or type any custom strike directly"
-                    placeholder="Strike"
-                  />
-                  {customStrike !== null && customStrike !== currentAtmStrike && (
-                    <button
-                      type="button"
-                      onClick={() => setCustomStrike(null)}
-                      className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-muted hover:bg-muted/80 text-muted-foreground hover:text-foreground h-7 border border-border cursor-pointer shrink-0"
-                      title="Reset to ATM Strike"
-                    >
-                      ATM
-                    </button>
-                  )}
                 </div>
 
-                {/* Option Type: CE / PE Toggle Buttons */}
-                <div className="flex items-center p-0.5 bg-muted/80 rounded border border-border h-7 shrink-0 shadow-2xs">
-                  <button
-                    type="button"
-                    onClick={() => setScalpOptionType("CE")}
-                    className={`px-2.5 py-0.5 text-xs font-bold rounded transition-all cursor-pointer ${
-                      scalpOptionType === "CE"
-                        ? "bg-emerald-600 text-white shadow-2xs font-extrabold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title="Call Option (CE)"
-                  >
-                    CE
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setScalpOptionType("PE")}
-                    className={`px-2.5 py-0.5 text-xs font-bold rounded transition-all cursor-pointer ${
-                      scalpOptionType === "PE"
-                        ? "bg-rose-600 text-white shadow-2xs font-extrabold"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                    title="Put Option (PE)"
-                  >
-                    PE
-                  </button>
-                </div>
-              </div>
-
-              {/* Row 3: Lots & Quantity Stepper */}
-              <div className="flex items-center justify-between p-1.5 rounded bg-muted/30 border border-border/70 text-[11px]">
-                <div className="flex items-center space-x-1.5">
-                  <span className="text-muted-foreground font-semibold">Lots:</span>
-                  <div className="flex items-center border border-border rounded bg-background overflow-hidden h-6 shadow-2xs">
+                <div className="space-y-1">
+                  <div className="text-[10px] text-muted-foreground font-semibold">
+                    Lots ({scalpLots * (scalpSpot === "SENSEX" ? 20 : 65)} Qty)
+                  </div>
+                  <div className="flex items-center border border-border rounded-lg bg-background h-8 overflow-hidden shadow-2xs">
                     <button
                       type="button"
                       onClick={() => setScalpLots((l) => Math.max(1, l - 1))}
-                      className="w-6 h-full hover:bg-muted text-foreground font-bold flex items-center justify-center cursor-pointer text-sm border-r border-border/70 active:bg-muted/80"
-                      title="Decrease Lots (-)"
+                      className="w-8 h-full hover:bg-muted text-foreground font-bold flex items-center justify-center text-sm border-r border-border cursor-pointer active:bg-muted"
                     >
                       −
                     </button>
@@ -1433,241 +1240,112 @@ export function LivePage() {
                       max={50}
                       value={scalpLots}
                       onChange={(e) => setScalpLots(Math.max(1, parseInt(e.target.value) || 1))}
-                      className="w-8 text-center font-mono font-bold text-foreground bg-transparent text-xs focus:outline-none"
+                      className="w-full text-center font-mono font-bold text-xs bg-transparent focus:outline-none"
                     />
                     <button
                       type="button"
                       onClick={() => setScalpLots((l) => Math.min(50, l + 1))}
-                      className="w-6 h-full hover:bg-muted text-foreground font-bold flex items-center justify-center cursor-pointer text-sm border-l border-border/70 active:bg-muted/80"
-                      title="Increase Lots (+)"
+                      className="w-8 h-full hover:bg-muted text-foreground font-bold flex items-center justify-center text-sm border-l border-border cursor-pointer active:bg-muted"
                     >
                       +
                     </button>
                   </div>
-                  <span className="text-muted-foreground font-mono text-[10px]">
-                    ={scalpLots * (scalpSpot === "SENSEX" ? 20 : 65)}Q
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-1">
-                  {[1, 2, 3, 5].map((lt) => (
-                    <button
-                      key={`lot-preset-${lt}`}
-                      type="button"
-                      onClick={() => setScalpLots(lt)}
-                      className={`px-1.5 py-0.5 text-[9px] font-mono font-bold rounded border transition-colors ${
-                        scalpLots === lt
-                          ? "bg-primary text-primary-foreground border-primary shadow-2xs"
-                          : "bg-background border-border text-muted-foreground hover:text-foreground hover:bg-muted"
-                      }`}
-                    >
-                      {lt}L
-                    </button>
-                  ))}
                 </div>
               </div>
 
-              {/* Row 4: Compact, Ergonomic TP & SL Boxes */}
+              {/* Row 3: Target Profit (TP) & Stop Loss (SL) Clean Inputs */}
               <div className="grid grid-cols-2 gap-2">
-                {/* TP (Target Profit Pts) Box */}
-                <div className="p-1.5 rounded-lg border border-emerald-500/30 bg-emerald-500/5 dark:bg-emerald-950/20 space-y-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-1">
-                      <Target className="w-3 h-3" /> TP (Target)
-                    </span>
-                    {scalpTp > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setScalpTp(0)}
-                        className="text-[9px] text-muted-foreground hover:text-rose-500 font-mono"
-                      >
-                        clear
-                      </button>
-                    )}
+                <div className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-emerald-500 font-bold">Target (TP)</span>
+                    <span className="text-muted-foreground font-mono">pts</span>
                   </div>
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono font-bold text-[11px] text-emerald-600">+</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={1000}
-                      step={scalpSpot === "SENSEX" ? 10 : 5}
-                      value={scalpTp === 0 ? "" : scalpTp}
-                      placeholder="0"
-                      onChange={(e) => setScalpTp(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="w-full pl-5 pr-6 py-0.5 font-mono font-bold text-xs text-emerald-600 dark:text-emerald-400 bg-background border border-emerald-500/40 rounded shadow-2xs focus:outline-none focus:ring-1 focus:ring-emerald-500 h-6.5 text-center"
-                      title="Target Profit Points (0 = off)"
-                    />
-                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-[9px] text-muted-foreground">pt</span>
-                  </div>
-                  {/* TP Presets */}
-                  <div className="grid grid-cols-4 gap-0.5 pt-0.5">
-                    {[10, 15, 25, 40].map((pt) => (
-                      <button
-                        key={`tp-${pt}`}
-                        type="button"
-                        onClick={() => setScalpTp(pt)}
-                        className={`py-0.5 text-[9px] font-mono font-bold rounded border transition-colors ${
-                          scalpTp === pt
-                            ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
-                            : "bg-background border-border hover:bg-muted text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        +{pt}
-                      </button>
-                    ))}
-                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1000}
+                    step={5}
+                    value={scalpTp === 0 ? "" : scalpTp}
+                    placeholder="30"
+                    onChange={(e) => setScalpTp(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-2 py-0.5 font-mono font-bold text-xs text-emerald-500 bg-background border border-emerald-500/40 rounded focus:outline-none text-center h-6.5"
+                  />
                 </div>
 
-                {/* TL (Stop Loss Pts) Box */}
-                <div className="p-1.5 rounded-lg border border-rose-500/30 bg-rose-500/5 dark:bg-rose-950/20 space-y-1">
-                  <div className="flex items-center justify-between text-[11px]">
-                    <span className="text-rose-600 dark:text-rose-400 font-bold flex items-center gap-1">
-                      <ShieldAlert className="w-3 h-3" /> TL / SL (Stop)
-                    </span>
-                    {scalpTs > 0 && (
-                      <button
-                        type="button"
-                        onClick={() => setScalpTs(0)}
-                        className="text-[9px] text-muted-foreground hover:text-rose-500 font-mono"
-                      >
-                        clear
-                      </button>
-                    )}
+                <div className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/5 space-y-1">
+                  <div className="flex items-center justify-between text-[10px]">
+                    <span className="text-rose-500 font-bold">Stop Loss (SL)</span>
+                    <span className="text-muted-foreground font-mono">pts</span>
                   </div>
-                  <div className="relative">
-                    <span className="absolute left-2 top-1/2 -translate-y-1/2 font-mono font-bold text-[11px] text-rose-600">−</span>
-                    <input
-                      type="number"
-                      min={0}
-                      max={1000}
-                      step={scalpSpot === "SENSEX" ? 10 : 5}
-                      value={scalpTs === 0 ? "" : scalpTs}
-                      placeholder="0"
-                      onChange={(e) => setScalpTs(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="w-full pl-5 pr-6 py-0.5 font-mono font-bold text-xs text-rose-600 dark:text-rose-400 bg-background border border-rose-500/40 rounded shadow-2xs focus:outline-none focus:ring-1 focus:ring-rose-500 h-6.5 text-center"
-                      title="Stop Loss Points (0 = off)"
-                    />
-                    <span className="absolute right-1.5 top-1/2 -translate-y-1/2 font-mono text-[9px] text-muted-foreground">pt</span>
-                  </div>
-                  {/* TL Presets */}
-                  <div className="grid grid-cols-4 gap-0.5 pt-0.5">
-                    {[5, 10, 15, 25].map((pt) => (
-                      <button
-                        key={`tl-${pt}`}
-                        type="button"
-                        onClick={() => setScalpTs(pt)}
-                        className={`py-0.5 text-[9px] font-mono font-bold rounded border transition-colors ${
-                          scalpTs === pt
-                            ? "bg-rose-600 text-white border-rose-600 shadow-2xs"
-                            : "bg-background border-border hover:bg-muted text-muted-foreground hover:text-foreground"
-                        }`}
-                      >
-                        -{pt}
-                      </button>
-                    ))}
-                  </div>
+                  <input
+                    type="number"
+                    min={0}
+                    max={1000}
+                    step={5}
+                    value={scalpTs === 0 ? "" : scalpTs}
+                    placeholder="10"
+                    onChange={(e) => setScalpTs(Math.max(0, parseFloat(e.target.value) || 0))}
+                    className="w-full px-2 py-0.5 font-mono font-bold text-xs text-rose-500 bg-background border border-rose-500/40 rounded focus:outline-none text-center h-6.5"
+                  />
                 </div>
               </div>
 
-              {/* Row 5: Action Buttons */}
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
+              {/* Row 4: Action Button */}
+              <div className="pt-0.5">
                 <Button
                   size="sm"
                   disabled={scalpBusy || Boolean(status?.risk_guardian?.is_locked)}
                   onClick={() => handleScalpOrder("BUY", scalpOptionType)}
-                  className={`h-8 text-xs font-bold flex items-center justify-center gap-1 shadow-sm ${
+                  className={`w-full h-9 text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm rounded-lg cursor-pointer ${
                     status?.risk_guardian?.is_locked
                       ? "bg-muted text-muted-foreground border border-border cursor-not-allowed"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer"
+                      : scalpOptionType === "CE"
+                      ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                      : "bg-rose-600 hover:bg-rose-700 text-white"
                   }`}
-                  title={
-                    status?.risk_guardian?.is_locked
-                      ? "Trading locked by Risk Guardian (Max Daily Loss reached)"
-                      : `Buy ${scalpSpot} ${activeStrike} ${scalpOptionType}${scalpTp > 0 ? ` TP:${scalpTp}pt` : ""}${scalpTs > 0 ? ` TS:${scalpTs}pt` : ""}`
-                  }
                 >
                   {scalpBusy ? (
-                    <Loader2 className="w-3 h-3 animate-spin" />
-                  ) : status?.risk_guardian?.is_locked ? (
-                    <ShieldAlert className="w-3.5 h-3.5 text-rose-500" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                   ) : (
-                    <ArrowUpRight className="w-3.5 h-3.5" />
+                    <Zap className="w-3.5 h-3.5 fill-current" />
                   )}
                   <span>
                     {status?.risk_guardian?.is_locked
                       ? "BUY LOCKED"
-                      : `BUY ${scalpOptionType} (LIVE)`}
+                      : `BUY ${scalpSpot} ${activeStrike} ${scalpOptionType} (${scalpLots}L)`}
                   </span>
-                </Button>
-
-                <Button
-                  size="sm"
-                  disabled={scalpBusy}
-                  onClick={() => {
-                    if (activeSpotTrade) {
-                      handleScalpExit()
-                    } else {
-                      handleScalpOrder("SELL", scalpOptionType)
-                    }
-                  }}
-                  className="h-8 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1 shadow-sm cursor-pointer"
-                  title={activeSpotTrade ? "Square Off Active Position" : `Sell ${scalpSpot} ${activeStrike} ${scalpOptionType}`}
-                >
-                  {scalpBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <ArrowDownRight className="w-3.5 h-3.5" />}
-                  <span>{activeSpotTrade ? "EXIT (LIVE)" : `SELL ${scalpOptionType} (LIVE)`}</span>
                 </Button>
               </div>
 
-              {/* Row 6: Active Position Card & Kotak Sync */}
+              {/* Active Position Card & Exit */}
               {activeSpotTrade && (
-                <div className="bg-muted/70 border border-border/80 p-2 rounded-lg space-y-1.5 animate-fadeIn">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="truncate mr-1 min-w-0">
-                      <span className="font-bold text-foreground text-xs block truncate">
-                        {activeSpotTrade.option || activeSpotTrade.symbol}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        ₹{Number(activeSpotTrade.buy_price || activeSpotTrade.nifty_in || 0).toFixed(1)} ({activeSpotTrade.qty}Q)
-                      </span>
+                <div className="p-2.5 rounded-lg bg-muted/60 border border-border space-y-2 animate-fadeIn">
+                  <div className="flex items-center justify-between">
+                    <div className="min-w-0">
+                      <div className="font-bold text-xs truncate">{activeSpotTrade.option || activeSpotTrade.symbol}</div>
+                      <div className="text-[10px] text-muted-foreground font-mono">₹{Number(activeSpotTrade.buy_price || 0).toFixed(1)} ({activeSpotTrade.qty}Q)</div>
                     </div>
-                    <span className={`font-mono font-bold text-xs ${pnlClass(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}`}>
+                    <div className={`font-mono font-bold text-xs ${pnlClass(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}`}>
                       {(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0) >= 0 ? "+" : ""}
                       {fmtRs(activeSpotTrade.option_pnl_rs ?? activeSpotTrade.pnl_rs ?? 0)}
-                    </span>
+                    </div>
                   </div>
-
-                  <div className="flex items-center gap-1.5 pt-0.5">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={scalpBusy}
-                      onClick={() => handleUpdateActiveTpTl(activeSpotTrade)}
-                      className="flex-1 h-7 text-[11px] font-bold border-emerald-500/60 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1 shadow-xs cursor-pointer"
-                      title="Update SL and TP directly on Kotak Neo order book"
-                    >
-                      <Zap className="w-3 h-3 fill-emerald-500" />
-                      <span>Sync TP/SL Kotak</span>
-                    </Button>
-
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      disabled={scalpBusy}
-                      onClick={handleScalpExit}
-                      className="h-7 text-[11px] font-bold bg-rose-600 hover:bg-rose-700 text-white flex items-center justify-center gap-1 shadow-xs cursor-pointer px-2.5"
-                    >
-                      {scalpBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
-                      <span>Exit</span>
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="destructive"
+                    disabled={scalpBusy}
+                    onClick={handleScalpExit}
+                    className="w-full h-7 text-xs font-bold cursor-pointer"
+                  >
+                    {scalpBusy ? <Loader2 className="w-3 h-3 animate-spin" /> : <LogOut className="w-3 h-3" />}
+                    <span>Square Off Position</span>
+                  </Button>
                 </div>
               )}
             </div>
           </div>
         )
       )}
-
       {/* 2. MAIN WORKSPACE CONTAINER */}
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
         {/* LEFT / CENTER: FULL-WIDTH / FLEX-1 CANDLESTICK CHART */}
@@ -1706,22 +1384,7 @@ export function LivePage() {
                     
                   </div>
 
-                  {/* Right: Side Panel Toggle Button */}
-                  {activeChart === "SENSEX" && (
-                    <button
-                      type="button"
-                      onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
-                        isSidePanelOpen
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background/80 hover:bg-muted text-muted-foreground hover:text-foreground border-border"
-                      }`}
-                      title={isSidePanelOpen ? "Collapse Trades Side Panel" : "Open Trades & Positions Panel"}
-                    >
-                      <PanelRightClose className={`w-3.5 h-3.5 transition-transform ${!isSidePanelOpen ? "rotate-180" : ""}`} />
-                      <span>Trades ({openTrades.length})</span>
-                    </button>
-                  )}
+
                 </div>
                 <div className="flex-1 min-h-0 relative">
                   <CandleChart
@@ -1771,22 +1434,7 @@ export function LivePage() {
                     
                   </div>
 
-                  {/* Right: Side Panel Toggle Button */}
-                  {(activeChart === "NIFTY" || activeChart === "DUAL") && (
-                    <button
-                      type="button"
-                      onClick={() => setIsSidePanelOpen(!isSidePanelOpen)}
-                      className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-all flex items-center gap-1.5 cursor-pointer shadow-2xs shrink-0 ${
-                        isSidePanelOpen
-                          ? "bg-primary text-primary-foreground border-primary"
-                          : "bg-background/80 hover:bg-muted text-muted-foreground hover:text-foreground border-border"
-                      }`}
-                      title={isSidePanelOpen ? "Collapse Trades Side Panel" : "Open Trades & Positions Panel"}
-                    >
-                      <PanelRightClose className={`w-3.5 h-3.5 transition-transform ${!isSidePanelOpen ? "rotate-180" : ""}`} />
-                      <span>Trades ({openTrades.length})</span>
-                    </button>
-                  )}
+
                 </div>
                 <div className="flex-1 min-h-0 relative">
                   <CandleChart
