@@ -573,10 +573,10 @@ export function ConfigPage() {
                 <div className="space-y-1.5 rounded-lg border p-3 bg-muted/10">
                   <div className="flex items-center justify-between">
                     <Label htmlFor="pt-loss" className="text-xs text-muted-foreground font-medium flex items-center gap-1">
-                      <span>Per-Trade Max Loss (₹)</span>
+                      <span>Per-Trade Max Loss (₹ / Lot)</span>
                     </Label>
                     <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
-                      Auto-Squareoff
+                      Dynamic / Lot
                     </Badge>
                   </div>
                   <Input
@@ -592,7 +592,7 @@ export function ConfigPage() {
                     className="h-9 text-sm font-semibold font-mono"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Cuts individual loser if loss reaches ₹{capitalSettings.per_trade_loss_limit.toLocaleString('en-IN')} (~10 pts on 1 lot)
+                    Dynamic per lot: ₹{capitalSettings.per_trade_loss_limit.toLocaleString('en-IN')}/lot (₹{(capitalSettings.per_trade_loss_limit * 2).toLocaleString('en-IN')} for 2 lots = ~10 pts SL)
                   </p>
                 </div>
 

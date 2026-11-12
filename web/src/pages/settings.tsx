@@ -461,10 +461,10 @@ export function SettingsPage() {
             <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20 flex flex-col justify-between">
               <span className="text-muted-foreground text-[11px]">Per-Trade Max Loss Auto-Cut</span>
               <span className="font-mono font-semibold text-amber-400 mt-0.5">
-                -₹{(status.status?.risk_guardian?.per_trade_loss_limit || 650).toLocaleString('en-IN')} (-{status.status?.risk_guardian?.per_trade_loss_pct || 20}%)
+                -₹{(status.status?.risk_guardian?.per_trade_loss_limit || 650).toLocaleString('en-IN')}/lot (-{status.status?.risk_guardian?.per_trade_loss_pct || 20}%)
               </span>
               <span className="text-[10px] text-muted-foreground mt-0.5">
-                {status.status?.risk_guardian?.per_trade_auto_cut !== false ? "Auto-squareoff loser instantly" : "Alert only"}
+                {status.status?.risk_guardian?.per_trade_auto_cut !== false ? "Dynamic: Scales automatically by position lots (~10 pts SL)" : "Alert only"}
               </span>
             </div>
           </div>

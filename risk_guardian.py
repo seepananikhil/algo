@@ -300,7 +300,7 @@ def enforce_per_trade_stops(open_positions: list, cfg: dict) -> list:
     if not cfg.get("per_trade_auto_cut", True):
         return []
 
-    max_loss_rs = float(cfg.get("per_trade_loss_limit", 650.0) or 650.0)
+    base_loss_rs = float(cfg.get("per_trade_loss_limit", 650.0) or 650.0)
     max_loss_pct = float(cfg.get("per_trade_loss_pct", 20.0) or 20.0)
 
     auto_cut_actions = []
@@ -311,15 +311,22 @@ def enforce_per_trade_stops(open_positions: list, cfg: dict) -> list:
             if not sym or qty <= 0:
                 continue
 
+            # Determine lot size dynamically: SENSEX = 20, NIFTY = 65 (or pos['lot_size'])
+            pos_lot_size = int(pos.get("lot_size") or (20 if "SENSEX" in sym.upper() else 65))
+            lots = max(1.0, round(float(qty) / float(pos_lot_size), 2)) if pos_lot_size > 0 else 1.0
+
+            # Dynamic Rupee limit scales automatically with lot size (e.g. Rs 650 for 1 lot, Rs 1300 for 2 lots)
+            max_loss_rs = base_loss_rs * lots
+
             unrealized = float(pos.get("unrealized_pnl", 0.0) or 0.0)
             pnl_pct = float(pos.get("pnl_pct", 0.0) or 0.0)
 
-            # Check if either Rupee loss limit or percentage loss limit is breached
+            # Check if either Rupee loss limit (scaled by lots) or percentage loss limit is breached
             breached_rs = (max_loss_rs > 0 and unrealized <= -max_loss_rs)
             breached_pct = (max_loss_pct > 0 and pnl_pct <= -max_loss_pct)
 
             if breached_rs or breached_pct:
-                reason_str = f"Per-trade SL hit! Unrealized: Rs. {unrealized:+,.2f} ({pnl_pct:+.1f}%) [Limits: -Rs. {max_loss_rs:,.0f} / -{max_loss_pct:.0f}%]"
+                reason_str = f"Per-trade SL hit! Unrealized: Rs. {unrealized:+,.2f} ({pnl_pct:+.1f}%) [Dynamic SL: -Rs. {max_loss_rs:,.0f} ({lots:.1f} lot{'s' if lots > 1 else ''}) / -{max_loss_pct:.0f}%]"
                 logger.warning(f"🚨 [RISK GUARDIAN PER-TRADE AUTO-CUT] Auto-cutting {sym}! {reason_str}")
 
                 from app_server import exit_position

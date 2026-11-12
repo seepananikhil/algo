@@ -813,7 +813,7 @@ export function LivePage() {
             >
               <ShieldCheck className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
               <span>Loss Guard: Rs. {(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')}</span>
-              <span className="text-[10px] opacity-75 font-mono text-amber-400">| SL: -₹{status?.risk_guardian?.per_trade_loss_limit || 650} (-{status?.risk_guardian?.per_trade_loss_pct || 20}%)</span>
+              <span className="text-[10px] opacity-75 font-mono text-amber-400">| SL: -₹{status?.risk_guardian?.per_trade_loss_limit || 650}/lot (-{status?.risk_guardian?.per_trade_loss_pct || 20}%)</span>
             </div>
           ) : null}
 
@@ -1304,7 +1304,7 @@ export function LivePage() {
                     <span>Risk Guard: -₹{(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')}</span>
                   </span>
                   <span className="font-mono text-amber-500 font-medium">
-                    Per-Trade SL: -₹{status?.risk_guardian?.per_trade_loss_limit || 650} (-{status?.risk_guardian?.per_trade_loss_pct || 20}%)
+                    Per-Trade SL: -₹{status?.risk_guardian?.per_trade_loss_limit || 650}/lot (-{status?.risk_guardian?.per_trade_loss_pct || 20}%) [Dynamic]
                   </span>
                 </div>
               )}
