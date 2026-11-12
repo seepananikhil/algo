@@ -1,7 +1,21 @@
 import { useState, useEffect } from "react"
-import { TrendingUp, RefreshCw, Clock, Calendar as CalendarIcon, Layers, BarChart3, ShieldCheck, Zap, CheckCircle2 } from "lucide-react"
+import {
+  TrendingUp,
+  RefreshCw,
+  Clock,
+  Calendar as CalendarIcon,
+  Layers,
+  BarChart3,
+  ShieldCheck,
+  Zap,
+  CheckCircle2,
+  LineChart,
+  ChevronDown,
+  ChevronUp
+} from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { PnlCalendar, type CalendarDay } from "@/components/pnl-calendar"
+import { SwingerTradeChartModal, type SwingerTradeTarget } from "@/components/swinger-trade-chart-modal"
 import { toast } from "sonner"
 
 interface Position {
@@ -35,6 +49,7 @@ interface Position {
 }
 
 interface Trade {
+  trade_id?: number
   symbol: string
   name?: string
   entry_date: string
@@ -43,10 +58,14 @@ interface Trade {
   avg_price?: number
   exit_price: number
   qty?: number
-  reason: string
-  days_held: number
+  shares?: number
+  reason?: string
+  exit_reason?: string
+  days_held?: number
+  holding_days?: number
   pnl: number
-  pnl_pct: number
+  pnl_pct?: number
+  pct_return?: number
 }
 
 interface MonthlyStat {
@@ -87,9 +106,13 @@ export function SwingerPage() {
     history: []
   })
   const [scanning, setScanning] = useState(false)
+  const [showMonthlyMatrix, setShowMonthlyMatrix] = useState(false)
   
-  // UI Tabs: 'holdings' | 'signals' | 'trades' | 'calendar'
-  const [activeTab, setActiveTab] = useState<'holdings' | 'signals' | 'trades' | 'calendar'>('holdings')
+  // Chart Inspection Modal Target
+  const [selectedTradeForChart, setSelectedTradeForChart] = useState<SwingerTradeTarget | null>(null)
+
+  // UI Tabs: 'holdings' | 'calendar' | 'trades' | 'signals'
+  const [activeTab, setActiveTab] = useState<'holdings' | 'calendar' | 'trades' | 'signals'>('holdings')
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [tradeFilter, setTradeFilter] = useState<'all' | 'wins' | 'losses'>('all')
 
@@ -130,7 +153,7 @@ export function SwingerPage() {
   const handleScanNow = async () => {
     try {
       setScanning(true)
-      toast.info("Connecting to Chartink & updating Paper Portfolio...")
+      toast.info("Scanning Chartink for 60% Down setups...")
       const res = await fetch("/api/swinger/scan-now", {
         method: "POST",
         headers: { "X-Dashboard": "1" }
@@ -151,7 +174,7 @@ export function SwingerPage() {
   }
 
   const formatExitReason = (r?: string) => {
-    if (!r) return "Swing Exit"
+    if (!r || typeof r !== "string") return "Swing Exit"
     return r
       .replace('RUNNER_TRAIL_25PCT', 'Runner 25% Trail')
       .replace('INITIAL_SL_25PCT', 'Initial SL -25%')
@@ -176,7 +199,7 @@ export function SwingerPage() {
     return `${sign}₹${abs.toFixed(0)}`
   }
 
-  const filteredTrades = trades.filter(t => {
+  const filteredTrades = trades.filter((t) => {
     if (selectedDate && t.exit_date !== selectedDate) return false
     if (tradeFilter === 'wins') return t.pnl > 0
     if (tradeFilter === 'losses') return t.pnl < 0
@@ -185,115 +208,115 @@ export function SwingerPage() {
 
   return (
     <div className="flex-1 space-y-6 p-6 bg-slate-50 min-h-screen text-slate-900 font-sans">
-      {/* Top Header - Clean Light Theme */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-2xl border border-slate-200 shadow-sm">
+      {/* Top Header - Streamlined Apple-style Navbar */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800 border border-amber-300">
               PAPER MODE ACTIVE
             </span>
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
               PURE CHARTINK SCANNER
             </span>
-            <span className="text-xs text-slate-500 font-mono font-medium">Daily Schedule: 15:25 IST</span>
+            <span className="text-xs text-slate-500 font-mono font-medium">Daily Sync: 15:25 IST</span>
           </div>
           <h1 className="text-2xl font-black tracking-tight text-slate-900 mt-1 flex items-center gap-2">
             <TrendingUp className="size-6 text-emerald-600" />
-            Swinger Paper Pro Terminal
+            Swinger Pro Terminal
           </h1>
           <p className="text-xs text-slate-600 mt-0.5 font-medium">
-            Daily Chartink Reversals · Initial SL -25% · BE Shield @ +20% · TP 50% @ +30% · 25% Runner Trailing SL · 10 Slots @ ₹25k
+            Deep Value Asymmetric Reversals · 60% Drawdown Floor · -25% Initial SL · BE Shield @ +20% · TP 50% @ +30% · 25% Runner Trail
           </p>
         </div>
 
         {/* View Switcher Tabs & Scan Action */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
             <button
               onClick={() => setActiveTab('holdings')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition ${
                 activeTab === 'holdings'
                   ? "bg-white text-emerald-700 shadow-xs border border-slate-200"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <Layers className="size-3.5" />
-              Paper Holdings ({positions.length})
-            </button>
-            <button
-              onClick={() => setActiveTab('signals')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                activeTab === 'signals'
-                  ? "bg-white text-emerald-700 shadow-xs border border-slate-200"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <Zap className="size-3.5" />
-              Daily Scanner ({dailySignals.count})
-            </button>
-            <button
-              onClick={() => setActiveTab('trades')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition ${
-                activeTab === 'trades'
-                  ? "bg-white text-emerald-700 shadow-xs border border-slate-200"
-                  : "text-slate-600 hover:text-slate-900"
-              }`}
-            >
-              <BarChart3 className="size-3.5" />
-              Trades Log ({trades.length})
+              Holdings ({positions.length})
             </button>
             <button
               onClick={() => setActiveTab('calendar')}
-              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-lg transition ${
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition ${
                 activeTab === 'calendar'
                   ? "bg-white text-emerald-700 shadow-xs border border-slate-200"
                   : "text-slate-600 hover:text-slate-900"
               }`}
             >
               <CalendarIcon className="size-3.5" />
-              Yearly Scorecard
+              Calendar & Scorecard
+            </button>
+            <button
+              onClick={() => setActiveTab('trades')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition ${
+                activeTab === 'trades'
+                  ? "bg-white text-emerald-700 shadow-xs border border-slate-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <BarChart3 className="size-3.5" />
+              Trade Audit ({trades.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('signals')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold rounded-xl transition ${
+                activeTab === 'signals'
+                  ? "bg-white text-emerald-700 shadow-xs border border-slate-200"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Zap className="size-3.5" />
+              Scanner ({dailySignals.count})
             </button>
           </div>
 
           <Button
             onClick={handleScanNow}
             disabled={scanning}
-            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-4 rounded-xl shadow-sm transition flex items-center gap-2"
+            className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-9 px-4 rounded-xl shadow-xs transition flex items-center gap-2"
           >
             <RefreshCw className={`size-3.5 ${scanning ? "animate-spin" : ""}`} />
-            {scanning ? "Scanning Chartink..." : "Scan Chartink Now"}
+            {scanning ? "Scanning..." : "Scan Chartink Now"}
           </Button>
         </div>
       </div>
 
-      {/* Top 4 KPI Metrics Banner */}
+      {/* 4 Core Summary KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Allocated Capital</span>
+        <div className="bg-white p-4.5 rounded-3xl border border-slate-200/80 shadow-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Allocated Capital</span>
           <div className="text-2xl font-black text-slate-900 mt-1 font-mono">₹2,50,000</div>
           <span className="text-xs text-slate-600 font-medium">10 Slots @ ₹25,000 Base</span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Active Invested</span>
+        <div className="bg-white p-4.5 rounded-3xl border border-slate-200/80 shadow-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Active Invested</span>
           <div className="text-2xl font-black text-slate-900 mt-1 font-mono">
             ₹{totalInvested.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </div>
-          <span className="text-xs text-slate-600 font-medium">{positions.length} Open Paper Positions</span>
+          <span className="text-xs text-slate-600 font-medium">{positions.length} Open Positions</span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Unrealized P&L</span>
+        <div className="bg-white p-4.5 rounded-3xl border border-slate-200/80 shadow-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Live Paper P&L</span>
           <div className={`text-2xl font-black mt-1 font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
             {totalUnrealizedPnl >= 0 ? "+" : ""}₹{totalUnrealizedPnl.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </div>
           <span className="text-xs text-slate-600 font-medium">
-            Booked in Runners: +₹{totalBookedPnl.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
+            Locked in Runners: +₹{totalBookedPnl.toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </span>
         </div>
 
-        <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-sm">
-          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Historical Net P&L</span>
+        <div className="bg-white p-4.5 rounded-3xl border border-slate-200/80 shadow-xs">
+          <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500">Realized Track Record</span>
           <div className="text-2xl font-black text-emerald-600 mt-1 font-mono">
             +₹{(summary.total_pnl ?? 378765).toLocaleString('en-IN', { maximumFractionDigits: 0 })}
           </div>
@@ -305,15 +328,15 @@ export function SwingerPage() {
 
       {/* TAB 1: LIVE HOLDINGS */}
       {activeTab === 'holdings' && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-          <div className="p-5 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50">
+        <div className="rounded-3xl border border-slate-200/80 bg-white shadow-xs overflow-hidden">
+          <div className="p-5 border-b border-slate-100 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-slate-50/60">
             <div>
               <h3 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
                 <ShieldCheck className="size-4 text-emerald-600" />
-                Live Paper Positions ({positions.length} Slots Active)
+                Active Paper Positions ({positions.length} Slots Open)
               </h3>
-              <p className="text-xs text-slate-600 font-medium">
-                Initial SL -25% · BE Shield Moves SL to Cost @ +20% · Books 50% @ +30% TP1 · 25% Runner Trail on Remainder
+              <p className="text-xs text-slate-600 font-medium mt-0.5">
+                Click any row or "View Chart" to see candlestick markers for Entry, Stop-Loss, and Take-Profit
               </p>
             </div>
             <div className="flex items-center gap-2">
@@ -321,14 +344,14 @@ export function SwingerPage() {
                 {positions.filter(p => p.tp_hit || p.tp_50_hit).length} in Runner Mode
               </span>
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-sky-100 text-sky-800 border border-sky-300">
-                {positions.filter(p => p.be_active).length} Shielded
+                {positions.filter(p => p.be_active).length} Shielded @ Cost
               </span>
             </div>
           </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+              <thead className="bg-slate-100/70 text-slate-700 border-b border-slate-200 font-bold">
                 <tr>
                   <th className="p-3.5">Stock</th>
                   <th className="p-3.5">Entry Date</th>
@@ -341,12 +364,13 @@ export function SwingerPage() {
                   <th className="p-3.5">Runner Trail (25%)</th>
                   <th className="p-3.5">Holding</th>
                   <th className="p-3.5 text-right">P&L Status</th>
+                  <th className="p-3.5 text-center">Chart</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {positions.length === 0 ? (
                   <tr>
-                    <td colSpan={11} className="p-8 text-center text-slate-500">
+                    <td colSpan={12} className="p-8 text-center text-slate-500">
                       <div className="flex flex-col items-center justify-center gap-2">
                         <Clock className="size-6 text-slate-400" />
                         <span>No active positions currently. Scanner runs daily at 15:25 IST.</span>
@@ -365,10 +389,16 @@ export function SwingerPage() {
                     const slDisplay = p.sl_price ?? (avgCost * 0.75)
 
                     return (
-                      <tr key={p.symbol} className="hover:bg-slate-50 transition">
+                      <tr
+                        key={p.symbol}
+                        onClick={() => setSelectedTradeForChart(p as any)}
+                        className="hover:bg-slate-50/80 cursor-pointer transition group"
+                      >
                         <td className="p-3.5">
-                          <div className="font-black text-slate-900 text-sm">{p.symbol}</div>
-                          <div className="text-[11px] text-slate-500 font-medium">{p.name || p.symbol}</div>
+                          <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition">
+                            {p.symbol}
+                          </div>
+                          <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">{p.name || p.symbol}</div>
                         </td>
                         <td className="p-3.5 text-slate-600 font-mono font-medium">{p.entry_date}</td>
                         <td className="p-3.5 font-mono font-bold text-slate-900">₹{avgCost.toFixed(2)}</td>
@@ -435,6 +465,20 @@ export function SwingerPage() {
                             </span>
                           )}
                         </td>
+                        <td className="p-3.5 text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setSelectedTradeForChart(p as any)
+                            }}
+                            className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg gap-1"
+                          >
+                            <LineChart className="size-3.5" />
+                            Chart
+                          </Button>
+                        </td>
                       </tr>
                     )
                   })
@@ -445,223 +489,21 @@ export function SwingerPage() {
         </div>
       )}
 
-      {/* TAB 2: DAILY SCANNER SIGNALS */}
-      {activeTab === 'signals' && (
-        <div className="space-y-5">
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 pb-4">
-              <div>
-                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
-                  <Zap className="size-5 text-amber-500" />
-                  Today's Chartink Screener Signals ({dailySignals.count} Triggers)
-                </h3>
-                <p className="text-xs text-slate-600 font-medium mt-0.5">
-                  Last Scanned: {dailySignals.last_scan_time ? new Date(dailySignals.last_scan_time).toLocaleString('en-IN') : "Pending Scan"} · Automated Daily at 15:25 IST
-                </p>
-              </div>
-              <Button
-                onClick={handleScanNow}
-                disabled={scanning}
-                variant="outline"
-                size="sm"
-                className="border-slate-300 text-xs font-bold"
-              >
-                <RefreshCw className={`size-3.5 mr-1.5 ${scanning ? "animate-spin" : ""}`} />
-                Refresh Feed
-              </Button>
-            </div>
-
-            {dailySignals.signals.length === 0 ? (
-              <div className="py-12 text-center text-slate-500">
-                <div className="max-w-md mx-auto space-y-3">
-                  <div className="size-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
-                    <CheckCircle2 className="size-6 text-emerald-600" />
-                  </div>
-                  <h4 className="font-bold text-slate-900 text-sm">No Stocks Matched All 12 Conditions Today</h4>
-                  <p className="text-xs text-slate-600 leading-relaxed">
-                    The strategy strictly requires a severe &ge;60% drawdown from the 4-year peak, combined with a 1.5x volume surge, 1-day RSI reversal, and lower-wick rejection. Quality over quantity ensures superior edge.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="overflow-x-auto mt-4">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
-                    <tr>
-                      <th className="p-3">Symbol</th>
-                      <th className="p-3">Name</th>
-                      <th className="p-3 font-mono">Close Price</th>
-                      <th className="p-3 font-mono">Day Gain %</th>
-                      <th className="p-3 font-mono">Daily Volume</th>
-                      <th className="p-3">Paper Allocation</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {dailySignals.signals.map((sig, idx) => {
-                      const alreadyHeld = positions.some(p => p.symbol === sig.nsecode)
-                      return (
-                        <tr key={idx} className="hover:bg-slate-50 transition">
-                          <td className="p-3 font-bold text-slate-900">{sig.nsecode}</td>
-                          <td className="p-3 text-slate-600">{sig.name}</td>
-                          <td className="p-3 font-mono font-bold text-slate-800">₹{(sig.close ?? 0).toFixed(2)}</td>
-                          <td className="p-3 font-mono font-bold text-emerald-600">+{(sig.per_chg ?? 0).toFixed(2)}%</td>
-                          <td className="p-3 font-mono text-slate-600">{sig.volume?.toLocaleString('en-IN') || "N/A"}</td>
-                          <td className="p-3">
-                            {alreadyHeld ? (
-                              <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                Active in Portfolio
-                              </span>
-                            ) : (
-                              <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
-                                Allocated ₹25k
-                              </span>
-                            )}
-                          </td>
-                        </tr>
-                      )
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-
-          {/* Past Scans History Log */}
-          {dailySignals.history && dailySignals.history.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-3">
-                Recent Daily Scanner Runs Log
-              </h4>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
-                    <tr>
-                      <th className="p-3">Date</th>
-                      <th className="p-3">Timestamp</th>
-                      <th className="p-3">Matches Found</th>
-                      <th className="p-3">Symbols Triggered</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {dailySignals.history.map((h, i) => (
-                      <tr key={i} className="hover:bg-slate-50 transition">
-                        <td className="p-3 font-mono font-bold text-slate-900">{h.date}</td>
-                        <td className="p-3 text-slate-600 font-mono text-[11px]">{new Date(h.scan_time).toLocaleTimeString('en-IN')}</td>
-                        <td className="p-3 font-bold">
-                          <span className={`px-2 py-0.5 rounded text-[10px] ${h.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
-                            {h.count} triggers
-                          </span>
-                        </td>
-                        <td className="p-3 font-mono text-slate-700">
-                          {h.signals && h.signals.length > 0 
-                            ? h.signals.map(s => s.nsecode).join(", ") 
-                            : "None"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TAB 3: TRADES AUDIT LOG */}
-      {activeTab === 'trades' && (
-        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden space-y-4 p-5">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-200 pb-4">
-            <div>
-              <h3 className="font-extrabold text-base text-slate-900">Completed Swings (Audit History)</h3>
-              <p className="text-xs text-slate-600 font-medium">Detailed trade logs with entry, exit, holding days, and profit/loss</p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Button
-                variant={tradeFilter === 'all' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setTradeFilter('all')}
-                className={`text-xs font-bold h-8 ${tradeFilter === 'all' ? "bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}
-              >
-                All ({trades.length})
-              </Button>
-              <Button
-                variant={tradeFilter === 'wins' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setTradeFilter('wins')}
-                className={`text-xs font-bold h-8 ${tradeFilter === 'wins' ? "bg-emerald-600 text-white" : "border-slate-300 text-slate-700"}`}
-              >
-                Wins ({trades.filter(t => t.pnl > 0).length})
-              </Button>
-              <Button
-                variant={tradeFilter === 'losses' ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setTradeFilter('losses')}
-                className={`text-xs font-bold h-8 ${tradeFilter === 'losses' ? "bg-rose-600 text-white" : "border-slate-300 text-slate-700"}`}
-              >
-                Losses ({trades.filter(t => t.pnl <= 0).length})
-              </Button>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
-                <tr>
-                  <th className="p-3">Stock</th>
-                  <th className="p-3">Entry Date</th>
-                  <th className="p-3">Exit Date</th>
-                  <th className="p-3">Entry (₹)</th>
-                  <th className="p-3">Exit (₹)</th>
-                  <th className="p-3">Held</th>
-                  <th className="p-3">Exit Reason</th>
-                  <th className="p-3 text-right">Net P&L</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100">
-                {filteredTrades.map((t, idx) => {
-                  const isWin = t.pnl > 0
-                  return (
-                    <tr key={idx} className="hover:bg-slate-50 transition">
-                      <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
-                      <td className="p-3 text-slate-600 font-mono">{t.entry_date}</td>
-                      <td className="p-3 text-slate-600 font-mono">{t.exit_date}</td>
-                      <td className="p-3 font-mono font-medium text-slate-800">₹{(t.entry_price ?? 0).toFixed(2)}</td>
-                      <td className="p-3 font-mono font-medium text-slate-800">₹{(t.exit_price ?? 0).toFixed(2)}</td>
-                      <td className="p-3 text-slate-600 font-medium">{(t.days_held ?? (t as any).holding_days ?? 0)}d</td>
-                      <td className="p-3">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isWin ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-rose-100 text-rose-800 border-rose-300"}`}>
-                          {formatExitReason(t.reason || (t as any).exit_reason)}
-                        </span>
-                      </td>
-                      <td className="p-3 text-right font-mono font-bold">
-                        <span className={isWin ? "text-emerald-600" : "text-rose-600"}>
-                          {isWin ? "+" : ""}{(t.pnl_pct ?? (t as any).pct_return ?? 0).toFixed(2)}% (₹{(t.pnl ?? 0).toLocaleString('en-IN')})
-                        </span>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-
-      {/* TAB 4: YEARLY SCORECARD & HEATMAP */}
+      {/* TAB 2: CALENDAR & SCORECARD */}
       {activeTab === 'calendar' && (
         <div className="space-y-6">
-          {/* Yearly Performance Cards */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          {/* Yearly Consistency Cards */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
                 <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
                   <CalendarIcon className="size-5 text-emerald-600" />
                   Annual Consistency Scorecard (2022 - 2026)
                 </h3>
-                <p className="text-xs text-slate-600 font-medium">Realized year-by-year profit, win rate, and profit factor</p>
+                <p className="text-xs text-slate-600 font-medium">Verified historical performance across complete market cycles</p>
               </div>
               <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300 font-mono">
-                {yearly.length} Full Cycles
+                {yearly.length} Full Cycles Tracked
               </span>
             </div>
 
@@ -675,7 +517,7 @@ export function SwingerPage() {
                 return (
                   <div
                     key={y.year}
-                    className={`rounded-2xl border p-4.5 transition shadow-xs ${
+                    className={`rounded-2xl border p-4.5 transition shadow-2xs ${
                       isProf
                         ? "bg-gradient-to-br from-emerald-50/70 to-white border-emerald-300 hover:border-emerald-500"
                         : "bg-gradient-to-br from-rose-50/70 to-white border-rose-300 hover:border-rose-500"
@@ -722,25 +564,30 @@ export function SwingerPage() {
             </div>
           </div>
 
-          {/* Monthly Breakdown */}
-          {monthly.length > 0 && (
-            <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
-                <div>
-                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
-                    <BarChart3 className="size-5 text-emerald-600" />
-                    Monthly Performance Matrix ({monthly.length} Months)
-                  </h3>
-                  <p className="text-xs text-slate-600 font-medium">Month-by-month return, profit factor, and closed swing count</p>
-                </div>
+          {/* Collapsible Monthly Matrix */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs">
+            <div className="flex justify-between items-center cursor-pointer" onClick={() => setShowMonthlyMatrix(!showMonthlyMatrix)}>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <BarChart3 className="size-5 text-emerald-600" />
+                  Monthly Performance Breakdown ({monthly.length} Months)
+                </h3>
+                <p className="text-xs text-slate-600 font-medium">Click to {showMonthlyMatrix ? "hide" : "expand"} month-by-month return matrix</p>
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-1">
+              <Button variant="ghost" size="sm" className="gap-1 text-xs font-bold text-slate-600">
+                {showMonthlyMatrix ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+                {showMonthlyMatrix ? "Collapse" : "Expand"}
+              </Button>
+            </div>
+
+            {showMonthlyMatrix && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-1 mt-4 pt-4 border-t border-slate-100">
                 {monthly.map((m) => {
                   const isProfitable = (m.pnl ?? 0) > 0
                   return (
                     <div
                       key={m.month}
-                      className={`rounded-xl border p-3.5 transition ${
+                      className={`rounded-2xl border p-3.5 transition ${
                         isProfitable 
                           ? "bg-emerald-50/50 border-emerald-300" 
                           : "bg-white border-slate-200"
@@ -753,7 +600,7 @@ export function SwingerPage() {
                         </span>
                       </div>
                       <div className="mt-2 flex items-baseline justify-between">
-                        <span className="text-[11px] text-slate-500 font-semibold">Net P&L:</span>
+                        <span className="text-[11px] text-slate-500 font-semibold">Net:</span>
                         <span className={`text-sm font-black font-mono ${isProfitable ? "text-emerald-600" : "text-rose-600"}`}>
                           {isProfitable ? "+" : ""}₹{(m.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                           <span className="text-[10px] ml-1 font-semibold">
@@ -769,11 +616,11 @@ export function SwingerPage() {
                   )
                 })}
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
-          {/* Daily Session Heatmap Calendar */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+          {/* Interactive Daily Session Heatmap Calendar */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
               <div>
                 <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
@@ -781,16 +628,16 @@ export function SwingerPage() {
                   Daily P&L Calendar Heatmap
                 </h3>
                 <p className="text-xs text-slate-600 font-medium">
-                  Click on any day to inspect individual trades that closed on that session
+                  Click on any active calendar day to inspect the trades and visualize Entry/Exit on charts
                 </p>
               </div>
               {selectedDate && (
                 <div className="flex items-center gap-2">
                   <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                    Filtered: {selectedDate}
+                    Filtered Date: {selectedDate}
                   </span>
                   <Button variant="ghost" size="sm" onClick={() => setSelectedDate(null)} className="h-7 text-xs text-slate-600 hover:text-slate-900">
-                    Clear Filter
+                    Clear Selection
                   </Button>
                 </div>
               )}
@@ -801,23 +648,28 @@ export function SwingerPage() {
               format={formatCalendarPnl}
               onPick={(date) => {
                 setSelectedDate(date === selectedDate ? null : date)
-                toast.info(`Viewing trades for ${date}`)
+                toast.info(`Inspecting trades for ${date}`)
               }}
             />
 
-            {/* Trades matching selected calendar day (if clicked) */}
+            {/* TRADES MATCHING CLICKED CALENDAR DATE */}
             {selectedDate && (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-xs mt-4">
+              <div className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4 shadow-2xs mt-4">
                 <div className="flex justify-between items-center mb-3">
-                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
-                    Trades Closed on {selectedDate}
-                  </h4>
-                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white text-slate-700 border border-slate-300">
-                    {filteredTrades.length} Trades
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-slate-800 flex items-center gap-2">
+                      <LineChart className="size-4 text-emerald-600" />
+                      Swings Closed on {selectedDate}
+                    </h4>
+                    <p className="text-[11px] text-slate-500">Click any trade row below to open its candlestick chart with Entry/Exit annotations</p>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-white text-slate-800 border border-slate-300">
+                    {filteredTrades.length} Trades Closed
                   </span>
                 </div>
+
                 {filteredTrades.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-2">No closed trades recorded on {selectedDate}.</p>
+                  <p className="text-xs text-slate-500 py-3 text-center">No closed trades recorded on {selectedDate}.</p>
                 ) : (
                   <div className="overflow-x-auto">
                     <table className="w-full text-left text-xs bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -830,14 +682,21 @@ export function SwingerPage() {
                           <th className="p-3">Held</th>
                           <th className="p-3">Exit Reason</th>
                           <th className="p-3 text-right">Net P&L</th>
+                          <th className="p-3 text-center">Visual Chart</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredTrades.map((t, i) => {
                           const isWin = (t.pnl ?? 0) > 0
                           return (
-                            <tr key={i} className="hover:bg-slate-50 transition">
-                              <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
+                            <tr
+                              key={i}
+                              onClick={() => setSelectedTradeForChart(t as any)}
+                              className="hover:bg-slate-50/90 cursor-pointer transition group"
+                            >
+                              <td className="p-3 font-bold text-slate-900 group-hover:text-emerald-700 transition">
+                                {t.symbol}
+                              </td>
                               <td className="p-3 text-slate-600 font-mono">{t.entry_date}</td>
                               <td className="p-3 font-mono font-medium text-slate-800">₹{(t.entry_price ?? 0).toFixed(2)}</td>
                               <td className="p-3 font-mono font-medium text-slate-800">₹{(t.exit_price ?? 0).toFixed(2)}</td>
@@ -852,6 +711,20 @@ export function SwingerPage() {
                                   {isWin ? "+" : ""}{(t.pnl_pct ?? (t as any).pct_return ?? 0).toFixed(2)}% (₹{(t.pnl ?? 0).toLocaleString('en-IN')})
                                 </span>
                               </td>
+                              <td className="p-3 text-center">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSelectedTradeForChart(t as any)
+                                  }}
+                                  className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg gap-1"
+                                >
+                                  <LineChart className="size-3.5" />
+                                  Inspect Chart
+                                </Button>
+                              </td>
                             </tr>
                           )
                         })}
@@ -863,6 +736,235 @@ export function SwingerPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* TAB 3: TRADES AUDIT LOG */}
+      {activeTab === 'trades' && (
+        <div className="rounded-3xl border border-slate-200/80 bg-white shadow-xs overflow-hidden space-y-4 p-5">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+            <div>
+              <h3 className="font-extrabold text-base text-slate-900">Historical Swings Audit ({trades.length} Trades)</h3>
+              <p className="text-xs text-slate-600 font-medium">Click on any trade row to inspect the entry point, profit booking, and trailing exit on the candlestick chart</p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant={tradeFilter === 'all' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTradeFilter('all')}
+                className={`text-xs font-bold h-8 rounded-xl ${tradeFilter === 'all' ? "bg-slate-900 text-white" : "border-slate-300 text-slate-700"}`}
+              >
+                All ({trades.length})
+              </Button>
+              <Button
+                variant={tradeFilter === 'wins' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTradeFilter('wins')}
+                className={`text-xs font-bold h-8 rounded-xl ${tradeFilter === 'wins' ? "bg-emerald-600 text-white" : "border-slate-300 text-slate-700"}`}
+              >
+                Wins ({trades.filter(t => t.pnl > 0).length})
+              </Button>
+              <Button
+                variant={tradeFilter === 'losses' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => setTradeFilter('losses')}
+                className={`text-xs font-bold h-8 rounded-xl ${tradeFilter === 'losses' ? "bg-rose-600 text-white" : "border-slate-300 text-slate-700"}`}
+              >
+                Losses ({trades.filter(t => t.pnl <= 0).length})
+              </Button>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-100/70 text-slate-700 border-b border-slate-200 font-bold">
+                <tr>
+                  <th className="p-3">Stock</th>
+                  <th className="p-3">Entry Date</th>
+                  <th className="p-3">Exit Date</th>
+                  <th className="p-3">Entry (₹)</th>
+                  <th className="p-3">Exit (₹)</th>
+                  <th className="p-3">Held</th>
+                  <th className="p-3">Exit Reason</th>
+                  <th className="p-3 text-right">Net P&L</th>
+                  <th className="p-3 text-center">Chart</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {filteredTrades.map((t, idx) => {
+                  const isWin = t.pnl > 0
+                  return (
+                    <tr
+                      key={idx}
+                      onClick={() => setSelectedTradeForChart(t as any)}
+                      className="hover:bg-slate-50/80 cursor-pointer transition group"
+                    >
+                      <td className="p-3 font-bold text-slate-900 group-hover:text-emerald-700 transition">{t.symbol}</td>
+                      <td className="p-3 text-slate-600 font-mono">{t.entry_date}</td>
+                      <td className="p-3 text-slate-600 font-mono">{t.exit_date}</td>
+                      <td className="p-3 font-mono font-medium text-slate-800">₹{(t.entry_price ?? 0).toFixed(2)}</td>
+                      <td className="p-3 font-mono font-medium text-slate-800">₹{(t.exit_price ?? 0).toFixed(2)}</td>
+                      <td className="p-3 text-slate-600 font-medium">{(t.days_held ?? (t as any).holding_days ?? 0)}d</td>
+                      <td className="p-3">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isWin ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-rose-100 text-rose-800 border-rose-300"}`}>
+                          {formatExitReason(t.reason || (t as any).exit_reason)}
+                        </span>
+                      </td>
+                      <td className="p-3 text-right font-mono font-bold">
+                        <span className={isWin ? "text-emerald-600" : "text-rose-600"}>
+                          {isWin ? "+" : ""}{(t.pnl_pct ?? (t as any).pct_return ?? 0).toFixed(2)}% (₹{(t.pnl ?? 0).toLocaleString('en-IN')})
+                        </span>
+                      </td>
+                      <td className="p-3 text-center">
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setSelectedTradeForChart(t as any)
+                          }}
+                          className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg gap-1"
+                        >
+                          <LineChart className="size-3.5" />
+                          Chart
+                        </Button>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 4: DAILY SCANNER SIGNALS */}
+      {activeTab === 'signals' && (
+        <div className="space-y-5">
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 border-b border-slate-100 pb-4">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <Zap className="size-5 text-amber-500" />
+                  Today's Chartink Screener Signals ({dailySignals.count} Triggers)
+                </h3>
+                <p className="text-xs text-slate-600 font-medium mt-0.5">
+                  Last Scanned: {dailySignals.last_scan_time ? new Date(dailySignals.last_scan_time).toLocaleString('en-IN') : "Pending Scan"} · Automated Daily at 15:25 IST
+                </p>
+              </div>
+              <Button
+                onClick={handleScanNow}
+                disabled={scanning}
+                variant="outline"
+                size="sm"
+                className="border-slate-300 text-xs font-bold rounded-xl"
+              >
+                <RefreshCw className={`size-3.5 mr-1.5 ${scanning ? "animate-spin" : ""}`} />
+                Refresh Feed
+              </Button>
+            </div>
+
+            {dailySignals.signals.length === 0 ? (
+              <div className="py-12 text-center text-slate-500">
+                <div className="max-w-md mx-auto space-y-3">
+                  <div className="size-12 rounded-full bg-slate-100 flex items-center justify-center mx-auto text-slate-400">
+                    <CheckCircle2 className="size-6 text-emerald-600" />
+                  </div>
+                  <h4 className="font-bold text-slate-900 text-sm">No Stocks Matched All 12 Conditions Today</h4>
+                  <p className="text-xs text-slate-600 leading-relaxed">
+                    The strategy strictly requires a severe &ge;60% drawdown from the 4-year peak, combined with a 1.5x volume surge, 1-day RSI reversal, and lower-wick rejection. Quality over quantity ensures superior edge.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto mt-4">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100/70 text-slate-700 border-b border-slate-200 font-bold">
+                    <tr>
+                      <th className="p-3">Symbol</th>
+                      <th className="p-3">Name</th>
+                      <th className="p-3 font-mono">Close Price</th>
+                      <th className="p-3 font-mono">Day Gain %</th>
+                      <th className="p-3 font-mono">Daily Volume</th>
+                      <th className="p-3">Paper Allocation</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dailySignals.signals.map((sig, idx) => {
+                      const alreadyHeld = positions.some(p => p.symbol === sig.nsecode)
+                      return (
+                        <tr key={idx} className="hover:bg-slate-50 transition">
+                          <td className="p-3 font-bold text-slate-900">{sig.nsecode}</td>
+                          <td className="p-3 text-slate-600">{sig.name}</td>
+                          <td className="p-3 font-mono font-bold text-slate-800">₹{(sig.close ?? 0).toFixed(2)}</td>
+                          <td className="p-3 font-mono font-bold text-emerald-600">+{(sig.per_chg ?? 0).toFixed(2)}%</td>
+                          <td className="p-3 font-mono text-slate-600">{sig.volume?.toLocaleString('en-IN') || "N/A"}</td>
+                          <td className="p-3">
+                            {alreadyHeld ? (
+                              <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                Active in Portfolio
+                              </span>
+                            ) : (
+                              <span className="px-2.5 py-0.5 rounded text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                                Allocated ₹25k
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Past Scans History Log */}
+          {dailySignals.history && dailySignals.history.length > 0 && (
+            <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs">
+              <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-600 mb-3">
+                Recent Daily Scanner Runs Log
+              </h4>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-slate-100/70 text-slate-700 border-b border-slate-200 font-bold">
+                    <tr>
+                      <th className="p-3">Date</th>
+                      <th className="p-3">Timestamp</th>
+                      <th className="p-3">Matches Found</th>
+                      <th className="p-3">Symbols Triggered</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {dailySignals.history.map((h, i) => (
+                      <tr key={i} className="hover:bg-slate-50 transition">
+                        <td className="p-3 font-mono font-bold text-slate-900">{h.date}</td>
+                        <td className="p-3 text-slate-600 font-mono text-[11px]">{new Date(h.scan_time).toLocaleTimeString('en-IN')}</td>
+                        <td className="p-3 font-bold">
+                          <span className={`px-2 py-0.5 rounded text-[10px] ${h.count > 0 ? "bg-emerald-100 text-emerald-800" : "bg-slate-100 text-slate-600"}`}>
+                            {h.count} triggers
+                          </span>
+                        </td>
+                        <td className="p-3 font-mono text-slate-700">
+                          {h.signals && h.signals.length > 0 
+                            ? h.signals.map(s => s.nsecode).join(", ") 
+                            : "None"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* INTERACTIVE TRADE INSPECTION CHART MODAL */}
+      {selectedTradeForChart && (
+        <SwingerTradeChartModal
+          trade={selectedTradeForChart}
+          onClose={() => setSelectedTradeForChart(null)}
+        />
       )}
     </div>
   )

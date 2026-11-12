@@ -443,10 +443,32 @@ export function SettingsPage() {
             </Badge>
           </div>
           <CardDescription>
-            Monitors real-time intraday P&L. If daily loss breaches ₹{(status.status?.risk_guardian?.daily_loss_limit || data?.daily_loss_limit || 2500).toLocaleString('en-IN')}, it automatically halts all trading.
+            Two-tier automated capital defense: Per-trade max loss auto-cut and daily portfolio circuit breaker.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-3">
+          {/* Rules Summary Strip */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+            <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20 flex flex-col justify-between">
+              <span className="text-muted-foreground text-[11px]">Daily Account Circuit Breaker</span>
+              <span className="font-mono font-semibold text-foreground mt-0.5">
+                -₹{(status.status?.risk_guardian?.daily_loss_limit || data?.daily_loss_limit || 2000).toLocaleString('en-IN')}
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                Buffer: ₹{Math.max(0, status.status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
+              </span>
+            </div>
+            <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20 flex flex-col justify-between">
+              <span className="text-muted-foreground text-[11px]">Per-Trade Max Loss Auto-Cut</span>
+              <span className="font-mono font-semibold text-amber-400 mt-0.5">
+                -₹{(status.status?.risk_guardian?.per_trade_loss_limit || 650).toLocaleString('en-IN')} (-{status.status?.risk_guardian?.per_trade_loss_pct || 20}%)
+              </span>
+              <span className="text-[10px] text-muted-foreground mt-0.5">
+                {status.status?.risk_guardian?.per_trade_auto_cut !== false ? "Auto-squareoff loser instantly" : "Alert only"}
+              </span>
+            </div>
+          </div>
+
           {status.status?.risk_guardian?.is_locked ? (
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-400">
               <div className="text-xs">

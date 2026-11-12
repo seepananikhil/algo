@@ -125,6 +125,9 @@ export function ConfigPage() {
   const [capitalSettings, setCapitalSettings] = useState({
     lots: 1,
     daily_loss_limit: 2500,
+    per_trade_loss_limit: 650,
+    per_trade_loss_pct: 20,
+    per_trade_auto_cut: true,
     minimum_live_funds: 10000,
     sizing_mode: "fixed",
   })
@@ -154,6 +157,9 @@ export function ConfigPage() {
         setCapitalSettings({
           lots: sData.sizing_mode === "fixed" ? 1 : Math.max(1, Number(sData.lots || 1)),
           daily_loss_limit: sData.daily_loss_limit ?? 2500,
+          per_trade_loss_limit: sData.per_trade_loss_limit ?? 650,
+          per_trade_loss_pct: sData.per_trade_loss_pct ?? 20,
+          per_trade_auto_cut: sData.per_trade_auto_cut ?? true,
           minimum_live_funds: sData.minimum_live_funds ?? 10000,
           sizing_mode: sData.sizing_mode || "fixed",
         })
@@ -178,6 +184,9 @@ export function ConfigPage() {
           lots: Number(capitalSettings.lots),
           trend_runner_lots: Number(capitalSettings.lots),
           daily_loss_limit: Number(capitalSettings.daily_loss_limit),
+          per_trade_loss_limit: Number(capitalSettings.per_trade_loss_limit),
+          per_trade_loss_pct: Number(capitalSettings.per_trade_loss_pct),
+          per_trade_auto_cut: Boolean(capitalSettings.per_trade_auto_cut),
           minimum_live_funds: Number(capitalSettings.minimum_live_funds),
           sizing_mode: capitalSettings.sizing_mode,
         }),
@@ -556,6 +565,83 @@ export function ConfigPage() {
                   <p className="text-[11px] text-muted-foreground">
                     Orders reject if broker cash is below ₹{capitalSettings.minimum_live_funds.toLocaleString('en-IN')}
                   </p>
+                </div>
+              </div>
+
+              {/* Per-Trade Max Loss Circuit Breakers */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 border-t pt-3">
+                <div className="space-y-1.5 rounded-lg border p-3 bg-muted/10">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="pt-loss" className="text-xs text-muted-foreground font-medium flex items-center gap-1">
+                      <span>Per-Trade Max Loss (₹)</span>
+                    </Label>
+                    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                      Auto-Squareoff
+                    </Badge>
+                  </div>
+                  <Input
+                    id="pt-loss"
+                    type="number"
+                    min={200}
+                    max={10000}
+                    step={50}
+                    value={capitalSettings.per_trade_loss_limit}
+                    onChange={(e) =>
+                      setCapitalSettings({ ...capitalSettings, per_trade_loss_limit: parseFloat(e.target.value) || 650 })
+                    }
+                    className="h-9 text-sm font-semibold font-mono"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Cuts individual loser if loss reaches ₹{capitalSettings.per_trade_loss_limit.toLocaleString('en-IN')} (~10 pts on 1 lot)
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 rounded-lg border p-3 bg-muted/10">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="pt-pct" className="text-xs text-muted-foreground font-medium">
+                      Per-Trade Max Loss (%)
+                    </Label>
+                    <Badge variant="outline" className="text-[10px] text-amber-400 border-amber-500/30">
+                      Premium %
+                    </Badge>
+                  </div>
+                  <Input
+                    id="pt-pct"
+                    type="number"
+                    min={5}
+                    max={50}
+                    step={5}
+                    value={capitalSettings.per_trade_loss_pct}
+                    onChange={(e) =>
+                      setCapitalSettings({ ...capitalSettings, per_trade_loss_pct: parseFloat(e.target.value) || 20 })
+                    }
+                    className="h-9 text-sm font-semibold font-mono"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Cuts if option premium drops by {capitalSettings.per_trade_loss_pct}% from entry price
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 rounded-lg border p-3 bg-muted/10 flex flex-col justify-between">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <Label className="text-xs font-semibold text-foreground">
+                        Auto-Cut Losing Positions
+                      </Label>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Instantly squares off on broker without locking the entire day
+                      </p>
+                    </div>
+                    <Switch
+                      checked={capitalSettings.per_trade_auto_cut}
+                      onCheckedChange={(checked) =>
+                        setCapitalSettings({ ...capitalSettings, per_trade_auto_cut: checked })
+                      }
+                    />
+                  </div>
+                  <div className="text-[10px] text-emerald-400 font-medium">
+                    {capitalSettings.per_trade_auto_cut ? "✓ Active: Protects against holding bad trades" : "⚠️ Disabled: Manual square-off only"}
+                  </div>
                 </div>
               </div>
 

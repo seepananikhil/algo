@@ -9,7 +9,7 @@ import {
   type SeriesMarker,
   type Time
 } from "lightweight-charts"
-import { X, TrendingUp, TrendingDown, Clock, ShieldCheck, Target, ArrowUpRight, ArrowDownRight, RefreshCw } from "lucide-react"
+import { X, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export interface SwingerTradeTarget {

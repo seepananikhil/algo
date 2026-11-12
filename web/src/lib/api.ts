@@ -35,6 +35,9 @@ export type Status = {
     is_locked: boolean
     enabled: boolean
     daily_loss_limit: number
+    per_trade_loss_limit?: number
+    per_trade_loss_pct?: number
+    per_trade_auto_cut?: boolean
     current_pnl: number
     remaining_buffer: number
     open_count: number

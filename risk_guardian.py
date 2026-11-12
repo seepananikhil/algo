@@ -70,10 +70,16 @@ def get_guardian_config() -> dict:
     limit = float(cfg.get("daily_loss_limit", 2000.0) or 2000.0)
     enabled = bool(cfg.get("risk_guardian_enabled", True))
     auto_close = bool(cfg.get("risk_guardian_auto_close", True))
+    per_trade_loss = float(cfg.get("per_trade_loss_limit", 650.0) or 650.0)
+    per_trade_pct = float(cfg.get("per_trade_loss_pct", 20.0) or 20.0)
+    per_trade_cut = bool(cfg.get("per_trade_auto_cut", True))
     return {
         "enabled": enabled,
         "daily_loss_limit": limit,
         "auto_close_on_breach": auto_close,
+        "per_trade_loss_limit": per_trade_loss,
+        "per_trade_loss_pct": per_trade_pct,
+        "per_trade_auto_cut": per_trade_cut,
     }
 
 
@@ -285,6 +291,74 @@ def get_current_metrics() -> dict:
         }
 
 
+def enforce_per_trade_stops(open_positions: list, cfg: dict) -> list:
+    """
+    Inspect individual open positions.
+    If any position breaches per_trade_loss_limit (in Rs) or per_trade_loss_pct (in %),
+    auto-square off that specific position immediately so the user never holds a losing trade.
+    """
+    if not cfg.get("per_trade_auto_cut", True):
+        return []
+
+    max_loss_rs = float(cfg.get("per_trade_loss_limit", 650.0) or 650.0)
+    max_loss_pct = float(cfg.get("per_trade_loss_pct", 20.0) or 20.0)
+
+    auto_cut_actions = []
+    for pos in open_positions:
+        try:
+            sym = str(pos.get("symbol", "")).strip()
+            qty = abs(int(pos.get("net_qty", 0)))
+            if not sym or qty <= 0:
+                continue
+
+            unrealized = float(pos.get("unrealized_pnl", 0.0) or 0.0)
+            pnl_pct = float(pos.get("pnl_pct", 0.0) or 0.0)
+
+            # Check if either Rupee loss limit or percentage loss limit is breached
+            breached_rs = (max_loss_rs > 0 and unrealized <= -max_loss_rs)
+            breached_pct = (max_loss_pct > 0 and pnl_pct <= -max_loss_pct)
+
+            if breached_rs or breached_pct:
+                reason_str = f"Per-trade SL hit! Unrealized: Rs. {unrealized:+,.2f} ({pnl_pct:+.1f}%) [Limits: -Rs. {max_loss_rs:,.0f} / -{max_loss_pct:.0f}%]"
+                logger.warning(f"🚨 [RISK GUARDIAN PER-TRADE AUTO-CUT] Auto-cutting {sym}! {reason_str}")
+
+                from app_server import exit_position
+                exit_res = exit_position({"symbol": sym, "qty": qty})
+                action = {
+                    "symbol": sym,
+                    "qty": qty,
+                    "unrealized_pnl": unrealized,
+                    "pnl_pct": pnl_pct,
+                    "reason": reason_str,
+                    "exit_result": exit_res,
+                    "timestamp": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+                }
+                auto_cut_actions.append(action)
+
+                # Notify via Telegram if configured
+                try:
+                    from trend_runner_paper import notify_trade_exit
+                    notify_trade_exit(
+                        symbol=sym,
+                        side=str(pos.get("side", "LONG")),
+                        option_str=sym,
+                        pnl_pts=0.0,
+                        option_pnl_pts=0.0,
+                        pnl_rupees=unrealized,
+                        exit_reason="PER_TRADE_SL_AUTOCUT",
+                        exit_price=float(pos.get("ltp") or 0.0),
+                        exit_time=datetime.now(IST).strftime("%H:%M:%S"),
+                        total_lots=max(1, qty // int(pos.get("lot_size", 1) or 1)),
+                        qty=qty,
+                    )
+                except Exception:
+                    pass
+        except Exception as exc:
+            logger.error(f"Error in enforce_per_trade_stops for {pos.get('symbol')}: {exc}")
+
+    return auto_cut_actions
+
+
 def check_and_enforce_guardian() -> dict:
     """
     Main enforcement routine called periodically by the watcher.
@@ -306,6 +380,7 @@ def check_and_enforce_guardian() -> dict:
     metrics = get_current_metrics()
     net_pnl = metrics.get("net_pnl", 0.0)
     open_count = metrics.get("open_count", 0)
+    open_pos = metrics.get("open_positions", [])
 
     # Effective P&L relative to manual reset baseline (if reset today)
     baseline_pnl = get_reset_baseline()
@@ -326,6 +401,9 @@ def check_and_enforce_guardian() -> dict:
             "is_locked": True,
             "enabled": cfg["enabled"],
             "daily_loss_limit": limit,
+            "per_trade_loss_limit": cfg["per_trade_loss_limit"],
+            "per_trade_loss_pct": cfg["per_trade_loss_pct"],
+            "per_trade_auto_cut": cfg["per_trade_auto_cut"],
             "current_pnl": net_pnl,
             "effective_pnl": round(effective_pnl, 2),
             "baseline_pnl": round(baseline_pnl, 2),
@@ -344,6 +422,9 @@ def check_and_enforce_guardian() -> dict:
             "is_locked": False,
             "enabled": False,
             "daily_loss_limit": limit,
+            "per_trade_loss_limit": cfg["per_trade_loss_limit"],
+            "per_trade_loss_pct": cfg["per_trade_loss_pct"],
+            "per_trade_auto_cut": cfg["per_trade_auto_cut"],
             "current_pnl": net_pnl,
             "effective_pnl": round(effective_pnl, 2),
             "baseline_pnl": round(baseline_pnl, 2),
@@ -351,6 +432,18 @@ def check_and_enforce_guardian() -> dict:
             "open_count": open_count,
             "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         }
+
+    # First, enforce per-trade stops on all open positions!
+    per_trade_cuts = []
+    if open_count > 0 and open_pos:
+        per_trade_cuts = enforce_per_trade_stops(open_pos, cfg)
+        if per_trade_cuts:
+            # Re-fetch metrics if any trade was cut
+            metrics = get_current_metrics()
+            net_pnl = metrics.get("net_pnl", 0.0)
+            open_count = metrics.get("open_count", 0)
+            effective_pnl = net_pnl - baseline_pnl
+            remaining_buffer = max(0.0, limit + effective_pnl)
 
     # Check loss limit breach against effective P&L (post-reset or intraday)
     if effective_pnl <= -limit:
@@ -371,6 +464,9 @@ def check_and_enforce_guardian() -> dict:
             "is_locked": True,
             "enabled": True,
             "daily_loss_limit": limit,
+            "per_trade_loss_limit": cfg["per_trade_loss_limit"],
+            "per_trade_loss_pct": cfg["per_trade_loss_pct"],
+            "per_trade_auto_cut": cfg["per_trade_auto_cut"],
             "current_pnl": net_pnl,
             "effective_pnl": round(effective_pnl, 2),
             "baseline_pnl": round(baseline_pnl, 2),
@@ -379,6 +475,7 @@ def check_and_enforce_guardian() -> dict:
             "lock_info": lock_info,
             "auto_closed": closed_actions,
             "cancelled_orders": cancelled_actions,
+            "per_trade_cuts": per_trade_cuts,
             "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         }
 
@@ -388,11 +485,15 @@ def check_and_enforce_guardian() -> dict:
         "is_locked": False,
         "enabled": True,
         "daily_loss_limit": limit,
+        "per_trade_loss_limit": cfg["per_trade_loss_limit"],
+        "per_trade_loss_pct": cfg["per_trade_loss_pct"],
+        "per_trade_auto_cut": cfg["per_trade_auto_cut"],
         "current_pnl": net_pnl,
         "effective_pnl": round(effective_pnl, 2),
         "baseline_pnl": round(baseline_pnl, 2),
         "remaining_buffer": round(remaining_buffer, 2),
         "open_count": open_count,
+        "per_trade_cuts": per_trade_cuts,
         "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
     }
 

@@ -313,6 +313,11 @@ EDITABLE_SETTINGS = {
     "sensex_runner_paper_trading": (bool, None, None),
     "sensex_runner_live_trading": (bool, None, None),
     "sensex_runner_lots": (int, 1, PAPER_LOTS),
+    "per_trade_loss_limit": (float, 50.0, 50000.0),
+    "per_trade_loss_pct": (float, 5.0, 90.0),
+    "per_trade_auto_cut": (bool, None, None),
+    "risk_guardian_enabled": (bool, None, None),
+    "risk_guardian_auto_close": (bool, None, None),
 }
 
 
@@ -6085,6 +6090,12 @@ class Handler(BaseHTTPRequestHandler):
                 cfg["risk_guardian_enabled"] = bool(body["risk_guardian_enabled"])
             if "risk_guardian_auto_close" in body:
                 cfg["risk_guardian_auto_close"] = bool(body["risk_guardian_auto_close"])
+            if "per_trade_loss_limit" in body:
+                cfg["per_trade_loss_limit"] = float(body["per_trade_loss_limit"])
+            if "per_trade_loss_pct" in body:
+                cfg["per_trade_loss_pct"] = float(body["per_trade_loss_pct"])
+            if "per_trade_auto_cut" in body:
+                cfg["per_trade_auto_cut"] = bool(body["per_trade_auto_cut"])
             write_config(cfg)
             from risk_guardian import check_and_enforce_guardian
             self._json(check_and_enforce_guardian())
