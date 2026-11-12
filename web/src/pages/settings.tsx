@@ -13,6 +13,7 @@ import {
   EyeOff,
   Zap,
   ShieldCheck,
+  ShieldAlert,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -49,6 +50,25 @@ export function SettingsPage() {
   const [restart, setRestart] = useState(false)
   const [funds, setFunds] = useState<FundsStatus | null>(null)
   const [fundsLoading, setFundsLoading] = useState(false)
+  const [resettingGuardian, setResettingGuardian] = useState(false)
+
+  async function handleResetGuardian() {
+    if (!window.confirm("Reset Risk Guardian circuit breaker and resume trading for today?")) return
+    setResettingGuardian(true)
+    try {
+      const res = await postJSON<{ ok: boolean; message?: string }>("/api/risk-guardian/reset", {})
+      if (res.ok) {
+        toast.success(res.message || "Risk Guardian lock reset! Trading resumed.")
+        await Promise.all([reload(), status.reload()])
+      } else {
+        toast.error("Failed to reset Risk Guardian lock")
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e))
+    } finally {
+      setResettingGuardian(false)
+    }
+  }
 
   useEffect(() => {
     if (data) {
@@ -404,6 +424,60 @@ export function SettingsPage() {
               </Button>
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* Capital Guardian & Circuit Breaker Card */}
+      <Card className={status.status?.risk_guardian?.is_locked ? "border-rose-500/50 bg-rose-500/5" : "border-emerald-500/30"}>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <ShieldAlert className={cn("size-5", status.status?.risk_guardian?.is_locked ? "text-rose-500 animate-pulse" : "text-emerald-500")} />
+              <CardTitle className="text-lg">Risk Guardian Circuit Breaker</CardTitle>
+            </div>
+            <Badge
+              variant="outline"
+              className={status.status?.risk_guardian?.is_locked ? "border-rose-500/40 text-rose-400 bg-rose-500/10 font-bold" : "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"}
+            >
+              {status.status?.risk_guardian?.is_locked ? "CIRCUIT BREAKER LOCKED" : "ACTIVE MONITORING"}
+            </Badge>
+          </div>
+          <CardDescription>
+            Monitors real-time intraday P&L. If daily loss breaches ₹{(status.status?.risk_guardian?.daily_loss_limit || data.daily_loss_limit || 2500).toLocaleString('en-IN')}, it automatically halts all trading.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3">
+          {status.status?.risk_guardian?.is_locked ? (
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-400">
+              <div className="text-xs">
+                <div className="font-bold">⚠️ Trading Halted: Daily Loss Limit Breached</div>
+                <div className="text-[11px] opacity-85 mt-0.5">{status.status.risk_guardian.lock_info?.reason || "Max daily loss limit reached. Positions squared off."}</div>
+              </div>
+              <Button
+                onClick={handleResetGuardian}
+                disabled={resettingGuardian}
+                size="sm"
+                className="bg-rose-600 hover:bg-rose-700 text-white font-bold shrink-0 gap-1.5"
+              >
+                <RefreshCw className={cn("size-3.5", resettingGuardian && "animate-spin")} />
+                {resettingGuardian ? "Resetting…" : "Reset Guardian Lock"}
+              </Button>
+            </div>
+          ) : (
+            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20 text-xs">
+              <div>
+                <span className="font-semibold text-foreground">Current Status: Safe</span>
+                <span className="text-muted-foreground block text-[11px] mt-0.5">
+                  Remaining loss buffer: ₹{Math.max(0, status.status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
+                </span>
+              </div>
+              <Link to="/config">
+                <Button variant="outline" size="sm" className="text-xs">
+                  Change Limit in Config
+                </Button>
+              </Link>
+            </div>
+          )}
         </CardContent>
       </Card>
 

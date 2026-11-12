@@ -111,6 +111,13 @@ def kotak_positions() -> dict:
 
         for r in rows:
             sym = str(r.get("trdSym", ""))
+            prod = str(r.get("prod") or r.get("prodCode") or "NRML").upper()
+            fl_b = int(r.get("flBuyQty", 0))
+            fl_s = int(r.get("flSellQty", 0))
+
+            # Exclude long-term equity / CNC holdings with no trading activity today from intraday algo P&L
+            if prod in ("CNC", "DELIVERY", "CASH") and fl_b == 0 and fl_s == 0:
+                continue
             b_qty = int(r.get("flBuyQty", 0)) + int(r.get("cfBuyQty", 0))
             s_qty = int(r.get("flSellQty", 0)) + int(r.get("cfSellQty", 0))
             b_amt = float(r.get("buyAmt", 0)) + float(r.get("cfBuyAmt", 0))

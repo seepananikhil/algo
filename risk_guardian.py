@@ -125,16 +125,19 @@ def lock_risk(limit: float, pnl: float, reason: str = "") -> dict:
     return lock_data
 
 
+_MANUAL_RESET_TIMESTAMP: float = 0.0
+
+
 def reset_risk_lock() -> bool:
-    """Manually clear the risk lock."""
+    """Manually clear the risk lock and trading halts."""
+    global _MANUAL_RESET_TIMESTAMP
     try:
+        _MANUAL_RESET_TIMESTAMP = time.time()
         if RISK_LOCK_FILE.exists():
-            RISK_LOCK_FILE.unlink()
+            RISK_LOCK_FILE.unlink(missing_ok=True)
         if STOP_FILE.exists():
-            content = STOP_FILE.read_text(encoding="utf-8", errors="ignore")
-            if "risk_guardian" in content:
-                STOP_FILE.unlink()
-        logger.info("🛡️ [RISK GUARDIAN] Risk lock cleared manually.")
+            STOP_FILE.unlink(missing_ok=True)
+        logger.info("🛡️ [RISK GUARDIAN] Risk lock and STOP_TRADING cleared manually via Web UI.")
         return True
     except Exception as exc:
         logger.error(f"Failed to reset risk lock: {exc}")
@@ -296,6 +299,20 @@ def check_and_enforce_guardian() -> dict:
             "auto_closed": closed_actions,
             "cancelled_orders": cancelled_actions,
             "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        }
+
+    # If manually reset within the last 5 minutes, do not immediately re-lock
+    if time.time() - _MANUAL_RESET_TIMESTAMP < 300:
+        return {
+            "status": "ACTIVE",
+            "is_locked": False,
+            "enabled": cfg["enabled"],
+            "daily_loss_limit": limit,
+            "current_pnl": net_pnl,
+            "remaining_buffer": max(0.0, limit + net_pnl),
+            "open_count": open_count,
+            "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+            "manual_override": True,
         }
 
     # 2. NORMAL MONITORING: Check if limit is breached

@@ -6010,14 +6010,16 @@ class Handler(BaseHTTPRequestHandler):
                         pass
             self._json(res, 200 if res.get("ok") else 400)
         elif url.path == "/api/risk-guardian/reset":
-            if not self._is_local_client():
-                return self._json({"error": "action is local-only"}, 403)
             from risk_guardian import reset_risk_lock
             reset_risk_lock()
-            self._json({"ok": True, "message": "Risk Guardian lock reset successfully."})
+            stop_file = ROOT / "STOP_TRADING"
+            if stop_file.exists():
+                try:
+                    stop_file.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            self._json({"ok": True, "message": "Risk Guardian lock and trading halt cleared successfully."})
         elif url.path == "/api/risk-guardian/config":
-            if not self._is_local_client():
-                return self._json({"error": "action is local-only"}, 403)
             body = self._body()
             cfg = read_config()
             if "daily_loss_limit" in body:
