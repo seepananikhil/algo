@@ -383,27 +383,7 @@ export function LivePage() {
     }
   }
 
-  // Session Summary Popover State
-  const [showPnlSummary, setShowPnlSummary] = useState(false)
-  const pnlSummaryRef = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    if (!showPnlSummary) return
-    const handleDown = (e: MouseEvent) => {
-      if (pnlSummaryRef.current && !pnlSummaryRef.current.contains(e.target as Node)) {
-        setShowPnlSummary(false)
-      }
-    }
-    const handleKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setShowPnlSummary(false)
-    }
-    document.addEventListener("mousedown", handleDown)
-    document.addEventListener("keydown", handleKey)
-    return () => {
-      document.removeEventListener("mousedown", handleDown)
-      document.removeEventListener("keydown", handleKey)
-    }
-  }, [showPnlSummary])
 
   // Drag handlers for floating scalper
   const handleDragStart = (e: React.MouseEvent) => {
@@ -861,150 +841,32 @@ export function LivePage() {
             <span>Scalper</span>
           </button>
 
-          {/* Session Net P&L Popover Trigger & Card */}
-          <div className="relative" ref={pnlSummaryRef}>
-            <button
-              type="button"
-              onClick={() => setShowPnlSummary(!showPnlSummary)}
-              className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md border text-xs font-mono font-bold shadow-xs transition-all cursor-pointer select-none ${
-                summaryMetrics.totalPnl > 0
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
-                  : summaryMetrics.totalPnl < 0
-                  ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
-                  : "bg-muted/60 border-border text-foreground hover:bg-muted"
-              } ${showPnlSummary ? "ring-2 ring-primary/40" : ""}`}
-              title="Click to view full Session Summary & Breakdown"
-            >
-              <span className="text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">P&L:</span>
-              <span>
-                {summaryMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.totalPnl)}
-              </span>
-              <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform duration-200 ${showPnlSummary ? "rotate-180" : ""}`} />
-            </button>
-
-            {/* SUMMARY POPOVER CARD */}
-            {showPnlSummary && (
-              <div className="absolute top-full mt-2 left-0 w-80 bg-popover/95 backdrop-blur-md border border-border rounded-xl shadow-xl z-50 p-3.5 space-y-3 animate-fadeIn text-foreground">
-                {/* Popover Header */}
-                <div className="flex items-center justify-between pb-2 border-b border-border/60">
-                  <div className="flex items-center gap-1.5 font-bold text-xs">
-                    <TrendingUp className="w-3.5 h-3.5 text-primary" />
-                    <span>Session Performance</span>
-                  </div>
-                  <button
-                    onClick={() => setShowPnlSummary(false)}
-                    className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
-                  >
-                    <X className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Mode Selector within Popover */}
-                <div className="flex items-center justify-between px-2.5 py-1 bg-muted/40 rounded-lg border border-border/60 text-[10px]">
-                  <span className="text-muted-foreground font-semibold uppercase tracking-wider">Source:</span>
-                  <div className="flex items-center gap-1 font-bold">
-                    <button
-                      type="button"
-                      onClick={() => handleSetTradeMode("LIVE")}
-                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${tradeMode === "LIVE" ? "bg-emerald-600 text-white" : "text-muted-foreground hover:text-foreground"}`}
-                      title="Kotak Neo Real Trades Only"
-                    >
-                      LIVE ({counts.live})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetTradeMode("ALL")}
-                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${tradeMode === "ALL" ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      ALL ({counts.total})
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => handleSetTradeMode("PAPER")}
-                      className={`px-2 py-0.5 rounded transition-all cursor-pointer ${tradeMode === "PAPER" ? "bg-amber-600 text-white" : "text-muted-foreground hover:text-foreground"}`}
-                    >
-                      PAPER ({counts.paper})
-                    </button>
-                  </div>
-                </div>
-
-                {/* Big Net P&L Display */}
-                <div className={`p-3 rounded-lg border text-center ${
-                  summaryMetrics.totalPnl >= 0
-                    ? "bg-emerald-50/70 border-emerald-300/60 dark:bg-emerald-950/40 dark:border-emerald-500/30"
-                    : "bg-rose-50/70 border-rose-300/60 dark:bg-rose-950/40 dark:border-rose-500/30"
-                }`}>
-                  <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                    Total Session P&L (Net)
-                  </div>
-                  <div className={`text-xl font-black font-mono tracking-tight mt-0.5 ${
-                    summaryMetrics.totalPnl >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"
-                  }`}>
-                    {summaryMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.totalPnl)}
-                  </div>
-                </div>
-
-                {/* Unrealized & Realized Grid */}
-                <div className="grid grid-cols-2 gap-2 text-center text-xs">
-                  <div className="bg-muted/40 p-2 rounded-lg border border-border/60">
-                    <div className="text-[10px] uppercase text-muted-foreground font-semibold">Unrealized MTM</div>
-                    <div className={`font-mono font-bold text-xs mt-0.5 ${pnlClass(summaryMetrics.runningPnl)}`}>
-                      {summaryMetrics.runningPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.runningPnl)}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground font-mono mt-0.5">{openTrades.length} open pos</div>
-                  </div>
-                  <div className="bg-muted/40 p-2 rounded-lg border border-border/60">
-                    <div className="text-[10px] uppercase text-muted-foreground font-semibold">Realized P&L</div>
-                    <div className={`font-mono font-bold text-xs mt-0.5 ${pnlClass(summaryMetrics.realizedPnl)}`}>
-                      {summaryMetrics.realizedPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.realizedPnl)}
-                    </div>
-                    <div className="text-[9px] text-muted-foreground font-mono mt-0.5">{closedTrades.length} closed</div>
-                  </div>
-                </div>
-
-                {/* Performance Metrics List */}
-                <div className="space-y-1.5 bg-muted/20 p-2.5 rounded-lg border border-border/50 text-[11px]">
-                  <div className="flex items-center justify-between py-0.5 border-b border-border/40">
-                    <span className="text-muted-foreground">Invested Capital</span>
-                    <span className="font-mono font-bold">{fmtRs(summaryMetrics.investedCapital)}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-0.5 border-b border-border/40">
-                    <span className="text-muted-foreground">Win Rate</span>
-                    <span className="font-mono font-bold">
-                      {summaryMetrics.winRate.toFixed(0)}%
-                      <span className="text-[10px] font-normal text-muted-foreground ml-1">
-                        ({summaryMetrics.winners}W / {summaryMetrics.losers}L)
-                      </span>
-                    </span>
-                  </div>
-                  <div className="flex items-center justify-between py-0.5 border-b border-border/40">
-                    <span className="text-muted-foreground">Total Executed Trades</span>
-                    <span className="font-mono font-bold">{summaryMetrics.openCount + summaryMetrics.closedCount}</span>
-                  </div>
-                  <div className="flex items-center justify-between py-0.5">
-                    <span className="text-muted-foreground">Active Strategies</span>
-                    <span className="font-mono font-bold">{new Set(tradesList.map(t => t.strategy)).size}</span>
-                  </div>
-                </div>
-
-                {/* Footer Action */}
-                <div className="pt-1 flex items-center justify-between gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="w-full text-xs font-semibold h-7 text-muted-foreground hover:text-foreground"
-                    onClick={() => {
-                      setIsSidePanelOpen(true)
-                      setSideTab("SUMMARY")
-                      setShowPnlSummary(false)
-                    }}
-                  >
-                    View in Side Panel →
-                  </Button>
-                </div>
-              </div>
-            )}
-          </div>
+          {/* Session Net P&L Button -> Toggles Side Panel directly */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isSidePanelOpen && (sideTab === "SUMMARY" || sideTab === "ACTIVE")) {
+                setIsSidePanelOpen(false)
+              } else {
+                setIsSidePanelOpen(true)
+                setSideTab(openTrades.length > 0 ? "ACTIVE" : "SUMMARY")
+              }
+            }}
+            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md border text-xs font-mono font-bold shadow-xs transition-all cursor-pointer select-none ${
+              summaryMetrics.totalPnl > 0
+                ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
+                : summaryMetrics.totalPnl < 0
+                ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
+                : "bg-muted/60 border-border text-foreground hover:bg-muted"
+            } ${isSidePanelOpen && (sideTab === "SUMMARY" || sideTab === "ACTIVE") ? "ring-2 ring-primary/40" : ""}`}
+            title="Click to toggle Trades & Session Summary Panel"
+          >
+            <span className="text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">P&L:</span>
+            <span>
+              {summaryMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.totalPnl)}
+            </span>
+            <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform duration-200 ${isSidePanelOpen && (sideTab === "SUMMARY" || sideTab === "ACTIVE") ? "rotate-180" : ""}`} />
+          </button>
 
           {/* Chart View Switcher */}
           <div className="flex items-center bg-muted/70 p-0.5 rounded-lg border border-border">
@@ -2111,30 +1973,25 @@ export function LivePage() {
 
               {/* TAB 3: POSITION & SESSION SUMMARY */}
               {sideTab === "SUMMARY" && (
-                <div className="p-3.5 space-y-3">
+                <div className="p-3.5 space-y-3 animate-fadeIn">
                   {/* Session Net P&L Card */}
-                  <div className={`p-4 rounded-lg border text-center shadow-xs transition-all ${
-                    (summaryMetrics.runningPnl + summaryMetrics.realizedPnl) >= 0
-                      ? "bg-emerald-50/80 border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-500/40"
-                      : "bg-rose-50/80 border-rose-300 dark:bg-rose-950/40 dark:border-rose-500/40"
+                  <div className={`p-4 rounded-xl border text-center shadow-xs transition-all ${
+                    summaryMetrics.totalPnl >= 0
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
+                      : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
                   }`}>
                     <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
                       Total Session P&L (Net)
                     </div>
-                    <div className={`text-2xl font-black font-mono tracking-tight mt-1 ${
-                      (summaryMetrics.runningPnl + summaryMetrics.realizedPnl) >= 0
-                        ? "text-emerald-700 dark:text-emerald-400"
-                        : "text-rose-700 dark:text-rose-400"
-                    }`}>
-                      {(summaryMetrics.runningPnl + summaryMetrics.realizedPnl) >= 0 ? "+" : ""}
-                      {fmtRs(summaryMetrics.runningPnl + summaryMetrics.realizedPnl)}
+                    <div className="text-2xl font-black font-mono tracking-tight mt-1">
+                      {summaryMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.totalPnl)}
                     </div>
                   </div>
 
                   {/* Realized & Unrealized Breakdown */}
                   <div className="grid grid-cols-2 gap-2 text-center text-xs">
                     <div className="bg-muted/30 p-2.5 rounded-lg border border-border shadow-2xs">
-                      <div className="text-[10px] uppercase text-muted-foreground font-semibold">Unrealized P&L</div>
+                      <div className="text-[10px] uppercase text-muted-foreground font-semibold">Unrealized MTM</div>
                       <div className={`font-mono font-bold text-sm mt-0.5 ${pnlClass(summaryMetrics.runningPnl)}`}>
                         {summaryMetrics.runningPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.runningPnl)}
                       </div>
@@ -2149,20 +2006,29 @@ export function LivePage() {
                     </div>
                   </div>
 
-                  {/* Capital & Trade Stats */}
+                  {/* Capital & Win Rate Stats */}
                   <div className="space-y-1.5 bg-muted/20 p-3 rounded-lg border border-border text-xs">
+                    <div className="flex items-center justify-between py-1 border-b border-border/40">
+                      <span className="text-muted-foreground">Win Rate</span>
+                      <span className="font-mono font-bold text-foreground">
+                        {summaryMetrics.winRate.toFixed(0)}%
+                        <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                          ({summaryMetrics.winners}W / {summaryMetrics.losers}L)
+                        </span>
+                      </span>
+                    </div>
                     <div className="flex items-center justify-between py-1 border-b border-border/40">
                       <span className="text-muted-foreground">Invested Capital</span>
                       <span className="font-mono font-bold text-foreground">{fmtRs(summaryMetrics.investedCapital)}</span>
                     </div>
                     <div className="flex items-center justify-between py-1 border-b border-border/40">
-                      <span className="text-muted-foreground">Total Trades Executed</span>
+                      <span className="text-muted-foreground">Total Executed Trades</span>
                       <span className="font-mono font-bold text-foreground">{summaryMetrics.openCount + summaryMetrics.closedCount}</span>
                     </div>
                     <div className="flex items-center justify-between py-1">
-                      <span className="text-muted-foreground">Active Strategies</span>
-                      <span className="font-mono font-bold text-foreground">
-                        {new Set(tradesList.map(t => t.strategy)).size}
+                      <span className="text-muted-foreground">Guardian Loss Buffer</span>
+                      <span className="font-mono font-bold text-emerald-500">
+                        ₹{Math.max(0, status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
                       </span>
                     </div>
                   </div>
