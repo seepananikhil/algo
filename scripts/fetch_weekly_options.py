@@ -255,7 +255,11 @@ def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retri
                     continue
             df = parse_neo_candles(res)
             if not df.empty:
-                return df
+                df["_dt"] = pd.to_datetime(df["Timestamp"], errors="coerce")
+                df = df[df["_dt"].dt.strftime("%Y-%m-%d") == session_str].reset_index(drop=True)
+                df.drop(columns=["_dt"], inplace=True)
+                if not df.empty:
+                    return df
         except Exception as exc:
             err = str(exc).lower()
             if "too many" in err or "circuit" in err or "503" in err or "429" in err:

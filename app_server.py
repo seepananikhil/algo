@@ -1118,12 +1118,32 @@ def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
     subdir = "sensex" if is_sx else "nifty50"
     live_prefix = "sensex" if is_sx else "nifty"
 
+    # PRIORITY 1: Today's live capture stream is ALWAYS authoritative during active trading
+    if date == today():
+        path = LIVE_DIR / f"{live_prefix}_1min_{date}.csv"
+        if path.exists():
+            try:
+                ldf = pd.read_csv(path)
+                if not ldf.empty and "timestamp" in ldf.columns:
+                    ldf["timestamp"] = pd.to_datetime(ldf["timestamp"], errors="coerce")
+                    ldf = ldf.dropna(subset=["timestamp"])
+                    ldf = ldf[ldf["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+                    if not ldf.empty:
+                        return ldf
+            except Exception:
+                pass
+
     candidates = []
 
     # 1. Technovusin archive (10-Year 1-min dataset, complete 375 bars/day)
     tech_df = load_technovusin_day(date, symbol=sym)
     if not tech_df.empty:
-        candidates.append((len(tech_df), tech_df))
+        if "timestamp" in tech_df.columns:
+            tech_df["timestamp"] = pd.to_datetime(tech_df["timestamp"], errors="coerce")
+            tech_df = tech_df.dropna(subset=["timestamp"])
+            tech_df = tech_df[tech_df["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+        if not tech_df.empty:
+            candidates.append((len(tech_df), tech_df))
 
     # 2. Historical data daily CSVs (automated daily sync)
     year, month = date[:4], date[5:7]
@@ -1134,12 +1154,14 @@ def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
             ts_c = "Timestamp" if "Timestamp" in hdf.columns else "timestamp"
             hdf["timestamp"] = pd.to_datetime(hdf[ts_c], errors="coerce")
             hdf = hdf.dropna(subset=["timestamp"])
-            hdf.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}, inplace=True)
-            candidates.append((len(hdf), hdf))
+            hdf = hdf[hdf["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+            if not hdf.empty:
+                hdf.rename(columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}, inplace=True)
+                candidates.append((len(hdf), hdf))
         except Exception:
             pass
 
-    # 3. Live capture file (today's active trading or live forward tests)
+    # 3. Live capture file (for past dates if archived there)
     path = LIVE_DIR / f"{live_prefix}_1min_{date}.csv"
     if path.exists():
         try:
@@ -1147,7 +1169,9 @@ def candles(date: str, symbol: str = "NIFTY") -> pd.DataFrame:
             if not ldf.empty and "timestamp" in ldf.columns:
                 ldf["timestamp"] = pd.to_datetime(ldf["timestamp"], errors="coerce")
                 ldf = ldf.dropna(subset=["timestamp"])
-                candidates.append((len(ldf), ldf))
+                ldf = ldf[ldf["timestamp"].dt.strftime("%Y-%m-%d") == date].reset_index(drop=True)
+                if not ldf.empty:
+                    candidates.append((len(ldf), ldf))
         except Exception:
             pass
 

@@ -131,6 +131,14 @@ def update_index_for_date(client, index_name: str, session: date) -> None:
         print(f"No candles returned for {index_name} on {session}")
         return
 
+    # Guard: Ensure returned candles strictly match the target session date
+    new_df["_dt"] = pd.to_datetime(new_df["Timestamp"], errors="coerce")
+    new_df = new_df[new_df["_dt"].dt.strftime("%Y-%m-%d") == from_date].reset_index(drop=True)
+    new_df.drop(columns=["_dt"], inplace=True)
+    if new_df.empty:
+        print(f"Returned candles for {index_name} do not match requested session {from_date} (market not open or holiday). Skipping.")
+        return
+
     # 1. Save Clean Daily 1-Minute CSV File (One file per trading session in YYYY/MM/)
     year_str = str(session.year)
     month_str = f"{session.month:02d}"
