@@ -150,6 +150,19 @@ export function SwingerPage() {
     }
   }
 
+  const formatExitReason = (r?: string) => {
+    if (!r) return "Swing Exit"
+    return r
+      .replace('RUNNER_TRAIL_25PCT', 'Runner 25% Trail')
+      .replace('INITIAL_SL_25PCT', 'Initial SL -25%')
+      .replace('BE_SHIELD_STOP', 'BE Shield @ Cost')
+      .replace('MAX_HOLD_1YEAR', '1-Year Max Hold')
+      .replace('TP 50% Hit (+100%) -> Trailed 25% Runner Exit', 'TP1 + Runner 25% Trail')
+      .replace('Break-Even Shield Exit (Cost Protected)', 'BE Shield @ Cost')
+      .replace('Initial Stop-Loss (-25%)', 'Initial SL -25%')
+      .replace('Time Exit (250 Trading Days)', '1-Year Max Hold')
+  }
+
   const totalInvested = positions.reduce((acc, p) => acc + ((p.avg_price ?? p.entry_price) * p.current_qty), 0)
   const totalUnrealizedPnl = positions.reduce((acc, p) => acc + (p.unrealized_pnl ?? 0), 0)
   const totalBookedPnl = positions.reduce((acc, p) => acc + (p.booked_pnl ?? 0), 0)
@@ -614,15 +627,15 @@ export function SwingerPage() {
                       <td className="p-3 text-slate-600 font-mono">{t.exit_date}</td>
                       <td className="p-3 font-mono font-medium text-slate-800">₹{(t.entry_price ?? 0).toFixed(2)}</td>
                       <td className="p-3 font-mono font-medium text-slate-800">₹{(t.exit_price ?? 0).toFixed(2)}</td>
-                      <td className="p-3 text-slate-600 font-medium">{t.days_held}d</td>
+                      <td className="p-3 text-slate-600 font-medium">{(t.days_held ?? (t as any).holding_days ?? 0)}d</td>
                       <td className="p-3">
                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isWin ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-rose-100 text-rose-800 border-rose-300"}`}>
-                          {t.reason.replace('RUNNER_TRAIL_25PCT', 'Runner 25% Trail').replace('INITIAL_SL_25PCT', 'Initial SL -25%').replace('BE_SHIELD_STOP', 'BE Shield Stop').replace('MAX_HOLD_1YEAR', '1-Year Max Hold')}
+                          {formatExitReason(t.reason || (t as any).exit_reason)}
                         </span>
                       </td>
                       <td className="p-3 text-right font-mono font-bold">
                         <span className={isWin ? "text-emerald-600" : "text-rose-600"}>
-                          {isWin ? "+" : ""}{(t.pnl_pct ?? 0).toFixed(2)}% (₹{(t.pnl ?? 0).toLocaleString('en-IN')})
+                          {isWin ? "+" : ""}{(t.pnl_pct ?? (t as any).pct_return ?? 0).toFixed(2)}% (₹{(t.pnl ?? 0).toLocaleString('en-IN')})
                         </span>
                       </td>
                     </tr>
@@ -639,42 +652,69 @@ export function SwingerPage() {
         <div className="space-y-6">
           {/* Yearly Performance Cards */}
           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <h3 className="font-extrabold text-base text-slate-900 mb-4 flex items-center gap-2">
-              <CalendarIcon className="size-5 text-emerald-600" />
-              Annual Consistency Scorecard (2022 - 2026)
-            </h3>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <CalendarIcon className="size-5 text-emerald-600" />
+                  Annual Consistency Scorecard (2022 - 2026)
+                </h3>
+                <p className="text-xs text-slate-600 font-medium">Realized year-by-year profit, win rate, and profit factor</p>
+              </div>
+              <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300 font-mono">
+                {yearly.length} Full Cycles
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
               {yearly.map((y) => {
-                const isProf = y.pnl > 0
+                const isProf = (y.pnl ?? 0) > 0
+                const retPct = y.pnl_pct ?? y.avg_return_pct ?? 0
+                const winRate = y.win_rate ?? 0
+                const pf = y.profit_factor ?? 0
+
                 return (
                   <div
                     key={y.year}
-                    className={`rounded-xl border p-4 transition ${
+                    className={`rounded-2xl border p-4.5 transition shadow-xs ${
                       isProf
-                        ? "bg-emerald-50/60 border-emerald-200 hover:border-emerald-400"
-                        : "bg-rose-50/60 border-rose-200 hover:border-rose-400"
+                        ? "bg-gradient-to-br from-emerald-50/70 to-white border-emerald-300 hover:border-emerald-500"
+                        : "bg-gradient-to-br from-rose-50/70 to-white border-rose-300 hover:border-rose-500"
                     }`}
                   >
                     <div className="flex items-center justify-between">
-                      <span className="font-black text-sm text-slate-800 font-mono">{y.year}</span>
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${isProf ? "bg-emerald-100 text-emerald-800 border border-emerald-300" : "bg-rose-100 text-rose-800 border-rose-300"}`}>
-                        {isProf ? "WIN" : "LOSS"}
+                      <span className="font-black text-base text-slate-900 font-mono tracking-tight">{y.year}</span>
+                      <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide border ${
+                        isProf 
+                          ? "bg-emerald-100 text-emerald-800 border-emerald-300" 
+                          : "bg-rose-100 text-rose-800 border-rose-300"
+                      }`}>
+                        {isProf ? "PROFIT" : "DRAWDOWN"}
                       </span>
                     </div>
 
-                    <div className="mt-2.5">
-                      <span className="text-[11px] text-slate-500 font-medium">Net Realized:</span>
-                      <div className={`text-base font-black font-mono ${isProf ? "text-emerald-700" : "text-rose-700"}`}>
-                        {isProf ? "+" : ""}₹{y.pnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                        <span className="text-xs ml-1 font-bold">
-                          ({isProf ? "+" : ""}{y.pnl_pct}%)
+                    <div className="mt-3">
+                      <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">Net Realized P&L</span>
+                      <div className={`text-xl font-black font-mono tracking-tight mt-0.5 ${isProf ? "text-emerald-700" : "text-rose-700"}`}>
+                        {isProf ? "+" : ""}₹{(y.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                        <span className="text-xs ml-1.5 font-bold">
+                          ({isProf ? "+" : ""}{retPct.toFixed(1)}%)
                         </span>
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600 font-medium">
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-600 font-medium">
                       <span>{y.trades} trades</span>
-                      <span className="font-bold text-slate-800">{y.win_rate}% WR</span>
+                      <span className="font-bold text-slate-800">
+                        {winRate.toFixed(1)}% WR · PF {pf > 0 ? pf.toFixed(2) : "0.0"}
+                      </span>
+                    </div>
+
+                    {/* Visual Win Rate Progress Bar */}
+                    <div className="mt-2.5 w-full bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                      <div
+                        className={`h-full rounded-full ${isProf ? "bg-emerald-500" : "bg-rose-500"}`}
+                        style={{ width: `${Math.min(100, Math.max(5, winRate))}%` }}
+                      />
                     </div>
                   </div>
                 )
@@ -685,38 +725,43 @@ export function SwingerPage() {
           {/* Monthly Breakdown */}
           {monthly.length > 0 && (
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-              <h3 className="font-extrabold text-base text-slate-900 mb-4 flex items-center gap-2">
-                <BarChart3 className="size-5 text-emerald-600" />
-                Monthly Performance Matrix
-              </h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                    <BarChart3 className="size-5 text-emerald-600" />
+                    Monthly Performance Matrix ({monthly.length} Months)
+                  </h3>
+                  <p className="text-xs text-slate-600 font-medium">Month-by-month return, profit factor, and closed swing count</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-1">
                 {monthly.map((m) => {
-                  const isProfitable = m.pnl > 0
+                  const isProfitable = (m.pnl ?? 0) > 0
                   return (
                     <div
                       key={m.month}
-                      className={`rounded-xl border p-4 transition ${
+                      className={`rounded-xl border p-3.5 transition ${
                         isProfitable 
                           ? "bg-emerald-50/50 border-emerald-300" 
                           : "bg-white border-slate-200"
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-sm text-slate-900">{m.label}</span>
-                        <span className="px-2 py-0.5 rounded text-[11px] font-bold border bg-slate-100 text-slate-700">
+                        <span className="font-bold text-xs text-slate-900">{m.label}</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-slate-100 text-slate-700">
                           PF {(m.profit_factor ?? 0).toFixed(2)}
                         </span>
                       </div>
-                      <div className="mt-2.5 flex items-baseline justify-between">
-                        <span className="text-xs text-slate-500 font-semibold">Net P&L:</span>
-                        <span className={`text-base font-black font-mono ${isProfitable ? "text-emerald-600" : "text-rose-600"}`}>
+                      <div className="mt-2 flex items-baseline justify-between">
+                        <span className="text-[11px] text-slate-500 font-semibold">Net P&L:</span>
+                        <span className={`text-sm font-black font-mono ${isProfitable ? "text-emerald-600" : "text-rose-600"}`}>
                           {isProfitable ? "+" : ""}₹{(m.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                          <span className="text-xs ml-1 font-semibold">
+                          <span className="text-[10px] ml-1 font-semibold">
                             ({isProfitable ? "+" : ""}{(m.pnl_pct ?? 0).toFixed(1)}%)
                           </span>
                         </span>
                       </div>
-                      <div className="mt-2 pt-2 border-t border-slate-200 flex items-center justify-between text-xs text-slate-600">
+                      <div className="mt-2 pt-1.5 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
                         <span>{m.trades} trades</span>
                         <span><strong className="text-emerald-700">{m.wins}W</strong> / <strong className="text-rose-700">{m.losses}L</strong> ({m.win_rate}%)</span>
                       </div>
@@ -759,6 +804,63 @@ export function SwingerPage() {
                 toast.info(`Viewing trades for ${date}`)
               }}
             />
+
+            {/* Trades matching selected calendar day (if clicked) */}
+            {selectedDate && (
+              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 shadow-xs mt-4">
+                <div className="flex justify-between items-center mb-3">
+                  <h4 className="text-xs font-extrabold uppercase tracking-wider text-slate-700">
+                    Trades Closed on {selectedDate}
+                  </h4>
+                  <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-white text-slate-700 border border-slate-300">
+                    {filteredTrades.length} Trades
+                  </span>
+                </div>
+                {filteredTrades.length === 0 ? (
+                  <p className="text-xs text-slate-500 py-2">No closed trades recorded on {selectedDate}.</p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-xs bg-white rounded-xl border border-slate-200 overflow-hidden">
+                      <thead className="bg-slate-100 text-slate-700 border-b border-slate-200 font-bold">
+                        <tr>
+                          <th className="p-3">Stock</th>
+                          <th className="p-3">Entry Date</th>
+                          <th className="p-3">Entry (₹)</th>
+                          <th className="p-3">Exit (₹)</th>
+                          <th className="p-3">Held</th>
+                          <th className="p-3">Exit Reason</th>
+                          <th className="p-3 text-right">Net P&L</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {filteredTrades.map((t, i) => {
+                          const isWin = (t.pnl ?? 0) > 0
+                          return (
+                            <tr key={i} className="hover:bg-slate-50 transition">
+                              <td className="p-3 font-bold text-slate-900">{t.symbol}</td>
+                              <td className="p-3 text-slate-600 font-mono">{t.entry_date}</td>
+                              <td className="p-3 font-mono font-medium text-slate-800">₹{(t.entry_price ?? 0).toFixed(2)}</td>
+                              <td className="p-3 font-mono font-medium text-slate-800">₹{(t.exit_price ?? 0).toFixed(2)}</td>
+                              <td className="p-3 text-slate-600 font-medium">{(t.days_held ?? (t as any).holding_days ?? 0)}d</td>
+                              <td className="p-3">
+                                <span className={`px-2 py-0.5 rounded text-[10px] font-bold border ${isWin ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-rose-100 text-rose-800 border-rose-300"}`}>
+                                  {formatExitReason(t.reason || (t as any).exit_reason)}
+                                </span>
+                              </td>
+                              <td className="p-3 text-right font-mono font-bold">
+                                <span className={isWin ? "text-emerald-600" : "text-rose-600"}>
+                                  {isWin ? "+" : ""}{(t.pnl_pct ?? (t as any).pct_return ?? 0).toFixed(2)}% (₹{(t.pnl ?? 0).toLocaleString('en-IN')})
+                                </span>
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}

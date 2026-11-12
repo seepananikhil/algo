@@ -415,7 +415,7 @@ export function HoldAndRaisePage() {
                               : "bg-muted text-muted-foreground border-border/40"
                           )}
                         >
-                          {b.status.replace("_", " ")}
+                          {b.status ? b.status.replace("_", " ") : "—"}
                         </Badge>
                       </TableCell>
                     </TableRow>

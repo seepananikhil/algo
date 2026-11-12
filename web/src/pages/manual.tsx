@@ -258,7 +258,7 @@ export function ManualTradingPage() {
                   <TableBody>
                     {manualBroker.data.positions.map((position: any) => (
                       <TableRow key={position.symbol}>
-                        <TableCell className="font-mono text-xs truncate max-w-[140px]">{position.symbol.replace("NSE:", "")}</TableCell>
+                        <TableCell className="font-mono text-xs truncate max-w-[140px]">{(position.symbol || "").replace("NSE:", "")}</TableCell>
                         <TableCell className="text-right tabular-nums">{position.net_qty}</TableCell>
                         <TableCell className="text-right tabular-nums">{fmtNum(position.average_price)}</TableCell>
                         <TableCell className={`text-right font-medium tabular-nums ${pnlClass(position.pnl)}`}>{fmtRs(position.pnl)}</TableCell>
@@ -301,7 +301,7 @@ export function ManualTradingPage() {
                     <TableRow key={order.id}>
                       <TableCell className="text-xs text-muted-foreground">{order.time.slice(11, 19)}</TableCell>
                       <TableCell className="font-medium">{order.side === 1 ? <span className="text-emerald-500">BUY</span> : <span className="text-rose-500">SELL</span>}</TableCell>
-                      <TableCell className="font-mono text-xs truncate max-w-[160px]">{order.symbol.replace("NSE:", "")}</TableCell>
+                      <TableCell className="font-mono text-xs truncate max-w-[160px]">{(order.symbol || "").replace("NSE:", "")}</TableCell>
                       <TableCell className="text-right tabular-nums">{order.filled_qty} / {order.qty}</TableCell>
                       <TableCell className="text-right tabular-nums">{order.traded_price ? fmtNum(order.traded_price) : order.limit_price ? fmtNum(order.limit_price) : "MKT"}</TableCell>
                       <TableCell className="text-xs">{order.status === 2 ? <span className="text-emerald-500 font-medium">FILLED</span> : order.status === 5 ? <span className="text-rose-500">REJECTED</span> : order.status === 1 ? <span className="text-amber-500">CANCELLED</span> : `Status ${order.status}`}</TableCell>

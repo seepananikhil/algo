@@ -650,8 +650,9 @@ export const pnlClass = (n: number | string | null | undefined) => {
   return val > 0 ? "text-emerald-600 dark:text-emerald-400 font-semibold" : "text-rose-600 dark:text-rose-400 font-semibold"
 }
 
-export const prettyReason = (r: string) =>
-  r
+export const prettyReason = (r?: string | null) => {
+  if (!r || typeof r !== "string") return "—"
+  return r
     .replace(/^entry_window_close$/, "No trade (range uncrossed)")
     .replace(/^target$/, "Target hit")
     .replace(/^stop$/, "Stop hit")
@@ -664,6 +665,7 @@ export const prettyReason = (r: string) =>
     .replace(/^open$/, "Active")
     .replace(/^reverse_after_void_/, "2nd trade (after void) · ")
     .replace(/_/g, " ")
+}
 
 export type PaperTrade = {
   date: string
