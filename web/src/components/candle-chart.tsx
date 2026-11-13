@@ -771,23 +771,29 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     [viewTick]
   )
 
-  // Mouse interaction handlers for drawing layer
-  const handleMouseMove = (e: React.MouseEvent<SVGRectElement>) => {
-    if (!el.current || !chart.current || !series.current) return
+  // Coordinate extractor for pointer events
+  const getEventCoords = (e: React.PointerEvent<SVGRectElement> | React.MouseEvent<SVGRectElement>) => {
+    if (!el.current || !series.current || !chart.current) return null
     const rect = el.current.getBoundingClientRect()
     const x = e.clientX - rect.left
     const y = e.clientY - rect.top
     const price = series.current.coordinateToPrice(y)
     const time = chart.current.timeScale().coordinateToTime(x)
     const logical = chart.current.timeScale().coordinateToLogical(x)
-
-    setHoverPos({
+    return {
       x,
       y,
       price: price != null ? Number(price) : null,
       time: time != null ? Number(time) : null,
       logical: logical != null ? Number(logical) : null,
-    })
+    }
+  }
+
+  // Pointer move handler for active drawing and hover detection
+  const handlePointerMoveOnSvg = (e: React.PointerEvent<SVGRectElement>) => {
+    const coords = getEventCoords(e)
+    if (!coords) return
+    setHoverPos(coords)
 
     // Hover detection for eraser
     if (tool === "eraser") {
@@ -796,15 +802,15 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       for (const d of drawings) {
         if (d.type === "hline") {
           const ly = getHLineY(d.price)
-          if (ly !== null && Math.abs(y - ly) < minDist) {
-            minDist = Math.abs(y - ly)
+          if (ly !== null && Math.abs(coords.y - ly) < minDist) {
+            minDist = Math.abs(coords.y - ly)
             nearestId = d.id
           }
         } else if (d.type === "trendline") {
           const c1 = getPointCoords(d.p1)
           const c2 = getPointCoords(d.p2)
           if (c1 && c2) {
-            const dist = distToSegment(x, y, c1.x, c1.y, c2.x, c2.y)
+            const dist = distToSegment(coords.x, coords.y, c1.x, c1.y, c2.x, c2.y)
             if (dist < minDist) {
               minDist = dist
               nearestId = d.id
@@ -816,10 +822,11 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
   }
 
-  const handleClick = () => {
-    if (!hoverPos || !series.current || !chart.current) return
-    const { x, y, price, time, logical } = hoverPos
-    if (price === null) return
+  // Pointer down handler for 1-click line creation
+  const handlePointerDownOnSvg = (e: React.PointerEvent<SVGRectElement>) => {
+    const coords = getEventCoords(e)
+    if (!coords || coords.price === null) return
+    const { x, y, price, time, logical } = coords
 
     if (tool === "hline") {
       const newDrawing: ChartDrawing = {
@@ -829,6 +836,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
         color: "#38bdf8",
       }
       setDrawings((prev) => [...prev, newDrawing])
+      setSelectedDrawingId(newDrawing.id)
     } else if (tool === "trendline") {
       if (!trendlineStart) {
         // Step 1: Click start point
@@ -857,12 +865,14 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           color: "#f59e0b",
         }
         setDrawings((prev) => [...prev, newDrawing])
+        setSelectedDrawingId(newDrawing.id)
         setTrendlineStart(null)
       }
     } else if (tool === "eraser") {
       if (hoveredDrawingId) {
         setDrawings((prev) => prev.filter((d) => d.id !== hoveredDrawingId))
         setHoveredDrawingId(null)
+        if (selectedDrawingId === hoveredDrawingId) setSelectedDrawingId(null)
       }
     }
   }
@@ -945,15 +955,31 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           tool !== "none" ? "pointer-events-auto cursor-crosshair" : "pointer-events-none"
         )}
       >
-        {/* Background event catcher when in drawing/eraser mode */}
+        {/* When a line is selected in pointer mode, an invisible backdrop catches outside clicks to unselect */}
+        {tool === "none" && selectedDrawingId !== null && (
+          <rect
+            width="100%"
+            height="100%"
+            fill="rgba(0,0,0,0.001)"
+            style={{ pointerEvents: "all" }}
+            onPointerDown={(e) => {
+              e.stopPropagation()
+              setSelectedDrawingId(null)
+              setHoveredDrawingId(null)
+            }}
+          />
+        )}
+
+        {/* Background event catcher when in active drawing / eraser mode */}
         {tool !== "none" && (
           <rect
             width="100%"
             height="100%"
-            fill="transparent"
-            onMouseMove={handleMouseMove}
-            onClick={handleClick}
-            onMouseLeave={() => {
+            fill="rgba(0,0,0,0.001)"
+            style={{ pointerEvents: "all" }}
+            onPointerMove={handlePointerMoveOnSvg}
+            onPointerDown={handlePointerDownOnSvg}
+            onPointerLeave={() => {
               setHoverPos(null)
               setHoveredDrawingId(null)
             }}
@@ -970,16 +996,16 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
             if (y === null || y < 0 || y > chartDim.height) return null
             return (
               <g key={d.id} className="group transition-all">
-                {/* Selection Halo Glow */}
+                {/* Selection / Drag Halo Glow */}
                 {isSelected && (
                   <line
                     x1={0}
                     y1={y}
                     x2={chartWidth}
                     y2={y}
-                    stroke="#38bdf8"
-                    strokeWidth={5}
-                    opacity={0.35}
+                    stroke={isDragging && dragRef.current?.id === d.id ? "#00f0ff" : "#38bdf8"}
+                    strokeWidth={isDragging && dragRef.current?.id === d.id ? 7 : 4}
+                    opacity={isDragging && dragRef.current?.id === d.id ? 0.7 : 0.35}
                   />
                 )}
                 {/* Wide invisible hit area for dragging / selection */}
@@ -1110,16 +1136,16 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
 
             return (
               <g key={d.id} className="group transition-all">
-                {/* Selection Halo Glow */}
+                {/* Selection / Drag Halo Glow */}
                 {isSelected && (
                   <line
                     x1={c1.x}
                     y1={c1.y}
                     x2={c2.x}
                     y2={c2.y}
-                    stroke="#f59e0b"
-                    strokeWidth={6}
-                    opacity={0.3}
+                    stroke={isDragging && dragRef.current?.id === d.id ? "#fbbf24" : "#f59e0b"}
+                    strokeWidth={isDragging && dragRef.current?.id === d.id ? 8 : 5}
+                    opacity={isDragging && dragRef.current?.id === d.id ? 0.75 : 0.3}
                   />
                 )}
                 {/* Wide invisible hit area for moving entire line */}
