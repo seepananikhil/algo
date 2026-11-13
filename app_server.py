@@ -1692,7 +1692,7 @@ def set_scalp_target(symbol: str, tp_pts: float, tl_pts: float, entry_price: flo
     raw_sym = symbol.replace("NSE:", "").replace("BSE:", "").strip()
 
     if tp_pts <= 0 and tl_pts <= 0:
-        for k in (raw_sym, clean_sym, symbol):
+        for k in (raw_sym, clean_sym, symbol, raw_sym.replace(" ", ""), clean_sym.replace(" ", "")):
             targets.pop(k, None)
         save_scalp_targets(targets)
         return {"ok": True, "symbol": raw_sym, "removed": True}
@@ -1709,10 +1709,13 @@ def set_scalp_target(symbol: str, tp_pts: float, tl_pts: float, entry_price: flo
         "target_price": tgt_px,
         "stop_price": sl_px,
         "qty": int(qty),
+        "created_ts": time.time(),
         "updated_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
     }
     targets[raw_sym] = info
     targets[clean_sym] = info
+    targets[raw_sym.replace(" ", "")] = info
+    targets[clean_sym.replace(" ", "")] = info
     save_scalp_targets(targets)
     return {"ok": True, "symbol": raw_sym, "target": info}
 
@@ -1722,7 +1725,7 @@ def clear_scalp_target(symbol: str) -> None:
     clean_sym = clean_option_symbol(symbol)
     raw_sym = symbol.replace("NSE:", "").replace("BSE:", "").strip()
     changed = False
-    for k in (raw_sym, clean_sym, symbol):
+    for k in (raw_sym, clean_sym, symbol, raw_sym.replace(" ", ""), clean_sym.replace(" ", "")):
         if k in targets:
             targets.pop(k, None)
             changed = True
@@ -1747,6 +1750,12 @@ def update_tp_tl(body: dict) -> dict:
 
     clean_sym = clean_option_symbol(symbol)
     raw_sym = symbol.replace("NSE:", "").replace("BSE:", "").strip()
+
+    try:
+        from broker import invalidate_positions_cache
+        invalidate_positions_cache()
+    except Exception:
+        pass
 
     # Save to local targets tracker
     res = set_scalp_target(symbol, tp_pts=tp_pts, tl_pts=tl_pts, entry_price=entry_price, qty=qty)
@@ -1834,8 +1843,15 @@ def scalp_tp_tl_sentinel_loop() -> None:
                             clean_sym = clean_option_symbol(sym)
                             active_syms.add(sym)
                             active_syms.add(clean_sym)
+                            active_syms.add(sym.replace(" ", ""))
+                            active_syms.add(clean_sym.replace(" ", ""))
 
-                            t_info = targets.get(sym) or targets.get(clean_sym)
+                            t_info = (
+                                targets.get(sym)
+                                or targets.get(clean_sym)
+                                or targets.get(sym.replace(" ", ""))
+                                or targets.get(clean_sym.replace(" ", ""))
+                            )
                             if not t_info:
                                 continue
 
@@ -1868,8 +1884,11 @@ def scalp_tp_tl_sentinel_loop() -> None:
                                 clear_scalp_target(sym)
                                 clear_scalp_target(clean_sym)
 
-                        for k in list(targets.keys()):
-                            if k not in active_syms:
+                        # Only prune targets if they have been active for > 90s and definitely no longer in open positions
+                        now_ts = time.time()
+                        for k, v in list(targets.items()):
+                            created_ts = float(v.get("created_ts") or 0.0) if isinstance(v, dict) else 0.0
+                            if (now_ts - created_ts) > 90.0 and k not in active_syms:
                                 clear_scalp_target(k)
         except Exception:
             pass
@@ -1951,6 +1970,12 @@ def submit_scalp_order(body: dict) -> dict:
     res = submit_manual_order(body)
     if not isinstance(res, dict) or not res.get("ok"):
         raise ManualTradeError(f"Broker live order failed: {res}")
+
+    try:
+        from broker import invalidate_positions_cache
+        invalidate_positions_cache()
+    except Exception:
+        pass
 
     raw_sym = str(res.get("symbol", "")).strip()
     fill_px = float(res.get("fill_price") or 0.0)

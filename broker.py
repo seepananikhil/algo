@@ -18,6 +18,13 @@ _last_known_ltps: dict = {}
 _last_positions_time: float = 0.0
 _last_positions_err_time: float = 0.0
 
+
+def invalidate_positions_cache() -> None:
+    """Clear position cache timestamp to force immediate fresh fetch from broker."""
+    global _last_positions_time, _last_positions_err_time
+    _last_positions_time = 0.0
+    _last_positions_err_time = 0.0
+
 def get_active_broker() -> str:
     """Return 'KOTAK_NEO' (sole active broker)."""
     return "KOTAK_NEO"
