@@ -69,13 +69,14 @@ export type ChartDrawing =
       id: string
       type: "hline"
       price: number
+      y?: number
       color?: string
     }
   | {
       id: string
       type: "trendline"
-      p1: { time?: number; logical?: number; price: number }
-      p2: { time?: number; logical?: number; price: number }
+      p1: { time?: number; logical?: number; price: number; x?: number; y?: number }
+      p2: { time?: number; logical?: number; price: number; x?: number; y?: number }
       color?: string
     }
 
@@ -737,36 +738,62 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     if (chart.current) fitSession(chart.current, bars.current, fullDay)
   }
 
-  // Coordinate projections for drawn lines
+  // Coordinate projections for drawn lines with fail-safe fallbacks
   const getHLineY = useCallback(
-    (price: number) => {
-      if (!series.current) return null
+    (price: number, fallbackY?: number) => {
+      if (!series.current) return fallbackY ?? null
       try {
-        return series.current.priceToCoordinate(price)
-      } catch {
-        return null
-      }
+        const y = series.current.priceToCoordinate(price)
+        if (y !== null && Number.isFinite(y)) return y
+      } catch {}
+      return fallbackY ?? null
     },
     [viewTick]
   )
 
   const getPointCoords = useCallback(
-    (p: { time?: number; logical?: number; price: number }) => {
-      if (!chart.current || !series.current) return null
-      try {
-        let x: number | null = null
-        if (p.time != null) {
-          x = chart.current.timeScale().timeToCoordinate(p.time as UTCTimestamp)
-        }
-        if (x === null && p.logical != null) {
-          x = chart.current.timeScale().logicalToCoordinate(p.logical as any)
-        }
-        const y = series.current.priceToCoordinate(p.price)
-        if (x === null || y === null) return null
-        return { x, y }
-      } catch {
+    (p: { time?: number; logical?: number; price: number; x?: number; y?: number }) => {
+      if (!chart.current || !series.current) {
+        if (p.x != null && p.y != null) return { x: p.x, y: p.y }
         return null
       }
+      let x: number | null = null
+      let y: number | null = null
+
+      // 1. Try logical index to coordinate first (most accurate continuous index)
+      if (p.logical != null) {
+        try {
+          const lx = chart.current.timeScale().logicalToCoordinate(p.logical as any)
+          if (lx !== null && Number.isFinite(lx)) x = lx
+        } catch {}
+      }
+
+      // 2. Try time to coordinate
+      if (x === null && p.time != null) {
+        try {
+          const tx = chart.current.timeScale().timeToCoordinate(p.time as UTCTimestamp)
+          if (tx !== null && Number.isFinite(tx)) x = tx
+        } catch {}
+      }
+
+      // 3. Fallback to stored pixel X
+      if (x === null && p.x != null) {
+        x = p.x
+      }
+
+      // Convert price to coordinate Y
+      try {
+        const py = series.current.priceToCoordinate(p.price)
+        if (py !== null && Number.isFinite(py)) y = py
+      } catch {}
+
+      // Fallback to stored pixel Y
+      if (y === null && p.y != null) {
+        y = p.y
+      }
+
+      if (x === null || y === null) return null
+      return { x, y }
     },
     [viewTick]
   )
@@ -833,10 +860,13 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
         id: "draw_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
         type: "hline",
         price: Math.round(price * 100) / 100,
+        y,
         color: "#38bdf8",
       }
       setDrawings((prev) => [...prev, newDrawing])
       setSelectedDrawingId(newDrawing.id)
+      setTool("none")
+      setHoverPos(null)
     } else if (tool === "trendline") {
       if (!trendlineStart) {
         // Step 1: Click start point
@@ -856,17 +886,23 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
             time: trendlineStart.time,
             logical: trendlineStart.logical,
             price: trendlineStart.price,
+            x: trendlineStart.x,
+            y: trendlineStart.y,
           },
           p2: {
             time: time ?? undefined,
             logical: logical ?? undefined,
             price: Math.round(price * 100) / 100,
+            x,
+            y,
           },
           color: "#f59e0b",
         }
         setDrawings((prev) => [...prev, newDrawing])
         setSelectedDrawingId(newDrawing.id)
         setTrendlineStart(null)
+        setTool("none")
+        setHoverPos(null)
       }
     } else if (tool === "eraser") {
       if (hoveredDrawingId) {
@@ -992,7 +1028,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           const isHovered = d.id === hoveredDrawingId
 
           if (d.type === "hline") {
-            const y = getHLineY(d.price)
+            const y = getHLineY(d.price, d.y)
             if (y === null || y < 0 || y > chartDim.height) return null
             return (
               <g key={d.id} className="group transition-all">
