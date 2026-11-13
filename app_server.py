@@ -861,6 +861,15 @@ def log_live_order_event(action: str, symbol: str, qty: int, order_id: str, fill
     except Exception as exc:
         print(f"Error logging live order event: {exc}")
 
+def load_portfolio_config() -> dict:
+    p = ROOT / "master_portfolio_config.json"
+    if p.exists():
+        try:
+            return json.loads(p.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    return {}
+
 def trend_runner_forward_loop() -> None:
     """Continuously monitor today's live 1-min stream for Trend Catcher (VIX Runner) setups."""
     today_str = today()
@@ -872,6 +881,7 @@ def trend_runner_forward_loop() -> None:
     while True:
         try:
             cfg = read_config()
+            port_cfg = load_portfolio_config()
             if not cfg.get("trend_runner_paper_trading", True):
                 time.sleep(5)
                 continue
@@ -893,13 +903,14 @@ def trend_runner_forward_loop() -> None:
                 time.sleep(5)
                 continue
 
+            setups_cfg = port_cfg.get("setups", cfg.get("setups", {}))
+            enable_trend = setups_cfg.get("trend_runner", True)
+            enable_trap = setups_cfg.get("vix_trap", True)
+
             from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
             if engine is None:
                 lots_cfg = int(cfg.get("trend_runner_lots", 1))
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
-                setups_cfg = cfg.get("setups", {})
-                enable_trend = setups_cfg.get("trend_runner", True)
-                enable_trap = setups_cfg.get("vix_trap", True)
                 engine = TrendRunnerPaperEngine(
                     sl_points=28.0,
                     sl_mode="fixed",
@@ -912,6 +923,9 @@ def trend_runner_forward_loop() -> None:
                 )
                 engine.current_day_str = today_str
                 log_engine_telemetry("NIFTY", "Apex Duo", "SYSTEM", f"Apex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
+            else:
+                engine.enable_trend_runner = enable_trend
+                engine.enable_vix_trap = enable_trap
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
@@ -941,7 +955,9 @@ def trend_runner_forward_loop() -> None:
                 dist_h = or_high - c1m
                 dist_l = c1m - or_low
                 status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else ("Above OR High" if c1m > or_high else "Below OR Low")
-                log_engine_telemetry("NIFTY", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc}")
+                vix_curr = ENGINE_LIVE_STATE["nifty"].get("vix_chg", 0.0)
+                vix_str = f"VIX Bias: {vix_curr:+.1f}%"
+                log_engine_telemetry("NIFTY", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo (Trend + Trap) Active")
 
             latest_bar = df5.iloc[-1]
             curr_5m_time = str(latest_bar.get("time_str", ""))
@@ -992,13 +1008,15 @@ def sensex_runner_forward_loop() -> None:
                 time.sleep(5)
                 continue
 
+            port_cfg = load_portfolio_config()
+            setups_cfg = port_cfg.get("setups", cfg.get("setups", {}))
+            enable_trend = setups_cfg.get("trend_runner", True)
+            enable_trap = setups_cfg.get("vix_trap", True)
+
             from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
             if engine is None:
                 lots_cfg = int(cfg.get("sensex_runner_lots", 1))
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
-                setups_cfg = cfg.get("setups", {})
-                enable_trend = setups_cfg.get("trend_runner", True)
-                enable_trap = setups_cfg.get("vix_trap", True)
                 engine = TrendRunnerPaperEngine(
                     symbol="SENSEX",
                     sl_points=120.0,
@@ -1012,6 +1030,9 @@ def sensex_runner_forward_loop() -> None:
                 )
                 engine.current_day_str = today_str
                 log_engine_telemetry("SENSEX", "Apex Duo", "SYSTEM", f"Sensex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
+            else:
+                engine.enable_trend_runner = enable_trend
+                engine.enable_vix_trap = enable_trap
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
@@ -1041,7 +1062,9 @@ def sensex_runner_forward_loop() -> None:
                 dist_h = or_high - c1m
                 dist_l = c1m - or_low
                 status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else ("Above OR High" if c1m > or_high else "Below OR Low")
-                log_engine_telemetry("SENSEX", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc}")
+                vix_curr = ENGINE_LIVE_STATE["sensex"].get("vix_chg", 0.0)
+                vix_str = f"VIX Bias: {vix_curr:+.1f}%"
+                log_engine_telemetry("SENSEX", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo (Trend + Trap) Active")
 
             latest_bar = df5.iloc[-1]
             curr_5m_time = str(latest_bar.get("time_str", ""))
