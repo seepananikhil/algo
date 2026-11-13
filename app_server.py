@@ -5138,34 +5138,60 @@ def get_spot_at_time(idx_sym: str, hhmm: str) -> float:
     return float((st.get("last_tick") or {}).get("ltp") or 23300.0)
 
 
+_last_completed_orders: list = []
+_last_orders_time: float = 0.0
+
+
 def kotak_live_trades() -> list:
     """Return active and closed Kotak Neo positions formatted as OptionTrade dicts with stable, FIFO-paired timestamps."""
+    global _last_completed_orders, _last_orders_time
+    import time
+    now = time.time()
     try:
         from broker import get_positions
         from kotak_orders import get_kotak_client
         pos_data = get_positions()
 
-        # Fetch and parse completed orders
+        # Fetch and parse completed orders with resilient caching to prevent UI flickering
         completed_orders = []
-        try:
-            client = get_kotak_client()
-            if client:
-                res = client.order_report()
-                if isinstance(res, dict) and str(res.get("stat", "")).lower() == "ok":
-                    for o in res.get("data") or []:
-                        if str(o.get("ordSt", "")).lower() in ("complete", "trd", "traded", "filled"):
-                            completed_orders.append(o)
-        except Exception as exc:
-            print(f"Error fetching Kotak Neo order_report: {exc}")
+        if (now - _last_orders_time) < 3.0 and _last_completed_orders:
+            completed_orders = list(_last_completed_orders)
+        else:
+            try:
+                client = get_kotak_client()
+                if client:
+                    res = client.order_report()
+                    if isinstance(res, dict) and str(res.get("stat", "")).lower() == "ok":
+                        fresh_orders = []
+                        for o in res.get("data") or []:
+                            if str(o.get("ordSt", "")).lower() in ("complete", "trd", "traded", "filled"):
+                                fresh_orders.append(o)
+                        if fresh_orders:
+                            _last_completed_orders = fresh_orders
+                            _last_orders_time = now
+                            completed_orders = list(fresh_orders)
+                        elif _last_completed_orders:
+                            completed_orders = list(_last_completed_orders)
+                    elif _last_completed_orders:
+                        completed_orders = list(_last_completed_orders)
+            except Exception as exc:
+                print(f"Error fetching Kotak Neo order_report: {exc}")
+                if _last_completed_orders:
+                    completed_orders = list(_last_completed_orders)
 
-        def parse_ord_time(o: dict):
+        def parse_ord_key(o: dict):
             dt_str = str(o.get("ordDtTm", "")).strip()
             try:
-                return datetime.strptime(dt_str, "%d-%b-%Y %H:%M:%S")
+                dt_val = datetime.strptime(dt_str, "%d-%b-%Y %H:%M:%S")
             except Exception:
-                return datetime.min
+                dt_val = datetime.min
+            try:
+                ord_no = int(str(o.get("nOrdNo") or "0").strip() or "0")
+            except Exception:
+                ord_no = 0
+            return (dt_val, ord_no)
 
-        completed_orders.sort(key=parse_ord_time)
+        completed_orders.sort(key=parse_ord_key)
 
         # Group completed orders by trading symbol
         by_symbol = {}
@@ -5661,6 +5687,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(read_csv_rows(LIVE_DIR / f"live_orders_{date}.csv"))
         elif url.path == "/api/trades":
             trade_mode = q.get("mode", [""])[0].strip().upper()
+            target_date = q.get("date", [""])[0].strip() or today()
             all_trades = []
             kotak_trades = []
             try:
@@ -5673,11 +5700,11 @@ class Handler(BaseHTTPRequestHandler):
             is_kotak_active = (get_active_broker() == "KOTAK_NEO")
 
             paper_trades = []
-            paper_trades.extend(trend_runner_live_paper_trades(date))
-            paper_trades.extend(sensex_runner_live_paper_trades(date))
-            paper_trades.extend(sensex_key_levels_live_paper_trades(date))
-            paper_trades.extend(nifty_key_levels_live_paper_trades(date))
-            paper_trades.extend(list(midpoint_option_trades(date)))
+            paper_trades.extend(trend_runner_live_paper_trades(target_date))
+            paper_trades.extend(sensex_runner_live_paper_trades(target_date))
+            paper_trades.extend(sensex_key_levels_live_paper_trades(target_date))
+            paper_trades.extend(nifty_key_levels_live_paper_trades(target_date))
+            paper_trades.extend(list(midpoint_option_trades(target_date)))
 
             if trade_mode == "LIVE":
                 self._json(kotak_trades)

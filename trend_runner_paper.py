@@ -948,6 +948,8 @@ class TrendRunnerPaperEngine:
         print("#" * 70 + "\n")
 
     def _log_trade(self, res: dict) -> None:
+        if not res.get("date"):
+            res["date"] = self.current_day_str or datetime.now().strftime("%Y-%m-%d")
         canonical_cols = [
             "date", "trade_num", "stage", "side", "option", "option_symbol",
             "option_entry_price", "option_exit_price", "option_pnl_points", "option_pnl_rupees",

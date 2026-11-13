@@ -469,8 +469,8 @@ export function LivePage() {
   const niftyDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=NIFTY&full=1` : null, 2500)
   const sensexDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=SENSEX&full=1` : null, 2500)
 
-  // Polling feeds: All strategy and broker positions
-  const liveTradesPoll = usePoll<OptionTrade[]>("/api/trades", 2500)
+  // Polling feeds: All strategy and broker positions (strictly for today)
+  const liveTradesPoll = usePoll<OptionTrade[]>(today ? `/api/trades?date=${today}` : "/api/trades", 2500)
 
   const lastKnownTradesRef = useRef<OptionTrade[]>([])
   const tradesList = useMemo(() => {
@@ -481,14 +481,14 @@ export function LivePage() {
     return liveTradesPoll.data ?? lastKnownTradesRef.current
   }, [liveTradesPoll.data])
 
-  // Partition into Active and Closed
+  // Partition into Active and Closed (strictly for today)
   const openTrades = useMemo(() => {
     return tradesList.filter((t) => t.is_open !== false && (!t.exit || t.exit === "" || t.exit_reason === "open"))
   }, [tradesList])
 
   const closedTrades = useMemo(() => {
-    return tradesList.filter((t) => t.is_open === false || (t.exit && t.exit !== "" && t.exit_reason !== "open"))
-  }, [tradesList])
+    return tradesList.filter((t) => (t.is_open === false || (t.exit && t.exit !== "" && t.exit_reason !== "open")) && (!t.date || t.date === today))
+  }, [tradesList, today])
 
   // Calculate Running Position Summary Metrics
   const summaryMetrics = useMemo(() => {
