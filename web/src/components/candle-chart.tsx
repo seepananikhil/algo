@@ -1134,26 +1134,26 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
                 >
                   {isHovered ? "✕ DEL" : Math.round(d.price)}
                 </text>
-                {/* Floating Contextual Delete Button */}
+                {/* Sleek Floating Delete Button */}
                 {isSelected && (
                   <g
-                    transform={`translate(${Math.max(chartWidth - 145, 60)}, ${Math.max(y - 30, 8)})`}
-                    className="cursor-pointer pointer-events-auto select-none"
+                    transform={`translate(${Math.max(chartWidth - 110, 60)}, ${Math.max(y - 24, 6)})`}
+                    className="cursor-pointer pointer-events-auto select-none hover:scale-105 transition-transform"
                     onClick={(e) => {
                       e.stopPropagation()
                       deleteSelected()
                     }}
                   >
                     <rect
-                      width={74}
-                      height={20}
-                      rx={4}
+                      width={56}
+                      height={18}
+                      rx={9}
                       fill="#ef4444"
                       stroke="#ffffff"
                       strokeWidth={1}
-                      filter="drop-shadow(0 2px 4px rgba(0,0,0,0.4))"
+                      filter="drop-shadow(0 2px 5px rgba(0,0,0,0.4))"
                     />
-                    <text x={37} y={13.5} textAnchor="middle" fill="#ffffff" fontSize={9.5} fontWeight="bold">
+                    <text x={28} y={12} textAnchor="middle" fill="#ffffff" fontSize={9} fontWeight="bold">
                       ✕ Delete
                     </text>
                   </g>
@@ -1168,8 +1168,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
             if (!c1 || !c2) return null
             const midX = (c1.x + c2.x) / 2
             const midY = (c1.y + c2.y) / 2
-            const deltaPts = Math.round((d.p2.price - d.p1.price) * 10) / 10
-
+            
             return (
               <g key={d.id} className="group transition-all">
                 {/* Selection / Drag Halo Glow */}
@@ -1231,52 +1230,27 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
                   className="pointer-events-auto cursor-crosshair"
                   onPointerDown={(e) => handleStartDragTrendline(e, d, "p2")}
                 />
-                {/* Midpoint Info Pill */}
-                <rect
-                  x={midX - 24}
-                  y={midY - 8}
-                  width={48}
-                  height={16}
-                  rx={3}
-                  fill={isHovered ? "#ef4444" : isSelected ? "#d97706" : "#b45309"}
-                  stroke={isSelected ? "#ffffff" : "transparent"}
-                  strokeWidth={isSelected ? 1 : 0}
-                  opacity={0.9}
-                  className="pointer-events-auto cursor-move"
-                  onPointerDown={(e) => handleStartDragTrendline(e, d, "body")}
-                />
-                <text
-                  x={midX}
-                  y={midY + 3.5}
-                  textAnchor="middle"
-                  fill="#ffffff"
-                  fontSize={9}
-                  fontFamily="monospace"
-                  fontWeight="bold"
-                  className="pointer-events-none select-none"
-                >
-                  {isHovered ? "✕ DEL" : `${deltaPts >= 0 ? "+" : ""}${deltaPts}`}
-                </text>
-                {/* Floating Contextual Delete Button */}
+
+                {/* Sleek Floating Delete Button */}
                 {isSelected && (
                   <g
-                    transform={`translate(${midX - 37}, ${Math.max(midY - 30, 8)})`}
-                    className="cursor-pointer pointer-events-auto select-none"
+                    transform={`translate(${midX - 28}, ${Math.max(midY - 24, 6)})`}
+                    className="cursor-pointer pointer-events-auto select-none hover:scale-105 transition-transform"
                     onClick={(e) => {
                       e.stopPropagation()
                       deleteSelected()
                     }}
                   >
                     <rect
-                      width={74}
-                      height={20}
-                      rx={4}
+                      width={56}
+                      height={18}
+                      rx={9}
                       fill="#ef4444"
                       stroke="#ffffff"
                       strokeWidth={1}
-                      filter="drop-shadow(0 2px 4px rgba(0,0,0,0.4))"
+                      filter="drop-shadow(0 2px 5px rgba(0,0,0,0.4))"
                     />
-                    <text x={37} y={13.5} textAnchor="middle" fill="#ffffff" fontSize={9.5} fontWeight="bold">
+                    <text x={28} y={12} textAnchor="middle" fill="#ffffff" fontSize={9} fontWeight="bold">
                       ✕ Delete
                     </text>
                   </g>
@@ -1356,12 +1330,10 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
                 />
                 <circle cx={trendlineStart.x} cy={trendlineStart.y} r={4} fill="#f59e0b" stroke="#ffffff" strokeWidth={1} />
                 <circle cx={hoverPos.x} cy={hoverPos.y} r={4} fill="#f59e0b" stroke="#ffffff" strokeWidth={1} />
-                <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 145)}, ${Math.max(hoverPos.y - 25, 20)})`}>
-                  <rect width={140} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#f59e0b" strokeWidth={0.8} />
-                  <text x={70} y={13.5} textAnchor="middle" fill="#f59e0b" fontSize={9.5} fontWeight="500">
-                    {hoverPos.price != null
-                      ? `Click 2: End (${hoverPos.price - trendlineStart.price >= 0 ? "+" : ""}${(hoverPos.price - trendlineStart.price).toFixed(1)} pt)`
-                      : "Click 2: End Point"}
+                <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 110)}, ${Math.max(hoverPos.y - 24, 16)})`}>
+                  <rect width={100} height={18} rx={4} fill="rgba(15, 23, 42, 0.9)" stroke="#f59e0b" strokeWidth={0.8} />
+                  <text x={50} y={12.5} textAnchor="middle" fill="#f59e0b" fontSize={9} fontWeight="500">
+                    Click 2: End Point
                   </text>
                 </g>
               </>
