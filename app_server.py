@@ -5374,6 +5374,9 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/swinger/daily-signals":
             from swinger_engine import load_daily_signals
             return self._json(load_daily_signals())
+        elif url.path == "/api/swinger/watchlist":
+            from swinger_engine import load_watchlist
+            return self._json(load_watchlist())
         elif url.path == "/api/swinger/candles":
             from swinger_engine import get_stock_candles
             sym = q.get("symbol", [""])[0]
@@ -5381,8 +5384,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._json({"error": "symbol required"}, 400)
             from_dt = q.get("from", [None])[0]
             to_dt = q.get("to", [None])[0]
-            candles = get_stock_candles(sym, from_dt, to_dt)
-            return self._json({"ok": True, "symbol": sym, "candles": candles})
+            stock_candles = get_stock_candles(sym, from_dt, to_dt)
+            return self._json({"ok": True, "symbol": sym, "candles": stock_candles})
 
         if not self._is_authenticated():
             return self._json({"error": "unauthorized", "auth_required": True}, 401)
