@@ -1,6 +1,6 @@
-import { useEffect, useRef } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
-import { RotateCcw, ZoomIn, ZoomOut } from "lucide-react"
+import { Eraser, Minus, MousePointer2, RotateCcw, Trash2, TrendingUp, ZoomIn, ZoomOut } from "lucide-react"
 import { useTheme } from "next-themes"
 import {
   CandlestickSeries,
@@ -45,8 +45,34 @@ function fitSession(c: IChartApi, bars: number, fullDay = false) {
   } catch {}
 }
 
+export type DrawingType = "none" | "hline" | "trendline" | "eraser"
+
+export type ChartDrawing =
+  | {
+      id: string
+      type: "hline"
+      price: number
+      color?: string
+    }
+  | {
+      id: string
+      type: "trendline"
+      p1: { time?: number; logical?: number; price: number }
+      p2: { time?: number; logical?: number; price: number }
+      color?: string
+    }
+
+function distToSegment(px: number, py: number, x1: number, y1: number, x2: number, y2: number) {
+  const l2 = (x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1)
+  if (l2 === 0) return Math.hypot(px - x1, py - y1)
+  let t = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / l2
+  t = Math.max(0, Math.min(1, t))
+  return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)))
+}
+
 type Props = {
   date: string
+  symbol?: string
   candles: Candle[]
   forming?: Partial<Candle>
   currentPrice?: number
@@ -65,7 +91,7 @@ type Props = {
   resetKey?: string
 }
 
-export function CandleChart({ date, candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, boxes = [], className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
+export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, boxes = [], className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
@@ -78,6 +104,92 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
   const manualRange = useRef(false)
   const viewKey = useRef("")
   const { resolvedTheme } = useTheme()
+
+  // Interactive Drawing Tools state
+  const [tool, setTool] = useState<DrawingType>("none")
+  const [drawings, setDrawings] = useState<ChartDrawing[]>([])
+  const [trendlineStart, setTrendlineStart] = useState<{
+    time?: number
+    logical?: number
+    price: number
+    x: number
+    y: number
+  } | null>(null)
+  const [hoverPos, setHoverPos] = useState<{
+    x: number
+    y: number
+    price: number | null
+    time: number | null
+    logical: number | null
+  } | null>(null)
+  const [hoveredDrawingId, setHoveredDrawingId] = useState<string | null>(null)
+  const [chartDim, setChartDim] = useState<{ width: number; height: number }>({ width: 800, height: 400 })
+  const [viewTick, setViewTick] = useState(0)
+
+  // Scoped strictly to today's date & symbol ("valid only for day")
+  const storageKey = `chart_drawings_${date}_${symbol || "NIFTY"}`
+
+  // Load drawings from localStorage for this specific day & symbol
+  useEffect(() => {
+    if (!date) return
+    try {
+      const raw = localStorage.getItem(storageKey)
+      if (raw) {
+        const parsed = JSON.parse(raw)
+        if (Array.isArray(parsed)) {
+          setDrawings(parsed)
+        }
+      } else {
+        setDrawings([])
+      }
+    } catch {
+      setDrawings([])
+    }
+
+    // Prune stale drawings from older dates so they don't persist indefinitely
+    try {
+      const prefix = "chart_drawings_"
+      const keysToRemove: string[] = []
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i)
+        if (k && k.startsWith(prefix) && !k.includes(date)) {
+          keysToRemove.push(k)
+        }
+      }
+      for (const k of keysToRemove) {
+        localStorage.removeItem(k)
+      }
+    } catch {}
+  }, [date, symbol, storageKey])
+
+  // Save drawings whenever changed
+  useEffect(() => {
+    if (!date) return
+    try {
+      if (drawings.length > 0) {
+        localStorage.setItem(storageKey, JSON.stringify(drawings))
+      } else {
+        localStorage.removeItem(storageKey)
+      }
+    } catch {}
+  }, [drawings, storageKey, date])
+
+  // Cancel drawing / tool on Escape
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        if (trendlineStart) {
+          setTrendlineStart(null)
+        } else {
+          setTool("none")
+          setHoverPos(null)
+          setHoveredDrawingId(null)
+        }
+      }
+    }
+    window.addEventListener("keydown", onKeyDown)
+    return () => window.removeEventListener("keydown", onKeyDown)
+  }, [trendlineStart])
 
   useEffect(() => {
     if (!el.current) return
@@ -157,6 +269,7 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
       for (const entry of entries) {
         if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
           c.resize(Math.floor(entry.contentRect.width), Math.floor(entry.contentRect.height), true)
+          setChartDim({ width: entry.contentRect.width, height: entry.contentRect.height })
           if (!manualRange.current && bars.current > 0) {
             fitSession(c, bars.current, fullDay)
           }
@@ -164,6 +277,10 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
       }
     })
     ro.observe(el.current)
+    const onRangeChange = () => {
+      setViewTick((v) => (v + 1) % 100000)
+    }
+    c.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
     const node = el.current
     const markManual = () => { manualRange.current = true }
     if (zoomable) {
@@ -172,6 +289,9 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     }
     return () => {
       ro.disconnect()
+      try {
+        c.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange)
+      } catch {}
       node.removeEventListener("wheel", markManual)
       node.removeEventListener("pointerdown", markManual)
       c.remove()
@@ -481,14 +601,467 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     if (chart.current) fitSession(chart.current, bars.current, fullDay)
   }
 
+  // Coordinate projections for drawn lines
+  const getHLineY = useCallback(
+    (price: number) => {
+      if (!series.current) return null
+      try {
+        return series.current.priceToCoordinate(price)
+      } catch {
+        return null
+      }
+    },
+    [viewTick]
+  )
+
+  const getPointCoords = useCallback(
+    (p: { time?: number; logical?: number; price: number }) => {
+      if (!chart.current || !series.current) return null
+      try {
+        let x: number | null = null
+        if (p.time != null) {
+          x = chart.current.timeScale().timeToCoordinate(p.time as UTCTimestamp)
+        }
+        if (x === null && p.logical != null) {
+          x = chart.current.timeScale().logicalToCoordinate(p.logical as any)
+        }
+        const y = series.current.priceToCoordinate(p.price)
+        if (x === null || y === null) return null
+        return { x, y }
+      } catch {
+        return null
+      }
+    },
+    [viewTick]
+  )
+
+  // Mouse interaction handlers for drawing layer
+  const handleMouseMove = (e: React.MouseEvent<SVGRectElement>) => {
+    if (!el.current || !chart.current || !series.current) return
+    const rect = el.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    const price = series.current.coordinateToPrice(y)
+    const time = chart.current.timeScale().coordinateToTime(x)
+    const logical = chart.current.timeScale().coordinateToLogical(x)
+
+    setHoverPos({
+      x,
+      y,
+      price: price != null ? Number(price) : null,
+      time: time != null ? Number(time) : null,
+      logical: logical != null ? Number(logical) : null,
+    })
+
+    // Hover detection for eraser
+    if (tool === "eraser") {
+      let nearestId: string | null = null
+      let minDist = 14
+      for (const d of drawings) {
+        if (d.type === "hline") {
+          const ly = getHLineY(d.price)
+          if (ly !== null && Math.abs(y - ly) < minDist) {
+            minDist = Math.abs(y - ly)
+            nearestId = d.id
+          }
+        } else if (d.type === "trendline") {
+          const c1 = getPointCoords(d.p1)
+          const c2 = getPointCoords(d.p2)
+          if (c1 && c2) {
+            const dist = distToSegment(x, y, c1.x, c1.y, c2.x, c2.y)
+            if (dist < minDist) {
+              minDist = dist
+              nearestId = d.id
+            }
+          }
+        }
+      }
+      setHoveredDrawingId(nearestId)
+    }
+  }
+
+  const handleClick = () => {
+    if (!hoverPos || !series.current || !chart.current) return
+    const { x, y, price, time, logical } = hoverPos
+    if (price === null) return
+
+    if (tool === "hline") {
+      const newDrawing: ChartDrawing = {
+        id: "draw_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+        type: "hline",
+        price: Math.round(price * 100) / 100,
+        color: "#38bdf8",
+      }
+      setDrawings((prev) => [...prev, newDrawing])
+    } else if (tool === "trendline") {
+      if (!trendlineStart) {
+        // Step 1: Click start point
+        setTrendlineStart({
+          time: time ?? undefined,
+          logical: logical ?? undefined,
+          price: Math.round(price * 100) / 100,
+          x,
+          y,
+        })
+      } else {
+        // Step 2: Click end point -> complete trendline
+        const newDrawing: ChartDrawing = {
+          id: "draw_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
+          type: "trendline",
+          p1: {
+            time: trendlineStart.time,
+            logical: trendlineStart.logical,
+            price: trendlineStart.price,
+          },
+          p2: {
+            time: time ?? undefined,
+            logical: logical ?? undefined,
+            price: Math.round(price * 100) / 100,
+          },
+          color: "#f59e0b",
+        }
+        setDrawings((prev) => [...prev, newDrawing])
+        setTrendlineStart(null)
+      }
+    } else if (tool === "eraser") {
+      if (hoveredDrawingId) {
+        setDrawings((prev) => prev.filter((d) => d.id !== hoveredDrawingId))
+        setHoveredDrawingId(null)
+      }
+    }
+  }
+
+  const clearAllDrawings = () => {
+    setDrawings([])
+    setTrendlineStart(null)
+    setHoveredDrawingId(null)
+    try {
+      localStorage.removeItem(storageKey)
+    } catch {}
+  }
+
+  const chartWidth = chartDim.width || 800
+
   return (
     <div className={cn("relative w-full flex-1 min-h-[300px]", className)} style={{ minHeight: "300px", height: "100%" }}>
       <div ref={el} className="w-full h-full min-h-[300px]" style={{ minHeight: "300px", height: "100%" }} />
+
+      {/* SVG Interactive Drawing Layer */}
+      <svg
+        className={cn(
+          "absolute inset-0 w-full h-full select-none z-10",
+          tool !== "none" ? "pointer-events-auto cursor-crosshair" : "pointer-events-none"
+        )}
+      >
+        {/* Background event catcher when in drawing/eraser mode */}
+        {tool !== "none" && (
+          <rect
+            width="100%"
+            height="100%"
+            fill="transparent"
+            onMouseMove={handleMouseMove}
+            onClick={handleClick}
+            onMouseLeave={() => {
+              setHoverPos(null)
+              setHoveredDrawingId(null)
+            }}
+          />
+        )}
+
+        {/* Render Drawn Elements */}
+        {drawings.map((d) => {
+          const isHovered = d.id === hoveredDrawingId
+
+          if (d.type === "hline") {
+            const y = getHLineY(d.price)
+            if (y === null || y < 0 || y > chartDim.height) return null
+            return (
+              <g key={d.id} className="transition-all">
+                {/* Visual Line */}
+                <line
+                  x1={0}
+                  y1={y}
+                  x2={chartWidth}
+                  y2={y}
+                  stroke={isHovered ? "#ef4444" : d.color || "#38bdf8"}
+                  strokeWidth={isHovered ? 2.5 : 1.5}
+                  strokeDasharray={isHovered ? undefined : "5 3"}
+                  opacity={isHovered ? 1 : 0.85}
+                />
+                {/* Price Pill Tag on Right Price Scale */}
+                <rect
+                  x={Math.max(chartWidth - 58, 20)}
+                  y={y - 9}
+                  width={54}
+                  height={18}
+                  rx={3}
+                  fill={isHovered ? "#ef4444" : "#0284c7"}
+                  opacity={0.95}
+                />
+                <text
+                  x={Math.max(chartWidth - 31, 47)}
+                  y={y + 3.5}
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  fontSize={10}
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                >
+                  {isHovered ? "✕ DEL" : Math.round(d.price)}
+                </text>
+              </g>
+            )
+          }
+
+          if (d.type === "trendline") {
+            const c1 = getPointCoords(d.p1)
+            const c2 = getPointCoords(d.p2)
+            if (!c1 || !c2) return null
+            const midX = (c1.x + c2.x) / 2
+            const midY = (c1.y + c2.y) / 2
+            const deltaPts = Math.round((d.p2.price - d.p1.price) * 10) / 10
+
+            return (
+              <g key={d.id} className="transition-all">
+                {/* Visual Slant Line */}
+                <line
+                  x1={c1.x}
+                  y1={c1.y}
+                  x2={c2.x}
+                  y2={c2.y}
+                  stroke={isHovered ? "#ef4444" : d.color || "#f59e0b"}
+                  strokeWidth={isHovered ? 3 : 2}
+                  opacity={isHovered ? 1 : 0.9}
+                />
+                {/* Anchor Endpoints */}
+                <circle
+                  cx={c1.x}
+                  cy={c1.y}
+                  r={3.5}
+                  fill={isHovered ? "#ef4444" : d.color || "#f59e0b"}
+                  stroke="#ffffff"
+                  strokeWidth={1}
+                />
+                <circle
+                  cx={c2.x}
+                  cy={c2.y}
+                  r={3.5}
+                  fill={isHovered ? "#ef4444" : d.color || "#f59e0b"}
+                  stroke="#ffffff"
+                  strokeWidth={1}
+                />
+                {/* Midpoint Info Pill */}
+                <rect
+                  x={midX - 24}
+                  y={midY - 8}
+                  width={48}
+                  height={16}
+                  rx={3}
+                  fill={isHovered ? "#ef4444" : "#b45309"}
+                  opacity={0.9}
+                />
+                <text
+                  x={midX}
+                  y={midY + 3.5}
+                  textAnchor="middle"
+                  fill="#ffffff"
+                  fontSize={9}
+                  fontFamily="monospace"
+                  fontWeight="bold"
+                >
+                  {isHovered ? "✕ DEL" : `${deltaPts >= 0 ? "+" : ""}${deltaPts}`}
+                </text>
+              </g>
+            )
+          }
+
+          return null
+        })}
+
+        {/* Live Hover Previews */}
+        {tool === "hline" && hoverPos && hoverPos.price !== null && (
+          <g>
+            {/* Guide line across chart */}
+            <line
+              x1={0}
+              y1={hoverPos.y}
+              x2={chartWidth}
+              y2={hoverPos.y}
+              stroke="#38bdf8"
+              strokeWidth={1.5}
+              strokeDasharray="3 3"
+              opacity={0.8}
+            />
+            {/* Price badge right scale */}
+            <rect
+              x={Math.max(chartWidth - 62, 20)}
+              y={hoverPos.y - 10}
+              width={58}
+              height={20}
+              rx={4}
+              fill="#0284c7"
+            />
+            <text
+              x={Math.max(chartWidth - 33, 49)}
+              y={hoverPos.y + 4}
+              textAnchor="middle"
+              fill="#ffffff"
+              fontSize={10}
+              fontFamily="monospace"
+              fontWeight="bold"
+            >
+              {hoverPos.price.toFixed(1)}
+            </text>
+            {/* Floating guidance pill */}
+            <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 140)}, ${Math.max(hoverPos.y - 25, 20)})`}>
+              <rect width={130} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#38bdf8" strokeWidth={0.8} />
+              <text x={65} y={13.5} textAnchor="middle" fill="#38bdf8" fontSize={9.5} fontWeight="500">
+                1-Click to place line
+              </text>
+            </g>
+          </g>
+        )}
+
+        {tool === "trendline" && hoverPos && (
+          <g>
+            {!trendlineStart ? (
+              /* Step 1 Guide */
+              <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 125)}, ${Math.max(hoverPos.y - 25, 20)})`}>
+                <rect width={115} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#f59e0b" strokeWidth={0.8} />
+                <text x={57.5} y={13.5} textAnchor="middle" fill="#f59e0b" fontSize={9.5} fontWeight="500">
+                  Click 1: Start Point
+                </text>
+              </g>
+            ) : (
+              /* Step 2 Rubberband Line */
+              <>
+                <line
+                  x1={trendlineStart.x}
+                  y1={trendlineStart.y}
+                  x2={hoverPos.x}
+                  y2={hoverPos.y}
+                  stroke="#f59e0b"
+                  strokeWidth={2}
+                  strokeDasharray="4 2"
+                />
+                <circle cx={trendlineStart.x} cy={trendlineStart.y} r={4} fill="#f59e0b" stroke="#ffffff" strokeWidth={1} />
+                <circle cx={hoverPos.x} cy={hoverPos.y} r={4} fill="#f59e0b" stroke="#ffffff" strokeWidth={1} />
+                <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 145)}, ${Math.max(hoverPos.y - 25, 20)})`}>
+                  <rect width={140} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#f59e0b" strokeWidth={0.8} />
+                  <text x={70} y={13.5} textAnchor="middle" fill="#f59e0b" fontSize={9.5} fontWeight="500">
+                    {hoverPos.price != null
+                      ? `Click 2: End (${hoverPos.price - trendlineStart.price >= 0 ? "+" : ""}${(hoverPos.price - trendlineStart.price).toFixed(1)} pt)`
+                      : "Click 2: End Point"}
+                  </text>
+                </g>
+              </>
+            )}
+          </g>
+        )}
+
+        {tool === "eraser" && hoverPos && (
+          <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 110)}, ${Math.max(hoverPos.y - 25, 20)})`}>
+            <rect width={105} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#ef4444" strokeWidth={0.8} />
+            <text x={52.5} y={13.5} textAnchor="middle" fill="#ef4444" fontSize={9.5} fontWeight="500">
+              {hoveredDrawingId ? "Click to Erase" : "Hover over a line"}
+            </text>
+          </g>
+        )}
+      </svg>
+
       {overlay && <div className="pointer-events-none absolute left-2 top-2 z-10 sm:left-3 sm:top-3">{overlay}</div>}
 
-      {/* Floating Layered Zoom Controls */}
+      {/* Floating Drawing & Zoom Toolbar */}
       {zoomable && !hideToolbar && (
-        <div className="absolute right-16 top-2 z-10 flex items-center bg-card/85 hover:bg-card backdrop-blur-md border border-border/80 rounded-md shadow-md p-0.5 gap-0.5 transition-all text-xs select-none">
+        <div className="absolute right-14 top-2 z-20 flex items-center bg-card/90 hover:bg-card backdrop-blur-md border border-border/80 rounded-md shadow-md p-0.5 gap-0.5 transition-all text-xs select-none">
+          {/* Pointer / Pan */}
+          <Button
+            variant={tool === "none" ? "secondary" : "ghost"}
+            size="icon-xs"
+            onClick={() => {
+              setTool("none")
+              setTrendlineStart(null)
+              setHoverPos(null)
+            }}
+            className={cn("h-6 w-6", tool === "none" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}
+            title="Pointer / Pan (Default)"
+          >
+            <MousePointer2 className="h-3.5 w-3.5" />
+          </Button>
+
+          {/* Straight Horizontal Line Tool (One-Click) */}
+          <Button
+            variant={tool === "hline" ? "secondary" : "ghost"}
+            size="icon-xs"
+            onClick={() => {
+              setTrendlineStart(null)
+              setTool(tool === "hline" ? "none" : "hline")
+            }}
+            className={cn(
+              "h-6 w-6",
+              tool === "hline"
+                ? "bg-sky-500/20 text-sky-400 border border-sky-500/50 shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Straight Horizontal Line (1-Click on chart)"
+          >
+            <Minus className="h-3.5 w-3.5" />
+          </Button>
+
+          {/* Slant 2-Point Line Tool */}
+          <Button
+            variant={tool === "trendline" ? "secondary" : "ghost"}
+            size="icon-xs"
+            onClick={() => {
+              setTrendlineStart(null)
+              setTool(tool === "trendline" ? "none" : "trendline")
+            }}
+            className={cn(
+              "h-6 w-6",
+              tool === "trendline"
+                ? "bg-amber-500/20 text-amber-400 border border-amber-500/50 shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Slant 2-Point Line (Click 2 points)"
+          >
+            <TrendingUp className="h-3.5 w-3.5" />
+          </Button>
+
+          {/* Eraser Tool */}
+          <Button
+            variant={tool === "eraser" ? "secondary" : "ghost"}
+            size="icon-xs"
+            onClick={() => {
+              setTrendlineStart(null)
+              setTool(tool === "eraser" ? "none" : "eraser")
+            }}
+            className={cn(
+              "h-6 w-6",
+              tool === "eraser"
+                ? "bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+            title="Eraser (Click any line to erase)"
+          >
+            <Eraser className="h-3.5 w-3.5" />
+          </Button>
+
+          {/* Clear All Drawings (Day) */}
+          {drawings.length > 0 && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              onClick={clearAllDrawings}
+              className="h-6 w-6 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
+              title={`Clear All Drawings for Today (${drawings.length})`}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          )}
+
+          <div className="w-[1px] h-3 bg-border mx-0.5" />
+
+          {/* Zoom controls */}
           <Button
             variant="ghost"
             size="icon-xs"
@@ -525,3 +1098,4 @@ export function CandleChart({ date, candles, forming, currentPrice, setup, trade
     </div>
   )
 }
+

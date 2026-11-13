@@ -1527,6 +1527,7 @@ export function LivePage() {
                 <div className="flex-1 min-h-0 relative">
                   <CandleChart
                     date={today}
+                    symbol="SENSEX"
                     candles={sensexDay.data?.candles ?? []}
                     forming={sensexDay.data?.forming}
                     currentPrice={sensexLtp}
@@ -1592,6 +1593,7 @@ export function LivePage() {
                 <div className="flex-1 min-h-0 relative">
                   <CandleChart
                     date={today}
+                    symbol="NIFTY"
                     candles={niftyDay.data?.candles ?? []}
                     forming={niftyDay.data?.forming}
                     currentPrice={niftyLtp}
