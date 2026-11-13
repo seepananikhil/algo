@@ -220,6 +220,7 @@ function ActiveTradeCard({
                 value={tpVal === 0 ? "" : tpVal}
                 placeholder="0 pt"
                 onChange={(e) => setTpVal(Math.max(0, parseFloat(e.target.value) || 0))}
+                onBlur={() => handleSave()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave()
                 }}
@@ -270,6 +271,7 @@ function ActiveTradeCard({
                 value={tlVal === 0 ? "" : tlVal}
                 placeholder="0 pt"
                 onChange={(e) => setTlVal(Math.max(0, parseFloat(e.target.value) || 0))}
+                onBlur={() => handleSave()}
                 onKeyDown={(e) => {
                   if (e.key === "Enter") handleSave()
                 }}
