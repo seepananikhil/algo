@@ -513,19 +513,29 @@ def _guardian_loop():
     global _guardian_running
     logger.info("🛡️ [RISK GUARDIAN] Watcher loop running.")
     while _guardian_running:
+        had_error = False
         try:
-            check_and_enforce_guardian()
+            res = check_and_enforce_guardian()
+            if isinstance(res, dict) and not res.get("enabled", True):
+                time.sleep(5.0)
+                continue
         except Exception as exc:
+            had_error = True
             logger.error(f"Error in Risk Guardian loop: {exc}")
 
-        # Poll rapidly during market hours (every 1.5 seconds)
+        # If broker had an error, backoff 8 seconds to prevent high-frequency loop choking
+        if had_error:
+            time.sleep(8.0)
+            continue
+
+        # Poll during market hours (every 3.0 seconds is plenty fast and prevents connection starvation)
         now_t = datetime.now(IST).time()
         market_open = datetime.strptime("09:14", "%H:%M").time()
         market_close = datetime.strptime("15:35", "%H:%M").time()
         if market_open <= now_t <= market_close:
-            time.sleep(1.5)
+            time.sleep(3.0)
         else:
-            time.sleep(5.0)
+            time.sleep(10.0)
 
 
 def start_risk_guardian():

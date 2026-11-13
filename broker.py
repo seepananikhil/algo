@@ -15,6 +15,8 @@ TMP_DIR = ROOT / ".tmp"
 # Persistent caches to prevent UI MTM flickering during intermittent broker quote drops
 _last_positions_cache: dict = {}
 _last_known_ltps: dict = {}
+_last_positions_time: float = 0.0
+_last_positions_err_time: float = 0.0
 
 def get_active_broker() -> str:
     """Return 'KOTAK_NEO' (sole active broker)."""
@@ -85,7 +87,16 @@ def get_all_broker_status() -> dict:
 
 
 def kotak_positions() -> dict:
-    global _last_positions_cache
+    global _last_positions_cache, _last_positions_time, _last_positions_err_time
+    import time
+    now = time.time()
+    # Serve cached positions if requested within 2.5s to avoid duplicate API calls
+    if (now - _last_positions_time) < 2.5 and _last_positions_cache.get("ok"):
+        return _last_positions_cache
+    # If recent broker error, backoff for 8s to prevent hammering failing broker API
+    if (now - _last_positions_err_time) < 8.0 and _last_positions_cache.get("ok"):
+        return _last_positions_cache
+
     from kotak_orders import get_kotak_client, kotak_token_status
     status = kotak_token_status()
     if not status.get("valid"):
@@ -244,8 +255,10 @@ def kotak_positions() -> dict:
             },
         }
         _last_positions_cache = result
+        _last_positions_time = time.time()
         return result
     except Exception as exc:
+        _last_positions_err_time = time.time()
         if _last_positions_cache.get("ok"):
             return _last_positions_cache
         return {"ok": False, "error": f"Error parsing Kotak positions: {exc}", "open_positions": [], "closed_positions": [], "summary": {}}

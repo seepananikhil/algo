@@ -21,6 +21,7 @@ import subprocess
 import sys
 import threading
 import time
+import traceback
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -843,6 +844,7 @@ def log_engine_telemetry(symbol: str, engine: str, level: str, message: str) -> 
         "message": message,
     }
     ENGINE_TELEMETRY_LOGS.append(entry)
+    print(f"[{now_str}] [{symbol.upper()}] [{engine}] [{level}] {message}", flush=True)
 
 def log_live_order_event(action: str, symbol: str, qty: int, order_id: str, fill_price: float = 0.0, reason: str = "", mode: str = "LIVE", trade_pnl_rs: float = 0.0) -> None:
     try:
@@ -975,8 +977,8 @@ def trend_runner_forward_loop() -> None:
                     print(f"[{datetime.now(IST):%H:%M:%S}] [Apex Duo LIVE PAPER] Position Event: {res}")
                     log_engine_telemetry("NIFTY", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
-        except Exception:
-            pass
+        except Exception as e:
+            traceback.print_exc()
         time.sleep(5)
 
 
@@ -1086,8 +1088,8 @@ def sensex_runner_forward_loop() -> None:
                     print(f"[{datetime.now(IST):%H:%M:%S}] [Sensex Apex Duo LIVE PAPER] Position Event: {res}")
                     log_engine_telemetry("SENSEX", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
-        except Exception:
-            pass
+        except Exception as e:
+            traceback.print_exc()
         time.sleep(5)
 
 

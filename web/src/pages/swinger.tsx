@@ -142,6 +142,44 @@ export function SwingerPage() {
   // Filters for 'all' tab
   const [filterType, setFilterType] = useState<'ALL' | 'ACTIVE' | 'CLOSED' | 'RADAR' | 'TODAY'>('ALL')
   const [searchQuery, setSearchQuery] = useState('')
+  const [displayLimit, setDisplayLimit] = useState(30)
+  const [yearGrouping, setYearGrouping] = useState<'entry' | 'exit'>('entry')
+
+  const dynamicYearly = useMemo(() => {
+    if (yearGrouping === 'exit') {
+      return yearly
+    }
+    const map = new Map<string, Trade[]>()
+    trades.forEach((t) => {
+      const yr = (t.entry_date || '').slice(0, 4)
+      if (!yr) return
+      if (!map.has(yr)) map.set(yr, [])
+      map.get(yr)!.push(t)
+    })
+    const list: any[] = []
+    Array.from(map.keys()).sort().forEach((yr) => {
+      const arr = map.get(yr)!
+      const wins = arr.filter((t) => (t.pnl || 0) > 0)
+      const losses = arr.filter((t) => (t.pnl || 0) <= 0)
+      const pnl = arr.reduce((acc, t) => acc + (t.pnl || 0), 0)
+      const gain = wins.reduce((acc, t) => acc + (t.pnl || 0), 0)
+      const loss = Math.abs(losses.reduce((acc, t) => acc + (t.pnl || 0), 0))
+      const pf = loss > 0 ? Number((gain / loss).toFixed(2)) : 99.0
+      const wr = arr.length > 0 ? Number(((wins.length / arr.length) * 100).toFixed(1)) : 0
+      list.push({
+        year: yr,
+        trades: arr.length,
+        wins: wins.length,
+        losses: losses.length,
+        win_rate: wr,
+        profit_factor: pf,
+        pnl: pnl,
+        pnl_pct: (pnl / 250000.0) * 100,
+        avg_return_pct: arr.reduce((acc, t) => acc + (t.pnl_pct ?? t.pct_return ?? 0), 0) / arr.length
+      })
+    })
+    return list
+  }, [trades, yearly, yearGrouping])
 
   const fetchData = async () => {
     try {
@@ -178,7 +216,7 @@ export function SwingerPage() {
 
   useEffect(() => {
     fetchData()
-    const interval = setInterval(fetchData, 15000)
+    const interval = setInterval(fetchData, 30000)
     return () => clearInterval(interval)
   }, [])
 
@@ -375,6 +413,11 @@ export function SwingerPage() {
       return true
     })
   }, [unifiedTriggers, filterType, searchQuery])
+
+  // Paginated visible triggers to ensure silky smooth 60fps rendering
+  const visibleTriggers = useMemo(() => {
+    return filteredUnifiedTriggers.slice(0, displayLimit)
+  }, [filteredUnifiedTriggers, displayLimit])
 
   // Trades on Clicked Calendar Date
   const calendarSelectedTrades = useMemo(() => {
@@ -624,7 +667,7 @@ export function SwingerPage() {
                     </td>
                   </tr>
                 ) : (
-                  filteredUnifiedTriggers.map((item, idx) => {
+                  visibleTriggers.map((item, idx) => {
                     const isPositive = (item.pnl || item.pnlPct || 0) >= 0
 
                     return (
@@ -731,6 +774,33 @@ export function SwingerPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {filteredUnifiedTriggers.length > displayLimit && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 px-2">
+              <span className="text-xs text-slate-500 font-medium">
+                Showing <span className="font-bold text-slate-800">{visibleTriggers.length}</span> of <span className="font-bold text-slate-800">{filteredUnifiedTriggers.length}</span> entries
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDisplayLimit((prev) => prev + 30)}
+                  className="text-xs font-bold rounded-xl h-8 px-3"
+                >
+                  Show Next 30
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDisplayLimit(filteredUnifiedTriggers.length)}
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-xl h-8 px-3"
+                >
+                  Show All ({filteredUnifiedTriggers.length})
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -860,21 +930,46 @@ export function SwingerPage() {
 
           {/* Yearly Consistency Cards */}
           <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
               <div>
                 <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
                   <BarChart3 className="size-5 text-emerald-600" />
                   Annual Consistency Scorecard (2022 - 2026)
                 </h3>
-                <p className="text-xs text-slate-500 font-medium">Verified historical performance across complete market cycles</p>
+                <p className="text-xs text-slate-500 font-medium">
+                  {yearGrouping === 'entry' 
+                    ? "Cohort Performance: Grouped by Setup Signal Year (Shows true strategy efficacy for trades entered in each year)" 
+                    : "Realized Accounting: Grouped by Exit Date (Shows when cash profits/losses were booked on exits)"}
+                </p>
               </div>
-              <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300 font-mono">
-                {yearly.length} Full Cycles Tracked
-              </span>
+              
+              <div className="flex items-center gap-2 flex-wrap">
+                <div className="flex items-center bg-slate-100 p-1 rounded-2xl border border-slate-200/80">
+                  <button
+                    onClick={() => setYearGrouping('entry')}
+                    className={`px-3 py-1 text-xs font-bold rounded-xl transition ${
+                      yearGrouping === 'entry' ? "bg-white text-emerald-800 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    By Signal Year (Vintage)
+                  </button>
+                  <button
+                    onClick={() => setYearGrouping('exit')}
+                    className={`px-3 py-1 text-xs font-bold rounded-xl transition ${
+                      yearGrouping === 'exit' ? "bg-white text-indigo-800 shadow-xs" : "text-slate-600 hover:text-slate-900"
+                    }`}
+                  >
+                    By Realized Exit Date
+                  </button>
+                </div>
+                <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-700 border border-slate-300 font-mono">
+                  {dynamicYearly.length} Cycles Tracked
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
-              {yearly.map((y) => {
+              {dynamicYearly.map((y) => {
                 const isProf = (y.pnl ?? 0) > 0
                 const retPct = y.pnl_pct ?? y.avg_return_pct ?? 0
                 const winRate = y.win_rate ?? 0
@@ -1141,6 +1236,33 @@ export function SwingerPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {filteredUnifiedTriggers.length > displayLimit && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 px-2">
+              <span className="text-xs text-slate-500 font-medium">
+                Showing <span className="font-bold text-slate-800">{visibleTriggers.length}</span> of <span className="font-bold text-slate-800">{filteredUnifiedTriggers.length}</span> entries
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDisplayLimit((prev) => prev + 30)}
+                  className="text-xs font-bold rounded-xl h-8 px-3"
+                >
+                  Show Next 30
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDisplayLimit(filteredUnifiedTriggers.length)}
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-xl h-8 px-3"
+                >
+                  Show All ({filteredUnifiedTriggers.length})
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1298,6 +1420,33 @@ export function SwingerPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination Controls */}
+          {filteredUnifiedTriggers.length > displayLimit && (
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 px-2">
+              <span className="text-xs text-slate-500 font-medium">
+                Showing <span className="font-bold text-slate-800">{visibleTriggers.length}</span> of <span className="font-bold text-slate-800">{filteredUnifiedTriggers.length}</span> entries
+              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setDisplayLimit((prev) => prev + 30)}
+                  className="text-xs font-bold rounded-xl h-8 px-3"
+                >
+                  Show Next 30
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setDisplayLimit(filteredUnifiedTriggers.length)}
+                  className="text-xs font-bold text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 rounded-xl h-8 px-3"
+                >
+                  Show All ({filteredUnifiedTriggers.length})
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
