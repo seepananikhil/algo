@@ -42,6 +42,11 @@ export interface SwingerTradeTarget {
   qty?: number
   shares?: number
   status?: string
+  leg?: number
+  strategy_leg?: string
+  base_high?: number
+  base_low?: number
+  surge_date?: string
 }
 
 interface CandleData {
@@ -164,6 +169,7 @@ export function SwingerTradeChartModal({
 
   // Chart feature toggles (Cleaner defaults: 1 Year view, EMA on, Levels on)
   const [showVolume, setShowVolume] = useState(true)
+  const [showEMA50, setShowEMA50] = useState(true)
   const [showEMA200, setShowEMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
   const [activeRange, setActiveRange] = useState<"3m" | "6m" | "1y" | "2y" | "all">("1y")
@@ -354,7 +360,20 @@ export function SwingerTradeChartModal({
       volumeSeriesRef.current = volumeSeries
     }
 
-    // 3. 200 EMA Line (Clean amber/gold curve)
+    // 3A. 50 EMA Line (Clean cyan curve)
+    let ema50Series: ISeriesApi<"Line"> | null = null
+    const ema50Values = calculateEMA(candles, 50)
+    if (showEMA50 && ema50Values.length > 0) {
+      ema50Series = chart.addSeries(LineSeries, {
+        color: "#06b6d4",
+        lineWidth: 2,
+        title: "50 EMA",
+        priceLineVisible: false
+      })
+      ema50Series.setData(ema50Values as any)
+    }
+
+    // 3B. 200 EMA Line (Clean amber/gold curve)
     let emaSeries: ISeriesApi<"Line"> | null = null
     const emaValues = calculateEMA(candles, 200)
     if (showEMA200 && emaValues.length > 0) {
@@ -373,8 +392,9 @@ export function SwingerTradeChartModal({
     if (showLevels) {
       const entryPrice = trade.avg_price ?? trade.entry_price
       if (entryPrice && entryPrice > 0) {
-        const slPrice = entryPrice * 0.80 // -20% SL
-        const bePrice = entryPrice * 1.15 // +15% BE Shield
+        const isLeg2 = (trade as any).leg === 2 || (trade as any).strategy_leg === "LEG2_BREAKOUT"
+        const slPrice = entryPrice * (isLeg2 ? 0.92 : 0.75) // Leg 2: -8%, Leg 1: -25%
+        const bePrice = entryPrice * (isLeg2 ? 1.10 : 1.15) // BE Shield
         const tpPrice = entryPrice * 1.30 // +30% TP1
 
         // Entry Line (Clean Emerald Dashed)
@@ -394,7 +414,7 @@ export function SwingerTradeChartModal({
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: `SL ₹${slPrice.toFixed(1)}`
+          title: `${isLeg2 ? "SL -8% (Leg 2)" : "SL -25% (Leg 1)"} ₹${slPrice.toFixed(1)}`
         })
 
         // Break-Even Shield Line (Sky Blue Dotted)
@@ -407,18 +427,27 @@ export function SwingerTradeChartModal({
           title: `BE ₹${bePrice.toFixed(1)}`
         })
 
-        // TP1 Line (Emerald Dashed)
+        // Runner Trigger Line (Purple/Emerald Dashed)
         candleSeries.createPriceLine({
           price: tpPrice,
-          color: "#16a34a",
+          color: "#9333ea",
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `TP1 ₹${tpPrice.toFixed(1)}`
+          title: `RUNNER TRIGGER ₹${tpPrice.toFixed(1)} (+30%)`
         })
 
-        // Exit Line (if closed)
-        if (trade.exit_price && trade.exit_price > 0) {
+        // Exit Line (ONLY if truly closed - NOT active/open)
+        const isTradeActive = 
+          trade.status === "OPEN" || 
+          trade.status === "ACTIVE" ||
+          trade.status === "SHIELDED" ||
+          trade.status === "RUNNER" ||
+          trade.reason === "Active Position" || 
+          trade.reason === "Marked to Market / Active" ||
+          !trade.exit_date;
+
+        if (!isTradeActive && trade.exit_price && trade.exit_price > 0) {
           candleSeries.createPriceLine({
             price: trade.exit_price,
             color: (trade.pnl ?? 0) >= 0 ? "#10b981" : "#e11d48",
@@ -426,7 +455,7 @@ export function SwingerTradeChartModal({
             lineStyle: LineStyle.Solid,
             axisLabelVisible: true,
             title: `EXIT ₹${trade.exit_price.toFixed(1)}`
-          })
+          });
         }
       }
     }
@@ -448,7 +477,16 @@ export function SwingerTradeChartModal({
     }
 
     const validExitTime = sanitizeDateToCandleTime(trade.exit_date, candles)
-    if (validExitTime && trade.exit_price) {
+    const isTradeActiveForMarker = 
+      trade.status === "OPEN" || 
+      trade.status === "ACTIVE" ||
+      trade.status === "SHIELDED" ||
+      trade.status === "RUNNER" ||
+      trade.reason === "Active Position" || 
+      trade.reason === "Marked to Market / Active" ||
+      !trade.exit_date;
+
+    if (!isTradeActiveForMarker && validExitTime && trade.exit_price) {
       const isWin = (trade.pnl ?? 0) >= 0
       const ret = trade.pnl_pct ?? trade.pct_return ?? 0
       markers.push({
@@ -592,7 +630,16 @@ export function SwingerTradeChartModal({
   const isWin = pnl >= 0
   const entryPrice = trade.avg_price ?? trade.entry_price
   const hasTradeDetails = Boolean(trade.entry_date && entryPrice)
-  const isOpen = hasTradeDetails && !trade.exit_date
+  const isOpen = 
+    hasTradeDetails && (
+      !trade.exit_date || 
+      trade.status === "OPEN" || 
+      trade.status === "ACTIVE" || 
+      trade.status === "SHIELDED" || 
+      trade.status === "RUNNER" || 
+      trade.reason === "Active Position" || 
+      trade.reason === "Marked to Market / Active"
+    )
 
   // Prev / Next trade in sequence
   const curIdx = allTrades ? allTrades.findIndex((t) => t.symbol === trade.symbol) : -1
@@ -622,6 +669,17 @@ export function SwingerTradeChartModal({
                 <span className="text-xs text-slate-500 font-medium hidden sm:inline">
                   {trade.name || trade.symbol}
                 </span>
+
+                {(trade as any).leg === 2 || (trade as any).strategy_leg === "LEG2_BREAKOUT" ? (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-300 flex items-center gap-1">
+                    <span className="size-1.5 rounded-full bg-purple-600 animate-pulse" />
+                    LEG 2 · Base Breakout (-8% SL)
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-blue-50 text-blue-700 border-blue-300">
+                    LEG 1 · Deep Value (-25% SL)
+                  </span>
+                )}
 
                 {hasTradeDetails ? (
                   <span
@@ -855,6 +913,19 @@ export function SwingerTradeChartModal({
 
           {/* Right: Technical Layer Toggles */}
           <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setShowEMA50(!showEMA50)}
+              className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition flex items-center gap-1 ${
+                showEMA50
+                  ? "bg-cyan-50 text-cyan-800 border-cyan-300"
+                  : "bg-white text-slate-400 border-slate-200"
+              }`}
+            >
+              <span className="size-1.5 rounded-full bg-cyan-500 inline-block" />
+              50 EMA
+            </button>
+
             <button
               type="button"
               onClick={() => setShowEMA200(!showEMA200)}

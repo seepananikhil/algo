@@ -1,2 +1,2 @@
 date,trade_num,stage,side,option,option_symbol,option_entry_price,option_exit_price,option_pnl_points,option_pnl_rupees,entry_time,entry_price,sl,final_sl,target,exit_time,exit_price,exit_reason,pnl_points,pnl_rupees,futures_pnl_rupees,diff_rupees,max_fav,max_adv,rr,lots,qty,vix_chg,initial_sl,base_lots,total_lots,pyramided
-2026-11-13,1,STAGE1_TREND,LONG,NIFTY 25100 CE (ITM-150),,0.0,0.0,-21.0,-1050.0,09:56,25225.3,,25197.3,,10:04,25197.3,STOP_LOSS,-28.0,-1050.0,-1400.0,-350.0,4.1,,-1.0,,,-1.73,25197.3,2,2,False
+2026-11-13,1,STAGE1_TREND,LONG,NIFTY 25100 CE,NIFTY26N1725100CE,239.60,218.00,-21.60,-540.00,09:56,25225.30,25197.30,25197.30,,10:04,25197.30,STOP_LOSS,-28.00,-540.00,-700.00,-160.00,4.10,28.00,-1.0,1,25,-1.73,25197.30,1,1,False

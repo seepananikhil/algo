@@ -49,6 +49,8 @@ interface Position {
   status?: string
   exit_rule?: string
   ema20?: number
+  leg?: number
+  strategy_leg?: string
 }
 
 interface Trade {
@@ -140,6 +142,10 @@ export function SwingerPage() {
   // Navigation Tabs: 'all' | 'holdings' | 'calendar' | 'radar'
   const [activeTab, setActiveTab] = useState<"all" | "holdings" | "calendar" | "radar">("all")
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [tradeLogSearch, setTradeLogSearch] = useState("")
+  const [tradeLogYear, setTradeLogYear] = useState<string>("ALL")
+  const [tradeLogFilter, setTradeLogFilter] = useState<"ALL" | "MULTIBAGGER" | "WIN" | "LOSS">("ALL")
+  const [tradeLogLimit, setTradeLogLimit] = useState(50)
 
   // Filters for 'all' triggers tab
   const [filterType, setFilterType] = useState<"ALL" | "TODAY" | "ACTIVE" | "WIN" | "LOSS" | "RADAR">("ALL")
@@ -253,15 +259,23 @@ export function SwingerPage() {
 
   const formatExitReason = (r?: string) => {
     if (!r || typeof r !== "string") return "Swing Exit"
+    if (r.includes("Open / End of Data")) return "Still Open (Live Holding)"
+    if (r.includes("50 EMA Volume Breakdown")) return "50 EMA Vol Breakdown"
+    if (r.includes("Backup Close Trailing Stop")) return "Backup 25% Close Trail"
+    if (r.includes("Profit Vault")) return "Vault Floor (+25%)"
     return r
-      .replace("RUNNER_TRAIL_25PCT", "Runner 25% Trail")
+      .replace("Institutional Volume Exhaustion Exit (Broken EMA20 on 2x Vol)", "Vol Exhaustion Exit")
+      .replace("Full Momentum Peak Trail (20% from High)", "20% Peak Trail")
+      .replace("RUNNER_TRAIL_25PCT", "Runner 20% Trail")
       .replace("INITIAL_SL_25PCT", "Initial SL -25%")
       .replace("BE_SHIELD_STOP", "BE Shield @ Cost")
       .replace("MAX_HOLD_1YEAR", "1-Year Max Hold")
-      .replace("TP 50% Hit (+100%) -> Trailed 25% Runner Exit", "TP1 + Runner 25% Trail")
-      .replace("TP1 Hit (+30%) -> Trailed 25% Runner Exit", "TP1 (+30%) + Runner Trail")
+      .replace("TP 50% Hit (+100%) -> Trailed 25% Runner Exit", "Runner 20% Trail")
+      .replace("TP1 Hit (+30%) -> Trailed 25% Runner Exit", "Runner 20% Trail")
       .replace("Break-Even Shield Exit (Cost Protected)", "BE Shield @ Cost")
       .replace("Initial Stop-Loss (-25%)", "Initial SL -25%")
+      .replace("Initial Stop-Loss (-20%)", "Initial SL -20%")
+      .replace("Time Exit (250 Trading Days / 1-Year Max)", "1-Year Max Hold")
       .replace("Time Exit (250 Trading Days)", "1-Year Max Hold")
   }
 
@@ -337,7 +351,7 @@ export function SwingerPage() {
         bookedPnl: p.booked_pnl ?? 0,
         daysHeld: p.days_held,
         statusLabel: p.runner_mode
-          ? "Runner Trailing 25%"
+          ? "Runner Trailing 20%"
           : p.be_active
           ? "Shield Active (Cost Protected)"
           : "Holding Active",
@@ -435,6 +449,30 @@ export function SwingerPage() {
     return filteredUnifiedTriggers.slice(0, displayLimit)
   }, [filteredUnifiedTriggers, displayLimit])
 
+  // Master Trade Log Filtered by Year, Outcome and Search
+  const filteredTradeLog = useMemo(() => {
+    return trades.filter((t) => {
+      if (tradeLogYear !== "ALL") {
+        const exitYr = (t.exit_date || "").slice(0, 4)
+        const entryYr = (t.entry_date || "").slice(0, 4)
+        if (exitYr !== tradeLogYear && entryYr !== tradeLogYear) return false
+      }
+      const pnl = t.pnl ?? 0
+      const pnlPct = t.pnl_pct ?? (t as any).pct_return ?? 0
+      if (tradeLogFilter === "MULTIBAGGER" && pnlPct < 100.0) return false
+      if (tradeLogFilter === "WIN" && pnl <= 0) return false
+      if (tradeLogFilter === "LOSS" && pnl > 0) return false
+
+      if (tradeLogSearch.trim()) {
+        const q = tradeLogSearch.toLowerCase().trim()
+        const symMatch = t.symbol.toLowerCase().includes(q)
+        const nameMatch = (t.name || "").toLowerCase().includes(q)
+        if (!symMatch && !nameMatch) return false
+      }
+      return true
+    })
+  }, [trades, tradeLogYear, tradeLogFilter, tradeLogSearch])
+
   // Trades on Clicked Calendar Date
   const calendarSelectedTrades = useMemo(() => {
     if (!selectedDate) return []
@@ -471,7 +509,7 @@ export function SwingerPage() {
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Turnaround Momentum Engine · -20% Stop Loss · +15% Break-Even Shield · +30% Take Profit 1 · 25% Runner Trail
+            Turnaround Momentum Engine · -20% Stop Loss · +15% Break-Even Shield · 100% Full Momentum Ride · 20% Peak Trail + Volume Exhaustion Exit
           </p>
         </div>
 
@@ -972,7 +1010,7 @@ export function SwingerPage() {
                 Active Portfolio Positions ({positions.length} Stocks)
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Autonomous SL tracking: -20% Initial SL · +15% Cost Shield · +30% TP1 Booking · 25% Runner Trail
+                Autonomous SL tracking: -25% Initial SL · +15% BE Shield · Pyramid @ +20% · +25% Vault Lock @ +50% · 50 EMA Vol Breakdown + 25% Close Trail
               </p>
             </div>
             <div className="text-right">
@@ -995,8 +1033,8 @@ export function SwingerPage() {
                     <th className="p-3.5 font-mono">Qty</th>
                     <th className="p-3.5">Stop Loss (₹)</th>
                     <th className="p-3.5">Break-Even Shield</th>
-                    <th className="p-3.5">TP1 (+30%)</th>
-                    <th className="p-3.5">Runner Trail</th>
+                    <th className="p-3.5">Runner Trigger (+30%)</th>
+                    <th className="p-3.5">20% Peak Trail</th>
                     <th className="p-3.5 font-mono">Held</th>
                     <th className="p-3.5 text-right font-mono">Open P&L</th>
                     <th className="p-3.5 text-center">Chart</th>
@@ -1013,7 +1051,8 @@ export function SwingerPage() {
                     positions.map((p) => {
                       const avgCost = p.avg_price ?? p.entry_price
                       const isPositive = (p.unrealized_pnl || 0) >= 0
-                      const slDisplay = p.sl_price ?? avgCost * 0.75
+                      const isLeg2 = p.leg === 2 || (p as any).strategy_leg === "LEG2_BREAKOUT"
+                      const slDisplay = p.sl_price ?? (isLeg2 ? avgCost * 0.92 : avgCost * 0.75)
                       const beTarget = p.be_trigger_price ?? avgCost * 1.2
                       const tpTarget = p.tp_target_price ?? avgCost * 1.3
 
@@ -1031,6 +1070,17 @@ export function SwingerPage() {
                             <div className="text-[11px] text-slate-500 font-medium truncate max-w-[130px]">
                               {p.name || p.symbol}
                             </div>
+                            <div className="flex items-center gap-1 mt-0.5">
+                              {p.leg === 2 ? (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-300">
+                                  LEG 2 BREAKOUT
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-blue-100 text-blue-700 border border-blue-300">
+                                  LEG 1 TURNAROUND
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-3.5 font-mono text-slate-600 font-medium">{p.entry_date}</td>
                           <td className="p-3.5 font-mono font-bold text-slate-900">₹{avgCost.toFixed(2)}</td>
@@ -1041,7 +1091,7 @@ export function SwingerPage() {
                               ₹{slDisplay.toFixed(2)}
                             </span>
                             <span className="block text-[10px] text-slate-400 font-normal">
-                              {p.runner_mode ? "25% Trail" : p.be_active ? "Cost Shield" : "Initial -20%"}
+                              {p.runner_mode ? "25% Trail" : p.be_active ? "Cost Shield" : isLeg2 ? "Initial -8%" : "Initial -25%"}
                             </span>
                           </td>
                           <td className="p-3.5 font-mono">
@@ -1058,8 +1108,8 @@ export function SwingerPage() {
                           </td>
                           <td className="p-3.5 font-mono">
                             {p.tp_hit || p.tp_50_hit ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                                50% Booked (+30%)
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                                100% Runner Active
                               </span>
                             ) : (
                               <span className="text-emerald-700 font-bold">
@@ -1391,6 +1441,223 @@ export function SwingerPage() {
                 </div>
               )}
             </div>
+          </div>
+
+          {/* Master Historical Trade Log Table with Instant Search */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <Sparkles className="size-5 text-emerald-600" />
+                  Master Closed Trade Log ({filteredTradeLog.length} of {trades.length} Closed Trades)
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">
+                  Search any symbol (e.g. PAYTM, STLTECH, SMSPHARMA) or filter by year and multi-baggers. Click any row to open full chart.
+                </p>
+              </div>
+
+              {/* Search Box */}
+              <div className="relative w-full sm:w-64">
+                <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="text"
+                  placeholder="Search symbol (e.g. PAYTM)..."
+                  value={tradeLogSearch}
+                  onChange={(e) => setTradeLogSearch(e.target.value)}
+                  className="w-full pl-9 pr-7 py-1.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
+                />
+                {tradeLogSearch && (
+                  <button
+                    onClick={() => setTradeLogSearch("")}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                  >
+                    ×
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Year & Category Filter Pills */}
+            <div className="flex items-center justify-between flex-wrap gap-2 pt-2 border-t border-slate-100">
+              {/* Year Tabs */}
+              <div className="flex items-center gap-1 flex-wrap text-xs">
+                {["ALL", "2026", "2025", "2024", "2023", "2022"].map((yr) => (
+                  <button
+                    key={yr}
+                    type="button"
+                    onClick={() => setTradeLogYear(yr)}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                      tradeLogYear === yr
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    {yr === "ALL" ? `All Years (${trades.length})` : yr}
+                  </button>
+                ))}
+              </div>
+
+              {/* Outcome Tabs */}
+              <div className="flex items-center gap-1 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTradeLogFilter("ALL")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    tradeLogFilter === "ALL"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
+                >
+                  All
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTradeLogFilter("MULTIBAGGER")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
+                    tradeLogFilter === "MULTIBAGGER"
+                      ? "bg-purple-600 text-white"
+                      : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200"
+                  }`}
+                >
+                  <Flame className="size-3" />
+                  Multi-Baggers (100%+)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTradeLogFilter("WIN")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    tradeLogFilter === "WIN"
+                      ? "bg-emerald-600 text-white"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                  }`}
+                >
+                  Winners
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTradeLogFilter("LOSS")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    tradeLogFilter === "LOSS"
+                      ? "bg-rose-600 text-white"
+                      : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                  }`}
+                >
+                  Losses
+                </button>
+              </div>
+            </div>
+
+            {/* The Clean Table */}
+            <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="p-3">Symbol</th>
+                    <th className="p-3">Entry Date</th>
+                    <th className="p-3">Exit Date</th>
+                    <th className="p-3 font-mono">Buy (₹)</th>
+                    <th className="p-3 font-mono">Exit (₹)</th>
+                    <th className="p-3 font-mono">Shares</th>
+                    <th className="p-3 font-mono">Held</th>
+                    <th className="p-3">Exit Reason</th>
+                    <th className="p-3 text-right font-mono">Realized P&L</th>
+                    <th className="p-3 text-center">Chart</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {filteredTradeLog.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="p-8 text-center text-slate-400 font-medium">
+                        No closed trades match your search or filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredTradeLog.slice(0, tradeLogLimit).map((t, idx) => {
+                      const isWin = (t.pnl || 0) > 0
+                      const pnlPct = t.pnl_pct ?? (t as any).pct_return ?? 0
+                      const isMultibagger = pnlPct >= 100.0
+
+                      return (
+                        <tr
+                          key={t.trade_id || `${t.symbol}-${idx}`}
+                          onClick={() => setSelectedTradeForChart(t as any)}
+                          className="hover:bg-slate-50 cursor-pointer transition group"
+                        >
+                          <td className="p-3">
+                            <div className="font-black text-slate-900 group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono">
+                              <span className="hover:underline">{t.symbol}</span>
+                              {isMultibagger && (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-0.5">
+                                  <Flame className="size-2.5 text-purple-600" />
+                                  100%+
+                                </span>
+                              )}
+                              <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
+                            </div>
+                            <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
+                              {t.name || t.symbol}
+                            </div>
+                          </td>
+                          <td className="p-3 font-mono text-slate-600">{t.entry_date}</td>
+                          <td className="p-3 font-mono text-slate-600">{t.exit_date}</td>
+                          <td className="p-3 font-mono font-medium text-slate-900">
+                            ₹{(t.avg_price ?? t.entry_price ?? 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 font-mono font-bold text-slate-900">
+                            ₹{(t.exit_price ?? 0).toFixed(2)}
+                          </td>
+                          <td className="p-3 font-mono text-slate-700">
+                            {t.shares ?? t.qty ?? 0}
+                          </td>
+                          <td className="p-3 font-mono text-slate-600">
+                            {t.days_held ?? (t as any).holding_days ?? 0}d
+                          </td>
+                          <td className="p-3 text-slate-600 font-medium">
+                            {formatExitReason(t.reason || (t as any).exit_reason)}
+                          </td>
+                          <td className="p-3 text-right font-mono font-black">
+                            <span className={isWin ? (isMultibagger ? "text-purple-700 font-black" : "text-emerald-600") : "text-rose-600"}>
+                              {isWin ? "+" : ""}₹{(t.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                              <span className="block text-[10px] font-semibold">
+                                ({isWin ? "+" : ""}{pnlPct.toFixed(1)}%)
+                              </span>
+                            </span>
+                          </td>
+                          <td className="p-3 text-center">
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setSelectedTradeForChart(t as any)
+                              }}
+                              className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1"
+                            >
+                              <LineChart className="size-3.5" />
+                              Chart
+                            </Button>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Pagination / Load more */}
+            {filteredTradeLog.length > tradeLogLimit && (
+              <div className="flex justify-center pt-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setTradeLogLimit((prev: number) => prev + 50)}
+                  className="rounded-xl text-xs font-bold text-slate-700"
+                >
+                  Load More ({filteredTradeLog.length - tradeLogLimit} remaining)
+                </Button>
+              </div>
+            )}
           </div>
         </div>
       )}
