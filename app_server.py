@@ -897,6 +897,9 @@ def trend_runner_forward_loop() -> None:
             if engine is None:
                 lots_cfg = int(cfg.get("trend_runner_lots", 1))
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
+                setups_cfg = cfg.get("setups", {})
+                enable_trend = setups_cfg.get("trend_runner", True)
+                enable_trap = setups_cfg.get("vix_trap", True)
                 engine = TrendRunnerPaperEngine(
                     sl_points=28.0,
                     sl_mode="fixed",
@@ -904,9 +907,11 @@ def trend_runner_forward_loop() -> None:
                     sizing_mode=sizing_cfg,
                     reentry=True,
                     notify_telegram=True,
+                    enable_trend_runner=enable_trend,
+                    enable_vix_trap=enable_trap,
                 )
                 engine.current_day_str = today_str
-                log_engine_telemetry("NIFTY", "Apex Duo", "SYSTEM", "Nifty Forward Engine active and listening.")
+                log_engine_telemetry("NIFTY", "Apex Duo", "SYSTEM", f"Apex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
@@ -991,6 +996,9 @@ def sensex_runner_forward_loop() -> None:
             if engine is None:
                 lots_cfg = int(cfg.get("sensex_runner_lots", 1))
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
+                setups_cfg = cfg.get("setups", {})
+                enable_trend = setups_cfg.get("trend_runner", True)
+                enable_trap = setups_cfg.get("vix_trap", True)
                 engine = TrendRunnerPaperEngine(
                     symbol="SENSEX",
                     sl_points=120.0,
@@ -999,9 +1007,11 @@ def sensex_runner_forward_loop() -> None:
                     sizing_mode=sizing_cfg,
                     reentry=True,
                     notify_telegram=True,
+                    enable_trend_runner=enable_trend,
+                    enable_vix_trap=enable_trap,
                 )
                 engine.current_day_str = today_str
-                log_engine_telemetry("SENSEX", "Apex Duo", "SYSTEM", "Sensex Forward Engine active and listening.")
+                log_engine_telemetry("SENSEX", "Apex Duo", "SYSTEM", f"Sensex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:

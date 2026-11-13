@@ -285,6 +285,8 @@ class TrendRunnerPaperEngine:
         self.log_trades: bool = kwargs.get("log_trades", True)
         self.notify_telegram: bool = kwargs.get("notify_telegram", False)
         self.fetch_live_quotes: bool = kwargs.get("fetch_live_quotes", False)
+        self.enable_trend_runner: bool = kwargs.get("enable_trend_runner", True)
+        self.enable_vix_trap: bool = kwargs.get("enable_vix_trap", True)
 
         self.active_position: Optional[Dict[str, Any]] = None
         self.trades_today: int = 0
@@ -302,6 +304,8 @@ class TrendRunnerPaperEngine:
         self.dyn_or_high: float = 0.0
         self.dyn_or_low: float = 999999.0
         self.bars_since_last_exit: int = 999
+        self.has_tested_or_high: bool = False
+        self.has_tested_or_low: bool = False
 
     def evaluate_bar(
         self,
@@ -341,6 +345,13 @@ class TrendRunnerPaperEngine:
         # Simple, robust Rolling Day High/Low for both Nifty and Sensex
         self.dyn_or_high = prev_dh
         self.dyn_or_low = prev_dl
+
+        # Track whether price tested OR high / low after 09:30
+        if t_str >= "09:30":
+            if h >= or_high:
+                self.has_tested_or_high = True
+            if l <= or_low:
+                self.has_tested_or_low = True
 
         # Update Midday Consolidation Box (09:45 to 12:00) for Williams Afternoon Fallback
         if "09:45" <= t_str <= "12:00":
@@ -647,9 +658,24 @@ class TrendRunnerPaperEngine:
             # Midday Chop Blackout: No new entries between 11:00 AM and 11:59 AM
             if "11:00" <= t_str < "12:00":
                 return None
-            # Trend Breakout Window: 09:30 to 13:00 IST (1:00 PM Hard Cutoff)
+
+            # --- SETUP 1: VIX Divergence Trap (Contrarian Reversal) ---
+            # Tested in update_vix_trap_backtests.py: 09:30 - 12:30 IST
+            if self.enable_vix_trap and ("09:30" <= t_str <= "12:30"):
+                # Bull Trap Reversal -> PUT
+                # VIX surging (>= +2.0%), price poked OR High, but candle closes red below VWAP and back below OR High
+                if (vix_chg >= 2.0) and self.has_tested_or_high and (c < o) and (c < vwap) and (c < or_high):
+                    sig = "SHORT"
+                    stage_name = "VIX_TRAP"
+                # Bear Trap Reversal -> CALL
+                # VIX collapsing (<= -2.0%), price poked OR Low, but candle closes green above VWAP and back above OR Low
+                elif (vix_chg <= -2.0) and self.has_tested_or_low and (c > o) and (c > vwap) and (c > or_low):
+                    sig = "LONG"
+                    stage_name = "VIX_TRAP"
+
+            # --- SETUP 2: Trend Runner ORB Breakout ---
             # MANDATORY: Must break Dynamic Expanded Range (OR High / Low expanded by pre-breakout wicks)
-            if "09:30" <= t_str <= "13:00":
+            if not sig and self.enable_trend_runner and ("09:30" <= t_str <= "13:00"):
                 if or_range >= 30.0:
                     # Solid Breakout Candle Filter (Conviction Body >= 70% of candle range, Rejection Wick <= 20%)
                     candle_rng = h - l
@@ -724,23 +750,46 @@ class TrendRunnerPaperEngine:
         if sig in ("LONG", "SHORT"):
             entry_px = next_bar_open if next_bar_open is not None else c
             is_sx = (self.symbol == "SENSEX")
-            sl_floor = 100.0 if is_sx else 35.0
-            sl_cap = 220.0 if is_sx else 65.0
-            sl_buffer = 15.0 if is_sx else 5.0
 
-            if self.sl_mode in ("swing", "adaptive", "adaptive_swing"):
-                if sig == "LONG":
-                    swing_ref = self.rolling_day_low if self.rolling_day_low < 900000 else entry_px - sl_floor
-                    sl_dist = max(sl_floor, min(sl_cap, entry_px - swing_ref + sl_buffer))
-                    sl_px = entry_px - sl_dist
+            if stage_name == "VIX_TRAP":
+                # Swing High / Low stop loss with floor and cap (from update_vix_trap_backtests.py)
+                if is_sx:
+                    if sig == "LONG":
+                        swing_low = self.rolling_day_low if self.rolling_day_low < 900000 else entry_px - 60.0
+                        sl_dist = max(60.0, min(120.0, entry_px - swing_low + 10.0))
+                        sl_px = entry_px - sl_dist
+                    else:
+                        swing_high = self.rolling_day_high if self.rolling_day_high > 0 else entry_px + 60.0
+                        sl_dist = max(60.0, min(120.0, swing_high - entry_px + 10.0))
+                        sl_px = entry_px + sl_dist
                 else:
-                    swing_ref = self.rolling_day_high if self.rolling_day_high > 0 else entry_px + sl_floor
-                    sl_dist = max(sl_floor, min(sl_cap, swing_ref - entry_px + sl_buffer))
-                    sl_px = entry_px + sl_dist
+                    if sig == "LONG":
+                        swing_low = self.rolling_day_low if self.rolling_day_low < 900000 else entry_px - 25.0
+                        sl_dist = max(25.0, min(80.0, entry_px - swing_low + 2.0))
+                        sl_px = entry_px - sl_dist
+                    else:
+                        swing_high = self.rolling_day_high if self.rolling_day_high > 0 else entry_px + 25.0
+                        sl_dist = max(25.0, min(80.0, swing_high - entry_px + 2.0))
+                        sl_px = entry_px + sl_dist
                 effective_sl_pts = sl_dist
             else:
-                effective_sl_pts = self.sl_points if trade_num == 1 else self.reentry_sl_points
-                sl_px = entry_px - effective_sl_pts if sig == "LONG" else entry_px + effective_sl_pts
+                sl_floor = 100.0 if is_sx else 35.0
+                sl_cap = 220.0 if is_sx else 65.0
+                sl_buffer = 15.0 if is_sx else 5.0
+
+                if self.sl_mode in ("swing", "adaptive", "adaptive_swing"):
+                    if sig == "LONG":
+                        swing_ref = self.rolling_day_low if self.rolling_day_low < 900000 else entry_px - sl_floor
+                        sl_dist = max(sl_floor, min(sl_cap, entry_px - swing_ref + sl_buffer))
+                        sl_px = entry_px - sl_dist
+                    else:
+                        swing_ref = self.rolling_day_high if self.rolling_day_high > 0 else entry_px + sl_floor
+                        sl_dist = max(sl_floor, min(sl_cap, swing_ref - entry_px + sl_buffer))
+                        sl_px = entry_px + sl_dist
+                    effective_sl_pts = sl_dist
+                else:
+                    effective_sl_pts = self.sl_points if trade_num == 1 else self.reentry_sl_points
+                    sl_px = entry_px - effective_sl_pts if sig == "LONG" else entry_px + effective_sl_pts
             opt_type = "CE" if sig == "LONG" else "PE"
 
             # Strike Selection: ITM-150 vs ATM
