@@ -932,8 +932,17 @@ def trend_runner_forward_loop() -> None:
                 time.sleep(5)
                 continue
 
+            # Compute 1-minute VWAP for 1-minute precision execution
+            df1["time_str"] = pd.to_datetime(df1["timestamp"]).dt.strftime("%H:%M")
+            tp1 = (df1["high"] + df1["low"] + df1["close"]) / 3.0
+            vol1 = df1["volume"] if "volume" in df1.columns else 1.0
+            pv1 = tp1 * vol1
+            cum_pv1 = pv1.cumsum()
+            cum_vol1 = vol1.cumsum()
+            df1["vwap"] = np.where(cum_vol1 > 0, cum_pv1 / cum_vol1, tp1.expanding().mean())
+
             latest_1m = df1.iloc[-1]
-            t1m = str(latest_1m.get("timestamp", ""))[-8:-3]
+            t1m = str(latest_1m.get("time_str", ""))
             c1m = float(latest_1m.get("close", 0.0))
             now_hms = datetime.now(IST).strftime("%H:%M:%S")
 
@@ -954,21 +963,16 @@ def trend_runner_forward_loop() -> None:
                 last_processed_1m = t1m
                 dist_h = or_high - c1m
                 dist_l = c1m - or_low
-                status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else ("Above OR High" if c1m > or_high else "Below OR Low")
-                vix_curr = ENGINE_LIVE_STATE["nifty"].get("vix_chg", 0.0)
-                vix_str = f"VIX Bias: {vix_curr:+.1f}%"
-                log_engine_telemetry("NIFTY", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo (Trend + Trap) Active")
+                status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else (f"Breakout Above OR High (+{c1m - or_high:.1f} pt)" if c1m > or_high else f"Breakdown Below OR Low (-{or_low - c1m:.1f} pt)")
+                vix_curr = get_vix_change_pct(today_str)
+                ENGINE_LIVE_STATE["nifty"]["vix_chg"] = round(vix_curr, 2)
+                vix_str = f"VIX Bias: {vix_curr:+.2f}%"
+                log_engine_telemetry("NIFTY", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo Active")
 
-            latest_bar = df5.iloc[-1]
-            curr_5m_time = str(latest_bar.get("time_str", ""))
-
-            if curr_5m_time != last_processed_5m:
-                vix_chg = get_vix_change_pct(today_str)
-                ENGINE_LIVE_STATE["nifty"]["vix_chg"] = round(vix_chg, 2)
-                res = engine.evaluate_bar(latest_bar, or_high, or_low, or_range, vix_chg)
-                last_processed_5m = curr_5m_time
+                # Evaluate with 1-Minute Candle Close Precision!
+                res = engine.evaluate_bar(latest_1m, or_high, or_low, or_range, vix_curr)
                 if res:
-                    print(f"[{datetime.now(IST):%H:%M:%S}] [Trend Catcher LIVE PAPER] Position Event: {res}")
+                    print(f"[{datetime.now(IST):%H:%M:%S}] [Apex Duo LIVE PAPER] Position Event: {res}")
                     log_engine_telemetry("NIFTY", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
         except Exception:
@@ -1039,8 +1043,17 @@ def sensex_runner_forward_loop() -> None:
                 time.sleep(5)
                 continue
 
+            # Compute 1-minute VWAP for 1-minute precision execution
+            df1["time_str"] = pd.to_datetime(df1["timestamp"]).dt.strftime("%H:%M")
+            tp1 = (df1["high"] + df1["low"] + df1["close"]) / 3.0
+            vol1 = df1["volume"] if "volume" in df1.columns else 1.0
+            pv1 = tp1 * vol1
+            cum_pv1 = pv1.cumsum()
+            cum_vol1 = vol1.cumsum()
+            df1["vwap"] = np.where(cum_vol1 > 0, cum_pv1 / cum_vol1, tp1.expanding().mean())
+
             latest_1m = df1.iloc[-1]
-            t1m = str(latest_1m.get("timestamp", ""))[-8:-3]
+            t1m = str(latest_1m.get("time_str", ""))
             c1m = float(latest_1m.get("close", 0.0))
             now_hms = datetime.now(IST).strftime("%H:%M:%S")
 
@@ -1061,21 +1074,16 @@ def sensex_runner_forward_loop() -> None:
                 last_processed_1m = t1m
                 dist_h = or_high - c1m
                 dist_l = c1m - or_low
-                status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else ("Above OR High" if c1m > or_high else "Below OR Low")
-                vix_curr = ENGINE_LIVE_STATE["sensex"].get("vix_chg", 0.0)
-                vix_str = f"VIX Bias: {vix_curr:+.1f}%"
-                log_engine_telemetry("SENSEX", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo (Trend + Trap) Active")
+                status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else (f"Breakout Above OR High (+{c1m - or_high:.1f} pt)" if c1m > or_high else f"Breakdown Below OR Low (-{or_low - c1m:.1f} pt)")
+                vix_curr = get_vix_change_pct(today_str)
+                ENGINE_LIVE_STATE["sensex"]["vix_chg"] = round(vix_curr, 2)
+                vix_str = f"VIX Bias: {vix_curr:+.2f}%"
+                log_engine_telemetry("SENSEX", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo Active")
 
-            latest_bar = df5.iloc[-1]
-            curr_5m_time = str(latest_bar.get("time_str", ""))
-
-            if curr_5m_time != last_processed_5m:
-                vix_chg = get_vix_change_pct(today_str)
-                ENGINE_LIVE_STATE["sensex"]["vix_chg"] = round(vix_chg, 2)
-                res = engine.evaluate_bar(latest_bar, or_high, or_low, or_range, vix_chg)
-                last_processed_5m = curr_5m_time
+                # Evaluate with 1-Minute Candle Close Precision!
+                res = engine.evaluate_bar(latest_1m, or_high, or_low, or_range, vix_curr)
                 if res:
-                    print(f"[{datetime.now(IST):%H:%M:%S}] [Sensex Trend Runner LIVE PAPER] Position Event: {res}")
+                    print(f"[{datetime.now(IST):%H:%M:%S}] [Sensex Apex Duo LIVE PAPER] Position Event: {res}")
                     log_engine_telemetry("SENSEX", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
         except Exception:
