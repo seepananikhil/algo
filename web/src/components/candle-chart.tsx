@@ -47,6 +47,23 @@ function fitSession(c: IChartApi, bars: number, fullDay = false) {
 
 export type DrawingType = "none" | "hline" | "trendline" | "eraser"
 
+type DragInfo =
+  | {
+      id: string
+      type: "hline"
+      startY: number
+      startPrice: number
+    }
+  | {
+      id: string
+      type: "trendline"
+      part: "p1" | "p2" | "body"
+      startX: number
+      startY: number
+      startP1: { time?: number; logical?: number; price: number }
+      startP2: { time?: number; logical?: number; price: number }
+    }
+
 export type ChartDrawing =
   | {
       id: string
@@ -108,6 +125,9 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
   // Interactive Drawing Tools state
   const [tool, setTool] = useState<DrawingType>("none")
   const [drawings, setDrawings] = useState<ChartDrawing[]>([])
+  const [selectedDrawingId, setSelectedDrawingId] = useState<string | null>(null)
+  const [isDragging, setIsDragging] = useState(false)
+  const dragRef = useRef<DragInfo | null>(null)
   const [trendlineStart, setTrendlineStart] = useState<{
     time?: number
     logical?: number
@@ -174,12 +194,128 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     } catch {}
   }, [drawings, storageKey, date])
 
-  // Cancel drawing / tool on Escape
+  // Window pointer listeners for moving / dragging drawn lines
+  useEffect(() => {
+    if (!isDragging) return
+
+    const handlePointerMove = (e: PointerEvent) => {
+      const drag = dragRef.current
+      if (!drag || !el.current || !series.current || !chart.current) return
+      const rect = el.current.getBoundingClientRect()
+      const x = e.clientX - rect.left
+      const y = e.clientY - rect.top
+
+      if (drag.type === "hline") {
+        const price = series.current.coordinateToPrice(y)
+        if (price != null) {
+          const rounded = Math.round(Number(price) * 100) / 100
+          setDrawings((prev) =>
+            prev.map((item) => (item.id === drag.id && item.type === "hline" ? { ...item, price: rounded } : item))
+          )
+        }
+      } else if (drag.type === "trendline") {
+        const price = series.current.coordinateToPrice(y)
+        const time = chart.current.timeScale().coordinateToTime(x)
+        const logical = chart.current.timeScale().coordinateToLogical(x)
+        const roundedPrice = price != null ? Math.round(Number(price) * 100) / 100 : null
+
+        if (drag.part === "p1") {
+          if (roundedPrice != null) {
+            setDrawings((prev) =>
+              prev.map((item) =>
+                item.id === drag.id && item.type === "trendline"
+                  ? {
+                      ...item,
+                      p1: {
+                        time: time != null ? Number(time) : item.p1.time,
+                        logical: logical != null ? Number(logical) : item.p1.logical,
+                        price: roundedPrice,
+                      },
+                    }
+                  : item
+              )
+            )
+          }
+        } else if (drag.part === "p2") {
+          if (roundedPrice != null) {
+            setDrawings((prev) =>
+              prev.map((item) =>
+                item.id === drag.id && item.type === "trendline"
+                  ? {
+                      ...item,
+                      p2: {
+                        time: time != null ? Number(time) : item.p2.time,
+                        logical: logical != null ? Number(logical) : item.p2.logical,
+                        price: roundedPrice,
+                      },
+                    }
+                  : item
+              )
+            )
+          }
+        } else if (drag.part === "body") {
+          const pStart = series.current.coordinateToPrice(drag.startY)
+          const pCurr = series.current.coordinateToPrice(y)
+          const deltaPrice = pCurr != null && pStart != null ? Number(pCurr) - Number(pStart) : 0
+
+          const lStart = chart.current.timeScale().coordinateToLogical(drag.startX)
+          const lCurr = chart.current.timeScale().coordinateToLogical(x)
+          const deltaLogical = lCurr != null && lStart != null ? Math.round(Number(lCurr) - Number(lStart)) : 0
+
+          setDrawings((prev) =>
+            prev.map((item) => {
+              if (item.id === drag.id && item.type === "trendline") {
+                const newP1Price = Math.round((drag.startP1.price + deltaPrice) * 100) / 100
+                const newP2Price = Math.round((drag.startP2.price + deltaPrice) * 100) / 100
+                const newP1Logical = (drag.startP1.logical ?? 0) + deltaLogical
+                const newP2Logical = (drag.startP2.logical ?? 0) + deltaLogical
+                return {
+                  ...item,
+                  p1: {
+                    ...item.p1,
+                    logical: newP1Logical,
+                    price: newP1Price,
+                  },
+                  p2: {
+                    ...item.p2,
+                    logical: newP2Logical,
+                    price: newP2Price,
+                  },
+                }
+              }
+              return item
+            })
+          )
+        }
+      }
+    }
+
+    const handlePointerUp = () => {
+      dragRef.current = null
+      setIsDragging(false)
+    }
+
+    window.addEventListener("pointermove", handlePointerMove)
+    window.addEventListener("pointerup", handlePointerUp)
+    return () => {
+      window.removeEventListener("pointermove", handlePointerMove)
+      window.removeEventListener("pointerup", handlePointerUp)
+    }
+  }, [isDragging])
+
+  // Keyboard controls: Delete / Backspace to delete selected drawing, Escape to deselect / cancel
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
+      if ((e.key === "Delete" || e.key === "Backspace") && selectedDrawingId) {
+        e.preventDefault()
+        setDrawings((prev) => prev.filter((d) => d.id !== selectedDrawingId))
+        setSelectedDrawingId(null)
+        setHoveredDrawingId(null)
+      } else if (e.key === "Escape") {
         if (trendlineStart) {
           setTrendlineStart(null)
+        } else if (selectedDrawingId) {
+          setSelectedDrawingId(null)
         } else {
           setTool("none")
           setHoverPos(null)
@@ -189,7 +325,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [trendlineStart])
+  }, [trendlineStart, selectedDrawingId])
 
   useEffect(() => {
     if (!el.current) return
@@ -731,8 +867,64 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
   }
 
+  const deleteSelected = () => {
+    if (!selectedDrawingId) return
+    setDrawings((prev) => prev.filter((d) => d.id !== selectedDrawingId))
+    setSelectedDrawingId(null)
+    setHoveredDrawingId(null)
+  }
+
+  const handleStartDragHLine = (e: React.PointerEvent, d: ChartDrawing & { type: "hline" }) => {
+    if (tool === "eraser") {
+      setDrawings((prev) => prev.filter((item) => item.id !== d.id))
+      setSelectedDrawingId(null)
+      return
+    }
+    e.stopPropagation()
+    setSelectedDrawingId(d.id)
+    if (!el.current) return
+    const rect = el.current.getBoundingClientRect()
+    const y = e.clientY - rect.top
+    dragRef.current = {
+      id: d.id,
+      type: "hline",
+      startY: y,
+      startPrice: d.price,
+    }
+    setIsDragging(true)
+  }
+
+  const handleStartDragTrendline = (
+    e: React.PointerEvent,
+    d: ChartDrawing & { type: "trendline" },
+    part: "p1" | "p2" | "body"
+  ) => {
+    if (tool === "eraser") {
+      setDrawings((prev) => prev.filter((item) => item.id !== d.id))
+      setSelectedDrawingId(null)
+      return
+    }
+    e.stopPropagation()
+    setSelectedDrawingId(d.id)
+    if (!el.current) return
+    const rect = el.current.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+    dragRef.current = {
+      id: d.id,
+      type: "trendline",
+      part,
+      startX: x,
+      startY: y,
+      startP1: { ...d.p1 },
+      startP2: { ...d.p2 },
+    }
+    setIsDragging(true)
+  }
+
   const clearAllDrawings = () => {
     setDrawings([])
+    setSelectedDrawingId(null)
     setTrendlineStart(null)
     setHoveredDrawingId(null)
     try {
@@ -770,24 +962,87 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
 
         {/* Render Drawn Elements */}
         {drawings.map((d) => {
+          const isSelected = d.id === selectedDrawingId
           const isHovered = d.id === hoveredDrawingId
 
           if (d.type === "hline") {
             const y = getHLineY(d.price)
             if (y === null || y < 0 || y > chartDim.height) return null
             return (
-              <g key={d.id} className="transition-all">
+              <g key={d.id} className="group transition-all">
+                {/* Selection Halo Glow */}
+                {isSelected && (
+                  <line
+                    x1={0}
+                    y1={y}
+                    x2={chartWidth}
+                    y2={y}
+                    stroke="#38bdf8"
+                    strokeWidth={5}
+                    opacity={0.35}
+                  />
+                )}
+                {/* Wide invisible hit area for dragging / selection */}
+                <line
+                  x1={0}
+                  y1={y}
+                  x2={chartWidth}
+                  y2={y}
+                  stroke="transparent"
+                  strokeWidth={18}
+                  className="pointer-events-auto cursor-ns-resize"
+                  onPointerDown={(e) => handleStartDragHLine(e, d)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedDrawingId(d.id)
+                  }}
+                />
                 {/* Visual Line */}
                 <line
                   x1={0}
                   y1={y}
                   x2={chartWidth}
                   y2={y}
-                  stroke={isHovered ? "#ef4444" : d.color || "#38bdf8"}
-                  strokeWidth={isHovered ? 2.5 : 1.5}
-                  strokeDasharray={isHovered ? undefined : "5 3"}
-                  opacity={isHovered ? 1 : 0.85}
+                  stroke={isHovered ? "#ef4444" : isSelected ? "#38bdf8" : d.color || "#38bdf8"}
+                  strokeWidth={isSelected ? 2 : isHovered ? 2.5 : 1.5}
+                  strokeDasharray={isSelected ? undefined : "5 3"}
+                  opacity={isHovered || isSelected ? 1 : 0.85}
                 />
+                {/* Selection Drag Handles */}
+                {isSelected && (
+                  <>
+                    <circle
+                      cx={chartWidth * 0.25}
+                      cy={y}
+                      r={4}
+                      fill="#38bdf8"
+                      stroke="#ffffff"
+                      strokeWidth={1.5}
+                      className="pointer-events-auto cursor-ns-resize"
+                      onPointerDown={(e) => handleStartDragHLine(e, d)}
+                    />
+                    <circle
+                      cx={chartWidth * 0.5}
+                      cy={y}
+                      r={4.5}
+                      fill="#38bdf8"
+                      stroke="#ffffff"
+                      strokeWidth={1.5}
+                      className="pointer-events-auto cursor-ns-resize"
+                      onPointerDown={(e) => handleStartDragHLine(e, d)}
+                    />
+                    <circle
+                      cx={chartWidth * 0.75}
+                      cy={y}
+                      r={4}
+                      fill="#38bdf8"
+                      stroke="#ffffff"
+                      strokeWidth={1.5}
+                      className="pointer-events-auto cursor-ns-resize"
+                      onPointerDown={(e) => handleStartDragHLine(e, d)}
+                    />
+                  </>
+                )}
                 {/* Price Pill Tag on Right Price Scale */}
                 <rect
                   x={Math.max(chartWidth - 58, 20)}
@@ -795,8 +1050,15 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
                   width={54}
                   height={18}
                   rx={3}
-                  fill={isHovered ? "#ef4444" : "#0284c7"}
+                  fill={isHovered ? "#ef4444" : isSelected ? "#0284c7" : "#0284c7"}
+                  stroke={isSelected ? "#ffffff" : "transparent"}
+                  strokeWidth={isSelected ? 1.5 : 0}
                   opacity={0.95}
+                  className="pointer-events-auto cursor-pointer"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedDrawingId(d.id)
+                  }}
                 />
                 <text
                   x={Math.max(chartWidth - 31, 47)}
@@ -806,9 +1068,34 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
                   fontSize={10}
                   fontFamily="monospace"
                   fontWeight="bold"
+                  className="pointer-events-none select-none"
                 >
                   {isHovered ? "✕ DEL" : Math.round(d.price)}
                 </text>
+                {/* Floating Contextual Delete Button */}
+                {isSelected && (
+                  <g
+                    transform={`translate(${Math.max(chartWidth - 145, 60)}, ${Math.max(y - 30, 8)})`}
+                    className="cursor-pointer pointer-events-auto select-none"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteSelected()
+                    }}
+                  >
+                    <rect
+                      width={74}
+                      height={20}
+                      rx={4}
+                      fill="#ef4444"
+                      stroke="#ffffff"
+                      strokeWidth={1}
+                      filter="drop-shadow(0 2px 4px rgba(0,0,0,0.4))"
+                    />
+                    <text x={37} y={13.5} textAnchor="middle" fill="#ffffff" fontSize={9.5} fontWeight="bold">
+                      ✕ Delete
+                    </text>
+                  </g>
+                )}
               </g>
             )
           }
@@ -822,33 +1109,65 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
             const deltaPts = Math.round((d.p2.price - d.p1.price) * 10) / 10
 
             return (
-              <g key={d.id} className="transition-all">
+              <g key={d.id} className="group transition-all">
+                {/* Selection Halo Glow */}
+                {isSelected && (
+                  <line
+                    x1={c1.x}
+                    y1={c1.y}
+                    x2={c2.x}
+                    y2={c2.y}
+                    stroke="#f59e0b"
+                    strokeWidth={6}
+                    opacity={0.3}
+                  />
+                )}
+                {/* Wide invisible hit area for moving entire line */}
+                <line
+                  x1={c1.x}
+                  y1={c1.y}
+                  x2={c2.x}
+                  y2={c2.y}
+                  stroke="transparent"
+                  strokeWidth={20}
+                  className="pointer-events-auto cursor-move"
+                  onPointerDown={(e) => handleStartDragTrendline(e, d, "body")}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setSelectedDrawingId(d.id)
+                  }}
+                />
                 {/* Visual Slant Line */}
                 <line
                   x1={c1.x}
                   y1={c1.y}
                   x2={c2.x}
                   y2={c2.y}
-                  stroke={isHovered ? "#ef4444" : d.color || "#f59e0b"}
-                  strokeWidth={isHovered ? 3 : 2}
-                  opacity={isHovered ? 1 : 0.9}
+                  stroke={isHovered ? "#ef4444" : isSelected ? "#fbbf24" : d.color || "#f59e0b"}
+                  strokeWidth={isSelected ? 2.5 : isHovered ? 3 : 2}
+                  opacity={isHovered || isSelected ? 1 : 0.9}
                 />
-                {/* Anchor Endpoints */}
+                {/* Anchor Endpoint 1 (Start handle) */}
                 <circle
                   cx={c1.x}
                   cy={c1.y}
-                  r={3.5}
-                  fill={isHovered ? "#ef4444" : d.color || "#f59e0b"}
+                  r={isSelected ? 6 : 4}
+                  fill={isSelected ? "#38bdf8" : isHovered ? "#ef4444" : d.color || "#f59e0b"}
                   stroke="#ffffff"
-                  strokeWidth={1}
+                  strokeWidth={isSelected ? 2 : 1}
+                  className="pointer-events-auto cursor-crosshair"
+                  onPointerDown={(e) => handleStartDragTrendline(e, d, "p1")}
                 />
+                {/* Anchor Endpoint 2 (End handle) */}
                 <circle
                   cx={c2.x}
                   cy={c2.y}
-                  r={3.5}
-                  fill={isHovered ? "#ef4444" : d.color || "#f59e0b"}
+                  r={isSelected ? 6 : 4}
+                  fill={isSelected ? "#38bdf8" : isHovered ? "#ef4444" : d.color || "#f59e0b"}
                   stroke="#ffffff"
-                  strokeWidth={1}
+                  strokeWidth={isSelected ? 2 : 1}
+                  className="pointer-events-auto cursor-crosshair"
+                  onPointerDown={(e) => handleStartDragTrendline(e, d, "p2")}
                 />
                 {/* Midpoint Info Pill */}
                 <rect
@@ -857,8 +1176,12 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
                   width={48}
                   height={16}
                   rx={3}
-                  fill={isHovered ? "#ef4444" : "#b45309"}
+                  fill={isHovered ? "#ef4444" : isSelected ? "#d97706" : "#b45309"}
+                  stroke={isSelected ? "#ffffff" : "transparent"}
+                  strokeWidth={isSelected ? 1 : 0}
                   opacity={0.9}
+                  className="pointer-events-auto cursor-move"
+                  onPointerDown={(e) => handleStartDragTrendline(e, d, "body")}
                 />
                 <text
                   x={midX}
@@ -868,9 +1191,34 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
                   fontSize={9}
                   fontFamily="monospace"
                   fontWeight="bold"
+                  className="pointer-events-none select-none"
                 >
                   {isHovered ? "✕ DEL" : `${deltaPts >= 0 ? "+" : ""}${deltaPts}`}
                 </text>
+                {/* Floating Contextual Delete Button */}
+                {isSelected && (
+                  <g
+                    transform={`translate(${midX - 37}, ${Math.max(midY - 30, 8)})`}
+                    className="cursor-pointer pointer-events-auto select-none"
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      deleteSelected()
+                    }}
+                  >
+                    <rect
+                      width={74}
+                      height={20}
+                      rx={4}
+                      fill="#ef4444"
+                      stroke="#ffffff"
+                      strokeWidth={1}
+                      filter="drop-shadow(0 2px 4px rgba(0,0,0,0.4))"
+                    />
+                    <text x={37} y={13.5} textAnchor="middle" fill="#ffffff" fontSize={9.5} fontWeight="bold">
+                      ✕ Delete
+                    </text>
+                  </g>
+                )}
               </g>
             )
           }
@@ -1045,6 +1393,20 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           >
             <Eraser className="h-3.5 w-3.5" />
           </Button>
+
+          {/* Delete Selected Button (Active when a line is selected) */}
+          {selectedDrawingId && (
+            <Button
+              variant="destructive"
+              size="xs"
+              onClick={deleteSelected}
+              className="h-6 px-2 text-[10px] font-semibold gap-1 bg-rose-500 hover:bg-rose-600 text-white shadow-xs animate-in fade-in"
+              title="Delete Selected Line (or press Del / Backspace)"
+            >
+              <Trash2 className="h-3 w-3" />
+              <span>Delete (Del)</span>
+            </Button>
+          )}
 
           {/* Clear All Drawings (Day) */}
           {drawings.length > 0 && (
