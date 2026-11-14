@@ -1,0 +1,29 @@
+{
+  "last_scan_time": "2026-11-13T23:57:06.606080+05:30",
+  "count": 0,
+  "signals": [],
+  "history": [
+    {
+      "date": "2026-11-13",
+      "scan_time": "2026-11-13T23:57:06.606080+05:30",
+      "count": 0,
+      "signals": []
+    },
+    {
+      "date": "2026-11-12",
+      "scan_time": "2026-11-12T21:45:03.028444+05:30",
+      "count": 1,
+      "signals": [
+        {
+          "sr": 1,
+          "nsecode": "ABREL",
+          "name": "Aditya Birla Real Estate Ltd",
+          "bsecode": "500040",
+          "close": 1198,
+          "per_chg": 10.16,
+          "volume": 3187601
+        }
+      ]
+    }
+  ]
+}

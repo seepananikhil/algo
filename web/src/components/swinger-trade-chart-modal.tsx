@@ -130,15 +130,16 @@ function calculateEMA(data: CandleData[], period: number = 200) {
 }
 
 // Format numbers nicely
-function fmtNum(n: number, decimals: number = 2): string {
+function fmtNum(n?: number | null, decimals: number = 2): string {
+  if (n === null || n === undefined || isNaN(n)) return "0.00"
   return n.toLocaleString("en-IN", {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals
   })
 }
 
-function fmtVol(vol: number): string {
-  if (!vol || vol <= 0) return "0"
+function fmtVol(vol?: number | null): string {
+  if (!vol || vol <= 0 || isNaN(vol)) return "0"
   if (vol >= 10_000_000) return `${(vol / 10_000_000).toFixed(2)} Cr`
   if (vol >= 100_000) return `${(vol / 100_000).toFixed(2)} L`
   if (vol >= 1_000) return `${(vol / 1_000).toFixed(1)} K`
@@ -158,7 +159,7 @@ export function SwingerTradeChartModal({
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
-  const candleSeriesRef = useRef<ISeriesApi<"Candlestick"> | null>(null)
+  const mainSeriesRef = useRef<ISeriesApi<any> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null)
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null)
 
@@ -230,40 +231,44 @@ export function SwingerTradeChartModal({
 
   // Key Technical Stats Derived from Full Candle Data
   const stats = useMemo(() => {
-    if (candles.length === 0) return null
-    const latest = candles[candles.length - 1]
-    const prev = candles.length > 1 ? candles[candles.length - 2] : latest
+    const validCandles = candles.filter(
+      (c) => c && typeof c.close === "number" && !isNaN(c.close) && c.close > 0
+    )
+    if (validCandles.length === 0) return null
+    const latest = validCandles[validCandles.length - 1]
+    const prev = validCandles.length > 1 ? validCandles[validCandles.length - 2] : latest
 
     // All-time / 1000-day peak
     let peakHigh = 0
     let peakDate = ""
-    for (const c of candles) {
-      if (c.high > peakHigh) {
+    for (const c of validCandles) {
+      if ((c.high ?? 0) > peakHigh) {
         peakHigh = c.high
         peakDate = c.time
       }
     }
 
     // 52-week (last 252 bars) high/low
-    const last252 = candles.slice(-252)
-    const high52 = Math.max(...last252.map((c) => c.high))
-    const low52 = Math.min(...last252.map((c) => c.low))
+    const last252 = validCandles.slice(-252)
+    const high52 = last252.length > 0 ? Math.max(...last252.map((c) => c.high || c.close || 0)) : (latest.high ?? latest.close)
+    const low52 = last252.length > 0 ? Math.min(...last252.map((c) => c.low || c.close || 0)) : (latest.low ?? latest.close)
 
     // 60-day volume average
-    const last60 = candles.slice(-60)
+    const last60 = validCandles.slice(-60)
     const avgVol60 = last60.reduce((acc, c) => acc + (c.volume || 0), 0) / Math.max(1, last60.length)
     const volSurge = avgVol60 > 0 ? (latest.volume || 0) / avgVol60 : 1.0
 
     // Depth from peak
-    const depthPct = peakHigh > 0 ? ((latest.close - peakHigh) / peakHigh) * 100 : 0
+    const depthPct = peakHigh > 0 ? (((latest.close || 0) - peakHigh) / peakHigh) * 100 : 0
     const crashFloor60 = peakHigh * 0.40
 
     // Today's change vs previous close
-    const dayChangePts = latest.close - prev.close
-    const dayChangePct = prev.close > 0 ? (dayChangePts / prev.close) * 100 : 0
+    const prevClose = prev?.close || latest.close || 1
+    const dayChangePts = (latest.close || 0) - prevClose
+    const dayChangePct = prevClose > 0 ? (dayChangePts / prevClose) * 100 : 0
 
     return {
-      cmp: latest.close,
+      cmp: latest.close || 0,
       latestDate: latest.time,
       dayChangePts,
       dayChangePct,
@@ -276,7 +281,7 @@ export function SwingerTradeChartModal({
       avgVol60,
       volSurge,
       latestVol: latest.volume || 0,
-      totalBars: candles.length
+      totalBars: validCandles.length
     }
   }, [candles])
 
@@ -322,10 +327,10 @@ export function SwingerTradeChartModal({
       }
     })
 
-    // 1. Candlestick Series (TradingView Standard Crisp Colors)
+    // 1. Candlestick Bar Series (TradingView Standard Crisp Colors)
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#10b981", // Crisp mint-emerald
-      downColor: "#ef4444", // Modern clean crimson (soft, not harsh neon)
+      downColor: "#ef4444", // Modern clean crimson
       borderVisible: false,
       wickUpColor: "#10b981",
       wickDownColor: "#ef4444",
@@ -335,8 +340,21 @@ export function SwingerTradeChartModal({
         minMove: 0.05
       }
     })
-    candleSeries.setData(candles as any)
-    candleSeriesRef.current = candleSeries
+
+    const cleanCandles = candles
+      .filter((c) => c && typeof c.close === "number" && !isNaN(c.close) && c.close > 0)
+      .map((c) => ({
+        time: c.time,
+        open: typeof c.open === "number" && !isNaN(c.open) ? c.open : c.close,
+        high: typeof c.high === "number" && !isNaN(c.high) ? Math.max(c.high, c.close) : c.close,
+        low: typeof c.low === "number" && !isNaN(c.low) ? Math.min(c.low, c.close) : c.close,
+        close: c.close,
+        volume: typeof c.volume === "number" && !isNaN(c.volume) ? c.volume : 0
+      }))
+
+    candleSeries.setData(cleanCandles as any)
+    mainSeriesRef.current = candleSeries
+    const mainSeries = candleSeries
 
     // 2. Subtle Volume Histogram at Bottom (Subdued opacity so it never overpowers)
     let volumeSeries: ISeriesApi<"Histogram"> | null = null
@@ -398,7 +416,7 @@ export function SwingerTradeChartModal({
         const tpPrice = entryPrice * 1.30 // +30% TP1
 
         // Entry Line (Clean Emerald Dashed)
-        candleSeries.createPriceLine({
+        mainSeries.createPriceLine({
           price: entryPrice,
           color: "#059669",
           lineWidth: 1,
@@ -408,7 +426,7 @@ export function SwingerTradeChartModal({
         })
 
         // Stop Loss Line (Clean, thin slate-rose dotted)
-        candleSeries.createPriceLine({
+        mainSeries.createPriceLine({
           price: slPrice,
           color: "#f43f5e",
           lineWidth: 1,
@@ -418,7 +436,7 @@ export function SwingerTradeChartModal({
         })
 
         // Break-Even Shield Line (Sky Blue Dotted)
-        candleSeries.createPriceLine({
+        mainSeries.createPriceLine({
           price: bePrice,
           color: "#0284c7",
           lineWidth: 1,
@@ -428,7 +446,7 @@ export function SwingerTradeChartModal({
         })
 
         // Runner Trigger Line (Purple/Emerald Dashed)
-        candleSeries.createPriceLine({
+        mainSeries.createPriceLine({
           price: tpPrice,
           color: "#9333ea",
           lineWidth: 1,
@@ -448,7 +466,7 @@ export function SwingerTradeChartModal({
           !trade.exit_date;
 
         if (!isTradeActive && trade.exit_price && trade.exit_price > 0) {
-          candleSeries.createPriceLine({
+          mainSeries.createPriceLine({
             price: trade.exit_price,
             color: (trade.pnl ?? 0) >= 0 ? "#10b981" : "#e11d48",
             lineWidth: 1,
@@ -501,33 +519,46 @@ export function SwingerTradeChartModal({
 
     if (markers.length > 0) {
       markers.sort((a, b) => (a.time as string).localeCompare(b.time as string))
-      createSeriesMarkers(candleSeries, markers)
+      createSeriesMarkers(mainSeries, markers)
     }
 
     // 6. Crosshair Movement HUD listener
     const emaMap = new Map<string, number>()
     for (const e of emaValues) emaMap.set(e.time, e.value)
 
+    const candleMap = new Map<string, CandleData>()
+    for (const c of cleanCandles) {
+      if (c && c.time) candleMap.set(c.time, c)
+    }
+
     chart.subscribeCrosshairMove((param) => {
       if (!param.time || !param.seriesData) {
         setHovered(null)
         return
       }
-      const barData = param.seriesData.get(candleSeries) as any
-      if (barData && typeof barData.close === "number") {
+      const barData = param.seriesData.get(mainSeries) as any
+      if (barData) {
         const timeStr = param.time as string
-        const pts = barData.close - barData.open
-        const pct = barData.open > 0 ? (pts / barData.open) * 100 : 0
+        const c = candleMap.get(timeStr)
+        const closePrice =
+          typeof barData.close === "number"
+            ? barData.close
+            : typeof barData.value === "number"
+            ? barData.value
+            : c?.close ?? 0
+        const openPrice = typeof barData.open === "number" ? barData.open : c?.open ?? closePrice
+        const pts = closePrice - openPrice
+        const pct = openPrice > 0 ? (pts / openPrice) * 100 : 0
         const volData = volumeSeries ? (param.seriesData.get(volumeSeries) as any) : null
         const emaVal = emaMap.get(timeStr)
 
         setHovered({
           time: timeStr,
-          open: barData.open,
-          high: barData.high,
-          low: barData.low,
-          close: barData.close,
-          volume: volData?.value,
+          open: openPrice,
+          high: typeof barData.high === "number" ? barData.high : c?.high ?? closePrice,
+          low: typeof barData.low === "number" ? barData.low : c?.low ?? closePrice,
+          close: closePrice,
+          volume: volData?.value ?? c?.volume ?? 0,
           changePts: pts,
           changePct: pct,
           ema200: emaVal
@@ -583,11 +614,21 @@ export function SwingerTradeChartModal({
       window.removeEventListener("resize", handleResize)
       chart.remove()
       chartRef.current = null
-      candleSeriesRef.current = null
+      mainSeriesRef.current = null
       volumeSeriesRef.current = null
       emaSeriesRef.current = null
     }
-  }, [candles, trade, showVolume, showEMA200, showLevels, activeRange, isMaximized, stats])
+  }, [
+    candles,
+    trade,
+    showVolume,
+    showEMA50,
+    showEMA200,
+    showLevels,
+    activeRange,
+    isMaximized,
+    stats
+  ])
 
   // Range switch handlers
   const handleRangeChange = (range: "3m" | "6m" | "1y" | "2y" | "all") => {
@@ -803,8 +844,8 @@ export function SwingerTradeChartModal({
           </div>
         </div>
 
-        {/* ================= 2. CLEAN CONTROLS & HUD TOOLBAR ================= */}
-        <div className="px-5 py-2 bg-slate-50/70 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2 text-xs">
+        {/* ================= 2. FIXED STABLE CONTROLS TOOLBAR (ZERO FLUCTUATION) ================= */}
+        <div className="px-5 py-2.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between gap-3 text-xs">
           {/* Left: Range Switcher (Clean minimalist buttons) */}
           <div className="flex items-center gap-1">
             <button
@@ -864,59 +905,12 @@ export function SwingerTradeChartModal({
             </button>
           </div>
 
-          {/* Center: Live Hover Candlestick HUD */}
-          {hovered ? (
-            <div className="flex items-center gap-2.5 font-mono text-[11px] bg-white px-3 py-1 rounded-lg border border-slate-200 shadow-2xs">
-              <span className="font-bold text-slate-900">{hovered.time}</span>
-              <span>
-                O: <strong className="text-slate-800">₹{fmtNum(hovered.open)}</strong>
-              </span>
-              <span>
-                H: <strong className="text-slate-800">₹{fmtNum(hovered.high)}</strong>
-              </span>
-              <span>
-                L: <strong className="text-slate-800">₹{fmtNum(hovered.low)}</strong>
-              </span>
-              <span>
-                C: <strong className="text-slate-800">₹{fmtNum(hovered.close)}</strong>
-              </span>
-              <span
-                className={`font-bold ${
-                  hovered.changePct >= 0 ? "text-emerald-600" : "text-rose-600"
-                }`}
-              >
-                {hovered.changePct >= 0 ? "+" : ""}
-                {hovered.changePct.toFixed(2)}%
-              </span>
-              {hovered.volume ? (
-                <span className="text-slate-400 hidden md:inline">Vol: {fmtVol(hovered.volume)}</span>
-              ) : null}
-            </div>
-          ) : stats ? (
-            <div className="text-[11px] text-slate-500 font-medium hidden md:flex items-center gap-3">
-              <span>
-                Vol Surge:{" "}
-                <strong
-                  className={
-                    stats.volSurge >= 2.0 ? "text-emerald-600 font-bold" : "text-slate-700 font-bold"
-                  }
-                >
-                  {stats.volSurge.toFixed(1)}x SMA60
-                </strong>
-              </span>
-              <span className="text-slate-300">·</span>
-              <span>
-                200 EMA: <strong className="text-amber-600 font-mono font-bold">₹{fmtNum(stats.cmp * 0.95, 0)}</strong>
-              </span>
-            </div>
-          ) : null}
-
           {/* Right: Technical Layer Toggles */}
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setShowEMA50(!showEMA50)}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
                 showEMA50
                   ? "bg-cyan-50 text-cyan-800 border-cyan-300"
                   : "bg-white text-slate-400 border-slate-200"
@@ -929,7 +923,7 @@ export function SwingerTradeChartModal({
             <button
               type="button"
               onClick={() => setShowEMA200(!showEMA200)}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
                 showEMA200
                   ? "bg-amber-50 text-amber-800 border-amber-300"
                   : "bg-white text-slate-400 border-slate-200"
@@ -942,7 +936,7 @@ export function SwingerTradeChartModal({
             <button
               type="button"
               onClick={() => setShowVolume(!showVolume)}
-              className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition flex items-center gap-1 ${
+              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
                 showVolume
                   ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                   : "bg-white text-slate-400 border-slate-200"
@@ -956,7 +950,7 @@ export function SwingerTradeChartModal({
               <button
                 type="button"
                 onClick={() => setShowLevels(!showLevels)}
-                className={`px-2 py-0.5 rounded-md text-[11px] font-bold border transition flex items-center gap-1 ${
+                className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
                   showLevels
                     ? "bg-sky-50 text-sky-800 border-sky-300"
                     : "bg-white text-slate-400 border-slate-200"
@@ -970,11 +964,34 @@ export function SwingerTradeChartModal({
         </div>
 
         {/* ================= 3. CHART CANVAS ================= */}
-        <div className="p-3 sm:p-5 flex-1 relative bg-white min-h-[400px] overflow-hidden">
+        <div className="p-3 sm:p-5 flex-1 relative bg-white min-h-[420px] overflow-hidden">
+          {/* Floating In-Chart Price HUD: Fixed Top-Left Position on canvas - ZERO Header Fluctuation */}
+          {hovered && (
+            <div className="absolute top-4 left-6 z-10 pointer-events-none flex items-center gap-2 font-mono text-xs bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
+              <span className="font-extrabold text-slate-900">{hovered.time}</span>
+              <span className="text-slate-300">·</span>
+              <span className="font-bold text-slate-800">₹{fmtNum(hovered.close)}</span>
+              <span
+                className={`font-black ${
+                  hovered.changePct >= 0 ? "text-emerald-600" : "text-rose-600"
+                }`}
+              >
+                {hovered.changePct >= 0 ? "+" : ""}
+                {hovered.changePct.toFixed(2)}%
+              </span>
+              {hovered.volume ? (
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span className="text-slate-500 font-medium">Vol: {fmtVol(hovered.volume)}</span>
+                </>
+              ) : null}
+            </div>
+          )}
+
           {loading && (
             <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/85 backdrop-blur-xs gap-2">
               <RefreshCw className="size-6 text-slate-600 animate-spin" />
-              <span className="text-xs font-bold text-slate-700">Loading {trade.symbol} candlesticks...</span>
+              <span className="text-xs font-bold text-slate-700">Loading {trade.symbol} chart data...</span>
             </div>
           )}
 
@@ -1002,12 +1019,16 @@ export function SwingerTradeChartModal({
               Red: Down Day
             </span>
             <span className="flex items-center gap-1.5 font-medium text-slate-600">
+              <span className="w-3 h-0.5 bg-cyan-500 inline-block" />
+              50 EMA
+            </span>
+            <span className="flex items-center gap-1.5 font-medium text-slate-600">
               <span className="w-3 h-0.5 bg-amber-500 inline-block" />
               200 EMA
             </span>
             {hasTradeDetails && (
               <span className="flex items-center gap-1.5 font-medium text-slate-600">
-                <span className="w-3 h-0.5 bg-emerald-600 inline-block" />
+                <span className="w-3 h-0.5 bg-emerald-600 border-b border-dashed border-emerald-600 inline-block" />
                 Entry / Target
               </span>
             )}

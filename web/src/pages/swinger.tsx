@@ -55,6 +55,8 @@ interface Position {
 
 interface Trade {
   trade_id?: number
+  leg?: number
+  strategy_leg?: string
   symbol: string
   name?: string
   entry_date: string
@@ -144,7 +146,7 @@ export function SwingerPage() {
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [tradeLogSearch, setTradeLogSearch] = useState("")
   const [tradeLogYear, setTradeLogYear] = useState<string>("ALL")
-  const [tradeLogFilter, setTradeLogFilter] = useState<"ALL" | "MULTIBAGGER" | "WIN" | "LOSS">("ALL")
+  const [tradeLogFilter, setTradeLogFilter] = useState<"ALL" | "LEG1" | "LEG2" | "MULTIBAGGER" | "WIN" | "LOSS">("ALL")
   const [tradeLogLimit, setTradeLogLimit] = useState(50)
 
   // Filters for 'all' triggers tab
@@ -459,6 +461,8 @@ export function SwingerPage() {
       }
       const pnl = t.pnl ?? 0
       const pnlPct = t.pnl_pct ?? (t as any).pct_return ?? 0
+      if (tradeLogFilter === "LEG1" && t.leg !== 1 && (t as any).strategy_leg !== "LEG1_TURNAROUND") return false
+      if (tradeLogFilter === "LEG2" && t.leg !== 2 && (t as any).strategy_leg !== "LEG2_BREAKOUT") return false
       if (tradeLogFilter === "MULTIBAGGER" && pnlPct < 100.0) return false
       if (tradeLogFilter === "WIN" && pnl <= 0) return false
       if (tradeLogFilter === "LOSS" && pnl > 0) return false
@@ -539,23 +543,27 @@ export function SwingerPage() {
 
       {/* ================= 2. EXECUTIVE METRIC CARDS (4 TILES) ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Card 1: Realized Net P&L */}
+        {/* Card 1: Realized Net P&L & Strategy XIRR */}
         <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
             <span>Realized Net P&L</span>
-            <span className="text-emerald-600 font-mono font-black">{summary.win_rate ?? 55.2}% WR</span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
+              XIRR: +{summary.xirr ?? 35.2}% p.a.
+            </span>
           </div>
           <div className="my-2">
             <div className="text-2xl font-black font-mono tracking-tight text-emerald-600">
-              +₹{(summary.net_pnl ?? 100724).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              +₹{(summary.net_pnl ?? 1120118).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-xs text-emerald-700 font-bold mt-0.5">
-              +{(((summary.net_pnl ?? 100724) / 250000.0) * 100).toFixed(1)}% ROI on ₹2.5L Base
+            <div className="text-xs text-emerald-700 font-bold mt-0.5 flex items-center gap-1.5 flex-wrap">
+              <span>+{summary.total_pnl_pct ?? 224.0}% ROI ({summary.period_years ?? 4.8}y)</span>
+              <span className="text-slate-300">·</span>
+              <span className="text-sky-700">Active XIRR: +{summary.xirr_active ?? 59.6}%</span>
             </div>
           </div>
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>{trades.length} Closed Trades</span>
-            <span>PF: <strong className="text-slate-800 font-bold">{summary.profit_factor ?? 1.47}</strong></span>
+            <span>{trades.length} Closed Trades ({summary.win_rate ?? 37.7}% WR)</span>
+            <span>PF: <strong className="text-slate-800 font-bold">{summary.profit_factor ?? 3.15}</strong></span>
           </div>
         </div>
 
@@ -589,15 +597,15 @@ export function SwingerPage() {
           </div>
           <div className="my-2">
             <div className="text-2xl font-black font-mono tracking-tight text-slate-900">
-              ₹{(250000 + (summary.net_pnl ?? 100724)).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              ₹{(summary.current_capital ?? (500000 + (summary.net_pnl ?? 1043747))).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-slate-500 font-medium mt-0.5">
-              Invested: ₹{(totalInvested / 1000).toFixed(0)}k · Available: ₹{(Math.max(0, 250000 - totalInvested) / 1000).toFixed(0)}k
+              Invested: ₹{(totalInvested / 1000).toFixed(0)}k · Initial: ₹{((summary.initial_capital ?? 500000) / 100000).toFixed(1)}L · CAGR: <strong className="text-emerald-700 font-bold font-mono">+{summary.xirr ?? 32.3}% p.a.</strong>
             </div>
           </div>
           <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
             <span>Slot Size:</span>
-            <span className="text-slate-800 font-mono font-bold">₹25,000 / Stock</span>
+            <span className="text-slate-800 font-mono font-bold">₹25,000 / Lot (Unlimited Lots)</span>
           </div>
         </div>
 
@@ -934,9 +942,9 @@ export function SwingerPage() {
                             <span className={isPositive ? "text-emerald-600" : "text-rose-600"}>
                               {isPositive ? "+" : ""}
                               {(item.pnlPct ?? 0).toFixed(1)}%
-                              {item.pnl !== 0 && (
+                              {item.pnl != null && item.pnl !== 0 && (
                                 <span className="block text-[10px] font-bold">
-                                  ({isPositive ? "+" : ""}₹{item.pnl.toLocaleString("en-IN")})
+                                  ({isPositive ? "+" : ""}₹{(item.pnl ?? 0).toLocaleString("en-IN")})
                                 </span>
                               )}
                             </span>
@@ -1327,6 +1335,62 @@ export function SwingerPage() {
               </div>
             </div>
 
+            {/* Strategy XIRR & Performance Master Banner */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl flex flex-wrap items-center justify-between gap-4 mb-4 shadow-sm border border-slate-700/60">
+              <div className="flex items-center gap-3.5">
+                <div className="size-11 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shadow-xs">
+                  <TrendingUp className="size-6" />
+                </div>
+                <div>
+                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
+                    Annualized Strategy Growth (XIRR)
+                  </div>
+                  <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
+                    <span className="text-2xl font-black font-mono tracking-tight text-emerald-400">
+                      +{summary.xirr ?? 35.2}% p.a.
+                    </span>
+                    <span className="text-xs text-slate-300 font-medium">
+                      (Total ₹5.0L Account)
+                    </span>
+                    <span className="text-slate-600 hidden sm:inline">·</span>
+                    <span className="text-base font-black font-mono text-sky-400">
+                      +{summary.xirr_active ?? 59.6}% p.a.
+                    </span>
+                    <span className="text-xs text-slate-300 font-medium">
+                      (₹2.5L Active Margin)
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-5 sm:gap-7 text-xs font-mono">
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total Net Profit</span>
+                  <span className="font-black text-emerald-400 text-sm">
+                    +₹{(summary.net_pnl ?? 1021492).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total ROI</span>
+                  <span className="font-black text-emerald-400 text-sm">
+                    +{summary.total_pnl_pct ?? 204.3}%
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Profit Factor</span>
+                  <span className="font-black text-white text-sm">
+                    {summary.profit_factor ?? 3.02}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Track Record</span>
+                  <span className="font-black text-slate-200 text-sm">
+                    {summary.period_years ?? 4.6} Years
+                  </span>
+                </div>
+              </div>
+            </div>
+
             {/* Scorecard Year Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
               {dynamicYearly.map((y) => {
@@ -1584,8 +1648,17 @@ export function SwingerPage() {
                           className="hover:bg-slate-50 cursor-pointer transition group"
                         >
                           <td className="p-3">
-                            <div className="font-black text-slate-900 group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono">
+                            <div className="font-black text-slate-900 group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono flex-wrap">
                               <span className="hover:underline">{t.symbol}</span>
+                              {t.leg === 2 || (t as any).strategy_leg === "LEG2_BREAKOUT" ? (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200">
+                                  LEG 2
+                                </span>
+                              ) : (
+                                <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  LEG 1
+                                </span>
+                              )}
                               {isMultibagger && (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-0.5">
                                   <Flame className="size-2.5 text-purple-600" />

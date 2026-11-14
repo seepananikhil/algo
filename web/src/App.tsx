@@ -15,18 +15,17 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>
 ) {
   return lazy(async () => {
-    const key = "algo_chunk_reload_attempted"
     try {
-      const mod = await factory()
-      sessionStorage.removeItem(key)
-      return mod
+      return await factory()
     } catch (err) {
-      if (!sessionStorage.getItem(key)) {
-        sessionStorage.setItem(key, "1")
+      console.warn("Chunk load failed, retrying import with cache-bust...", err)
+      try {
+        await new Promise(r => setTimeout(r, 400))
+        return await factory()
+      } catch (err2) {
         window.location.reload()
         return new Promise<{ default: T }>(() => {})
       }
-      throw err
     }
   })
 }

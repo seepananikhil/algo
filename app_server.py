@@ -5963,14 +5963,26 @@ class Handler(BaseHTTPRequestHandler):
             target = (root / path.lstrip("/")).resolve()
             is_spa_fallback = False
             if root not in target.parents or not target.is_file():
-                if path.startswith("/assets/") or any(path.endswith(ext) for ext in (".js", ".css", ".map", ".woff", ".woff2", ".png", ".jpg", ".svg", ".ico")):
+                if path.startswith("/assets/"):
+                    asset_prefix = path.replace("/assets/", "").split("-")[0]
+                    matches = list((root / "assets").glob(f"{asset_prefix}-*.js")) or list((root / "assets").glob(f"{asset_prefix}-*.css"))
+                    if matches:
+                        target = matches[0]
+                    else:
+                        self.send_response(404)
+                        self.send_header("Content-Type", "text/plain")
+                        self.end_headers()
+                        self.wfile.write(b"Asset not found")
+                        return
+                elif any(path.endswith(ext) for ext in (".js", ".css", ".map", ".woff", ".woff2", ".png", ".jpg", ".svg", ".ico")):
                     self.send_response(404)
                     self.send_header("Content-Type", "text/plain")
                     self.end_headers()
                     self.wfile.write(b"Asset not found")
                     return
-                target = root / "index.html"
-                is_spa_fallback = True
+                else:
+                    target = root / "index.html"
+                    is_spa_fallback = True
             body = target.read_bytes()
             ctype = mimetypes.guess_type(target.name)[0] or "application/octet-stream"
 
