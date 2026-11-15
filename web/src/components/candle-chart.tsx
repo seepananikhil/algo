@@ -22,7 +22,6 @@ import {
   createChart,
   createSeriesMarkers,
   HistogramSeries,
-  LineSeries,
   LineStyle,
   type IChartApi,
   type IPriceLine,
@@ -57,24 +56,6 @@ function fitSession(c: IChartApi, barCount: number, fullDay = false) {
     const toIndex = fullDay || barCount >= 50 ? barCount + 3 : Math.max(barCount + 2, 38)
     timeScale.setVisibleLogicalRange({ from: fromIndex, to: toIndex })
   } catch {}
-}
-
-// Calculate Exponential Moving Average (EMA)
-function calculateEMA(data: { time: UTCTimestamp; close: number }[], period: number) {
-  if (data.length < period) return []
-  const k = 2 / (period + 1)
-  let ema = data.slice(0, period).reduce((acc, val) => acc + val.close, 0) / period
-  const emaData: { time: UTCTimestamp; value: number }[] = []
-
-  for (let i = period - 1; i < data.length; i++) {
-    if (i === period - 1) {
-      emaData.push({ time: data[i].time, value: Math.round(ema * 100) / 100 })
-    } else {
-      ema = data[i].close * k + ema * (1 - k)
-      emaData.push({ time: data[i].time, value: Math.round(ema * 100) / 100 })
-    }
-  }
-  return emaData
 }
 
 function fmtNum(n?: number | null, decimals = 2): string {
@@ -138,15 +119,10 @@ function distToSegment(px: number, py: number, x1: number, y1: number, x2: numbe
 
 interface HoveredInfo {
   time: string
-  open: number
-  high: number
-  low: number
   close: number
   volume?: number
   changePts: number
   changePct: number
-  ema50?: number
-  ema200?: number
 }
 
 type Props = {
@@ -193,8 +169,6 @@ export function CandleChart({
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
   const volumeSeries = useRef<ISeriesApi<"Histogram"> | null>(null)
-  const ema50Series = useRef<ISeriesApi<"Line"> | null>(null)
-  const ema200Series = useRef<ISeriesApi<"Line"> | null>(null)
   const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const lines = useRef<IPriceLine[]>([])
   const band = useRef<PriceBandPrimitive | null>(null)
@@ -205,10 +179,8 @@ export function CandleChart({
   const viewKey = useRef("")
   const { resolvedTheme } = useTheme()
 
-  // Swinger UX: Feature toggles & Fullscreen
+  // Feature toggles: Levels, Volume, Fullscreen, and Prominent Hover HUD
   const [showVolume, setShowVolume] = useState<boolean>(true)
-  const [showEMA50, setShowEMA50] = useState<boolean>(true)
-  const [showEMA200, setShowEMA200] = useState<boolean>(true)
   const [showLevelsState, setShowLevelsState] = useState<boolean>(Boolean(showKeyLevels || showTradeLevels || true))
   const [isMaximized, setIsMaximized] = useState<boolean>(false)
   const [hovered, setHovered] = useState<HoveredInfo | null>(null)
@@ -544,30 +516,13 @@ export function CandleChart({
     })
     volumeSeries.current = volSeries
 
-    // 3. Technical Indicator Lines (50 EMA & 200 EMA)
-    const e50 = c.addSeries(LineSeries, {
-      color: "#06b6d4",
-      lineWidth: 2,
-      title: "50 EMA",
-      priceLineVisible: false,
-    })
-    ema50Series.current = e50
-
-    const e200 = c.addSeries(LineSeries, {
-      color: "#f59e0b",
-      lineWidth: 2,
-      title: "200 EMA",
-      priceLineVisible: false,
-    })
-    ema200Series.current = e200
-
     markers.current = createSeriesMarkers(s, [])
     band.current = new PriceBandPrimitive()
     s.attachPrimitive(band.current)
     boxPrimitive.current = new BoxPrimitive()
     s.attachPrimitive(boxPrimitive.current)
 
-    // Floating Crosshair HUD subscriber (Swinger UX)
+    // Floating Crosshair HUD subscriber (Clean, prominent price + gain + volume, no raw OHLC clutter)
     const onCrosshairMove = (param: any) => {
       if (!param.time || !param.seriesData || !series.current) {
         setHovered(null)
@@ -586,20 +541,13 @@ export function CandleChart({
         const pts = closePrice - openPrice
         const pct = openPrice > 0 ? (pts / openPrice) * 100 : 0
         const vData = volumeSeries.current ? (param.seriesData.get(volumeSeries.current) as any) : null
-        const e50Data = ema50Series.current ? (param.seriesData.get(ema50Series.current) as any) : null
-        const e200Data = ema200Series.current ? (param.seriesData.get(ema200Series.current) as any) : null
 
         setHovered({
           time: timeStr,
-          open: openPrice,
-          high: typeof barData.high === "number" ? barData.high : closePrice,
-          low: typeof barData.low === "number" ? barData.low : closePrice,
           close: closePrice,
           volume: vData?.value ?? 0,
           changePts: pts,
           changePct: pct,
-          ema50: e50Data?.value,
-          ema200: e200Data?.value,
         })
       } else {
         setHovered(null)
@@ -647,8 +595,6 @@ export function CandleChart({
       chart.current = null
       series.current = null
       volumeSeries.current = null
-      ema50Series.current = null
-      ema200Series.current = null
       markers.current = null
       band.current = null
       boxPrimitive.current = null
@@ -682,7 +628,7 @@ export function CandleChart({
     return () => clearTimeout(timer)
   }, [isMaximized, fullDay])
 
-  // Data population & indicators
+  // Data population
   useEffect(() => {
     const s = series.current
     if (!s) return
@@ -726,8 +672,6 @@ export function CandleChart({
       showTradeLevels,
       boxes,
       showVolume,
-      showEMA50,
-      showEMA200,
       showLevelsState,
     ])
     if (key === dataKey.current) return
@@ -750,28 +694,6 @@ export function CandleChart({
         volumeSeries.current.setData(volData)
       } else {
         volumeSeries.current.setData([])
-      }
-    }
-
-    // Populate 50 EMA Data
-    if (ema50Series.current) {
-      if (showEMA50 && data.length >= 10) {
-        const period50 = Math.min(50, Math.max(10, Math.floor(data.length / 2)))
-        const ema50Values = calculateEMA(data, period50)
-        ema50Series.current.setData(ema50Values)
-      } else {
-        ema50Series.current.setData([])
-      }
-    }
-
-    // Populate 200 EMA Data
-    if (ema200Series.current) {
-      if (showEMA200 && data.length >= 30) {
-        const period200 = Math.min(200, Math.max(30, Math.floor(data.length * 0.75)))
-        const ema200Values = calculateEMA(data, period200)
-        ema200Series.current.setData(ema200Values)
-      } else {
-        ema200Series.current.setData([])
       }
     }
 
@@ -1014,8 +936,6 @@ export function CandleChart({
     resetKey,
     boxes,
     showVolume,
-    showEMA50,
-    showEMA200,
     showLevelsState,
   ])
 
@@ -1270,7 +1190,7 @@ export function CandleChart({
 
   const chartWidth = chartDim.width || 800
 
-  // The controls toolbar component (shared in normal and fullscreen view)
+  // The controls toolbar: Prominent Drawing Tools, Levels, Volume & Fullscreen (no EMA clutter)
   const renderToolbar = (isHeaderLayout = false) => (
     <div
       className={cn(
@@ -1280,72 +1200,7 @@ export function CandleChart({
           : "absolute right-3 top-2.5 z-20 bg-background/90 dark:bg-slate-900/90 hover:bg-background dark:hover:bg-slate-900 backdrop-blur-md border border-border/80 rounded-lg shadow-md p-1 gap-1"
       )}
     >
-      {/* Technical Indicator Layer Toggles */}
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          onClick={() => setShowEMA50(!showEMA50)}
-          className={cn(
-            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
-            showEMA50
-              ? "bg-cyan-500/15 text-cyan-500 dark:text-cyan-400 border-cyan-500/40 shadow-2xs"
-              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
-          )}
-          title="Toggle 50 EMA Line"
-        >
-          <span className="size-1.5 rounded-full bg-cyan-500 inline-block" />
-          <span>50</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowEMA200(!showEMA200)}
-          className={cn(
-            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
-            showEMA200
-              ? "bg-amber-500/15 text-amber-500 dark:text-amber-400 border-amber-500/40 shadow-2xs"
-              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
-          )}
-          title="Toggle 200 EMA Line"
-        >
-          <span className="size-1.5 rounded-full bg-amber-500 inline-block" />
-          <span>200</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowVolume(!showVolume)}
-          className={cn(
-            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
-            showVolume
-              ? "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border-emerald-500/40 shadow-2xs"
-              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
-          )}
-          title="Toggle Volume Histogram"
-        >
-          <BarChart2 className="h-3 w-3" />
-          <span className="hidden sm:inline">Vol</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setShowLevelsState(!showLevelsState)}
-          className={cn(
-            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
-            showLevelsState
-              ? "bg-sky-500/15 text-sky-500 dark:text-sky-400 border-sky-500/40 shadow-2xs"
-              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
-          )}
-          title="Toggle S&R Key Levels & Trade Targets"
-        >
-          <Layers className="h-3 w-3" />
-          <span className="hidden sm:inline">Levels</span>
-        </button>
-      </div>
-
-      <div className="w-[1px] h-3.5 bg-border mx-0.5" />
-
-      {/* Drawing Tools */}
+      {/* 1. Drawing Tools (Primary Focus) */}
       <div className="flex items-center gap-0.5">
         <Button
           variant={tool === "none" ? "secondary" : "ghost"}
@@ -1446,7 +1301,42 @@ export function CandleChart({
 
       <div className="w-[1px] h-3.5 bg-border mx-0.5" />
 
-      {/* Navigation & Fullscreen */}
+      {/* 2. Layer Toggles (Levels & Volume) */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setShowLevelsState(!showLevelsState)}
+          className={cn(
+            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
+            showLevelsState
+              ? "bg-sky-500/15 text-sky-500 dark:text-sky-400 border-sky-500/40 shadow-2xs"
+              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
+          )}
+          title="Toggle S&R Key Levels & Trade Targets"
+        >
+          <Layers className="h-3 w-3" />
+          <span>Levels</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowVolume(!showVolume)}
+          className={cn(
+            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
+            showVolume
+              ? "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border-emerald-500/40 shadow-2xs"
+              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
+          )}
+          title="Toggle Volume Histogram"
+        >
+          <BarChart2 className="h-3 w-3" />
+          <span>Vol</span>
+        </button>
+      </div>
+
+      <div className="w-[1px] h-3.5 bg-border mx-0.5" />
+
+      {/* 3. Navigation & Fullscreen */}
       <div className="flex items-center gap-0.5">
         <Button
           variant="ghost"
@@ -1490,20 +1380,20 @@ export function CandleChart({
     </div>
   )
 
-  // Floating In-Chart Live Crosshair HUD (Zero Header Fluctuation)
+  // Floating In-Chart Live Crosshair HUD (Clean, prominent price + gain + volume, no raw OHLC clutter)
   const renderFloatingHUD = () => (
     <>
       {hovered ? (
-        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 pointer-events-none flex items-center gap-2 font-mono text-xs bg-background/95 dark:bg-slate-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg border border-border shadow-md animate-in fade-in duration-100">
-          <span className="font-extrabold text-foreground">{hovered.time}</span>
-          <span className="text-muted-foreground/40">·</span>
-          <span className="font-bold text-foreground">₹{fmtNum(hovered.close, 1)}</span>
+        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 pointer-events-none flex items-center gap-2.5 font-mono bg-background/95 dark:bg-slate-900/95 backdrop-blur-md px-3.5 py-2 rounded-xl border border-border shadow-lg animate-in fade-in duration-100">
+          <span className="text-xs sm:text-sm font-semibold text-muted-foreground">{hovered.time}</span>
+          <span className="text-muted-foreground/30 text-sm">·</span>
+          <span className="text-sm sm:text-base font-black text-foreground tracking-tight">₹{fmtNum(hovered.close, 1)}</span>
           <span
             className={cn(
-              "font-black px-1.5 py-0.2 rounded text-[11px]",
+              "font-black px-2 py-0.5 rounded-md text-xs sm:text-sm tracking-tight",
               hovered.changePts >= 0
-                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25"
+                : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25"
             )}
           >
             {hovered.changePts >= 0 ? "+" : ""}
@@ -1512,20 +1402,8 @@ export function CandleChart({
           </span>
           {hovered.volume ? (
             <>
-              <span className="text-muted-foreground/40">·</span>
-              <span className="text-muted-foreground font-medium">Vol: {fmtVol(hovered.volume)}</span>
-            </>
-          ) : null}
-          {showEMA50 && hovered.ema50 ? (
-            <>
-              <span className="text-muted-foreground/40 hidden md:inline">·</span>
-              <span className="text-cyan-500 font-semibold hidden md:inline">50 EMA: {fmtNum(hovered.ema50, 1)}</span>
-            </>
-          ) : null}
-          {showEMA200 && hovered.ema200 ? (
-            <>
-              <span className="text-muted-foreground/40 hidden lg:inline">·</span>
-              <span className="text-amber-500 font-semibold hidden lg:inline">200 EMA: {fmtNum(hovered.ema200, 1)}</span>
+              <span className="text-muted-foreground/30 text-sm">·</span>
+              <span className="text-xs font-semibold text-muted-foreground">Vol: {fmtVol(hovered.volume)}</span>
             </>
           ) : null}
         </div>
@@ -1533,34 +1411,14 @@ export function CandleChart({
     </>
   )
 
-  // Slim interactive footer with legend & shortcuts
+  // Slim interactive footer with legend & shortcuts (no Bullish/Bearish or EMA clutter)
   const renderFooter = () => (
     <div className="px-3.5 py-1.5 border-t border-border/40 bg-muted/20 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground select-none shrink-0">
       <div className="flex items-center gap-3.5 flex-wrap">
-        <span className="flex items-center gap-1.5 font-medium">
-          <span className="size-2 rounded-full bg-emerald-500" />
-          Bullish
-        </span>
-        <span className="flex items-center gap-1.5 font-medium">
-          <span className="size-2 rounded-full bg-rose-500" />
-          Bearish
-        </span>
-        {showEMA50 && (
-          <span className="flex items-center gap-1.5 font-medium text-cyan-600 dark:text-cyan-400">
-            <span className="w-2.5 h-0.5 bg-cyan-500 inline-block" />
-            50 EMA
-          </span>
-        )}
-        {showEMA200 && (
-          <span className="flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
-            <span className="w-2.5 h-0.5 bg-amber-500 inline-block" />
-            200 EMA
-          </span>
-        )}
         {showLevelsState && (
           <span className="flex items-center gap-1.5 font-medium text-sky-600 dark:text-sky-400">
             <span className="w-2.5 h-0.5 bg-sky-500 border-b border-dashed inline-block" />
-            Key Levels
+            Key Levels &amp; S&amp;R
           </span>
         )}
         {drawings.length > 0 && (
@@ -1571,7 +1429,7 @@ export function CandleChart({
       </div>
 
       <div className="flex items-center gap-3 font-mono text-[10px] text-muted-foreground">
-        <span>Scroll to Zoom · Drag to Pan</span>
+        <span>Scroll to Zoom · Drag to Pan · Click to Draw</span>
         <span>
           <kbd className="px-1 py-0.2 bg-muted border border-border rounded text-foreground font-semibold">
             ESC
