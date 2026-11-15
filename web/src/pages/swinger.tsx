@@ -442,6 +442,13 @@ export function SwingerPage() {
     return list.sort((a, b) => (b.date || "").localeCompare(a.date || ""))
   }, [positions, trades, watchlist, dailySignals])
 
+  // Filter out any symbols that already have open active positions so they never appear on Radar
+  const heldSymbolSet = useMemo(() => new Set(positions.map((p) => p.symbol)), [positions])
+  const activeRadarList = useMemo(
+    () => watchlist.filter((w) => !heldSymbolSet.has(w.symbol)),
+    [watchlist, heldSymbolSet]
+  )
+
   // Filtered triggers based on active category and search
   const filteredUnifiedTriggers = useMemo(() => {
     return unifiedTriggers.filter((item) => {
@@ -906,7 +913,7 @@ export function SwingerPage() {
                 activeTab === "radar" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
               }`}
             >
-              {watchlist.length}
+              {activeRadarList.length}
             </span>
           </button>
 
@@ -1015,7 +1022,7 @@ export function SwingerPage() {
                     : "bg-amber-50 text-amber-700 hover:bg-amber-100"
                 }`}
               >
-                Radar ({watchlist.length})
+                Radar ({activeRadarList.length})
               </button>
             </div>
 
@@ -1953,7 +1960,7 @@ export function SwingerPage() {
             <div>
               <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
                 <Flame className="size-5 text-amber-500" />
-                Turnaround Pullback Radar ({watchlist.length} Candidates Tracked)
+                Turnaround Pullback Radar ({activeRadarList.length} Candidates Tracked)
               </h2>
               <p className="text-xs text-slate-500 font-medium">
                 High-probability 2-stage swing re-entry: Alerted on massive volume surge (RSI &gt; 68), cooling down to 20 EMA
@@ -1961,10 +1968,10 @@ export function SwingerPage() {
             </div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold">
               <span className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
-                {watchlist.filter(w => w.cooldown_ready).length} Ready to Enter
+                {activeRadarList.filter(w => w.cooldown_ready).length} Ready to Enter
               </span>
               <span className="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-700 border border-sky-200">
-                {watchlist.filter(w => w.status === "ENTERED").length} Entries Executed
+                {activeRadarList.filter(w => w.status === "ENTERED").length} Entries Executed
               </span>
             </div>
           </div>
@@ -1986,7 +1993,7 @@ export function SwingerPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {watchlist.length === 0 ? (
+                  {activeRadarList.length === 0 ? (
                     <tr>
                       <td colSpan={9} className="p-12 text-center">
                         <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
@@ -2003,7 +2010,7 @@ export function SwingerPage() {
                       </td>
                     </tr>
                   ) : (
-                    watchlist.map((item) => (
+                    activeRadarList.map((item) => (
                       <tr
                         key={item.symbol}
                         onClick={() =>
