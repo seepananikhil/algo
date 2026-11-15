@@ -104,18 +104,28 @@ trades_log_html = f"""<!DOCTYPE html>
   <div class="grid-6">
     <div class="kpi-card">
       <div class="kpi-label">Total Net P&L</div>
-      <div class="kpi-val c-green">+₹{summary.get('net_pnl', 0):,.2f}</div>
-      <div class="kpi-sub">Across 4.8 Years (+{summary.get('total_pnl_pct', 0):.1f}% ROI)</div>
+      <div class="kpi-val c-green">+₹{summary.get('net_pnl', 0):,.0f}</div>
+      <div class="kpi-sub">+{summary.get('total_pnl_pct', 0):.1f}% ROI ({summary.get('period_years', 4.8)}y)</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">Account XIRR</div>
+      <div class="kpi-label">Annualized XIRR</div>
       <div class="kpi-val c-green">+{summary.get('xirr', 0):.1f}% p.a.</div>
-      <div class="kpi-sub">Active Margin XIRR: +{summary.get('xirr_active', 0):.1f}%</div>
+      <div class="kpi-sub">Active Margin: +{summary.get('xirr_active', 0):.1f}% p.a.</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Max Drawdown</div>
+      <div class="kpi-val c-red">{summary.get('max_drawdown_pct', 0):.1f}%</div>
+      <div class="kpi-sub">Peak Dip: -₹{abs(summary.get('max_drawdown', 0))/1000:.1f}k (Calmar: {summary.get('calmar_ratio', 0)})</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Reward / Risk Payoff</div>
+      <div class="kpi-val" style="color: #b45309;">{summary.get('payoff_ratio', 0)}x</div>
+      <div class="kpi-sub">Avg Win: +₹{summary.get('avg_win', 0):,.0f} · Avg Loss: -₹{summary.get('avg_loss', 0):,.0f}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Profit Factor</div>
       <div class="kpi-val">{summary.get('profit_factor', 0)}</div>
-      <div class="kpi-sub">Gross Win / Gross Loss</div>
+      <div class="kpi-sub">Expectancy: +₹{summary.get('expectancy', 0):,.0f} / trade</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Total Trades</div>
@@ -125,12 +135,12 @@ trades_log_html = f"""<!DOCTYPE html>
     <div class="kpi-card">
       <div class="kpi-label">Win Rate</div>
       <div class="kpi-val">{summary.get('win_rate', 0):.1f}%</div>
-      <div class="kpi-sub">Average Win: +39.2%</div>
+      <div class="kpi-sub">Asymmetric Trend Following</div>
     </div>
     <div class="kpi-card">
-      <div class="kpi-label">Ending Capital</div>
-      <div class="kpi-val">₹{summary.get('current_capital', 0):,.2f}</div>
-      <div class="kpi-sub">From ₹5,00,000 Initial</div>
+      <div class="kpi-label">Ending Portfolio</div>
+      <div class="kpi-val">₹{summary.get('current_capital', 0):,.0f}</div>
+      <div class="kpi-sub">From ₹5,00,000 Base Capital</div>
     </div>
   </div>
 
@@ -295,37 +305,47 @@ dashboard_html = f"""<!DOCTYPE html>
     </div>
   </div>
 
-  <!-- 6-Card KPI Grid -->
+  <!-- KPI Metrics Grid -->
   <div class="grid-6">
-    <div class="kpi-card">
-      <div class="kpi-label">Total Net ROI</div>
-      <div class="kpi-val c-green">+{summary.get('total_pnl_pct', 0):.1f}%</div>
-      <div class="kpi-sub">Across 4.8 Years (+{summary.get('xirr', 0):.1f}% XIRR)</div>
-    </div>
-    <div class="kpi-card">
-      <div class="kpi-label">Active Margin XIRR</div>
-      <div class="kpi-val c-green">+{summary.get('xirr_active', 0):.1f}% p.a.</div>
-      <div class="kpi-sub">CAGR on Deployed Capital</div>
-    </div>
     <div class="kpi-card">
       <div class="kpi-label">Total Net P&L</div>
       <div class="kpi-val c-green">+₹{summary.get('net_pnl', 0):,.0f}</div>
-      <div class="kpi-sub">Pure Realized Alpha</div>
+      <div class="kpi-sub">+{summary.get('total_pnl_pct', 0):.1f}% ROI ({summary.get('period_years', 4.8)}y)</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Annualized XIRR</div>
+      <div class="kpi-val c-green">+{summary.get('xirr', 0):.1f}% p.a.</div>
+      <div class="kpi-sub">Active Margin: +{summary.get('xirr_active', 0):.1f}% p.a.</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Max Drawdown</div>
+      <div class="kpi-val c-red">{summary.get('max_drawdown_pct', 0):.1f}%</div>
+      <div class="kpi-sub">Peak Dip: -₹{abs(summary.get('max_drawdown', 0))/1000:.1f}k (Calmar: {summary.get('calmar_ratio', 0)})</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Reward / Risk Payoff</div>
+      <div class="kpi-val" style="color: #b45309;">{summary.get('payoff_ratio', 0)}x</div>
+      <div class="kpi-sub">Avg Win: +₹{summary.get('avg_win', 0):,.0f} · Avg Loss: -₹{summary.get('avg_loss', 0):,.0f}</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Profit Factor</div>
       <div class="kpi-val">{summary.get('profit_factor', 0)}</div>
-      <div class="kpi-sub">Exceptional Risk-Adjusted Return</div>
+      <div class="kpi-sub">Expectancy: +₹{summary.get('expectancy', 0):,.0f} / trade</div>
+    </div>
+    <div class="kpi-card">
+      <div class="kpi-label">Total Trades</div>
+      <div class="kpi-val">{summary.get('total_trades', 0)}</div>
+      <div class="kpi-sub">{summary.get('winning_trades', 0)} Wins · {summary.get('losing_trades', 0)} Losses</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Win Rate</div>
       <div class="kpi-val">{summary.get('win_rate', 0):.1f}%</div>
-      <div class="kpi-sub">{summary.get('winning_trades', 0)} Wins / {summary.get('losing_trades', 0)} Losses</div>
+      <div class="kpi-sub">Asymmetric Trend Following</div>
     </div>
     <div class="kpi-card">
       <div class="kpi-label">Ending Portfolio</div>
       <div class="kpi-val">₹{summary.get('current_capital', 0):,.0f}</div>
-      <div class="kpi-sub">From ₹5,00,000 Base</div>
+      <div class="kpi-sub">From ₹5,00,000 Base Capital</div>
     </div>
   </div>
 

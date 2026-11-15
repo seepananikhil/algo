@@ -335,12 +335,50 @@ for t in closed_trades:
 cfs_active.append((end_dt, 250000.0))
 calc_xirr_active = round(pure_xirr(cfs_active), 1)
 
+# Cumulative Drawdown Analysis
+df_t = pd.DataFrame(closed_trades)
+df_t['cum_pnl'] = df_t['pnl'].cumsum()
+df_t['equity'] = CAPITAL + df_t['cum_pnl']
+df_t['peak_equity'] = df_t['equity'].cummax()
+df_t['dd_amt'] = df_t['equity'] - df_t['peak_equity']
+df_t['dd_pct'] = (df_t['equity'] - df_t['peak_equity']) / df_t['peak_equity'] * 100.0
+
+max_dd_amt = float(df_t['dd_amt'].min())
+max_dd_pct = float(df_t['dd_pct'].min())
+
+df_t['equity_active'] = 250000.0 + df_t['cum_pnl']
+df_t['peak_equity_active'] = df_t['equity_active'].cummax()
+df_t['dd_pct_active'] = (df_t['equity_active'] - df_t['peak_equity_active']) / df_t['peak_equity_active'] * 100.0
+max_dd_pct_active = float(df_t['dd_pct_active'].min())
+
+avg_win = float(sum(t['pnl'] for t in wins) / len(wins)) if wins else 0.0
+avg_loss = float(abs(sum(t['pnl'] for t in losses)) / len(losses)) if losses else 0.0
+payoff_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else 99.0
+expectancy = round(pnl_tot / len(closed_trades), 2) if closed_trades else 0.0
+
+# Max consecutive losses
+streaks = []
+cur_streak = 0
+for t in closed_trades:
+    if t['pnl'] <= 0:
+        cur_streak += 1
+    else:
+        if cur_streak > 0: streaks.append(cur_streak)
+        cur_streak = 0
+if cur_streak > 0: streaks.append(cur_streak)
+max_consec_losses = max(streaks) if streaks else 0
+
+ann_ret = (pnl_tot / CAPITAL * 100.0) / years if years > 0 else 0.0
+calmar_ratio = round(ann_ret / abs(max_dd_pct), 2) if max_dd_pct != 0 else 99.0
+
 print(f"Total Trades: {len(closed_trades)}")
 print(f"Win Rate: {win_rate:.1f}%")
 print(f"Net P&L: ₹{pnl_tot:,.2f}")
 print(f"Profit Factor: {profit_factor}")
 print(f"Account XIRR: +{calc_xirr}% p.a.")
 print(f"Active Margin XIRR: +{calc_xirr_active}% p.a.")
+print(f"Max Drawdown: ₹{max_dd_amt:,.2f} ({max_dd_pct:.2f}%)")
+print(f"Payoff Ratio: {payoff_ratio}x | Expectancy: +₹{expectancy:,.2f} | Calmar: {calmar_ratio}")
 
 # Yearly Breakdown
 yearly = {}
@@ -420,6 +458,15 @@ ledger_data = {
         'profit_factor': profit_factor,
         'xirr': calc_xirr,
         'xirr_active': calc_xirr_active,
+        'max_drawdown': round(max_dd_amt, 2),
+        'max_drawdown_pct': round(max_dd_pct, 2),
+        'max_drawdown_active_pct': round(max_dd_pct_active, 2),
+        'avg_win': round(avg_win, 2),
+        'avg_loss': round(avg_loss, 2),
+        'payoff_ratio': payoff_ratio,
+        'expectancy': expectancy,
+        'calmar_ratio': calmar_ratio,
+        'max_consecutive_losses': max_consec_losses,
         'period_years': round(years, 1),
         'mode': 'UNLIMITED_LOTS'
     },

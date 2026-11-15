@@ -12,6 +12,15 @@
     "profit_factor": 3.15,
     "xirr": 35.2,
     "xirr_active": 59.6,
+    "max_drawdown": -61883.77,
+    "max_drawdown_pct": -8.77,
+    "max_drawdown_active_pct": -17.49,
+    "avg_win": 14527.37,
+    "avg_loss": 2788.64,
+    "payoff_ratio": 5.21,
+    "expectancy": 3733.73,
+    "calmar_ratio": 5.27,
+    "max_consecutive_losses": 17,
     "period_years": 4.8,
     "mode": "UNLIMITED_LOTS"
   },
@@ -16252,5 +16261,5 @@
       "pnl_pct": 10.5
     }
   ],
-  "last_updated": "2026-11-15 00:34:00"
+  "last_updated": "2026-11-15 08:03:56"
 }
