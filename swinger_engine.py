@@ -1196,7 +1196,7 @@ def update_positions_and_scan():
             if cache_p.exists():
                 with open(cache_p, "rb") as f:
                     u_data = pickle.load(f)
-                trig_leg2, coiled_leg2 = scan_leg2_breakouts(u_data, held_symbols=held_symbols)
+                trig_leg2, coiled_leg2 = scan_leg2_breakouts(u_data, held_symbols=held_symbols, eligible_symbols=False)
                 print(f"[Swinger Paper] Leg 2 Scanner: {len(trig_leg2)} breakouts triggering, {len(coiled_leg2)} coiled.")
                 
                 radar_file = ROOT / "paper" / "swinger" / "radar_leg2.json"
