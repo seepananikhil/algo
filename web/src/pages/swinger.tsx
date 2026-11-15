@@ -420,7 +420,7 @@ export function SwingerPage() {
         pnlPct: w.pullback_pct ?? 0,
         bookedPnl: 0,
         daysHeld: 0,
-        statusLabel: w.cooldown_ready ? "Stage-2 Ready" : "Cooling Down",
+        statusLabel: w.status === "ENTERED" ? "Entry Executed" : w.cooldown_ready ? "Stage-2 Ready" : "Cooling Down",
         ruleDetails: `RSI: ${w.current_rsi?.toFixed(1)} · EMA20: ₹${w.ema20?.toFixed(1)} (${w.distance_to_ema20_pct ?? 0}%)`,
         raw: {
           symbol: w.symbol,
@@ -1949,15 +1949,23 @@ export function SwingerPage() {
       {/* ================= TAB 4: RADAR WATCHLIST ================= */}
       {activeTab === "radar" && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
             <div>
               <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
                 <Flame className="size-5 text-amber-500" />
-                Turnaround Pullback Radar ({watchlist.length} Candidates)
+                Turnaround Pullback Radar ({watchlist.length} Candidates Tracked)
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                High-probability swing re-entry: Alerted on massive volume surge (RSI above 68), cooling down to 20 EMA
+                High-probability 2-stage swing re-entry: Alerted on massive volume surge (RSI &gt; 68), cooling down to 20 EMA
               </p>
+            </div>
+            <div className="flex items-center gap-2 text-xs font-mono font-bold">
+              <span className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
+                {watchlist.filter(w => w.cooldown_ready).length} Ready to Enter
+              </span>
+              <span className="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-700 border border-sky-200">
+                {watchlist.filter(w => w.status === "ENTERED").length} Entries Executed
+              </span>
             </div>
           </div>
 
@@ -2051,15 +2059,27 @@ export function SwingerPage() {
                           </span>
                         </td>
                         <td className="p-3.5">
-                          {item.cooldown_ready ? (
+                          {item.status === "ENTERED" ? (
+                            <div>
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                                <CheckCircle2 className="size-3 text-sky-600" />
+                                Entry Executed
+                              </span>
+                              {item.entry_date && (
+                                <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">
+                                  {item.entry_date} @ ₹{item.entry_price?.toFixed(1)}
+                                </span>
+                              )}
+                            </div>
+                          ) : item.cooldown_ready ? (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
                               <CheckCircle2 className="size-3 text-emerald-600" />
-                              Stage-2 Ready
+                              Stage-2 Ready (Buy)
                             </span>
                           ) : (
                             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
                               <Clock className="size-3 text-amber-500" />
-                              Cooling Down
+                              Cooling Down (Wait)
                             </span>
                           )}
                         </td>
