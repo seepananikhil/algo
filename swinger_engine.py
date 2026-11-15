@@ -607,23 +607,76 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
             'dist_to_ceiling': round(float(dist_to_ceiling), 1)
         }
         
-        # Overhead 200 EMA Resistance Collision Check
-        ema200 = pd.Series(c).ewm(span=200, adjust=False).mean().values[-1]
+        # EMA calculations
+        ema20 = pd.Series(c).ewm(span=20, adjust=False).mean().values[-1]
         ema50 = pd.Series(c).ewm(span=50, adjust=False).mean().values[-1]
+        ema200 = pd.Series(c).ewm(span=200, adjust=False).mean().values[-1]
+        
+        # RSI 14
+        delta = pd.Series(c).diff()
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.ewm(com=13, min_periods=14).mean()
+        avg_loss = loss.ewm(com=13, min_periods=14).mean()
+        rsi_series = 100 - (100 / (1 + avg_gain / (avg_loss + 1e-9)))
+        rsi_val = float(rsi_series.values[-1])
+        surge_rsi = float(rsi_series.values[s_idx]) if s_idx < len(rsi_series) else 72.0
+        
+        cur_pct_gain = (cur_c - c[-2]) / c[-2] * 100.0 if c[-2] > 0 else 0.0
+        cur_range = h[-1] - l[-1]
+        upper_wick_ratio = ((h[-1] - cur_c) / cur_range) if cur_range > 0 else 0.0
+        dist_ema20 = (cur_c - ema20) / ema20 * 100.0 if ema20 > 0 else 0.0
         is_at_ema200_wall = abs(cur_c - ema200) / ema200 < 0.01 and cur_c < ema200 * 1.005
 
-        # Stage-2 50 EMA Pullback Bounce Check
-        cur_pct_gain = (cur_c - c[-2]) / c[-2] * 100.0 if c[-2] > 0 else 0.0
-        near_ema_support = (abs(l[-1] - ema50) / ema50 <= 0.04) or (abs(l[-1] - ema200) / ema200 <= 0.04)
-        is_ma_pullback = (cur_c > ema200) and near_ema_support and (cur_c > cur_o) and (cur_pct_gain >= 4.0) and (cur_vr >= 1.5)
-        is_breakout = (cur_c >= base_h * 0.995) and (cur_vr >= min_vol_ratio) and (cur_c >= cur_o)
+        # 1. Quiet Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
+        # Bounces gently off 20 EMA after healthy cool-off, avoiding chasing circuit spikes
+        is_ema_pullback = (
+            (-2.5 <= dist_ema20 <= 3.5) and 
+            (cur_c >= ema50 * 0.98) and 
+            (cur_c >= cur_o) and 
+            (1.0 <= cur_pct_gain <= 5.5) and 
+            (44.0 <= rsi_val <= 64.0) and 
+            (cur_vr >= 0.7) and 
+            (upper_wick_ratio <= 0.40)
+        )
 
-        if (is_breakout or is_ma_pullback) and not is_at_ema200_wall:
-            setup_dict['status'] = 'BREAKING OUT NOW'
-            setup_dict['setup_type'] = 'MA_PULLBACK' if is_ma_pullback and not is_breakout else 'BASE_BREAKOUT'
+        # 2. Stage-2 Base Breakout with Anti-Chasing Cap
+        # Breaks above the 20-25 day base resistance, but strictly rejects >8% circuit blow-offs
+        is_breakout = (
+            (cur_c >= base_h * 0.995) and 
+            (cur_vr >= min_vol_ratio) and 
+            (cur_c >= cur_o) and 
+            (cur_pct_gain <= 8.0) and  # Anti-chasing cap: never buy an exhausted +10-20% blast
+            (upper_wick_ratio <= 0.35)  # Rejects pin-bar traps
+        )
+
+        setup_dict['dist_ema20'] = round(float(dist_ema20), 1)
+        setup_dict['rsi'] = round(float(rsi_val), 1)
+        setup_dict['surge_rsi'] = round(float(surge_rsi), 1)
+        setup_dict['candle_pct'] = round(float(cur_pct_gain), 2)
+        setup_dict['ema20'] = round(float(ema20), 2)
+        setup_dict['surge_price'] = round(float(c[s_idx]), 2)
+        setup_dict['pullback_pct'] = round(float((cur_c / c[s_idx] - 1) * 100.0), 1) if c[s_idx] > 0 else 0.0
+
+        if (is_breakout or is_ema_pullback) and not is_at_ema200_wall:
+            if is_ema_pullback and not is_breakout:
+                setup_dict['status'] = 'PULLBACK BOUNCE TRIGGERED'
+                setup_dict['setup_type'] = 'MA_PULLBACK'
+                setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
+            else:
+                setup_dict['status'] = 'BREAKING OUT NOW'
+                setup_dict['setup_type'] = 'BASE_BREAKOUT'
+                setup_dict['strategy_leg'] = 'LEG2_BASE_BREAKOUT'
             triggered.append(setup_dict)
+        elif -2.0 <= dist_ema20 <= 2.5 and 44.0 <= rsi_val <= 60.0 and cur_c >= ema50 * 0.98:
+            setup_dict['status'] = 'RESTING AT 20 EMA'
+            setup_dict['setup_type'] = 'MA_PULLBACK'
+            setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
+            coiled.append(setup_dict)
         elif dist_to_ceiling >= -5.0:
             setup_dict['status'] = 'COILED (BREAKOUT IMMINENT)'
+            setup_dict['setup_type'] = 'BASE_BREAKOUT'
+            setup_dict['strategy_leg'] = 'LEG2_BASE_BREAKOUT'
             coiled.append(setup_dict)
             
     triggered.sort(key=lambda x: x['today_vol_mult'], reverse=True)
@@ -1070,6 +1123,26 @@ def update_positions_and_scan():
                 with open(radar_file, "w", encoding="utf-8") as f:
                     json.dump({"coiled": coiled_leg2, "updated_at": datetime.now(IST).isoformat()}, f, indent=2)
                     
+                # Dynamically update watchlist.json for the Radar tab in Web UI
+                radar_candidates = []
+                for item in coiled_leg2:
+                    radar_candidates.append({
+                        "symbol": item["symbol"],
+                        "name": item.get("name", item["symbol"]),
+                        "alert_date": item.get("surge_date", ""),
+                        "alert_price": item.get("surge_price", item["current_price"]),
+                        "alert_rsi": item.get("surge_rsi", 72.0),
+                        "current_price": item["current_price"],
+                        "current_rsi": item.get("rsi", 50.0),
+                        "ema20": item.get("ema20", item["current_price"]),
+                        "distance_to_ema20_pct": item.get("dist_ema20", 0.0),
+                        "pullback_pct": item.get("pullback_pct", 0.0),
+                        "status": item.get("status", "COILED"),
+                        "cooldown_ready": True if abs(item.get("dist_ema20", 99.0)) <= 2.5 else False,
+                        "notes": f"{item.get('status', 'COILED')} | Cooled {item.get('consol_days', 0)}d since volume surge"
+                    })
+                save_watchlist({"watchlist": radar_candidates})
+                    
                 alloc_per_slot = cfg.get("base_position_size", 25000.0)
                 for cand2 in trig_leg2:
                     if available_slots <= 0:
@@ -1084,12 +1157,13 @@ def update_positions_and_scan():
                     sl2 = round(c_p * (1.0 + leg2_sl_pct / 100.0), 2)
                     be2 = round(c_p * (1.0 + leg2_be_pct / 100.0), 2)
                     tp2 = round(c_p * 1.30, 2)
+                    s_leg2 = cand2.get("strategy_leg", "LEG2_BASE_BREAKOUT")
                     
                     new_pos2 = {
                         "symbol": sym2,
                         "name": sym2,
                         "leg": 2,
-                        "strategy_leg": "LEG2_BREAKOUT",
+                        "strategy_leg": s_leg2,
                         "entry_date": datetime.now(IST).strftime("%Y-%m-%d"),
                         "entry_price": c_p,
                         "avg_price": c_p,
@@ -1117,7 +1191,7 @@ def update_positions_and_scan():
                         "unrealized_pnl": 0.0,
                         "unrealized_pnl_pct": 0.0,
                         "unrealized_pct": 0.0,
-                        "status": "ACTIVE (Leg 2 Breakout)",
+                        "status": f"ACTIVE ({'20 EMA Pullback' if 'PULLBACK' in s_leg2 else 'Base Breakout'})",
                         "stars": 5,
                         "exit_rule": f"Leg 2 SL {leg2_sl_pct:.0f}% - BE Shield @ +{leg2_be_pct:.0f}% - 50 EMA Vol Breakdown + 20% Trail",
                         "peak_price": c_p
