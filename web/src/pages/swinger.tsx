@@ -543,95 +543,111 @@ export function SwingerPage() {
 
       {/* ================= 2. EXECUTIVE METRIC CARDS (4 TILES) ================= */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Card 1: Realized Net P&L & Strategy XIRR */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        {/* Card 1: Realized Profit & Compound Return */}
+        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span>Realized Net P&L</span>
+            <span className="flex items-center gap-1.5">
+              <TrendingUp className="size-3.5 text-emerald-500" />
+              <span>Realized Profit</span>
+            </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
-              XIRR: +{summary.xirr ?? 35.2}% p.a.
+              CAGR: +{summary.xirr ?? 35.2}% p.a.
             </span>
           </div>
-          <div className="my-2">
+          <div className="my-2.5">
             <div className="text-2xl font-black font-mono tracking-tight text-emerald-600">
               +₹{(summary.net_pnl ?? 1120118).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-xs text-emerald-700 font-bold mt-0.5 flex items-center gap-1.5 flex-wrap">
+            <div className="text-xs text-emerald-700 font-bold mt-1 flex items-center gap-1.5 flex-wrap">
               <span>+{summary.total_pnl_pct ?? 224.0}% ROI ({summary.period_years ?? 4.8}y)</span>
               <span className="text-slate-300">·</span>
               <span className="text-sky-700">Active XIRR: +{summary.xirr_active ?? 59.6}%</span>
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>{trades.length} Closed Trades ({summary.win_rate ?? 37.7}% WR)</span>
-            <span>PF: <strong className="text-slate-800 font-bold">{summary.profit_factor ?? 3.15}</strong></span>
+          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+            <span>Portfolio Ending:</span>
+            <span className="text-slate-800 font-mono font-bold">₹{((summary.current_capital ?? 1620118) / 100000).toFixed(2)}L <span className="text-slate-400 font-normal">from ₹5.0L</span></span>
           </div>
         </div>
 
-        {/* Card 2: Active Portfolio Holdings */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+        {/* Card 2: Drawdown & Risk Safety */}
+        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
           <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span>Active Holdings</span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
-              {positions.length} Positions
+            <span className="flex items-center gap-1.5">
+              <ShieldCheck className="size-3.5 text-sky-500" />
+              <span>Max Drawdown</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 font-mono">
+              Calmar: {summary.calmar_ratio ?? 5.27}
             </span>
           </div>
-          <div className="my-2">
+          <div className="my-2.5">
+            <div className="text-2xl font-black font-mono tracking-tight text-slate-900">
+              {summary.max_drawdown_pct ?? -8.8}%
+            </div>
+            <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>Peak Dip: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.abs(summary.max_drawdown ?? 61884) / 1000).toFixed(1)}k</strong></span>
+              <span className="text-slate-300">·</span>
+              <span className="text-slate-600">Active DD: {summary.max_drawdown_active_pct ?? -17.5}%</span>
+            </div>
+          </div>
+          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+            <span>Max Consecutive Cuts:</span>
+            <span className="text-slate-800 font-mono font-bold">{summary.max_consecutive_losses ?? 17} <span className="text-emerald-600 font-normal">(Controlled ₹25k Lots)</span></span>
+          </div>
+        </div>
+
+        {/* Card 3: Payoff Ratio & Asymmetric Edge */}
+        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="flex items-center gap-1.5">
+              <BarChart3 className="size-3.5 text-amber-500" />
+              <span>Reward / Risk Edge</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 font-mono">
+              PF: {summary.profit_factor ?? 3.15}
+            </span>
+          </div>
+          <div className="my-2.5">
+            <div className="text-2xl font-black font-mono tracking-tight text-amber-600">
+              {summary.payoff_ratio ?? 5.21}x <span className="text-xs font-bold text-slate-400 tracking-normal font-sans">Payoff</span>
+            </div>
+            <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>Avg Win: <strong className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.avg_win ?? 14527)).toLocaleString("en-IN")}</strong></span>
+              <span className="text-slate-300">·</span>
+              <span>Avg Loss: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.round(summary.avg_loss ?? 2789)).toLocaleString("en-IN")}</strong></span>
+            </div>
+          </div>
+          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+            <span>{trades.length} Closed Trades ({summary.win_rate ?? 37.7}% WR)</span>
+            <span className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.expectancy ?? 3734)).toLocaleString("en-IN")} <span className="text-slate-400 font-normal">/ trade</span></span>
+          </div>
+        </div>
+
+        {/* Card 4: Active Portfolio & Exposure */}
+        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
+          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <span className="flex items-center gap-1.5">
+              <Wallet className="size-3.5 text-indigo-500" />
+              <span>Active Portfolio</span>
+            </span>
+            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+              {positions.length} Open Holdings
+            </span>
+          </div>
+          <div className="my-2.5">
             <div className={`text-2xl font-black font-mono tracking-tight ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
               {totalUnrealizedPnl >= 0 ? "+" : ""}₹{totalUnrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </div>
-            <div className="text-xs text-slate-500 font-medium mt-0.5">
-              Unrealized Open P&L
+            <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
+              <span>Invested: <strong className="text-slate-800 font-mono font-bold">₹{totalInvested >= 1000 ? `${(totalInvested / 1000).toFixed(1)}k` : totalInvested.toFixed(0)}</strong></span>
+              <span className="text-slate-300">·</span>
+              <span>Standard Slot: <strong className="text-slate-800 font-mono font-bold">₹25k</strong></span>
             </div>
           </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
+          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
             <span>Banked TP1 Cash:</span>
             <span className="text-emerald-700 font-bold font-mono">+₹{totalBookedPnl.toLocaleString("en-IN")}</span>
-          </div>
-        </div>
-
-        {/* Card 3: Capital & Allocation */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span>Capital Allocation</span>
-            <Wallet className="size-4 text-slate-400" />
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-black font-mono tracking-tight text-slate-900">
-              ₹{(summary.current_capital ?? (500000 + (summary.net_pnl ?? 1043747))).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-0.5">
-              Invested: ₹{(totalInvested / 1000).toFixed(0)}k · Initial: ₹{((summary.initial_capital ?? 500000) / 100000).toFixed(1)}L · CAGR: <strong className="text-emerald-700 font-bold font-mono">+{summary.xirr ?? 32.3}% p.a.</strong>
-            </div>
-          </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>Slot Size:</span>
-            <span className="text-slate-800 font-mono font-bold">₹25,000 / Lot (Unlimited Lots)</span>
-          </div>
-        </div>
-
-        {/* Card 4: Scanner Hits & Radar */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span>Today's Screener Hits</span>
-            <Flame className="size-4 text-amber-500" />
-          </div>
-          <div className="my-2">
-            <div className="text-2xl font-black font-mono tracking-tight text-purple-700">
-              {dailySignals.count} {dailySignals.count === 1 ? "Stock" : "Stocks"}
-            </div>
-            <div className="text-xs text-purple-800 font-bold mt-0.5 truncate">
-              {dailySignals.signals.length > 0 ? (
-                <span>
-                  {dailySignals.signals[0].nsecode} (+{(dailySignals.signals[0].per_chg || 0).toFixed(1)}%)
-                </span>
-              ) : (
-                "No fresh breakout today"
-              )}
-            </div>
-          </div>
-          <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>Watchlist Radar:</span>
-            <span className="text-amber-700 font-bold">{watchlist.length} Pullback Setups</span>
           </div>
         </div>
       </div>

@@ -5525,7 +5525,14 @@ class Handler(BaseHTTPRequestHandler):
                 df = df[df["timestamp"] <= end].reset_index(drop=True)
                 cutoff = end.strftime("%H:%M")
             rows = [] if df.empty else [
-                {"time": r.timestamp.strftime("%H:%M"), "open": r.open, "high": r.high, "low": r.low, "close": r.close}
+                {
+                    "time": r.timestamp.strftime("%H:%M"),
+                    "open": float(r.open),
+                    "high": float(r.high),
+                    "low": float(r.low),
+                    "close": float(r.close),
+                    "volume": float(getattr(r, "volume", 0) or 0) if hasattr(r, "volume") else 0,
+                }
                 for r in df.itertuples()
             ]
             forming = forming_candle(date, rows[-1]["time"] if rows else "", symbol=symbol)
@@ -5630,7 +5637,14 @@ class Handler(BaseHTTPRequestHandler):
             settings = key_level_settings(read_config())
             replay_trades = backtest_key_levels(minute_candles, settings)
             rows = [] if bars.empty else [
-                {"time": row.timestamp.strftime("%H:%M"), "open": row.open, "high": row.high, "low": row.low, "close": row.close}
+                {
+                    "time": row.timestamp.strftime("%H:%M"),
+                    "open": float(row.open),
+                    "high": float(row.high),
+                    "low": float(row.low),
+                    "close": float(row.close),
+                    "volume": float(getattr(row, "volume", 0) or 0) if hasattr(row, "volume") else 0,
+                }
                 for row in bars.itertuples()
             ]
             chart_trades = [

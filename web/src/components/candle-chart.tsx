@@ -1,12 +1,28 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
-import { Eraser, Minus, MousePointer2, RotateCcw, Trash2, TrendingUp, ZoomIn, ZoomOut } from "lucide-react"
+import {
+  BarChart2,
+  Eraser,
+  Layers,
+  Maximize2,
+  Minimize2,
+  Minus,
+  MousePointer2,
+  RotateCcw,
+  Trash2,
+  TrendingUp,
+  X,
+  ZoomIn,
+  ZoomOut,
+} from "lucide-react"
 import { useTheme } from "next-themes"
 import {
   CandlestickSeries,
   ColorType,
   createChart,
   createSeriesMarkers,
+  HistogramSeries,
+  LineSeries,
   LineStyle,
   type IChartApi,
   type IPriceLine,
@@ -21,7 +37,6 @@ import { Button } from "@/components/ui/button"
 import { PriceBandPrimitive, type Band } from "@/components/price-band"
 import { BoxPrimitive, type TimeBoundedBox } from "@/components/box-primitive"
 import type { CompressionBox } from "@/lib/api"
-
 import { cn } from "@/lib/utils"
 
 // Treat IST wall-clock as UTC so the axis shows market time (09:15 etc.).
@@ -34,15 +49,48 @@ const toTime = (date: string, hhmm: string) => {
   return (isNaN(ts) ? 0 : ts / 1000) as UTCTimestamp
 }
 
-function fitSession(c: IChartApi, bars: number, fullDay = false) {
-  if (!c || bars <= 0) return
+function fitSession(c: IChartApi, barCount: number, fullDay = false) {
+  if (!c || barCount <= 0) return
   try {
     const timeScale = c.timeScale()
-    // 4 bars of breathing room on the left so 09:15 candle and label are never cut off
     const fromIndex = -4
-    const toIndex = fullDay || bars >= 50 ? bars + 3 : Math.max(bars + 2, 38)
+    const toIndex = fullDay || barCount >= 50 ? barCount + 3 : Math.max(barCount + 2, 38)
     timeScale.setVisibleLogicalRange({ from: fromIndex, to: toIndex })
   } catch {}
+}
+
+// Calculate Exponential Moving Average (EMA)
+function calculateEMA(data: { time: UTCTimestamp; close: number }[], period: number) {
+  if (data.length < period) return []
+  const k = 2 / (period + 1)
+  let ema = data.slice(0, period).reduce((acc, val) => acc + val.close, 0) / period
+  const emaData: { time: UTCTimestamp; value: number }[] = []
+
+  for (let i = period - 1; i < data.length; i++) {
+    if (i === period - 1) {
+      emaData.push({ time: data[i].time, value: Math.round(ema * 100) / 100 })
+    } else {
+      ema = data[i].close * k + ema * (1 - k)
+      emaData.push({ time: data[i].time, value: Math.round(ema * 100) / 100 })
+    }
+  }
+  return emaData
+}
+
+function fmtNum(n?: number | null, decimals = 2): string {
+  if (n === null || n === undefined || isNaN(n)) return "0.00"
+  return n.toLocaleString("en-IN", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  })
+}
+
+function fmtVol(vol?: number | null): string {
+  if (!vol || vol <= 0 || isNaN(vol)) return "0"
+  if (vol >= 10_000_000) return `${(vol / 10_000_000).toFixed(2)} Cr`
+  if (vol >= 100_000) return `${(vol / 100_000).toFixed(2)} L`
+  if (vol >= 1_000) return `${(vol / 1_000).toFixed(1)} K`
+  return vol.toLocaleString("en-IN")
 }
 
 export type DrawingType = "none" | "hline" | "trendline" | "eraser"
@@ -88,6 +136,19 @@ function distToSegment(px: number, py: number, x1: number, y1: number, x2: numbe
   return Math.hypot(px - (x1 + t * (x2 - x1)), py - (y1 + t * (y2 - y1)))
 }
 
+interface HoveredInfo {
+  time: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume?: number
+  changePts: number
+  changePct: number
+  ema50?: number
+  ema200?: number
+}
+
 type Props = {
   date: string
   symbol?: string
@@ -109,10 +170,31 @@ type Props = {
   resetKey?: string
 }
 
-export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentPrice, setup, trades = [], keyLevelZone, showKeyLevels = false, showTradeLevels = false, boxes = [], className = "h-[clamp(340px,46vh,480px)]", overlay, zoomable = false, hideToolbar = false, fullDay = false, resetKey = "" }: Props) {
+export function CandleChart({
+  date,
+  symbol = "NIFTY",
+  candles,
+  forming,
+  currentPrice,
+  setup,
+  trades = [],
+  keyLevelZone,
+  showKeyLevels = false,
+  showTradeLevels = false,
+  boxes = [],
+  className = "h-[clamp(340px,46vh,480px)]",
+  overlay,
+  zoomable = false,
+  hideToolbar = false,
+  fullDay = false,
+  resetKey = "",
+}: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
   const series = useRef<ISeriesApi<"Candlestick"> | null>(null)
+  const volumeSeries = useRef<ISeriesApi<"Histogram"> | null>(null)
+  const ema50Series = useRef<ISeriesApi<"Line"> | null>(null)
+  const ema200Series = useRef<ISeriesApi<"Line"> | null>(null)
   const markers = useRef<ISeriesMarkersPluginApi<Time> | null>(null)
   const lines = useRef<IPriceLine[]>([])
   const band = useRef<PriceBandPrimitive | null>(null)
@@ -122,6 +204,14 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
   const manualRange = useRef(false)
   const viewKey = useRef("")
   const { resolvedTheme } = useTheme()
+
+  // Swinger UX: Feature toggles & Fullscreen
+  const [showVolume, setShowVolume] = useState<boolean>(true)
+  const [showEMA50, setShowEMA50] = useState<boolean>(true)
+  const [showEMA200, setShowEMA200] = useState<boolean>(true)
+  const [showLevelsState, setShowLevelsState] = useState<boolean>(Boolean(showKeyLevels || showTradeLevels || true))
+  const [isMaximized, setIsMaximized] = useState<boolean>(false)
+  const [hovered, setHovered] = useState<HoveredInfo | null>(null)
 
   // Interactive Drawing Tools state
   const [tool, setTool] = useState<DrawingType>("none")
@@ -150,6 +240,33 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
   // Scoped strictly to today's date & symbol ("valid only for day")
   const storageKey = `chart_drawings_${date}_${symbol || "NIFTY"}`
 
+  // Key stats for title bar & HUD
+  const stats = useMemo(() => {
+    if (!candles || candles.length === 0) return null
+    const latest = candles[candles.length - 1]
+    const first = candles[0]
+    const cmp = currentPrice ?? latest.close
+    const base = first.open || cmp
+    const dayChangePts = cmp - base
+    const dayChangePct = base > 0 ? (dayChangePts / base) * 100 : 0
+    let sessionHigh = -Infinity
+    let sessionLow = Infinity
+    let totalVol = 0
+    for (const c of candles) {
+      if (c.high > sessionHigh) sessionHigh = c.high
+      if (c.low < sessionLow) sessionLow = c.low
+      totalVol += c.volume || 0
+    }
+    return {
+      cmp,
+      dayChangePts,
+      dayChangePct,
+      sessionHigh: sessionHigh === -Infinity ? cmp : sessionHigh,
+      sessionLow: sessionLow === Infinity ? cmp : sessionLow,
+      totalVol,
+    }
+  }, [candles, currentPrice])
+
   // Load drawings from localStorage for this specific day & symbol
   useEffect(() => {
     if (!date) return
@@ -167,7 +284,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       setDrawings([])
     }
 
-    // Prune stale drawings from older dates so they don't persist indefinitely
+    // Prune stale drawings from older dates
     try {
       const prefix = "chart_drawings_"
       const keysToRemove: string[] = []
@@ -304,7 +421,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
   }, [isDragging])
 
-  // Keyboard controls: Delete / Backspace to delete selected drawing, Escape to deselect / cancel
+  // Keyboard controls: Delete / Backspace to delete drawing, Escape to exit fullscreen / deselect
   useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.key === "Delete" || e.key === "Backspace") && selectedDrawingId) {
@@ -313,7 +430,9 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
         setSelectedDrawingId(null)
         setHoveredDrawingId(null)
       } else if (e.key === "Escape") {
-        if (trendlineStart) {
+        if (isMaximized) {
+          setIsMaximized(false)
+        } else if (trendlineStart) {
           setTrendlineStart(null)
         } else if (selectedDrawingId) {
           setSelectedDrawingId(null)
@@ -326,14 +445,15 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [trendlineStart, selectedDrawingId])
+  }, [trendlineStart, selectedDrawingId, isMaximized])
 
+  // Build the lightweight chart instance
   useEffect(() => {
     if (!el.current) return
     const isLight = resolvedTheme === "light"
-    const gridLineColor = isLight ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)"
-    const borderColor = isLight ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.1)"
-    const textColor = isLight ? "#52525b" : "#a1a1aa"
+    const gridLineColor = isLight ? "rgba(241, 245, 249, 0.8)" : "rgba(255, 255, 255, 0.04)"
+    const borderColor = isLight ? "#e2e8f0" : "rgba(255, 255, 255, 0.1)"
+    const textColor = isLight ? "#64748b" : "#94a3b8"
 
     const c = createChart(el.current, {
       autoSize: true,
@@ -343,8 +463,21 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
         fontSize: 11,
         fontFamily: "Geist Mono, monospace, sans-serif",
       },
-      grid: { vertLines: { visible: false }, horzLines: { color: gridLineColor } },
-      rightPriceScale: { borderColor: borderColor, scaleMargins: { top: 0.04, bottom: 0.04 }, entireTextOnly: true },
+      grid: {
+        vertLines: { visible: false },
+        horzLines: { color: gridLineColor },
+      },
+      crosshair: {
+        mode: 1, // Magnet crosshair for smooth tracking
+      },
+      rightPriceScale: {
+        borderColor: borderColor,
+        scaleMargins: {
+          top: 0.06,
+          bottom: showVolume ? 0.20 : 0.05,
+        },
+        entireTextOnly: true,
+      },
       timeScale: {
         borderColor: borderColor,
         timeVisible: true,
@@ -376,13 +509,14 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           return String(time)
         },
       },
-      crosshair: { mode: 0 },
       handleScroll: zoomable,
       handleScale: zoomable,
     })
+
+    // 1. Candlestick Series (TradingView Standard Crisp Colors)
     const s = c.addSeries(CandlestickSeries, {
-      upColor: "#10b981",
-      downColor: "#ef4444",
+      upColor: "#10b981", // Crisp mint-emerald
+      downColor: "#ef4444", // Modern clean crimson
       borderVisible: false,
       wickUpColor: "#10b981",
       wickDownColor: "#ef4444",
@@ -396,12 +530,84 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     })
     chart.current = c
     series.current = s
+
+    // 2. Volume Histogram Series at Bottom
+    const volSeries = c.addSeries(HistogramSeries, {
+      priceFormat: { type: "volume" },
+      priceScaleId: "", // Overlay at bottom
+    })
+    volSeries.priceScale().applyOptions({
+      scaleMargins: {
+        top: 0.82,
+        bottom: 0,
+      },
+    })
+    volumeSeries.current = volSeries
+
+    // 3. Technical Indicator Lines (50 EMA & 200 EMA)
+    const e50 = c.addSeries(LineSeries, {
+      color: "#06b6d4",
+      lineWidth: 2,
+      title: "50 EMA",
+      priceLineVisible: false,
+    })
+    ema50Series.current = e50
+
+    const e200 = c.addSeries(LineSeries, {
+      color: "#f59e0b",
+      lineWidth: 2,
+      title: "200 EMA",
+      priceLineVisible: false,
+    })
+    ema200Series.current = e200
+
     markers.current = createSeriesMarkers(s, [])
     band.current = new PriceBandPrimitive()
     s.attachPrimitive(band.current)
     boxPrimitive.current = new BoxPrimitive()
     s.attachPrimitive(boxPrimitive.current)
-    // Keep the whole session in view when the card resizes, unless the user zoomed.
+
+    // Floating Crosshair HUD subscriber (Swinger UX)
+    const onCrosshairMove = (param: any) => {
+      if (!param.time || !param.seriesData || !series.current) {
+        setHovered(null)
+        return
+      }
+      const barData = param.seriesData.get(series.current) as any
+      if (barData) {
+        const timeVal = param.time as UTCTimestamp
+        const d = new Date(timeVal * 1000)
+        const hh = String(d.getUTCHours()).padStart(2, "0")
+        const mm = String(d.getUTCMinutes()).padStart(2, "0")
+        const timeStr = `${hh}:${mm}`
+
+        const closePrice = typeof barData.close === "number" ? barData.close : barData.value ?? 0
+        const openPrice = typeof barData.open === "number" ? barData.open : closePrice
+        const pts = closePrice - openPrice
+        const pct = openPrice > 0 ? (pts / openPrice) * 100 : 0
+        const vData = volumeSeries.current ? (param.seriesData.get(volumeSeries.current) as any) : null
+        const e50Data = ema50Series.current ? (param.seriesData.get(ema50Series.current) as any) : null
+        const e200Data = ema200Series.current ? (param.seriesData.get(ema200Series.current) as any) : null
+
+        setHovered({
+          time: timeStr,
+          open: openPrice,
+          high: typeof barData.high === "number" ? barData.high : closePrice,
+          low: typeof barData.low === "number" ? barData.low : closePrice,
+          close: closePrice,
+          volume: vData?.value ?? 0,
+          changePts: pts,
+          changePct: pct,
+          ema50: e50Data?.value,
+          ema200: e200Data?.value,
+        })
+      } else {
+        setHovered(null)
+      }
+    }
+    c.subscribeCrosshairMove(onCrosshairMove)
+
+    // Resize Observer keeps session in view
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.contentRect.width > 0 && entry.contentRect.height > 0) {
@@ -414,19 +620,25 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       }
     })
     ro.observe(el.current)
+
     const onRangeChange = () => {
       setViewTick((v) => (v + 1) % 100000)
     }
     c.timeScale().subscribeVisibleLogicalRangeChange(onRangeChange)
+
     const node = el.current
-    const markManual = () => { manualRange.current = true }
+    const markManual = () => {
+      manualRange.current = true
+    }
     if (zoomable) {
       node.addEventListener("wheel", markManual, { passive: true })
       node.addEventListener("pointerdown", markManual)
     }
+
     return () => {
       ro.disconnect()
       try {
+        c.unsubscribeCrosshairMove(onCrosshairMove)
         c.timeScale().unsubscribeVisibleLogicalRangeChange(onRangeChange)
       } catch {}
       node.removeEventListener("wheel", markManual)
@@ -434,6 +646,9 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       c.remove()
       chart.current = null
       series.current = null
+      volumeSeries.current = null
+      ema50Series.current = null
+      ema200Series.current = null
       markers.current = null
       band.current = null
       boxPrimitive.current = null
@@ -442,27 +657,41 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
   }, [])
 
+  // Update theme colors
   useEffect(() => {
     const light = resolvedTheme === "light"
-    const line = light ? "rgba(0,0,0,0.06)" : "rgba(255,255,255,0.04)"
-    const border = light ? "rgba(0,0,0,0.12)" : "rgba(255,255,255,0.1)"
+    const line = light ? "rgba(241, 245, 249, 0.8)" : "rgba(255, 255, 255, 0.04)"
+    const border = light ? "#e2e8f0" : "rgba(255, 255, 255, 0.1)"
     chart.current?.applyOptions({
-      layout: { textColor: light ? "#52525b" : "#a1a1aa", fontSize: 11 },
+      layout: { textColor: light ? "#64748b" : "#94a3b8", fontSize: 11 },
       grid: { horzLines: { color: line } },
-      rightPriceScale: { borderColor: border, scaleMargins: { top: 0.04, bottom: 0.04 }, entireTextOnly: true },
+      rightPriceScale: { borderColor: border, scaleMargins: { top: 0.06, bottom: showVolume ? 0.20 : 0.05 }, entireTextOnly: true },
       timeScale: { borderColor: border },
     })
-  }, [resolvedTheme])
+  }, [resolvedTheme, showVolume])
 
+  // Resize when maximizing or restoring
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (chart.current && el.current) {
+        chart.current.resize(el.current.clientWidth, el.current.clientHeight, true)
+        setChartDim({ width: el.current.clientWidth, height: el.current.clientHeight })
+        fitSession(chart.current, bars.current, fullDay)
+      }
+    }, 60)
+    return () => clearTimeout(timer)
+  }, [isMaximized, fullDay])
+
+  // Data population & indicators
   useEffect(() => {
     const s = series.current
     if (!s) return
-    const dataMap = new Map<number, { time: UTCTimestamp; open: number; high: number; low: number; close: number }>()
+    const dataMap = new Map<number, { time: UTCTimestamp; open: number; high: number; low: number; close: number; volume?: number }>()
     for (const k of candles) {
       if (k.open == null || k.high == null || k.low == null || k.close == null) continue
       const t = toTime(date, k.time)
       if (t > 0) {
-        dataMap.set(t, { time: t, open: k.open, high: k.high, low: k.low, close: k.close })
+        dataMap.set(t, { time: t, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume || 0 })
       }
     }
     if (forming?.time && forming.open != null && forming.high != null && forming.low != null && forming.close != null) {
@@ -474,18 +703,33 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           high: forming.high,
           low: forming.low,
           close: forming.close,
+          volume: forming.volume || 0,
         })
       }
     }
     const data = Array.from(dataMap.values()).sort((a, b) => (a.time as number) - (b.time as number))
 
-    // Polling hands us new arrays every few seconds; skip redraws when nothing changed.
     const frame = `${date}|${resetKey}`
     if (viewKey.current !== frame) {
       viewKey.current = frame
       manualRange.current = false
     }
-    const key = JSON.stringify([date, data.length, data.at(-1), currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels, boxes])
+    const key = JSON.stringify([
+      date,
+      data.length,
+      data.at(-1),
+      currentPrice,
+      setup,
+      trades,
+      keyLevelZone,
+      showKeyLevels,
+      showTradeLevels,
+      boxes,
+      showVolume,
+      showEMA50,
+      showEMA200,
+      showLevelsState,
+    ])
     if (key === dataKey.current) return
     dataKey.current = key
 
@@ -495,6 +739,43 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       console.warn("CandleChart setData error:", err)
     }
 
+    // Populate Volume Data
+    if (volumeSeries.current) {
+      if (showVolume && data.length > 0) {
+        const volData = data.map((c) => ({
+          time: c.time,
+          value: c.volume || 0,
+          color: c.close >= c.open ? "rgba(16, 185, 129, 0.30)" : "rgba(239, 68, 68, 0.25)",
+        }))
+        volumeSeries.current.setData(volData)
+      } else {
+        volumeSeries.current.setData([])
+      }
+    }
+
+    // Populate 50 EMA Data
+    if (ema50Series.current) {
+      if (showEMA50 && data.length >= 10) {
+        const period50 = Math.min(50, Math.max(10, Math.floor(data.length / 2)))
+        const ema50Values = calculateEMA(data, period50)
+        ema50Series.current.setData(ema50Values)
+      } else {
+        ema50Series.current.setData([])
+      }
+    }
+
+    // Populate 200 EMA Data
+    if (ema200Series.current) {
+      if (showEMA200 && data.length >= 30) {
+        const period200 = Math.min(200, Math.max(30, Math.floor(data.length * 0.75)))
+        const ema200Values = calculateEMA(data, period200)
+        ema200Series.current.setData(ema200Values)
+      } else {
+        ema200Series.current.setData([])
+      }
+    }
+
+    // Populate Price Lines & Key Levels
     lines.current.forEach((l) => s.removePriceLine(l))
     lines.current = []
     const add = (
@@ -503,7 +784,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       style = LineStyle.Dashed,
       axisLabel = true,
       title = "",
-      lineWidth: 1 | 2 | 3 | 4 = 1,
+      lineWidth: 1 | 2 | 3 | 4 = 1
     ) => {
       if (price == null) return
       const p = typeof price === "number" ? price : Number(price)
@@ -515,124 +796,124 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       }
     }
 
-    // Clean subtle reference lines without axis badge clutter
-    if (currentPrice != null) {
-      add(currentPrice, "rgba(249, 115, 22, 0.7)", LineStyle.Dotted, false, "", 1)
-    }
-    add(setup?.range_high, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "HIGH", 1)
-    add(setup?.range_low, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "LOW", 1)
-    // Prominent Midpoint line with clean axis badge
-    add(setup?.mid, "#fbbf24", LineStyle.Solid, true, "MID", 2)
-
     let sessionLow = Infinity
     let sessionHigh = -Infinity
     for (const bar of data) {
       if (bar.low < sessionLow) sessionLow = bar.low
       if (bar.high > sessionHigh) sessionHigh = bar.high
     }
+
     const bands: Band[] = []
-    if (setup?.mid != null && setup.buffer) {
-      bands.push({
-        top: setup.mid + setup.buffer,
-        bottom: setup.mid - setup.buffer,
-        fill: "rgba(251, 191, 36, 0.08)",
-        edge: "rgba(251, 191, 36, 0.3)",
-        autoscale: false,
-      })
-    }
 
-    if (showKeyLevels || showTradeLevels || keyLevelZone) {
-      let sessionLow = Infinity
-      let sessionHigh = -Infinity
-      for (const bar of data) {
-        if (bar.low < sessionLow) sessionLow = bar.low
-        if (bar.high > sessionHigh) sessionHigh = bar.high
+    if (showLevelsState) {
+      // Subtle reference lines
+      if (currentPrice != null) {
+        add(currentPrice, "rgba(249, 115, 22, 0.7)", LineStyle.Dotted, false, "", 1)
       }
-      const step = 500
-      const defaultBuffer = keyLevelZone?.buffer ?? setup?.key_level_zone?.buffer ?? 10
-      const levelSet = new Set<number>()
-      if (Number.isFinite(sessionLow) && Number.isFinite(sessionHigh)) {
-        const startLevel = Math.floor((sessionLow - defaultBuffer) / step) * step
-        const endLevel = Math.ceil((sessionHigh + defaultBuffer) / step) * step
-        for (let lvl = startLevel; lvl <= endLevel; lvl += step) levelSet.add(lvl)
-      }
-      for (const level of setup?.key_levels ?? []) {
-        if (Number.isFinite(level.price)) levelSet.add(level.price)
-      }
-      const explicitZone = keyLevelZone ?? setup?.key_level_zone ?? null
-      if (explicitZone && Number.isFinite(explicitZone.level)) levelSet.add(explicitZone.level)
+      add(setup?.range_high, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "HIGH", 1)
+      add(setup?.range_low, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "LOW", 1)
+      add(setup?.mid, "#fbbf24", LineStyle.Solid, true, "MID", 2)
 
-      const allLevels = [...levelSet].sort((a, b) => a - b)
-      const lastClose = data.at(-1)?.close ?? 0
-      const distToSession = (lvl: number) =>
-        Number.isFinite(sessionLow) && Number.isFinite(sessionHigh)
-          ? Math.max(sessionLow - lvl, 0, lvl - sessionHigh)
-          : Infinity
-      const primaryLevel =
-        explicitZone?.level ??
-        (allLevels.length
-          ? [...allLevels].sort((a, b) => distToSession(a) - distToSession(b) || Math.abs(lastClose - a) - Math.abs(lastClose - b))[0]
-          : null)
-
-      for (const lvl of allLevels) {
-        const isPrimary = lvl === primaryLevel
-        const nearSession = distToSession(lvl) <= 150
-        if (!isPrimary && !nearSession) continue
-
-        // Only show axis badge on the primary key level to prevent badge overlap
-        add(
-          lvl,
-          isPrimary ? "#06b6d4" : "rgba(6, 182, 212, 0.45)",
-          isPrimary ? LineStyle.Solid : LineStyle.Dashed,
-          isPrimary,
-          isPrimary ? "KEY" : "",
-          isPrimary ? 2 : 1
-        )
+      if (setup?.mid != null && setup.buffer) {
         bands.push({
-          top: lvl + defaultBuffer,
-          bottom: lvl - defaultBuffer,
-          fill: "rgba(6, 182, 212, 0.06)",
-          edge: "rgba(6, 182, 212, 0.25)",
+          top: setup.mid + setup.buffer,
+          bottom: setup.mid - setup.buffer,
+          fill: "rgba(251, 191, 36, 0.08)",
+          edge: "rgba(251, 191, 36, 0.3)",
           autoscale: false,
         })
       }
+
+      if (showKeyLevels || showTradeLevels || keyLevelZone) {
+        const step = 500
+        const defaultBuffer = keyLevelZone?.buffer ?? setup?.key_level_zone?.buffer ?? 10
+        const levelSet = new Set<number>()
+        if (Number.isFinite(sessionLow) && Number.isFinite(sessionHigh)) {
+          const startLevel = Math.floor((sessionLow - defaultBuffer) / step) * step
+          const endLevel = Math.ceil((sessionHigh + defaultBuffer) / step) * step
+          for (let lvl = startLevel; lvl <= endLevel; lvl += step) levelSet.add(lvl)
+        }
+        for (const level of setup?.key_levels ?? []) {
+          if (Number.isFinite(level.price)) levelSet.add(level.price)
+        }
+        const explicitZone = keyLevelZone ?? setup?.key_level_zone ?? null
+        if (explicitZone && Number.isFinite(explicitZone.level)) levelSet.add(explicitZone.level)
+
+        const allLevels = [...levelSet].sort((a, b) => a - b)
+        const lastClose = data.at(-1)?.close ?? 0
+        const distToSession = (lvl: number) =>
+          Number.isFinite(sessionLow) && Number.isFinite(sessionHigh)
+            ? Math.max(sessionLow - lvl, 0, lvl - sessionHigh)
+            : Infinity
+        const primaryLevel =
+          explicitZone?.level ??
+          (allLevels.length
+            ? [...allLevels].sort((a, b) => distToSession(a) - distToSession(b) || Math.abs(lastClose - a) - Math.abs(lastClose - b))[0]
+            : null)
+
+        for (const lvl of allLevels) {
+          const isPrimary = lvl === primaryLevel
+          const nearSession = distToSession(lvl) <= 150
+          if (!isPrimary && !nearSession) continue
+
+          add(
+            lvl,
+            isPrimary ? "#06b6d4" : "rgba(6, 182, 212, 0.45)",
+            isPrimary ? LineStyle.Solid : LineStyle.Dashed,
+            isPrimary,
+            isPrimary ? "KEY" : "",
+            isPrimary ? 2 : 1
+          )
+          bands.push({
+            top: lvl + defaultBuffer,
+            bottom: lvl - defaultBuffer,
+            fill: "rgba(6, 182, 212, 0.06)",
+            edge: "rgba(6, 182, 212, 0.25)",
+            autoscale: false,
+          })
+        }
+      }
+
+      if (setup?.armed) add(setup.armed.level, "#c084fc", LineStyle.Solid, true, "ARMED", 2)
+
+      if (showTradeLevels) {
+        for (const trade of trades) {
+          if (!trade) continue
+          const slNum = Number(trade.sl)
+          const tgtNum = Number(trade.target)
+          const ceilNum = Number((trade as any).box_high ?? (trade as any).ceil)
+          const floorNum = Number((trade as any).box_low ?? (trade as any).floor)
+
+          if (!Number.isNaN(ceilNum) && Number.isFinite(ceilNum) && ceilNum > 0 && ceilNum >= sessionLow * 0.9 && ceilNum <= sessionHigh * 1.1) {
+            add(ceilNum, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
+          }
+          if (!Number.isNaN(floorNum) && Number.isFinite(floorNum) && floorNum > 0 && floorNum >= sessionLow * 0.9 && floorNum <= sessionHigh * 1.1) {
+            add(floorNum, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
+          }
+          if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 && slNum >= sessionLow * 0.9 && slNum <= sessionHigh * 1.1) {
+            add(slNum, "#ef4444", LineStyle.Dashed, true, "SL")
+          }
+          if (!Number.isNaN(tgtNum) && Number.isFinite(tgtNum) && tgtNum > 0 && tgtNum >= sessionLow * 0.9 && tgtNum <= sessionHigh * 1.1) {
+            add(tgtNum, "#10b981", LineStyle.Dashed, true, "TGT")
+          }
+        }
+      }
+
+      if (boxes && boxes.length > 0) {
+        for (const b of boxes) {
+          if (b.ceiling && (!trades || trades.length === 0)) {
+            add(b.ceiling, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
+          }
+          if (b.floor && (!trades || trades.length === 0)) {
+            add(b.floor, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
+          }
+        }
+      }
     }
+
     band.current?.setBands(bands)
-    if (setup?.armed) add(setup.armed.level, "#c084fc", LineStyle.Solid, true, "ARMED", 2)
-    if (showTradeLevels) {
-      for (const trade of trades) {
-        if (!trade) continue
-        const slNum = Number(trade.sl)
-        const tgtNum = Number(trade.target)
-        const ceilNum = Number((trade as any).box_high ?? (trade as any).ceil)
-        const floorNum = Number((trade as any).box_low ?? (trade as any).floor)
 
-        if (!Number.isNaN(ceilNum) && Number.isFinite(ceilNum) && ceilNum > 0 && ceilNum >= sessionLow * 0.9 && ceilNum <= sessionHigh * 1.1) {
-          add(ceilNum, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
-        }
-        if (!Number.isNaN(floorNum) && Number.isFinite(floorNum) && floorNum > 0 && floorNum >= sessionLow * 0.9 && floorNum <= sessionHigh * 1.1) {
-          add(floorNum, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
-        }
-        if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 && slNum >= sessionLow * 0.9 && slNum <= sessionHigh * 1.1) {
-          add(slNum, "#ef4444", LineStyle.Dashed, true, "SL")
-        }
-        if (!Number.isNaN(tgtNum) && Number.isFinite(tgtNum) && tgtNum > 0 && tgtNum >= sessionLow * 0.9 && tgtNum <= sessionHigh * 1.1) {
-          add(tgtNum, "#10b981", LineStyle.Dashed, true, "TGT")
-        }
-      }
-    }
-
-    if (boxes && boxes.length > 0) {
-      for (const b of boxes) {
-        if (b.ceiling && (!trades || trades.length === 0)) {
-          add(b.ceiling, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
-        }
-        if (b.floor && (!trades || trades.length === 0)) {
-          add(b.floor, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
-        }
-      }
-    }
-
+    // Markers
     const m: SeriesMarker<Time>[] = []
     const seenTouches = new Set<string>()
     const addTouches = (touchTimes: string[] | undefined, isRes: boolean) => {
@@ -656,7 +937,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       })
     }
 
-    if (boxes && boxes.length > 0) {
+    if (boxes && boxes.length > 0 && showLevelsState) {
       for (const b of boxes) {
         if (b.touch_times) {
           addTouches(b.touch_times, b.status !== "breakout_down")
@@ -664,14 +945,15 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       }
     }
     for (const t of trades) {
-      const call = t.side === "CALL"
+      const call = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
       if (t.entry) {
         m.push({
           time: toTime(date, t.entry.slice(0, 5)),
           position: call ? "belowBar" : "aboveBar",
           color: call ? "#10b981" : "#ef4444",
           shape: call ? "arrowUp" : "arrowDown",
-          size: 1,
+          size: 1.5,
+          text: `BUY @ ${t.entry_price ? fmtNum(t.entry_price, 1) : ""}`,
         })
       }
       if (t.exit && !(t.reason && t.reason.endsWith("open"))) {
@@ -680,7 +962,8 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           position: call ? "aboveBar" : "belowBar",
           color: "#71717a",
           shape: call ? "arrowDown" : "arrowUp",
-          size: 1,
+          size: 1.5,
+          text: `EXIT ${t.pnl_points ? `(${t.pnl_points > 0 ? "+" : ""}${fmtNum(t.pnl_points, 1)} pts)` : ""}`,
         })
       }
     }
@@ -691,7 +974,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       console.warn("CandleChart: failed to set markers", e)
     }
 
-    if (boxes && boxes.length > 0) {
+    if (boxes && boxes.length > 0 && showLevelsState) {
       const bBoxes: TimeBoundedBox[] = boxes.map((b, idx) => {
         const sTime = toTime(date, b.start_time)
         const eTime = toTime(date, b.end_time || b.break_time || "15:25")
@@ -711,12 +994,30 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     } else {
       boxPrimitive.current?.setBoxes([])
     }
+
     const isFirstBarFit = bars.current === 0 && data.length > 0
     bars.current = data.length
     if (chart.current && !manualRange.current && isFirstBarFit) {
       fitSession(chart.current, data.length, fullDay)
     }
-  }, [date, candles, forming, currentPrice, setup, trades, keyLevelZone, showKeyLevels, showTradeLevels, fullDay, resetKey, boxes])
+  }, [
+    date,
+    candles,
+    forming,
+    currentPrice,
+    setup,
+    trades,
+    keyLevelZone,
+    showKeyLevels,
+    showTradeLevels,
+    fullDay,
+    resetKey,
+    boxes,
+    showVolume,
+    showEMA50,
+    showEMA200,
+    showLevelsState,
+  ])
 
   useEffect(() => {
     manualRange.current = false
@@ -738,7 +1039,7 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     if (chart.current) fitSession(chart.current, bars.current, fullDay)
   }
 
-  // Coordinate projections for drawn lines with fail-safe fallbacks
+  // Coordinate projections for drawn lines
   const getHLineY = useCallback(
     (price: number, fallbackY?: number) => {
       if (!series.current) return fallbackY ?? null
@@ -760,7 +1061,6 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       let x: number | null = null
       let y: number | null = null
 
-      // 1. Try logical index to coordinate first (most accurate continuous index)
       if (p.logical != null) {
         try {
           const lx = chart.current.timeScale().logicalToCoordinate(p.logical as any)
@@ -768,7 +1068,6 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
         } catch {}
       }
 
-      // 2. Try time to coordinate
       if (x === null && p.time != null) {
         try {
           const tx = chart.current.timeScale().timeToCoordinate(p.time as UTCTimestamp)
@@ -776,18 +1075,15 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
         } catch {}
       }
 
-      // 3. Fallback to stored pixel X
       if (x === null && p.x != null) {
         x = p.x
       }
 
-      // Convert price to coordinate Y
       try {
         const py = series.current.priceToCoordinate(p.price)
         if (py !== null && Number.isFinite(py)) y = py
       } catch {}
 
-      // Fallback to stored pixel Y
       if (y === null && p.y != null) {
         y = p.y
       }
@@ -798,7 +1094,6 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     [viewTick]
   )
 
-  // Coordinate extractor for pointer events
   const getEventCoords = (e: React.PointerEvent<SVGRectElement> | React.MouseEvent<SVGRectElement>) => {
     if (!el.current || !series.current || !chart.current) return null
     const rect = el.current.getBoundingClientRect()
@@ -816,13 +1111,11 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
   }
 
-  // Pointer move handler for active drawing and hover detection
   const handlePointerMoveOnSvg = (e: React.PointerEvent<SVGRectElement>) => {
     const coords = getEventCoords(e)
     if (!coords) return
     setHoverPos(coords)
 
-    // Hover detection for eraser
     if (tool === "eraser") {
       let nearestId: string | null = null
       let minDist = 14
@@ -849,7 +1142,6 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
     }
   }
 
-  // Pointer down handler for 1-click line creation
   const handlePointerDownOnSvg = (e: React.PointerEvent<SVGRectElement>) => {
     const coords = getEventCoords(e)
     if (!coords || coords.price === null) return
@@ -869,7 +1161,6 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
       setHoverPos(null)
     } else if (tool === "trendline") {
       if (!trendlineStart) {
-        // Step 1: Click start point
         setTrendlineStart({
           time: time ?? undefined,
           logical: logical ?? undefined,
@@ -878,7 +1169,6 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
           y,
         })
       } else {
-        // Step 2: Click end point -> complete trendline
         const newDrawing: ChartDrawing = {
           id: "draw_" + Date.now() + "_" + Math.random().toString(36).slice(2, 6),
           type: "trendline",
@@ -980,518 +1270,628 @@ export function CandleChart({ date, symbol = "NIFTY", candles, forming, currentP
 
   const chartWidth = chartDim.width || 800
 
-  return (
-    <div className={cn("relative w-full flex-1 min-h-[300px]", className)} style={{ minHeight: "300px", height: "100%" }}>
-      <div ref={el} className="w-full h-full min-h-[300px]" style={{ minHeight: "300px", height: "100%" }} />
-
-      {/* SVG Interactive Drawing Layer */}
-      <svg
-        className={cn(
-          "absolute inset-0 w-full h-full select-none z-10",
-          tool !== "none" ? "pointer-events-auto cursor-crosshair" : "pointer-events-none"
-        )}
-      >
-        {/* When a line is selected in pointer mode, an invisible backdrop catches outside clicks to unselect */}
-        {tool === "none" && selectedDrawingId !== null && (
-          <rect
-            width="100%"
-            height="100%"
-            fill="rgba(0,0,0,0.001)"
-            style={{ pointerEvents: "all" }}
-            onPointerDown={(e) => {
-              e.stopPropagation()
-              setSelectedDrawingId(null)
-              setHoveredDrawingId(null)
-            }}
-          />
-        )}
-
-        {/* Background event catcher when in active drawing / eraser mode */}
-        {tool !== "none" && (
-          <rect
-            width="100%"
-            height="100%"
-            fill="rgba(0,0,0,0.001)"
-            style={{ pointerEvents: "all" }}
-            onPointerMove={handlePointerMoveOnSvg}
-            onPointerDown={handlePointerDownOnSvg}
-            onPointerLeave={() => {
-              setHoverPos(null)
-              setHoveredDrawingId(null)
-            }}
-          />
-        )}
-
-        {/* Render Drawn Elements */}
-        {drawings.map((d) => {
-          const isSelected = d.id === selectedDrawingId
-          const isHovered = d.id === hoveredDrawingId
-
-          if (d.type === "hline") {
-            const y = getHLineY(d.price, d.y)
-            if (y === null || y < 0 || y > chartDim.height) return null
-            return (
-              <g key={d.id} className="group transition-all">
-                {/* Selection / Drag Halo Glow */}
-                {isSelected && (
-                  <line
-                    x1={0}
-                    y1={y}
-                    x2={chartWidth}
-                    y2={y}
-                    stroke={isDragging && dragRef.current?.id === d.id ? "#00f0ff" : "#38bdf8"}
-                    strokeWidth={isDragging && dragRef.current?.id === d.id ? 7 : 4}
-                    opacity={isDragging && dragRef.current?.id === d.id ? 0.7 : 0.35}
-                  />
-                )}
-                {/* Wide invisible hit area for dragging / selection */}
-                <line
-                  x1={0}
-                  y1={y}
-                  x2={chartWidth}
-                  y2={y}
-                  stroke="transparent"
-                  strokeWidth={18}
-                  className="pointer-events-auto cursor-ns-resize"
-                  onPointerDown={(e) => handleStartDragHLine(e, d)}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setSelectedDrawingId(d.id)
-                  }}
-                />
-                {/* Visual Line */}
-                <line
-                  x1={0}
-                  y1={y}
-                  x2={chartWidth}
-                  y2={y}
-                  stroke={isHovered ? "#ef4444" : isSelected ? "#38bdf8" : d.color || "#38bdf8"}
-                  strokeWidth={isSelected ? 2 : isHovered ? 2.5 : 1.5}
-                  strokeDasharray={isSelected ? undefined : "5 3"}
-                  opacity={isHovered || isSelected ? 1 : 0.85}
-                />
-                {/* Selection Drag Handles */}
-                {isSelected && (
-                  <>
-                    <circle
-                      cx={chartWidth * 0.25}
-                      cy={y}
-                      r={4}
-                      fill="#38bdf8"
-                      stroke="#ffffff"
-                      strokeWidth={1.5}
-                      className="pointer-events-auto cursor-ns-resize"
-                      onPointerDown={(e) => handleStartDragHLine(e, d)}
-                    />
-                    <circle
-                      cx={chartWidth * 0.5}
-                      cy={y}
-                      r={4.5}
-                      fill="#38bdf8"
-                      stroke="#ffffff"
-                      strokeWidth={1.5}
-                      className="pointer-events-auto cursor-ns-resize"
-                      onPointerDown={(e) => handleStartDragHLine(e, d)}
-                    />
-                    <circle
-                      cx={chartWidth * 0.75}
-                      cy={y}
-                      r={4}
-                      fill="#38bdf8"
-                      stroke="#ffffff"
-                      strokeWidth={1.5}
-                      className="pointer-events-auto cursor-ns-resize"
-                      onPointerDown={(e) => handleStartDragHLine(e, d)}
-                    />
-                  </>
-                )}
-                {/* Price Pill Tag on Right Price Scale */}
-                <rect
-                  x={Math.max(chartWidth - 58, 20)}
-                  y={y - 9}
-                  width={54}
-                  height={18}
-                  rx={3}
-                  fill={isHovered ? "#ef4444" : isSelected ? "#0284c7" : "#0284c7"}
-                  stroke={isSelected ? "#ffffff" : "transparent"}
-                  strokeWidth={isSelected ? 1.5 : 0}
-                  opacity={0.95}
-                  className="pointer-events-auto cursor-pointer"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setSelectedDrawingId(d.id)
-                  }}
-                />
-                <text
-                  x={Math.max(chartWidth - 31, 47)}
-                  y={y + 3.5}
-                  textAnchor="middle"
-                  fill="#ffffff"
-                  fontSize={10}
-                  fontFamily="monospace"
-                  fontWeight="bold"
-                  className="pointer-events-none select-none"
-                >
-                  {isHovered ? "✕ DEL" : Math.round(d.price)}
-                </text>
-                {/* Sleek Floating Delete Button */}
-                {isSelected && (
-                  <g
-                    transform={`translate(${Math.max(chartWidth - 110, 60)}, ${Math.max(y - 24, 6)})`}
-                    className="cursor-pointer pointer-events-auto select-none hover:scale-105 transition-transform"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteSelected()
-                    }}
-                  >
-                    <rect
-                      width={56}
-                      height={18}
-                      rx={9}
-                      fill="#ef4444"
-                      stroke="#ffffff"
-                      strokeWidth={1}
-                      filter="drop-shadow(0 2px 5px rgba(0,0,0,0.4))"
-                    />
-                    <text x={28} y={12} textAnchor="middle" fill="#ffffff" fontSize={9} fontWeight="bold">
-                      ✕ Delete
-                    </text>
-                  </g>
-                )}
-              </g>
-            )
-          }
-
-          if (d.type === "trendline") {
-            const c1 = getPointCoords(d.p1)
-            const c2 = getPointCoords(d.p2)
-            if (!c1 || !c2) return null
-            const midX = (c1.x + c2.x) / 2
-            const midY = (c1.y + c2.y) / 2
-            
-            return (
-              <g key={d.id} className="group transition-all">
-                {/* Selection / Drag Halo Glow */}
-                {isSelected && (
-                  <line
-                    x1={c1.x}
-                    y1={c1.y}
-                    x2={c2.x}
-                    y2={c2.y}
-                    stroke={isDragging && dragRef.current?.id === d.id ? "#fbbf24" : "#f59e0b"}
-                    strokeWidth={isDragging && dragRef.current?.id === d.id ? 8 : 5}
-                    opacity={isDragging && dragRef.current?.id === d.id ? 0.75 : 0.3}
-                  />
-                )}
-                {/* Wide invisible hit area for moving entire line */}
-                <line
-                  x1={c1.x}
-                  y1={c1.y}
-                  x2={c2.x}
-                  y2={c2.y}
-                  stroke="transparent"
-                  strokeWidth={20}
-                  className="pointer-events-auto cursor-move"
-                  onPointerDown={(e) => handleStartDragTrendline(e, d, "body")}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    setSelectedDrawingId(d.id)
-                  }}
-                />
-                {/* Visual Slant Line */}
-                <line
-                  x1={c1.x}
-                  y1={c1.y}
-                  x2={c2.x}
-                  y2={c2.y}
-                  stroke={isHovered ? "#ef4444" : isSelected ? "#fbbf24" : d.color || "#f59e0b"}
-                  strokeWidth={isSelected ? 2.5 : isHovered ? 3 : 2}
-                  opacity={isHovered || isSelected ? 1 : 0.9}
-                />
-                {/* Anchor Endpoint 1 (Start handle) */}
-                <circle
-                  cx={c1.x}
-                  cy={c1.y}
-                  r={isSelected ? 6 : 4}
-                  fill={isSelected ? "#38bdf8" : isHovered ? "#ef4444" : d.color || "#f59e0b"}
-                  stroke="#ffffff"
-                  strokeWidth={isSelected ? 2 : 1}
-                  className="pointer-events-auto cursor-crosshair"
-                  onPointerDown={(e) => handleStartDragTrendline(e, d, "p1")}
-                />
-                {/* Anchor Endpoint 2 (End handle) */}
-                <circle
-                  cx={c2.x}
-                  cy={c2.y}
-                  r={isSelected ? 6 : 4}
-                  fill={isSelected ? "#38bdf8" : isHovered ? "#ef4444" : d.color || "#f59e0b"}
-                  stroke="#ffffff"
-                  strokeWidth={isSelected ? 2 : 1}
-                  className="pointer-events-auto cursor-crosshair"
-                  onPointerDown={(e) => handleStartDragTrendline(e, d, "p2")}
-                />
-
-                {/* Sleek Floating Delete Button */}
-                {isSelected && (
-                  <g
-                    transform={`translate(${midX - 28}, ${Math.max(midY - 24, 6)})`}
-                    className="cursor-pointer pointer-events-auto select-none hover:scale-105 transition-transform"
-                    onClick={(e) => {
-                      e.stopPropagation()
-                      deleteSelected()
-                    }}
-                  >
-                    <rect
-                      width={56}
-                      height={18}
-                      rx={9}
-                      fill="#ef4444"
-                      stroke="#ffffff"
-                      strokeWidth={1}
-                      filter="drop-shadow(0 2px 5px rgba(0,0,0,0.4))"
-                    />
-                    <text x={28} y={12} textAnchor="middle" fill="#ffffff" fontSize={9} fontWeight="bold">
-                      ✕ Delete
-                    </text>
-                  </g>
-                )}
-              </g>
-            )
-          }
-
-          return null
-        })}
-
-        {/* Live Hover Previews */}
-        {tool === "hline" && hoverPos && hoverPos.price !== null && (
-          <g>
-            {/* Guide line across chart */}
-            <line
-              x1={0}
-              y1={hoverPos.y}
-              x2={chartWidth}
-              y2={hoverPos.y}
-              stroke="#38bdf8"
-              strokeWidth={1.5}
-              strokeDasharray="3 3"
-              opacity={0.8}
-            />
-            {/* Price badge right scale */}
-            <rect
-              x={Math.max(chartWidth - 62, 20)}
-              y={hoverPos.y - 10}
-              width={58}
-              height={20}
-              rx={4}
-              fill="#0284c7"
-            />
-            <text
-              x={Math.max(chartWidth - 33, 49)}
-              y={hoverPos.y + 4}
-              textAnchor="middle"
-              fill="#ffffff"
-              fontSize={10}
-              fontFamily="monospace"
-              fontWeight="bold"
-            >
-              {hoverPos.price.toFixed(1)}
-            </text>
-            {/* Floating guidance pill */}
-            <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 140)}, ${Math.max(hoverPos.y - 25, 20)})`}>
-              <rect width={130} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#38bdf8" strokeWidth={0.8} />
-              <text x={65} y={13.5} textAnchor="middle" fill="#38bdf8" fontSize={9.5} fontWeight="500">
-                1-Click to place line
-              </text>
-            </g>
-          </g>
-        )}
-
-        {tool === "trendline" && hoverPos && (
-          <g>
-            {!trendlineStart ? (
-              /* Step 1 Guide */
-              <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 125)}, ${Math.max(hoverPos.y - 25, 20)})`}>
-                <rect width={115} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#f59e0b" strokeWidth={0.8} />
-                <text x={57.5} y={13.5} textAnchor="middle" fill="#f59e0b" fontSize={9.5} fontWeight="500">
-                  Click 1: Start Point
-                </text>
-              </g>
-            ) : (
-              /* Step 2 Rubberband Line */
-              <>
-                <line
-                  x1={trendlineStart.x}
-                  y1={trendlineStart.y}
-                  x2={hoverPos.x}
-                  y2={hoverPos.y}
-                  stroke="#f59e0b"
-                  strokeWidth={2}
-                  strokeDasharray="4 2"
-                />
-                <circle cx={trendlineStart.x} cy={trendlineStart.y} r={4} fill="#f59e0b" stroke="#ffffff" strokeWidth={1} />
-                <circle cx={hoverPos.x} cy={hoverPos.y} r={4} fill="#f59e0b" stroke="#ffffff" strokeWidth={1} />
-                <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 110)}, ${Math.max(hoverPos.y - 24, 16)})`}>
-                  <rect width={100} height={18} rx={4} fill="rgba(15, 23, 42, 0.9)" stroke="#f59e0b" strokeWidth={0.8} />
-                  <text x={50} y={12.5} textAnchor="middle" fill="#f59e0b" fontSize={9} fontWeight="500">
-                    Click 2: End Point
-                  </text>
-                </g>
-              </>
-            )}
-          </g>
-        )}
-
-        {tool === "eraser" && hoverPos && (
-          <g transform={`translate(${Math.min(hoverPos.x + 12, chartWidth - 110)}, ${Math.max(hoverPos.y - 25, 20)})`}>
-            <rect width={105} height={20} rx={4} fill="rgba(15, 23, 42, 0.92)" stroke="#ef4444" strokeWidth={0.8} />
-            <text x={52.5} y={13.5} textAnchor="middle" fill="#ef4444" fontSize={9.5} fontWeight="500">
-              {hoveredDrawingId ? "Click to Erase" : "Hover over a line"}
-            </text>
-          </g>
-        )}
-      </svg>
-
-      {overlay && <div className="pointer-events-none absolute left-2 top-2 z-10 sm:left-3 sm:top-3">{overlay}</div>}
-
-      {/* Floating Drawing & Zoom Toolbar */}
-      {zoomable && !hideToolbar && (
-        <div className="absolute right-14 top-2 z-20 flex items-center bg-card/90 hover:bg-card backdrop-blur-md border border-border/80 rounded-md shadow-md p-0.5 gap-0.5 transition-all text-xs select-none">
-          {/* Pointer / Pan */}
-          <Button
-            variant={tool === "none" ? "secondary" : "ghost"}
-            size="icon-xs"
-            onClick={() => {
-              setTool("none")
-              setTrendlineStart(null)
-              setHoverPos(null)
-            }}
-            className={cn("h-6 w-6", tool === "none" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground")}
-            title="Pointer / Pan (Default)"
-          >
-            <MousePointer2 className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* Straight Horizontal Line Tool (One-Click) */}
-          <Button
-            variant={tool === "hline" ? "secondary" : "ghost"}
-            size="icon-xs"
-            onClick={() => {
-              setTrendlineStart(null)
-              setTool(tool === "hline" ? "none" : "hline")
-            }}
-            className={cn(
-              "h-6 w-6",
-              tool === "hline"
-                ? "bg-sky-500/20 text-sky-400 border border-sky-500/50 shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            title="Straight Horizontal Line (1-Click on chart)"
-          >
-            <Minus className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* Slant 2-Point Line Tool */}
-          <Button
-            variant={tool === "trendline" ? "secondary" : "ghost"}
-            size="icon-xs"
-            onClick={() => {
-              setTrendlineStart(null)
-              setTool(tool === "trendline" ? "none" : "trendline")
-            }}
-            className={cn(
-              "h-6 w-6",
-              tool === "trendline"
-                ? "bg-amber-500/20 text-amber-400 border border-amber-500/50 shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            title="Slant 2-Point Line (Click 2 points)"
-          >
-            <TrendingUp className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* Eraser Tool */}
-          <Button
-            variant={tool === "eraser" ? "secondary" : "ghost"}
-            size="icon-xs"
-            onClick={() => {
-              setTrendlineStart(null)
-              setTool(tool === "eraser" ? "none" : "eraser")
-            }}
-            className={cn(
-              "h-6 w-6",
-              tool === "eraser"
-                ? "bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-xs"
-                : "text-muted-foreground hover:text-foreground"
-            )}
-            title="Eraser (Click any line to erase)"
-          >
-            <Eraser className="h-3.5 w-3.5" />
-          </Button>
-
-          {/* Delete Selected Button (Active when a line is selected) */}
-          {selectedDrawingId && (
-            <Button
-              variant="destructive"
-              size="xs"
-              onClick={deleteSelected}
-              className="h-6 px-2 text-[10px] font-semibold gap-1 bg-rose-500 hover:bg-rose-600 text-white shadow-xs animate-in fade-in"
-              title="Delete Selected Line (or press Del / Backspace)"
-            >
-              <Trash2 className="h-3 w-3" />
-              <span>Delete (Del)</span>
-            </Button>
-          )}
-
-          {/* Clear All Drawings (Day) */}
-          {drawings.length > 0 && (
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              onClick={clearAllDrawings}
-              className="h-6 w-6 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10"
-              title={`Clear All Drawings for Today (${drawings.length})`}
-            >
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
-          )}
-
-          <div className="w-[1px] h-3 bg-border mx-0.5" />
-
-          {/* Zoom controls */}
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Zoom in"
-            onClick={() => zoom(0.7)}
-            className="h-6 w-6 text-muted-foreground hover:text-foreground"
-            title="Zoom In"
-          >
-            <ZoomIn className="h-3.5 w-3.5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            aria-label="Zoom out"
-            onClick={() => zoom(1.4)}
-            className="h-6 w-6 text-muted-foreground hover:text-foreground"
-            title="Zoom Out"
-          >
-            <ZoomOut className="h-3.5 w-3.5" />
-          </Button>
-          <div className="w-[1px] h-3 bg-border mx-0.5" />
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={reset}
-            className="h-6 px-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground gap-1"
-            title="Reset Zoom to Full Day"
-          >
-            <RotateCcw className="h-2.5 w-2.5" />
-            <span>Reset</span>
-          </Button>
-        </div>
+  // The controls toolbar component (shared in normal and fullscreen view)
+  const renderToolbar = (isHeaderLayout = false) => (
+    <div
+      className={cn(
+        "flex items-center gap-1.5 flex-wrap select-none text-xs",
+        isHeaderLayout
+          ? "bg-transparent p-0"
+          : "absolute right-3 top-2.5 z-20 bg-background/90 dark:bg-slate-900/90 hover:bg-background dark:hover:bg-slate-900 backdrop-blur-md border border-border/80 rounded-lg shadow-md p-1 gap-1"
       )}
+    >
+      {/* Technical Indicator Layer Toggles */}
+      <div className="flex items-center gap-1">
+        <button
+          type="button"
+          onClick={() => setShowEMA50(!showEMA50)}
+          className={cn(
+            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
+            showEMA50
+              ? "bg-cyan-500/15 text-cyan-500 dark:text-cyan-400 border-cyan-500/40 shadow-2xs"
+              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
+          )}
+          title="Toggle 50 EMA Line"
+        >
+          <span className="size-1.5 rounded-full bg-cyan-500 inline-block" />
+          <span>50</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowEMA200(!showEMA200)}
+          className={cn(
+            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
+            showEMA200
+              ? "bg-amber-500/15 text-amber-500 dark:text-amber-400 border-amber-500/40 shadow-2xs"
+              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
+          )}
+          title="Toggle 200 EMA Line"
+        >
+          <span className="size-1.5 rounded-full bg-amber-500 inline-block" />
+          <span>200</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowVolume(!showVolume)}
+          className={cn(
+            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
+            showVolume
+              ? "bg-emerald-500/15 text-emerald-500 dark:text-emerald-400 border-emerald-500/40 shadow-2xs"
+              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
+          )}
+          title="Toggle Volume Histogram"
+        >
+          <BarChart2 className="h-3 w-3" />
+          <span className="hidden sm:inline">Vol</span>
+        </button>
+
+        <button
+          type="button"
+          onClick={() => setShowLevelsState(!showLevelsState)}
+          className={cn(
+            "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
+            showLevelsState
+              ? "bg-sky-500/15 text-sky-500 dark:text-sky-400 border-sky-500/40 shadow-2xs"
+              : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
+          )}
+          title="Toggle S&R Key Levels & Trade Targets"
+        >
+          <Layers className="h-3 w-3" />
+          <span className="hidden sm:inline">Levels</span>
+        </button>
+      </div>
+
+      <div className="w-[1px] h-3.5 bg-border mx-0.5" />
+
+      {/* Drawing Tools */}
+      <div className="flex items-center gap-0.5">
+        <Button
+          variant={tool === "none" ? "secondary" : "ghost"}
+          size="icon-xs"
+          onClick={() => {
+            setTool("none")
+            setTrendlineStart(null)
+            setHoverPos(null)
+          }}
+          className={cn(
+            "h-6 w-6 rounded cursor-pointer",
+            tool === "none" ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:text-foreground"
+          )}
+          title="Pointer / Pan (Default)"
+        >
+          <MousePointer2 className="h-3 w-3" />
+        </Button>
+
+        <Button
+          variant={tool === "hline" ? "secondary" : "ghost"}
+          size="icon-xs"
+          onClick={() => {
+            setTrendlineStart(null)
+            setTool(tool === "hline" ? "none" : "hline")
+          }}
+          className={cn(
+            "h-6 w-6 rounded cursor-pointer",
+            tool === "hline"
+              ? "bg-sky-500/20 text-sky-400 border border-sky-500/50 shadow-xs"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+          title="Straight Horizontal Line (1-Click on chart)"
+        >
+          <Minus className="h-3.5 w-3.5" />
+        </Button>
+
+        <Button
+          variant={tool === "trendline" ? "secondary" : "ghost"}
+          size="icon-xs"
+          onClick={() => {
+            setTrendlineStart(null)
+            setTool(tool === "trendline" ? "none" : "trendline")
+          }}
+          className={cn(
+            "h-6 w-6 rounded cursor-pointer",
+            tool === "trendline"
+              ? "bg-amber-500/20 text-amber-400 border border-amber-500/50 shadow-xs"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+          title="Slant 2-Point Line (Click 2 points)"
+        >
+          <TrendingUp className="h-3.5 w-3.5" />
+        </Button>
+
+        <Button
+          variant={tool === "eraser" ? "secondary" : "ghost"}
+          size="icon-xs"
+          onClick={() => {
+            setTrendlineStart(null)
+            setTool(tool === "eraser" ? "none" : "eraser")
+          }}
+          className={cn(
+            "h-6 w-6 rounded cursor-pointer",
+            tool === "eraser"
+              ? "bg-rose-500/20 text-rose-400 border border-rose-500/50 shadow-xs"
+              : "text-muted-foreground hover:text-foreground"
+          )}
+          title="Eraser (Click any line to erase)"
+        >
+          <Eraser className="h-3.5 w-3.5" />
+        </Button>
+
+        {selectedDrawingId && (
+          <Button
+            variant="destructive"
+            size="xs"
+            onClick={deleteSelected}
+            className="h-6 px-1.5 text-[10px] font-semibold gap-1 bg-rose-500 hover:bg-rose-600 text-white shadow-xs animate-in fade-in cursor-pointer"
+            title="Delete Selected Line (Del / Backspace)"
+          >
+            <Trash2 className="h-3 w-3" />
+            <span>Del</span>
+          </Button>
+        )}
+
+        {drawings.length > 0 && !selectedDrawingId && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            onClick={clearAllDrawings}
+            className="h-6 w-6 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 cursor-pointer"
+            title={`Clear All Drawings for Today (${drawings.length})`}
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </Button>
+        )}
+      </div>
+
+      <div className="w-[1px] h-3.5 bg-border mx-0.5" />
+
+      {/* Navigation & Fullscreen */}
+      <div className="flex items-center gap-0.5">
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => zoom(0.7)}
+          className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer"
+          title="Zoom In"
+        >
+          <ZoomIn className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => zoom(1.4)}
+          className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer"
+          title="Zoom Out"
+        >
+          <ZoomOut className="h-3.5 w-3.5" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={reset}
+          className="h-6 px-1.5 text-[10px] font-semibold text-muted-foreground hover:text-foreground gap-1 cursor-pointer"
+          title="Reset View to Full Session"
+        >
+          <RotateCcw className="h-2.5 w-2.5" />
+          <span>Reset</span>
+        </Button>
+
+        <Button
+          variant="ghost"
+          size="icon-xs"
+          onClick={() => setIsMaximized(!isMaximized)}
+          className="h-6 w-6 text-muted-foreground hover:text-foreground cursor-pointer"
+          title={isMaximized ? "Restore Normal View (Esc)" : "Maximize Fullscreen View"}
+        >
+          {isMaximized ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
+        </Button>
+      </div>
+    </div>
+  )
+
+  // Floating In-Chart Live Crosshair HUD (Zero Header Fluctuation)
+  const renderFloatingHUD = () => (
+    <>
+      {hovered ? (
+        <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 pointer-events-none flex items-center gap-2 font-mono text-xs bg-background/95 dark:bg-slate-900/95 backdrop-blur-md px-3 py-1.5 rounded-lg border border-border shadow-md animate-in fade-in duration-100">
+          <span className="font-extrabold text-foreground">{hovered.time}</span>
+          <span className="text-muted-foreground/40">·</span>
+          <span className="font-bold text-foreground">₹{fmtNum(hovered.close, 1)}</span>
+          <span
+            className={cn(
+              "font-black px-1.5 py-0.2 rounded text-[11px]",
+              hovered.changePts >= 0
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
+                : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/20"
+            )}
+          >
+            {hovered.changePts >= 0 ? "+" : ""}
+            {fmtNum(hovered.changePts, 1)} ({hovered.changePct >= 0 ? "+" : ""}
+            {hovered.changePct.toFixed(2)}%)
+          </span>
+          {hovered.volume ? (
+            <>
+              <span className="text-muted-foreground/40">·</span>
+              <span className="text-muted-foreground font-medium">Vol: {fmtVol(hovered.volume)}</span>
+            </>
+          ) : null}
+          {showEMA50 && hovered.ema50 ? (
+            <>
+              <span className="text-muted-foreground/40 hidden md:inline">·</span>
+              <span className="text-cyan-500 font-semibold hidden md:inline">50 EMA: {fmtNum(hovered.ema50, 1)}</span>
+            </>
+          ) : null}
+          {showEMA200 && hovered.ema200 ? (
+            <>
+              <span className="text-muted-foreground/40 hidden lg:inline">·</span>
+              <span className="text-amber-500 font-semibold hidden lg:inline">200 EMA: {fmtNum(hovered.ema200, 1)}</span>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+    </>
+  )
+
+  // Slim interactive footer with legend & shortcuts
+  const renderFooter = () => (
+    <div className="px-3.5 py-1.5 border-t border-border/40 bg-muted/20 flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground select-none shrink-0">
+      <div className="flex items-center gap-3.5 flex-wrap">
+        <span className="flex items-center gap-1.5 font-medium">
+          <span className="size-2 rounded-full bg-emerald-500" />
+          Bullish
+        </span>
+        <span className="flex items-center gap-1.5 font-medium">
+          <span className="size-2 rounded-full bg-rose-500" />
+          Bearish
+        </span>
+        {showEMA50 && (
+          <span className="flex items-center gap-1.5 font-medium text-cyan-600 dark:text-cyan-400">
+            <span className="w-2.5 h-0.5 bg-cyan-500 inline-block" />
+            50 EMA
+          </span>
+        )}
+        {showEMA200 && (
+          <span className="flex items-center gap-1.5 font-medium text-amber-600 dark:text-amber-400">
+            <span className="w-2.5 h-0.5 bg-amber-500 inline-block" />
+            200 EMA
+          </span>
+        )}
+        {showLevelsState && (
+          <span className="flex items-center gap-1.5 font-medium text-sky-600 dark:text-sky-400">
+            <span className="w-2.5 h-0.5 bg-sky-500 border-b border-dashed inline-block" />
+            Key Levels
+          </span>
+        )}
+        {drawings.length > 0 && (
+          <span className="flex items-center gap-1 font-semibold text-primary">
+            <span>✏️ {drawings.length} drawing{drawings.length > 1 ? "s" : ""}</span>
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center gap-3 font-mono text-[10px] text-muted-foreground">
+        <span>Scroll to Zoom · Drag to Pan</span>
+        <span>
+          <kbd className="px-1 py-0.2 bg-muted border border-border rounded text-foreground font-semibold">
+            ESC
+          </kbd>{" "}
+          {isMaximized ? "restore" : "unselect"}
+        </span>
+      </div>
+    </div>
+  )
+
+  // SVG Drawing Overlay
+  const renderSvgOverlay = () => (
+    <svg
+      className={cn(
+        "absolute inset-0 w-full h-full select-none z-10",
+        tool !== "none" ? "pointer-events-auto cursor-crosshair" : "pointer-events-none"
+      )}
+    >
+      {tool === "none" && selectedDrawingId !== null && (
+        <rect
+          width="100%"
+          height="100%"
+          fill="rgba(0,0,0,0.001)"
+          style={{ pointerEvents: "all" }}
+          onPointerDown={(e) => {
+            e.stopPropagation()
+            setSelectedDrawingId(null)
+            setHoveredDrawingId(null)
+          }}
+        />
+      )}
+
+      {tool !== "none" && (
+        <rect
+          width="100%"
+          height="100%"
+          fill="rgba(0,0,0,0.001)"
+          style={{ pointerEvents: "all" }}
+          onPointerMove={handlePointerMoveOnSvg}
+          onPointerDown={handlePointerDownOnSvg}
+          onPointerLeave={() => {
+            setHoverPos(null)
+            setHoveredDrawingId(null)
+          }}
+        />
+      )}
+
+      {drawings.map((d) => {
+        const isSelected = d.id === selectedDrawingId
+        const isHovered = d.id === hoveredDrawingId
+
+        if (d.type === "hline") {
+          const y = getHLineY(d.price, d.y)
+          if (y === null || y < 0 || y > chartDim.height) return null
+          return (
+            <g key={d.id} className="group transition-all">
+              {isSelected && (
+                <line
+                  x1={0}
+                  y1={y}
+                  x2={chartWidth}
+                  y2={y}
+                  stroke={isDragging && dragRef.current?.id === d.id ? "#00f0ff" : "#38bdf8"}
+                  strokeWidth={isDragging && dragRef.current?.id === d.id ? 7 : 4}
+                  opacity={isDragging && dragRef.current?.id === d.id ? 0.7 : 0.35}
+                />
+              )}
+              <line
+                x1={0}
+                y1={y}
+                x2={chartWidth}
+                y2={y}
+                stroke="transparent"
+                strokeWidth={18}
+                className="pointer-events-auto cursor-ns-resize"
+                onPointerDown={(e) => handleStartDragHLine(e, d)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedDrawingId(d.id)
+                }}
+              />
+              <line
+                x1={0}
+                y1={y}
+                x2={chartWidth}
+                y2={y}
+                stroke={isHovered ? "#ef4444" : isSelected ? "#38bdf8" : d.color || "#38bdf8"}
+                strokeWidth={isSelected ? 2 : isHovered ? 2.5 : 1.5}
+                strokeDasharray={isSelected ? undefined : "5 3"}
+                opacity={isHovered || isSelected ? 1 : 0.85}
+              />
+              {isSelected && (
+                <>
+                  <circle
+                    cx={chartWidth * 0.25}
+                    cy={y}
+                    r={4}
+                    fill="#38bdf8"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    className="pointer-events-auto cursor-ns-resize"
+                    onPointerDown={(e) => handleStartDragHLine(e, d)}
+                  />
+                  <circle
+                    cx={chartWidth * 0.5}
+                    cy={y}
+                    r={4.5}
+                    fill="#38bdf8"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    className="pointer-events-auto cursor-ns-resize"
+                    onPointerDown={(e) => handleStartDragHLine(e, d)}
+                  />
+                  <circle
+                    cx={chartWidth * 0.75}
+                    cy={y}
+                    r={4}
+                    fill="#38bdf8"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    className="pointer-events-auto cursor-ns-resize"
+                    onPointerDown={(e) => handleStartDragHLine(e, d)}
+                  />
+                </>
+              )}
+            </g>
+          )
+        } else if (d.type === "trendline") {
+          const c1 = getPointCoords(d.p1)
+          const c2 = getPointCoords(d.p2)
+          if (!c1 || !c2) return null
+          return (
+            <g key={d.id} className="group transition-all">
+              {isSelected && (
+                <line
+                  x1={c1.x}
+                  y1={c1.y}
+                  x2={c2.x}
+                  y2={c2.y}
+                  stroke={isDragging && dragRef.current?.id === d.id ? "#00f0ff" : "#f59e0b"}
+                  strokeWidth={isDragging && dragRef.current?.id === d.id ? 7 : 4}
+                  opacity={isDragging && dragRef.current?.id === d.id ? 0.7 : 0.35}
+                />
+              )}
+              <line
+                x1={c1.x}
+                y1={c1.y}
+                x2={c2.x}
+                y2={c2.y}
+                stroke="transparent"
+                strokeWidth={18}
+                className="pointer-events-auto cursor-move"
+                onPointerDown={(e) => handleStartDragTrendline(e, d, "body")}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setSelectedDrawingId(d.id)
+                }}
+              />
+              <line
+                x1={c1.x}
+                y1={c1.y}
+                x2={c2.x}
+                y2={c2.y}
+                stroke={isHovered ? "#ef4444" : isSelected ? "#f59e0b" : d.color || "#f59e0b"}
+                strokeWidth={isSelected ? 2.5 : isHovered ? 2.5 : 1.8}
+                strokeDasharray={isSelected ? undefined : "5 3"}
+                opacity={isHovered || isSelected ? 1 : 0.85}
+              />
+              {isSelected && (
+                <>
+                  <circle
+                    cx={c1.x}
+                    cy={c1.y}
+                    r={5}
+                    fill="#f59e0b"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    className="pointer-events-auto cursor-grab active:cursor-grabbing"
+                    onPointerDown={(e) => handleStartDragTrendline(e, d, "p1")}
+                  />
+                  <circle
+                    cx={(c1.x + c2.x) / 2}
+                    cy={(c1.y + c2.y) / 2}
+                    r={4}
+                    fill="#f59e0b"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    className="pointer-events-auto cursor-move"
+                    onPointerDown={(e) => handleStartDragTrendline(e, d, "body")}
+                  />
+                  <circle
+                    cx={c2.x}
+                    cy={c2.y}
+                    r={5}
+                    fill="#f59e0b"
+                    stroke="#ffffff"
+                    strokeWidth={1.5}
+                    className="pointer-events-auto cursor-grab active:cursor-grabbing"
+                    onPointerDown={(e) => handleStartDragTrendline(e, d, "p2")}
+                  />
+                </>
+              )}
+            </g>
+          )
+        }
+        return null
+      })}
+
+      {tool === "trendline" && trendlineStart && hoverPos && (
+        <line
+          x1={trendlineStart.x}
+          y1={trendlineStart.y}
+          x2={hoverPos.x}
+          y2={hoverPos.y}
+          stroke="#f59e0b"
+          strokeWidth={1.5}
+          strokeDasharray="4 4"
+          opacity={0.8}
+        />
+      )}
+    </svg>
+  )
+
+  // 1. FULLSCREEN / MAXIMIZED MODAL OVERLAY (Swinger Executive Experience)
+  if (isMaximized) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-150">
+        <div className="bg-card rounded-2xl border border-border shadow-2xl flex flex-col w-[98vw] h-[96vh] max-w-none max-h-none overflow-hidden transition-all duration-200">
+          {/* Executive Title Bar */}
+          <div className="px-5 py-3.5 border-b border-border bg-card flex items-center justify-between gap-3 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="size-9 rounded-xl bg-slate-900 dark:bg-slate-800 flex items-center justify-center font-bold text-white text-xs font-mono shadow-xs">
+                {(symbol || "NIF").slice(0, 3)}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-lg font-black tracking-tight text-foreground font-mono">
+                    {symbol === "SENSEX" ? "BSE SENSEX" : "NSE NIFTY 50"}
+                  </h2>
+                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-mono font-bold">
+                    {date}
+                  </span>
+                </div>
+                {stats && (
+                  <div className="flex items-center gap-2 text-xs mt-0.5">
+                    <span className="font-extrabold font-mono text-foreground">₹{fmtNum(stats.cmp, 1)}</span>
+                    <span
+                      className={cn(
+                        "font-mono font-bold px-1.5 py-0.2 rounded text-[11px]",
+                        stats.dayChangePts >= 0
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                          : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                      )}
+                    >
+                      {stats.dayChangePts >= 0 ? "+" : ""}
+                      {fmtNum(stats.dayChangePts, 1)} ({stats.dayChangePct >= 0 ? "+" : ""}
+                      {stats.dayChangePct.toFixed(2)}%)
+                    </span>
+                    <span className="text-muted-foreground/40">·</span>
+                    <span className="text-muted-foreground text-[11px]">
+                      Range: ₹{fmtNum(stats.sessionLow, 0)} - ₹{fmtNum(stats.sessionHigh, 0)}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Right: Controls & Restore/Close */}
+            <div className="flex items-center gap-2">
+              {renderToolbar(true)}
+              <div className="border-l border-border pl-2 flex items-center">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsMaximized(false)}
+                  className="size-8 rounded-lg text-muted-foreground hover:text-foreground cursor-pointer"
+                  title="Close Fullscreen (Esc)"
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Chart Canvas Area */}
+          <div className="flex-1 relative w-full h-full min-h-[400px] overflow-hidden bg-background">
+            {renderFloatingHUD()}
+            {renderSvgOverlay()}
+            <div ref={el} className="w-full h-full" />
+          </div>
+
+          {/* Footer */}
+          {renderFooter()}
+        </div>
+      </div>
+    )
+  }
+
+  // 2. NORMAL EMBEDDED CHART VIEW
+  return (
+    <div className={cn("relative w-full flex-1 flex flex-col rounded-lg overflow-hidden border border-border/40 bg-card shadow-2xs", className)}>
+      {/* Chart Canvas */}
+      <div className="flex-1 relative w-full h-full min-h-[280px]">
+        {/* Floating Controls Toolbar */}
+        {!hideToolbar && renderToolbar(false)}
+
+        {/* Floating Crosshair HUD */}
+        {renderFloatingHUD()}
+
+        {/* SVG Drawing Layer */}
+        {renderSvgOverlay()}
+
+        {/* Lightweight Charts Canvas */}
+        <div ref={el} className="w-full h-full min-h-[280px]" />
+
+        {overlay && <div className="pointer-events-none absolute left-3 top-3 z-10">{overlay}</div>}
+      </div>
+
+      {/* Slim interactive footer with legend */}
+      {renderFooter()}
     </div>
   )
 }
-
