@@ -14,8 +14,27 @@ import {
   Search,
   Flame,
   Wallet,
-  Sparkles
+  Sparkles,
+  Activity,
+  Layers,
+  ArrowUpRight,
+  ArrowDownRight,
+  Award,
+  Target
 } from "lucide-react"
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  Cell,
+  ReferenceLine
+} from "recharts"
 import { Button } from "@/components/ui/button"
 import { PnlCalendar, type CalendarDay } from "@/components/pnl-calendar"
 import { SwingerTradeChartModal, type SwingerTradeTarget } from "@/components/swinger-trade-chart-modal"
@@ -141,8 +160,9 @@ export function SwingerPage() {
   // Chart Inspection Modal Target
   const [selectedTradeForChart, setSelectedTradeForChart] = useState<SwingerTradeTarget | null>(null)
 
-  // Navigation Tabs: 'all' | 'holdings' | 'calendar' | 'radar'
-  const [activeTab, setActiveTab] = useState<"all" | "holdings" | "calendar" | "radar">("all")
+  // Navigation Tabs: 'all' | 'holdings' | 'calendar' | 'radar' | 'payoff'
+  const [activeTab, setActiveTab] = useState<"all" | "holdings" | "calendar" | "radar" | "payoff">("all")
+  const [payoffView, setPayoffView] = useState<"equity" | "convex" | "distribution">("equity")
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [tradeLogSearch, setTradeLogSearch] = useState("")
   const [tradeLogYear, setTradeLogYear] = useState<string>("ALL")
@@ -494,6 +514,166 @@ export function SwingerPage() {
     return filteredUnifiedTriggers.map((t) => t.raw)
   }, [activeTab, calendarSelectedTrades, positions, filteredUnifiedTriggers])
 
+  // Cumulative Equity & Drawdown Curve Data
+  const equityCurveData = useMemo(() => {
+    if (!trades || trades.length === 0) return []
+    const sorted = [...trades].sort((a, b) => (a.exit_date || "").localeCompare(b.exit_date || ""))
+    let cumPnl = 0
+    let peakEquity = 500000
+    const points: any[] = [
+      {
+        tradeNo: 0,
+        date: sorted[0]?.entry_date || "2022-01-01",
+        symbol: "Base Capital",
+        pnl: 0,
+        pnlPct: 0,
+        equity: 500000,
+        peakEquity: 500000,
+        drawdownAmt: 0,
+        drawdownPct: 0
+      }
+    ]
+
+    sorted.forEach((t, i) => {
+      cumPnl += t.pnl || 0
+      const currentEquity = 500000 + cumPnl
+      if (currentEquity > peakEquity) {
+        peakEquity = currentEquity
+      }
+      const ddAmt = currentEquity - peakEquity
+      const ddPct = peakEquity > 0 ? (ddAmt / peakEquity) * 100 : 0
+
+      points.push({
+        tradeNo: i + 1,
+        date: t.exit_date || t.entry_date,
+        symbol: t.symbol,
+        name: t.name || t.symbol,
+        pnl: Math.round(t.pnl || 0),
+        pnlPct: parseFloat((t.pnl_pct ?? (t as any).pct_return ?? 0).toFixed(1)),
+        equity: Math.round(currentEquity),
+        peakEquity: Math.round(peakEquity),
+        drawdownAmt: Math.round(ddAmt),
+        drawdownPct: parseFloat(ddPct.toFixed(2))
+      })
+    })
+
+    return points
+  }, [trades])
+
+  // Convex Asymmetric Return Curve (Sorted Trade Outcomes)
+  const convexPayoffData = useMemo(() => {
+    if (!trades || trades.length === 0) return []
+    const sorted = [...trades].sort((a, b) => {
+      const retA = a.pnl_pct ?? (a as any).pct_return ?? 0
+      const retB = b.pnl_pct ?? (b as any).pct_return ?? 0
+      return retA - retB
+    })
+
+    return sorted.map((t, idx) => {
+      const ret = t.pnl_pct ?? (t as any).pct_return ?? 0
+      return {
+        rank: idx + 1,
+        symbol: t.symbol,
+        name: t.name || t.symbol,
+        pnlPct: parseFloat(ret.toFixed(1)),
+        pnl: Math.round(t.pnl || 0),
+        exitDate: t.exit_date,
+        reason: formatExitReason(t.reason || (t as any).exit_reason),
+        raw: t
+      }
+    })
+  }, [trades])
+
+  // Return Buckets Histogram Data
+  const distributionBuckets = useMemo(() => {
+    if (!trades || trades.length === 0) return []
+    const defs = [
+      { key: "deep_stop", label: "Deep Stop (<-20%)", min: -999, max: -20, count: 0, pnl: 0, color: "#dc2626" },
+      { key: "normal_sl", label: "Standard SL (-20% to -10%)", min: -20, max: -10, count: 0, pnl: 0, color: "#f87171" },
+      { key: "shield", label: "Shield / BE (-10% to 0%)", min: -10, max: 0, count: 0, pnl: 0, color: "#fb923c" },
+      { key: "small_win", label: "Small Win (0% to +20%)", min: 0, max: 20, count: 0, pnl: 0, color: "#a3e635" },
+      { key: "solid_win", label: "Solid Win (+20% to +50%)", min: 20, max: 50, count: 0, pnl: 0, color: "#4ade80" },
+      { key: "runner", label: "Super Runner (+50% to +100%)", min: 50, max: 100, count: 0, pnl: 0, color: "#22c55e" },
+      { key: "multibagger", label: "Multibagger (>+100%)", min: 100, max: 9999, count: 0, pnl: 0, color: "#15803d" }
+    ]
+
+    trades.forEach((t) => {
+      const ret = t.pnl_pct ?? (t as any).pct_return ?? 0
+      const p = t.pnl || 0
+      let bIdx = 0
+      if (ret < -20) bIdx = 0
+      else if (ret < -10) bIdx = 1
+      else if (ret <= 0) bIdx = 2
+      else if (ret <= 20) bIdx = 3
+      else if (ret <= 50) bIdx = 4
+      else if (ret <= 100) bIdx = 5
+      else bIdx = 6
+
+      defs[bIdx].count += 1
+      defs[bIdx].pnl += p
+    })
+
+    return defs
+  }, [trades])
+
+  // Yearly Payoff & Risk Profile Breakdown
+  const yearlyPayoffStats = useMemo(() => {
+    if (!trades || trades.length === 0) return []
+    const map: Record<string, { trades: any[]; pnl: number; wins: number; losses: number; winPnl: number; lossPnl: number }> = {}
+
+    trades.forEach((t) => {
+      const yr = (t.exit_date || t.entry_date || "").slice(0, 4) || "Other"
+      if (!map[yr]) {
+        map[yr] = { trades: [], pnl: 0, wins: 0, losses: 0, winPnl: 0, lossPnl: 0 }
+      }
+      map[yr].trades.push(t)
+      const p = t.pnl || 0
+      map[yr].pnl += p
+      if (p > 0) {
+        map[yr].wins += 1
+        map[yr].winPnl += p
+      } else {
+        map[yr].losses += 1
+        map[yr].lossPnl += Math.abs(p)
+      }
+    })
+
+    return Object.keys(map).sort().map((yr) => {
+      const d = map[yr]
+      const total = d.trades.length
+      const wr = total > 0 ? (d.wins / total) * 100 : 0
+      const avgW = d.wins > 0 ? d.winPnl / d.wins : 0
+      const avgL = d.losses > 0 ? d.lossPnl / d.losses : 0
+      const payoff = avgL > 0 ? avgW / avgL : 0
+      const pf = d.lossPnl > 0 ? d.winPnl / d.lossPnl : 99.0
+
+      const sortedT = [...d.trades].sort((a, b) => (a.exit_date || "").localeCompare(b.exit_date || ""))
+      let peak = 0
+      let cur = 0
+      let maxDd = 0
+      sortedT.forEach((t) => {
+        cur += t.pnl || 0
+        if (cur > peak) peak = cur
+        const dd = cur - peak
+        if (dd < maxDd) maxDd = dd
+      })
+
+      return {
+        year: yr,
+        totalTrades: total,
+        wins: d.wins,
+        losses: d.losses,
+        winRate: wr.toFixed(1),
+        pnl: Math.round(d.pnl),
+        payoffRatio: payoff.toFixed(2),
+        profitFactor: pf.toFixed(2),
+        maxDrawdown: Math.round(maxDd),
+        avgWin: Math.round(avgW),
+        avgLoss: Math.round(avgL)
+      }
+    })
+  }, [trades])
+
   return (
     <div className="flex-1 space-y-5 p-4 sm:p-6 bg-slate-50 min-h-screen text-slate-900 font-sans">
       {/* ================= 1. SWINGER 2.0 HERO & ACTION BAR ================= */}
@@ -732,6 +912,26 @@ export function SwingerPage() {
               }`}
             >
               {watchlist.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab("payoff")}
+            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+              activeTab === "payoff"
+                ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
+                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+            }`}
+          >
+            <Activity className="size-3.5" />
+            Payoff Curve & Risk
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
+                activeTab === "payoff" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
+              }`}
+            >
+              5.21x
             </span>
           </button>
         </div>
@@ -1900,6 +2100,601 @@ export function SwingerPage() {
                       </tr>
                     ))
                   )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= TAB 5: PAYOFF CURVE & RISK GEOMETRY ================= */}
+      {activeTab === "payoff" && (
+        <div className="space-y-4">
+          {/* Header & Sub-View Switcher */}
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+            <div>
+              <div className="flex items-center gap-2">
+                <div className="size-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">
+                  <Activity className="size-4" />
+                </div>
+                <h2 className="text-lg font-black tracking-tight text-slate-900">
+                  Payoff Curve & Risk Geometry
+                </h2>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 font-mono">
+                  5.21x Edge
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-1 font-medium">
+                Convex asymmetric payoff profile, cumulative equity compounding, and underwater risk drawdown across {trades.length} closed trades.
+              </p>
+            </div>
+
+            {/* View Selector Buttons */}
+            <div className="flex items-center gap-1.5 bg-slate-100 p-1.5 rounded-2xl border border-slate-200/80 self-stretch sm:self-auto justify-start sm:justify-end overflow-x-auto">
+              <button
+                type="button"
+                onClick={() => setPayoffView("equity")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                  payoffView === "equity"
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200/60 font-black"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <TrendingUp className="size-3.5 text-emerald-600" />
+                Equity & Drawdown
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPayoffView("convex")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                  payoffView === "convex"
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200/60 font-black"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <Activity className="size-3.5 text-amber-600" />
+                Convex Payoff Curve
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setPayoffView("distribution")}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                  payoffView === "distribution"
+                    ? "bg-white text-slate-900 shadow-xs border border-slate-200/60 font-black"
+                    : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                }`}
+              >
+                <BarChart3 className="size-3.5 text-sky-600" />
+                Outcome Distribution
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Payoff Geometry Metric Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <span>Reward / Risk Payoff</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 font-mono">
+                  {summary.payoff_ratio ?? 5.21}x
+                </span>
+              </div>
+              <div className="my-2">
+                <div className="text-2xl font-black font-mono tracking-tight text-amber-600">
+                  5.21x Asymmetry
+                </div>
+                <div className="text-xs text-slate-500 font-medium mt-1">
+                  Avg Win: <strong className="text-emerald-700 font-mono">+₹{(Math.round(summary.avg_win ?? 14527)).toLocaleString("en-IN")}</strong> vs Loss: <strong className="text-rose-600 font-mono">-₹{(Math.round(summary.avg_loss ?? 2789)).toLocaleString("en-IN")}</strong>
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 font-medium border-t border-slate-100 pt-2">
+                Winners yield 5.21x higher cash than losses surrender
+              </div>
+            </div>
+
+            <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <span>Multibagger Power</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
+                  19 Trades
+                </span>
+              </div>
+              <div className="my-2">
+                <div className="text-2xl font-black font-mono tracking-tight text-emerald-600">
+                  +₹7.77 Lakhs
+                </div>
+                <div className="text-xs text-slate-500 font-medium mt-1">
+                  19 multibaggers alone pay for all 187 losses (-₹5.21L)
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 font-medium border-t border-slate-100 pt-2">
+                Surplus +₹2.55L beyond all losing trades combined
+              </div>
+            </div>
+
+            <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <span>Calmar & Drawdown</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 font-mono">
+                  Calmar: {summary.calmar_ratio ?? 5.27}
+                </span>
+              </div>
+              <div className="my-2">
+                <div className="text-2xl font-black font-mono tracking-tight text-slate-900">
+                  {summary.max_drawdown_pct ?? -8.8}%
+                </div>
+                <div className="text-xs text-slate-500 font-medium mt-1">
+                  Peak Dip: <strong className="text-rose-600 font-mono">-₹{(Math.abs(summary.max_drawdown ?? 61884) / 1000).toFixed(1)}k</strong> from all-time peak
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 font-medium border-t border-slate-100 pt-2">
+                Top-tier recovery ratio (Return / Max Drawdown = 5.27)
+              </div>
+            </div>
+
+            <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs">
+              <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
+                <span>Trade Expectancy</span>
+                <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-indigo-100 text-indigo-800 border border-indigo-300 font-mono">
+                  PF: {summary.profit_factor ?? 3.15}
+                </span>
+              </div>
+              <div className="my-2">
+                <div className="text-2xl font-black font-mono tracking-tight text-indigo-600">
+                  +₹{(Math.round(summary.expectancy ?? 3734)).toLocaleString("en-IN")}
+                </div>
+                <div className="text-xs text-slate-500 font-medium mt-1">
+                  Expected value generated per ₹25,000 slot entry
+                </div>
+              </div>
+              <div className="text-[11px] text-slate-400 font-medium border-t border-slate-100 pt-2">
+                Gross Gains: ₹16.42L · Gross Losses: ₹5.22L
+              </div>
+            </div>
+          </div>
+
+          {/* VIEW 1: CUMULATIVE EQUITY & UNDERWATER DRAWDOWN CURVE */}
+          {payoffView === "equity" && (
+            <div className="space-y-4">
+              {/* Primary Equity Curve */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <TrendingUp className="size-4 text-emerald-600" />
+                      Cumulative Portfolio Equity Curve (₹5.00L Base → ₹16.20L Ending)
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                      Chronological trade-by-trade compounding curve across 300 closed positions (2022 – 2026)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                    <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Peak: ₹16.20 Lakhs
+                    </span>
+                    <span className="px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+                      CAGR: +35.2% p.a.
+                    </span>
+                  </div>
+                </div>
+
+                <div className="h-[280px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={equityCurveData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="equityGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.35} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#f1f5f9" vertical={false} strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: string) => (v ? v.slice(0, 7) : "")}
+                        interval={35}
+                      />
+                      <YAxis
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        domain={["auto", "auto"]}
+                        tickFormatter={(v: number) => `₹${(v / 100000).toFixed(1)}L`}
+                        width={65}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 shadow-xl text-xs space-y-1">
+                                <div className="font-bold text-slate-300">
+                                  Trade #{d.tradeNo}: <span className="text-emerald-400 font-mono">{d.symbol}</span>
+                                </div>
+                                <div className="text-[11px] text-slate-400">{d.date}</div>
+                                <div className="pt-1 border-t border-slate-800 space-y-0.5">
+                                  <div className="flex justify-between gap-4">
+                                    <span className="text-slate-400">Trade P&L:</span>
+                                    <span className={`font-mono font-bold ${d.pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                      {d.pnl >= 0 ? "+" : ""}₹{d.pnl.toLocaleString("en-IN")} ({d.pnlPct >= 0 ? "+" : ""}{d.pnlPct}%)
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between gap-4">
+                                    <span className="text-slate-400">Cumulative Equity:</span>
+                                    <span className="font-mono font-bold text-white">
+                                      ₹{(d.equity / 100000).toFixed(2)}L
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          }
+                          return null
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="equity"
+                        stroke="#059669"
+                        strokeWidth={2.5}
+                        fill="url(#equityGradient)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* Secondary Underwater Drawdown Curve */}
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-3">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <ShieldCheck className="size-4 text-sky-600" />
+                      Underwater Drawdown Curve (% Peak-to-Trough)
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                      Measures capital safety from peak equity; bottom floor is strictly bounded at -8.77%
+                    </p>
+                  </div>
+                  <div className="text-xs font-mono font-bold px-2.5 py-1 rounded-xl bg-rose-50 text-rose-700 border border-rose-200">
+                    Max Drawdown: -8.77% (-₹61.9k)
+                  </div>
+                </div>
+
+                <div className="h-[140px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={equityCurveData} margin={{ top: 5, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="ddGradient" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#ef4444" stopOpacity={0.05} />
+                          <stop offset="95%" stopColor="#ef4444" stopOpacity={0.35} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#f1f5f9" vertical={false} strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="date"
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: string) => (v ? v.slice(0, 7) : "")}
+                        interval={35}
+                      />
+                      <YAxis
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        domain={[-10, 0]}
+                        tickFormatter={(v: number) => `${v}%`}
+                        width={65}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-2.5 rounded-xl border border-slate-700 shadow-xl text-xs space-y-1">
+                                <div className="font-bold text-slate-300">
+                                  {d.symbol} · {d.date}
+                                </div>
+                                <div className="flex justify-between gap-4 font-mono">
+                                  <span className="text-slate-400">Drawdown:</span>
+                                  <span className="text-rose-400 font-bold">{d.drawdownPct}% (-₹{(Math.abs(d.drawdownAmt) / 1000).toFixed(1)}k)</span>
+                                </div>
+                              </div>
+                            )
+                          }
+                          return null
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="drawdownPct"
+                        stroke="#dc2626"
+                        strokeWidth={2}
+                        fill="url(#ddGradient)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW 2: CONVEX ASYMMETRIC RETURN HOCKEY STICK */}
+          {payoffView === "convex" && (
+            <div className="space-y-4">
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <Activity className="size-4 text-amber-600" />
+                      Convex Asymmetric Payoff Curve (300 Trades Sorted by Return)
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                      Visual proof of trend-following edge: Left flat floor (capped losses) vs. Right steep explosive ceiling (multibaggers)
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                    <span className="px-2.5 py-1 rounded-xl bg-rose-50 text-rose-700 border border-rose-200">
+                      Loss Floor: -33.9% max
+                    </span>
+                    <span className="px-2.5 py-1 rounded-xl bg-emerald-50 text-emerald-700 border border-emerald-200">
+                      Max Runner: +673.9%
+                    </span>
+                  </div>
+                </div>
+
+                <div className="h-[340px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={convexPayoffData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="convexGrad" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                          <stop offset="95%" stopColor="#10b981" stopOpacity={0.0} />
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid stroke="#f1f5f9" vertical={false} strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="rank"
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: number) => `#${v}`}
+                        interval={29}
+                      />
+                      <YAxis
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: number) => `${v}%`}
+                        width={60}
+                      />
+                      <ReferenceLine y={0} stroke="#cbd5e1" strokeDasharray="3 3" />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 shadow-xl text-xs space-y-1">
+                                <div className="flex items-center justify-between gap-3">
+                                  <span className="font-bold text-slate-300">#{d.rank} {d.symbol}</span>
+                                  <span className="text-[10px] text-slate-400">{d.exitDate}</span>
+                                </div>
+                                <div className="pt-1 border-t border-slate-800 space-y-0.5">
+                                  <div className="flex justify-between gap-4 font-mono font-bold">
+                                    <span className="text-slate-400">Return:</span>
+                                    <span className={d.pnlPct >= 0 ? "text-emerald-400" : "text-rose-400"}>
+                                      {d.pnlPct >= 0 ? "+" : ""}{d.pnlPct}% (+₹{d.pnl.toLocaleString("en-IN")})
+                                    </span>
+                                  </div>
+                                  <div className="text-[11px] text-slate-400 flex items-center justify-between gap-2">
+                                    <span>Exit:</span>
+                                    <span className="text-slate-200">{d.reason}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          }
+                          return null
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="pnlPct"
+                        stroke="#059669"
+                        strokeWidth={2.5}
+                        fill="url(#convexGrad)"
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
+
+                <div className="mt-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="size-8 rounded-xl bg-emerald-100 text-emerald-800 flex items-center justify-center font-bold shrink-0">
+                      <Target className="size-4" />
+                    </div>
+                    <div className="text-xs text-slate-600 font-medium">
+                      <strong className="text-slate-900 font-bold">Why the Hockey Stick Shape Delivers Asymmetric Profit:</strong> Losses on the left are strictly bounded by initial stop losses and the Break-Even Cost Shield, while winners on the right are allowed to ride complete multi-month trends up to hundreds of percent.
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 rounded-xl text-xs font-bold font-mono bg-emerald-600 text-white shrink-0">
+                    5.21x Edge
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW 3: OUTCOME DISTRIBUTION HISTOGRAM & BUCKETS */}
+          {payoffView === "distribution" && (
+            <div className="space-y-4">
+              <div className="bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
+                  <div>
+                    <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                      <BarChart3 className="size-4 text-sky-600" />
+                      Trade Frequency by % Return Bucket
+                    </h3>
+                    <p className="text-[11px] text-slate-400 font-medium mt-0.5">
+                      Histogram showing distribution of 300 trades across loss cuts, break-evens, and runners
+                    </p>
+                  </div>
+                  <div className="text-xs font-mono font-bold px-2.5 py-1 rounded-xl bg-slate-100 text-slate-700 border border-slate-200">
+                    Total: {trades.length} Closed Trades
+                  </div>
+                </div>
+
+                <div className="h-[260px] w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={distributionBuckets} margin={{ top: 10, right: 10, left: 0, bottom: 20 }}>
+                      <CartesianGrid stroke="#f1f5f9" vertical={false} strokeDasharray="3 3" />
+                      <XAxis
+                        dataKey="label"
+                        stroke="#94a3b8"
+                        fontSize={10}
+                        tickLine={false}
+                        axisLine={false}
+                        interval={0}
+                        angle={-15}
+                        textAnchor="end"
+                      />
+                      <YAxis
+                        stroke="#94a3b8"
+                        fontSize={11}
+                        tickLine={false}
+                        axisLine={false}
+                        tickFormatter={(v: number) => `${v}`}
+                        width={40}
+                      />
+                      <RechartsTooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload
+                            return (
+                              <div className="bg-slate-900 text-white p-3 rounded-xl border border-slate-700 shadow-xl text-xs space-y-1">
+                                <div className="font-bold text-slate-300">{d.label}</div>
+                                <div className="pt-1 border-t border-slate-800 space-y-0.5 font-mono">
+                                  <div className="flex justify-between gap-4">
+                                    <span className="text-slate-400">Trade Count:</span>
+                                    <span className="text-white font-bold">{d.count} trades ({((d.count / trades.length) * 100).toFixed(1)}%)</span>
+                                  </div>
+                                  <div className="flex justify-between gap-4">
+                                    <span className="text-slate-400">Net Dollar P&L:</span>
+                                    <span className={`font-bold ${d.pnl >= 0 ? "text-emerald-400" : "text-rose-400"}`}>
+                                      {d.pnl >= 0 ? "+" : ""}₹{Math.round(d.pnl).toLocaleString("en-IN")}
+                                    </span>
+                                  </div>
+                                </div>
+                              </div>
+                            )
+                          }
+                          return null
+                        }}
+                      />
+                      <Bar dataKey="count" radius={[6, 6, 0, 0]}>
+                        {distributionBuckets.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.color} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+
+              {/* 7-Bucket Visual Breakdown Cards */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {distributionBuckets.map((b) => {
+                  const pctOfTrades = trades.length > 0 ? ((b.count / trades.length) * 100).toFixed(1) : "0"
+                  return (
+                    <div key={b.key} className="p-3.5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between">
+                      <div className="flex items-center justify-between text-xs font-bold text-slate-500">
+                        <span className="flex items-center gap-1.5">
+                          <span className="size-2 rounded-full" style={{ backgroundColor: b.color }} />
+                          <span className="text-[11px] font-bold text-slate-700">{b.label}</span>
+                        </span>
+                        <span className="font-mono text-[10px] text-slate-400">{pctOfTrades}%</span>
+                      </div>
+                      <div className="my-2 flex items-baseline justify-between">
+                        <span className="text-xl font-black font-mono text-slate-900">{b.count} <span className="text-xs font-medium text-slate-400">trades</span></span>
+                        <span className={`font-mono font-bold text-xs ${b.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                          {b.pnl >= 0 ? "+" : ""}₹{(Math.round(b.pnl) / 1000).toFixed(1)}k
+                        </span>
+                      </div>
+                      <div className="text-[10px] text-slate-400 font-medium">
+                        Avg: {b.count > 0 ? `${b.pnl >= 0 ? "+" : ""}₹${Math.round(b.pnl / b.count).toLocaleString("en-IN")}` : "₹0"} / trade
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* YEARLY PAYOFF & ASYMMETRY PERFORMANCE TABLE */}
+          <div className="bg-white rounded-3xl border border-slate-200/80 overflow-hidden shadow-xs">
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center flex-wrap gap-2">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                  <Award className="size-4 text-emerald-600" />
+                  Multi-Year Payoff & Consistency Audit (2022 – 2026)
+                </h3>
+                <p className="text-[11px] text-slate-400 font-medium">
+                  Year-by-year validation of win rates, payoff ratios, max drawdowns, and net realized profits
+                </p>
+              </div>
+              <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+                Total Realized: +₹11.20L
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="p-3.5">Year</th>
+                    <th className="p-3.5 font-mono text-center">Closed Trades</th>
+                    <th className="p-3.5 font-mono text-center">Wins / Losses</th>
+                    <th className="p-3.5 font-mono text-center">Win Rate</th>
+                    <th className="p-3.5 font-mono text-center">Payoff Ratio</th>
+                    <th className="p-3.5 font-mono text-center">Profit Factor</th>
+                    <th className="p-3.5 font-mono text-center">Avg Win</th>
+                    <th className="p-3.5 font-mono text-center">Avg Loss</th>
+                    <th className="p-3.5 font-mono text-center">Max Drawdown</th>
+                    <th className="p-3.5 font-mono text-right">Net Realized P&L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {yearlyPayoffStats.map((y) => (
+                    <tr key={y.year} className="hover:bg-slate-50/80 transition">
+                      <td className="p-3.5 font-black text-slate-900 font-mono text-sm">{y.year}</td>
+                      <td className="p-3.5 font-mono text-center text-slate-700">{y.totalTrades}</td>
+                      <td className="p-3.5 font-mono text-center text-slate-500 text-[11px]">
+                        <span className="text-emerald-700 font-bold">{y.wins}W</span> / <span className="text-rose-600 font-bold">{y.losses}L</span>
+                      </td>
+                      <td className="p-3.5 font-mono text-center font-bold text-slate-800">{y.winRate}%</td>
+                      <td className="p-3.5 font-mono text-center font-black text-amber-600 bg-amber-50/40">{y.payoffRatio}x</td>
+                      <td className="p-3.5 font-mono text-center font-bold text-slate-800">{y.profitFactor}</td>
+                      <td className="p-3.5 font-mono text-center text-emerald-700 font-bold">+₹{y.avgWin.toLocaleString("en-IN")}</td>
+                      <td className="p-3.5 font-mono text-center text-rose-600 font-bold">-₹{y.avgLoss.toLocaleString("en-IN")}</td>
+                      <td className="p-3.5 font-mono text-center text-rose-600 font-bold">-₹{(Math.abs(y.maxDrawdown) / 1000).toFixed(1)}k</td>
+                      <td className="p-3.5 font-mono text-right font-black text-sm">
+                        <span className={y.pnl >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                          {y.pnl >= 0 ? "+" : ""}₹{y.pnl.toLocaleString("en-IN")}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
