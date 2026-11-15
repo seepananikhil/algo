@@ -70,7 +70,8 @@ for s, df in price_data.items():
     stock_bars[s] = {
         'dates': dates, 'date_map': {d: i for i, d in enumerate(dates)},
         'c': c, 'h': h, 'l': l, 'o': o, 'v': v,
-        'e50': ema50, 'e200': ema200, 'vsma50': vol_sma50, 'vr50': vr50,
+        'e20': ema20, 'e50': ema50, 'e200': ema200, 'rsi': rsi,
+        'vsma50': vol_sma50, 'vr50': vr50,
         'ret_3d': ret_3d, 'base_c20': base_c20, 'n': n
     }
     
@@ -110,7 +111,7 @@ for s, first_leg1_dt in phoenix_first_dt.items():
     b = stock_bars[s]
     c = b['c']; h = b['h']; l = b['l']; o = b['o']; dates = b['dates']
     n = b['n']; vr50 = b['vr50']; base_c20 = b['base_c20']
-    e50 = b['e50']; e200 = b['e200']
+    e20 = b['e20']; e50 = b['e50']; e200 = b['e200']; rsi = b['rsi']
     first_idx = b['date_map'][first_leg1_dt]
     last_trigger_idx = -999
     
@@ -119,11 +120,28 @@ for s, first_leg1_dt in phoenix_first_dt.items():
             continue
             
         cur_pct = (c[i] - c[i-1]) / c[i-1] * 100.0 if c[i-1] > 0 else 0.0
+        dist_20 = (c[i] - e20[i]) / e20[i] * 100.0 if e20[i] > 0 else 0.0
+        rng = h[i] - l[i]
+        wick_ratio = ((h[i] - c[i]) / rng) if rng > 0 else 0.0
         
-        # 1. Base Breakout
-        is_breakout = (c[i] > base_c20[i]) and (vr50[i] >= 2.0) and (c[i] > o[i]) and (cur_pct >= 2.5)
-        # 2. Stage-2 50 EMA Pullback Bounce
-        is_ma_pullback = (c[i] > e200[i]) and (abs(l[i] - e50[i]) / e50[i] <= 0.04 or abs(l[i] - e200[i]) / e200[i] <= 0.04) and (c[i] > o[i]) and (cur_pct >= 4.0) and (vr50[i] >= 1.5)
+        # 1. Quiet Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
+        is_ma_pullback = (
+            (-3.0 <= dist_20 <= 3.5) and 
+            (c[i] >= e50[i] * 0.97) and 
+            (c[i] >= o[i]) and 
+            (0.8 <= cur_pct <= 5.5) and 
+            (40.0 <= rsi[i] <= 64.0) and 
+            (vr50[i] >= 0.40) and 
+            (wick_ratio <= 0.45)
+        )
+        # 2. Stage-2 Base Breakout with Anti-Chasing Cap
+        is_breakout = (
+            (c[i] > base_c20[i]) and 
+            (vr50[i] >= 2.0) and 
+            (c[i] > o[i]) and 
+            (2.5 <= cur_pct <= 8.0) and # Anti-Chasing Cap <= 8%
+            (wick_ratio <= 0.35)
+        )
         
         if is_breakout or is_ma_pullback:
             # Overhead Resistance Check: Avoid breakout candles colliding directly into the 200 EMA wall

@@ -31,21 +31,6 @@
       "notes": "Surged to peak \u20b9851.0; cooled down -18.6% over 32d. RSI reset 67.9 \u2192 47.1. Resting at 20 EMA support"
     },
     {
-      "symbol": "ZOTA",
-      "name": "ZOTA",
-      "alert_date": "2026-09-21",
-      "alert_price": 1287.8,
-      "alert_rsi": 70.0,
-      "current_price": 1273.6,
-      "current_rsi": 50.7,
-      "ema20": 1267.35,
-      "distance_to_ema20_pct": 0.5,
-      "pullback_pct": -14.2,
-      "status": "AT 20 EMA SUPPORT",
-      "cooldown_ready": true,
-      "notes": "Surged to peak \u20b91483.6; cooled down -14.2% over 33d. RSI reset 70.0 \u2192 50.7. Resting at 20 EMA support"
-    },
-    {
       "symbol": "TARIL",
       "name": "TARIL",
       "alert_date": "2026-10-14",
@@ -151,6 +136,21 @@
       "notes": "Surged to peak \u20b9479.1; cooled down -19.2% over 31d. RSI reset 71.1 \u2192 45.6. Approaching 20 EMA"
     },
     {
+      "symbol": "SIGMAADV",
+      "name": "SIGMAADV",
+      "alert_date": "2026-10-05",
+      "alert_price": 1130.6,
+      "alert_rsi": 82.8,
+      "current_price": 937.95,
+      "current_rsi": 53.7,
+      "ema20": 913.56,
+      "distance_to_ema20_pct": 2.7,
+      "pullback_pct": -19.5,
+      "status": "COOLING TOWARDS 20 EMA",
+      "cooldown_ready": false,
+      "notes": "Surged to peak \u20b91165.0; cooled down -19.5% over 24d. RSI reset 82.8 \u2192 53.7. Approaching 20 EMA"
+    },
+    {
       "symbol": "OPTIEMUS",
       "name": "OPTIEMUS",
       "alert_date": "2026-09-22",
@@ -226,6 +226,6 @@
       "notes": "Surged to peak \u20b9991.0; cooled down -6.0% over 24d. RSI reset 84.1 \u2192 61.6. Approaching 20 EMA"
     }
   ],
-  "last_updated": "2026-11-15T11:47:03.381289+05:30",
+  "last_updated": "2026-11-15T18:43:57.040409+05:30",
   "count": 15
 }

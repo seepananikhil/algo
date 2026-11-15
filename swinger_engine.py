@@ -550,7 +550,7 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
             for s_item in sig_data.get('signals', []):
                 if s_item.get('nsecode'):
                     eligible_symbols.add(s_item.get('nsecode'))
-            for w_item in w_data.get('radar', []):
+            for w_item in (w_data.get('watchlist', []) or w_data.get('radar', [])):
                 if w_item.get('symbol'):
                     eligible_symbols.add(w_item.get('symbol'))
         except Exception:
@@ -629,15 +629,15 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
         is_at_ema200_wall = abs(cur_c - ema200) / ema200 < 0.01 and cur_c < ema200 * 1.005
 
         # 1. Quiet Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
-        # Bounces gently off 20 EMA after healthy cool-off, avoiding chasing circuit spikes
+        # Bounces gently off 20 EMA after healthy cool-off, accepting natural volume contraction
         is_ema_pullback = (
-            (-2.5 <= dist_ema20 <= 3.5) and 
-            (cur_c >= ema50 * 0.98) and 
+            (-3.0 <= dist_ema20 <= 3.5) and 
+            (cur_c >= ema50 * 0.97) and 
             (cur_c >= cur_o) and 
-            (1.0 <= cur_pct_gain <= 5.5) and 
-            (44.0 <= rsi_val <= 64.0) and 
-            (cur_vr >= 0.7) and 
-            (upper_wick_ratio <= 0.40)
+            (0.8 <= cur_pct_gain <= 5.5) and 
+            (40.0 <= rsi_val <= 64.0) and 
+            (cur_vr >= 0.40) and 
+            (upper_wick_ratio <= 0.45)
         )
 
         # 2. Stage-2 Base Breakout with Anti-Chasing Cap
@@ -739,14 +739,14 @@ def scan_cooldown_radar(price_data, held_symbols=None):
             if not (-3.5 <= dist_20 <= 4.5): continue
             if cur_c < ema50[-1] * 0.96: continue
             
-            days_cooling = (n - 1) - s_idx
-            is_ready = abs(dist_20) <= 2.5 and (45.0 <= cur_rsi <= 58.0)
+            days_cooling = int((n - 1) - s_idx)
+            is_ready = bool(abs(dist_20) <= 2.5 and (45.0 <= cur_rsi <= 58.0))
             status_text = "AT 20 EMA SUPPORT" if is_ready else ("COOLING TOWARDS 20 EMA" if dist_20 > 2.0 else "TESTING 20 EMA")
             
             candidates.append({
                 "symbol": s,
                 "name": s,
-                "alert_date": dates[s_idx],
+                "alert_date": str(dates[s_idx]),
                 "alert_price": round(float(c[s_idx]), 2),
                 "alert_rsi": round(float(surge_rsi), 1),
                 "current_price": round(float(cur_c), 2),
@@ -1203,10 +1203,6 @@ def update_positions_and_scan():
                 with open(radar_file, "w", encoding="utf-8") as f:
                     json.dump({"coiled": coiled_leg2, "updated_at": datetime.now(IST).isoformat()}, f, indent=2)
                     
-                # Dynamically update watchlist.json with true cooldown candidates
-                radar_candidates = scan_cooldown_radar(u_data, held_symbols=held_symbols)
-                save_watchlist({"watchlist": radar_candidates})
-                    
                 alloc_per_slot = cfg.get("base_position_size", 25000.0)
                 for cand2 in trig_leg2:
                     if available_slots <= 0:
@@ -1264,6 +1260,10 @@ def update_positions_and_scan():
                     updated_positions.append(new_pos2)
                     held_symbols.add(sym2)
                     available_slots -= 1
+                    
+                # Dynamically update watchlist.json with true cooldown candidates (excluding all held symbols)
+                radar_candidates = scan_cooldown_radar(u_data, held_symbols=held_symbols)
+                save_watchlist({"watchlist": radar_candidates})
         except Exception as e:
             print(f"[Swinger Paper] Error during Leg 2 scan: {e}")
 
