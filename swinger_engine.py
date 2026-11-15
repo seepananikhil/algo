@@ -683,6 +683,86 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
     coiled.sort(key=lambda x: x['dist_to_ceiling'], reverse=True)
     return triggered, coiled
 
+def scan_cooldown_radar(price_data, held_symbols=None):
+    """
+    Scans tracked universe for true Turnaround Pullback Cooldown setups:
+    1. Recent High-RSI Surge Alert (10 to 35 trading days ago, RSI >= 67 or 3dRet >= 14% on vol >= 1.8x).
+    2. Actively Coming Down / Retracing from Peak: Pullback between -4.0% and -20.0% from recent peak.
+    3. Cooled-Down RSI: Current RSI has cooled from overbought down to 44 - 60.
+    4. Settling at 20 EMA: Current price is within [-3.5%, +4.5%] of the 20 EMA and holding above 50 EMA.
+    """
+    held_symbols = held_symbols or set()
+    candidates = []
+    
+    for s, df in price_data.items():
+        if s in held_symbols or len(df) < 80 or s in ['^NSEI', 'NIFTY']:
+            continue
+        c = df['Close'].values; h = df['High'].values; l = df['Low'].values; o = df['Open'].values; v = df['Volume'].values
+        dates = [d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d)[:10] for d in df.index]
+        n = len(df)
+        
+        vol_sma50 = pd.Series(v).rolling(50, min_periods=20).mean().values
+        vol_ratio = np.where(vol_sma50 > 0, v / vol_sma50, 0.0)
+        ema20 = pd.Series(c).ewm(span=20, adjust=False).mean().values
+        ema50 = pd.Series(c).ewm(span=50, adjust=False).mean().values
+        
+        delta = pd.Series(c).diff()
+        gain = delta.clip(lower=0)
+        loss = -delta.clip(upper=0)
+        avg_gain = gain.ewm(com=13, min_periods=14).mean()
+        avg_loss = loss.ewm(com=13, min_periods=14).mean()
+        rsi = 100 - (100 / (1 + avg_gain / (avg_loss + 1e-9))).values
+        
+        # Look for a surge between 10 and 35 trading days ago
+        for s_idx in range(n - 35, n - 4):
+            if s_idx < 10: continue
+            day_gain = (c[s_idx] - c[s_idx-1]) / c[s_idx-1] * 100.0 if c[s_idx-1] > 0 else 0
+            gain_3d = (c[s_idx] - c[max(0, s_idx-3)]) / c[max(0, s_idx-3)] * 100.0 if c[max(0, s_idx-3)] > 0 else 0
+            vr = vol_ratio[s_idx]
+            surge_rsi = rsi[s_idx]
+            
+            is_surge = (gain_3d >= 14.0 or day_gain >= 8.0) and (vr >= 1.8) and (surge_rsi >= 67.0)
+            if not is_surge: continue
+            
+            peak_idx = s_idx + np.argmax(h[s_idx:n])
+            peak_price = h[peak_idx]
+            cur_c = c[-1]
+            
+            pullback_pct = (cur_c - peak_price) / peak_price * 100.0
+            if pullback_pct > -3.0 or pullback_pct < -20.0: continue
+            
+            cur_rsi = rsi[-1]
+            if not (44.0 <= cur_rsi <= 62.0): continue
+            
+            cur_ema20 = ema20[-1]
+            dist_20 = (cur_c - cur_ema20) / cur_ema20 * 100.0
+            if not (-3.5 <= dist_20 <= 4.5): continue
+            if cur_c < ema50[-1] * 0.96: continue
+            
+            days_cooling = (n - 1) - s_idx
+            is_ready = abs(dist_20) <= 2.5 and (45.0 <= cur_rsi <= 58.0)
+            status_text = "AT 20 EMA SUPPORT" if is_ready else ("COOLING TOWARDS 20 EMA" if dist_20 > 2.0 else "TESTING 20 EMA")
+            
+            candidates.append({
+                "symbol": s,
+                "name": s,
+                "alert_date": dates[s_idx],
+                "alert_price": round(float(c[s_idx]), 2),
+                "alert_rsi": round(float(surge_rsi), 1),
+                "current_price": round(float(cur_c), 2),
+                "current_rsi": round(float(cur_rsi), 1),
+                "ema20": round(float(cur_ema20), 2),
+                "distance_to_ema20_pct": round(float(dist_20), 1),
+                "pullback_pct": round(float(pullback_pct), 1),
+                "status": status_text,
+                "cooldown_ready": is_ready,
+                "notes": f"Surged to peak ₹{peak_price:.1f}; cooled down {pullback_pct:.1f}% over {days_cooling}d. RSI reset {surge_rsi:.1f} → {cur_rsi:.1f}. {'Resting at 20 EMA support' if is_ready else 'Approaching 20 EMA'}"
+            })
+            break
+            
+    candidates.sort(key=lambda x: (not x["cooldown_ready"], abs(x["distance_to_ema20_pct"])))
+    return candidates
+
 def update_positions_and_scan():
     """
     Main Daily Cycle:
@@ -1123,24 +1203,8 @@ def update_positions_and_scan():
                 with open(radar_file, "w", encoding="utf-8") as f:
                     json.dump({"coiled": coiled_leg2, "updated_at": datetime.now(IST).isoformat()}, f, indent=2)
                     
-                # Dynamically update watchlist.json for the Radar tab in Web UI
-                radar_candidates = []
-                for item in coiled_leg2:
-                    radar_candidates.append({
-                        "symbol": item["symbol"],
-                        "name": item.get("name", item["symbol"]),
-                        "alert_date": item.get("surge_date", ""),
-                        "alert_price": item.get("surge_price", item["current_price"]),
-                        "alert_rsi": item.get("surge_rsi", 72.0),
-                        "current_price": item["current_price"],
-                        "current_rsi": item.get("rsi", 50.0),
-                        "ema20": item.get("ema20", item["current_price"]),
-                        "distance_to_ema20_pct": item.get("dist_ema20", 0.0),
-                        "pullback_pct": item.get("pullback_pct", 0.0),
-                        "status": item.get("status", "COILED"),
-                        "cooldown_ready": True if abs(item.get("dist_ema20", 99.0)) <= 2.5 else False,
-                        "notes": f"{item.get('status', 'COILED')} | Cooled {item.get('consol_days', 0)}d since volume surge"
-                    })
+                # Dynamically update watchlist.json with true cooldown candidates
+                radar_candidates = scan_cooldown_radar(u_data, held_symbols=held_symbols)
                 save_watchlist({"watchlist": radar_candidates})
                     
                 alloc_per_slot = cfg.get("base_position_size", 25000.0)
