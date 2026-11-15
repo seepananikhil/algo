@@ -733,22 +733,22 @@ export function SwingerPage() {
               <span>Realized Profit</span>
             </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
-              CAGR: +{summary.xirr ?? 35.2}% p.a.
+              CAGR: +{(summary.xirr ?? 0).toFixed(1)}% p.a.
             </span>
           </div>
           <div className="my-2.5">
-            <div className="text-2xl font-black font-mono tracking-tight text-emerald-600">
-              +₹{(summary.net_pnl ?? 1120118).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+            <div className={`text-2xl font-black font-mono tracking-tight ${(summary.net_pnl ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {(summary.net_pnl ?? 0) >= 0 ? "+" : ""}₹{(summary.net_pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
             </div>
             <div className="text-xs text-emerald-700 font-bold mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>+{summary.total_pnl_pct ?? 224.0}% ROI ({summary.period_years ?? 4.8}y)</span>
+              <span>+{(summary.total_pnl_pct ?? 0).toFixed(1)}% ROI ({summary.period_years ?? 0}y)</span>
               <span className="text-slate-300">·</span>
-              <span className="text-sky-700">Active XIRR: +{summary.xirr_active ?? 59.6}%</span>
+              <span className="text-sky-700">Active XIRR: +{(summary.xirr_active ?? 0).toFixed(1)}%</span>
             </div>
           </div>
           <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
             <span>Portfolio Ending:</span>
-            <span className="text-slate-800 font-mono font-bold">₹{((summary.current_capital ?? 1620118) / 100000).toFixed(2)}L <span className="text-slate-400 font-normal">from ₹5.0L</span></span>
+            <span className="text-slate-800 font-mono font-bold">₹{((summary.current_capital ?? 500000) / 100000).toFixed(2)}L <span className="text-slate-400 font-normal">from ₹5.0L</span></span>
           </div>
         </div>
 
@@ -760,22 +760,22 @@ export function SwingerPage() {
               <span>Max Drawdown</span>
             </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 font-mono">
-              Calmar: {summary.calmar_ratio ?? 5.27}
+              Calmar: {summary.calmar_ratio ?? 0}
             </span>
           </div>
           <div className="my-2.5">
             <div className="text-2xl font-black font-mono tracking-tight text-slate-900">
-              {summary.max_drawdown_pct ?? -8.8}%
+              {summary.max_drawdown_pct ?? 0}%
             </div>
             <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>Peak Dip: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.abs(summary.max_drawdown ?? 61884) / 1000).toFixed(1)}k</strong></span>
+              <span>Peak Dip: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.abs(summary.max_drawdown ?? 0) / 1000).toFixed(1)}k</strong></span>
               <span className="text-slate-300">·</span>
-              <span className="text-slate-600">Active DD: {summary.max_drawdown_active_pct ?? -17.5}%</span>
+              <span className="text-slate-600">Active DD: {summary.max_drawdown_active_pct ?? 0}%</span>
             </div>
           </div>
           <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
             <span>Max Consecutive Cuts:</span>
-            <span className="text-slate-800 font-mono font-bold">{summary.max_consecutive_losses ?? 17} <span className="text-emerald-600 font-normal">(Controlled ₹25k Lots)</span></span>
+            <span className="text-slate-800 font-mono font-bold">{summary.max_consecutive_losses ?? 0} <span className="text-emerald-600 font-normal">(Controlled ₹25k Lots)</span></span>
           </div>
         </div>
 
@@ -787,22 +787,22 @@ export function SwingerPage() {
               <span>Reward / Risk Edge</span>
             </span>
             <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 font-mono">
-              PF: {summary.profit_factor ?? 3.15}
+              PF: {summary.profit_factor ?? 0}
             </span>
           </div>
           <div className="my-2.5">
             <div className="text-2xl font-black font-mono tracking-tight text-amber-600">
-              {summary.payoff_ratio ?? 5.21}x <span className="text-xs font-bold text-slate-400 tracking-normal font-sans">Payoff</span>
+              {summary.payoff_ratio ?? 0}x <span className="text-xs font-bold text-slate-400 tracking-normal font-sans">Payoff</span>
             </div>
             <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>Avg Win: <strong className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.avg_win ?? 14527)).toLocaleString("en-IN")}</strong></span>
+              <span>Avg Win: <strong className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.avg_win ?? 0)).toLocaleString("en-IN")}</strong></span>
               <span className="text-slate-300">·</span>
-              <span>Avg Loss: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.round(summary.avg_loss ?? 2789)).toLocaleString("en-IN")}</strong></span>
+              <span>Avg Loss: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.round(summary.avg_loss ?? 0)).toLocaleString("en-IN")}</strong></span>
             </div>
           </div>
           <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>{trades.length} Closed Trades ({summary.win_rate ?? 37.7}% WR)</span>
-            <span className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.expectancy ?? 3734)).toLocaleString("en-IN")} <span className="text-slate-400 font-normal">/ trade</span></span>
+            <span>{trades.length} Closed Trades ({summary.win_rate ?? 0}% WR)</span>
+            <span className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.expectancy ?? 0)).toLocaleString("en-IN")} <span className="text-slate-400 font-normal">/ trade</span></span>
           </div>
         </div>
 
@@ -1565,14 +1565,14 @@ export function SwingerPage() {
                   </div>
                   <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
                     <span className="text-2xl font-black font-mono tracking-tight text-emerald-400">
-                      +{summary.xirr ?? 35.2}% p.a.
+                      +{(summary.xirr ?? 0).toFixed(1)}% p.a.
                     </span>
                     <span className="text-xs text-slate-300 font-medium">
                       (Total ₹5.0L Account)
                     </span>
                     <span className="text-slate-600 hidden sm:inline">·</span>
                     <span className="text-base font-black font-mono text-sky-400">
-                      +{summary.xirr_active ?? 59.6}% p.a.
+                      +{(summary.xirr_active ?? 0).toFixed(1)}% p.a.
                     </span>
                     <span className="text-xs text-slate-300 font-medium">
                       (₹2.5L Active Margin)
@@ -1585,25 +1585,25 @@ export function SwingerPage() {
                 <div>
                   <span className="text-slate-400 block text-[10px] uppercase font-bold">Total Net Profit</span>
                   <span className="font-black text-emerald-400 text-sm">
-                    +₹{(summary.net_pnl ?? 1021492).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                    {(summary.net_pnl ?? 0) >= 0 ? "+" : ""}₹{(summary.net_pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] uppercase font-bold">Total ROI</span>
                   <span className="font-black text-emerald-400 text-sm">
-                    +{summary.total_pnl_pct ?? 204.3}%
+                    +{(summary.total_pnl_pct ?? 0).toFixed(1)}%
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] uppercase font-bold">Profit Factor</span>
                   <span className="font-black text-white text-sm">
-                    {summary.profit_factor ?? 3.02}
+                    {summary.profit_factor ?? 0}
                   </span>
                 </div>
                 <div>
                   <span className="text-slate-400 block text-[10px] uppercase font-bold">Track Record</span>
                   <span className="font-black text-slate-200 text-sm">
-                    {summary.period_years ?? 4.6} Years
+                    {summary.period_years ?? 0} Years
                   </span>
                 </div>
               </div>
@@ -1611,7 +1611,11 @@ export function SwingerPage() {
 
             {/* Scorecard Year Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              {dynamicYearly.map((y) => {
+              {dynamicYearly.length === 0 ? (
+                <div className="col-span-full p-8 text-center text-slate-400 font-medium">
+                  No closed trades or yearly performance recorded yet.
+                </div>
+              ) : dynamicYearly.map((y) => {
                 const isProf = (y.pnl ?? 0) >= 0
                 const winRate = y.win_rate ?? 0
                 const pf = y.profit_factor ?? 0
@@ -2141,6 +2145,17 @@ export function SwingerPage() {
 
       {/* ================= TAB 5: PAYOFF CURVE & PERFORMANCE ASYMMETRY ================= */}
       {activeTab === "payoff" && (
+        trades.length === 0 ? (
+          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center shadow-xs">
+            <div className="size-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
+              <Activity className="size-6" />
+            </div>
+            <h3 className="text-base font-black text-slate-800">No Closed Trades Yet</h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
+              Your trade ledger and performance metrics are currently clean. As the automated engine executes and closes trades, your equity curves, payoff ratios, and audit logs will automatically populate here.
+            </p>
+          </div>
+        ) : (
         <div className="space-y-4">
           {/* Header */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs">
@@ -2650,6 +2665,7 @@ export function SwingerPage() {
             </div>
           </div>
         </div>
+        )
       )}
 
       {/* ================= 4. EMBEDDED INTERACTIVE TRADINGVIEW CHART MODAL ================= */}
