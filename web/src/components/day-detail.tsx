@@ -128,7 +128,15 @@ export function DayDetail({
 
 
   // Render Charts grid block (reusable in compact and regular view)
-  const renderCharts = (isCompactView: boolean) => (
+  const renderCharts = (isCompactView: boolean) => {
+    const isDual = chartLayout === "both" && hasSecondary
+    const chartHeightClass = isCompactView
+      ? "h-[clamp(440px,52vh,540px)] min-h-[440px]"
+      : isDual
+      ? "h-[clamp(520px,62vh,680px)] min-h-[500px]"
+      : "h-[clamp(620px,74vh,800px)] min-h-[580px]"
+
+    return (
     <div className={cn(
       "w-full",
       (chartLayout === "both" && hasSecondary) ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "flex flex-col gap-3"
@@ -205,10 +213,10 @@ export function DayDetail({
               )}
             </div>
           </div>
-          <div className="p-1 min-h-[320px] h-[320px] flex-1 flex flex-col">
+          <div className={cn("p-1 w-full flex-1 flex flex-col", chartHeightClass)}>
             {chartLoading && !chartCandles ? (
-              <div className="relative w-full h-[320px]">
-                <Skeleton className="h-[320px] w-full" />
+              <div className={cn("relative w-full", chartHeightClass)}>
+                <Skeleton className={cn("w-full", chartHeightClass)} />
               </div>
             ) : useFiveMinute && keyLevelDay.error ? (
               <p className="py-16 text-center text-sm text-red-500">5-minute chart failed: {keyLevelDay.error}</p>
@@ -224,9 +232,8 @@ export function DayDetail({
                 keyLevelZone={useFiveMinute ? (keyLevelDay.data?.key_level_zone ?? s?.key_level_zone) : null}
                 showKeyLevels={true}
                 showTradeLevels={true}
-                className={isCompactView ? "h-[310px]" : "h-[clamp(310px,44vh,350px)]"}
+                className={cn("w-full", chartHeightClass)}
                 zoomable
-                hideToolbar={true}
                 fullDay={true}
                 resetKey={`${chartLayout}|${primaryResetKey}`}
               />
@@ -301,10 +308,10 @@ export function DayDetail({
               </button>
             </div>
           </div>
-          <div className="p-1 min-h-[320px] h-[320px] flex-1 flex flex-col">
+          <div className={cn("p-1 w-full flex-1 flex flex-col", chartHeightClass)}>
             {secondaryDay.loading && !secondaryCandles.length ? (
-              <div className="w-full h-[320px]">
-                <Skeleton className="h-[320px] w-full" />
+              <div className={cn("w-full", chartHeightClass)}>
+                <Skeleton className={cn("w-full", chartHeightClass)} />
               </div>
             ) : secondaryCandles.length ? (
               <CandleChart
@@ -317,9 +324,8 @@ export function DayDetail({
                 keyLevelZone={secondarySetup?.key_level_zone ?? null}
                 showKeyLevels={true}
                 showTradeLevels={false}
-                className={isCompactView ? "h-[310px]" : "h-[clamp(310px,44vh,350px)]"}
+                className={cn("w-full", chartHeightClass)}
                 zoomable
-                hideToolbar={true}
                 fullDay={true}
                 resetKey={`${chartLayout}|${secondaryResetKey}`}
               />
@@ -330,7 +336,8 @@ export function DayDetail({
         </div>
       )}
     </div>
-  )
+    )
+  }
 
   if (compact) {
     return (
@@ -391,7 +398,7 @@ export function DayDetail({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1400px] flex-col gap-2.5">
+    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-2.5">
       {/* Sleek Action / Header Bar with plenty of breathing space */}
       <div className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-card/80 px-3 py-1.5 text-xs shadow-2xs backdrop-blur shrink-0">
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">
