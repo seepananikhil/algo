@@ -1988,8 +1988,18 @@ export function SwingerPage() {
                 <tbody className="divide-y divide-slate-100">
                   {watchlist.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
-                        No stocks currently on radar cooldown.
+                      <td colSpan={9} className="p-12 text-center">
+                        <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
+                          <div className="size-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
+                            <Flame className="size-6" />
+                          </div>
+                          <div className="text-sm font-black text-slate-800">
+                            No Stocks Currently on Pullback Cooldown
+                          </div>
+                          <p className="text-xs text-slate-500 font-medium leading-relaxed">
+                            All previous pullback candidates have triggered and moved into <strong>Active Positions</strong> (Manyavar, Cohance, Shoppers Stop) or <strong>Closed Trades</strong> (UFBL, Tejas, Relaxo). Fresh candidates are queued here automatically upon volume blast alerts.
+                          </p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
