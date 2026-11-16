@@ -234,17 +234,21 @@ for cur_dt in all_market_dates:
         exit_p = None
         exit_reason = None
         
-        # STOP-LOSS & RUNNER EXIT EVALUATION (PURE TRAILING STOP - NO BE LOCK):
+        # STOP-LOSS & RUNNER EXIT EVALUATION:
         if not pos['runner_mode']:
+            # Breakeven Shield: +15% High-Watermark activates Cost+1% Shield (eliminates round-trips)
+            if pos.get('be_shield_active', False) and l <= entry_p * 1.01:
+                exited = True
+                exit_p = min(o, entry_p * 1.01) if o < entry_p * 1.01 else entry_p * 1.01
+                exit_reason = "BE Shield Stop (+1%)"
             # Initial Stop: 12% Daily Candle Close Stop (Gives stock room to breathe)
-            if c <= entry_p * 0.88:
+            elif c <= entry_p * 0.88:
                 exited = True
                 exit_p = c
                 exit_reason = "Initial SL (-12% Close)"
         else:
             # Runner Mode: activated at +20% high watermark
             peak_trail = pos['runner_peak'] * (1.0 - trail_frac)
-            # Pure Trailing Stop: NO BE lock (cost floor removed so normal swing pullbacks don't trigger premature exits)
             if l <= peak_trail:
                 exited = True
                 exit_p = min(o, peak_trail) if o < peak_trail else peak_trail
@@ -288,7 +292,11 @@ for cur_dt in all_market_dates:
             })
             trade_id += 1
         else:
-            # Runner mode activation at +20% high watermark (Pure Trailing Stop)
+            # Breakeven Shield activation at +15% high watermark (eliminates round-trips)
+            if high_ret >= 15.0:
+                pos['be_shield_active'] = True
+            
+            # Runner mode activation at +20% high watermark
             if high_ret >= 20.0 and not pos['runner_mode']:
                 pos['runner_mode'] = True
                 pos['runner_peak'] = pos['highest_close']

@@ -854,6 +854,9 @@ export function SwingerPage() {
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
               Paper Mode (₹25k / Slot)
             </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Protects profits by moving stop to Cost+1% once gain reaches +15%">
+              BE Shield @ +15%
+            </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="Requires >=8% room to 200 EMA ceiling and prioritizes Stage-2 bases">
               200 EMA Clearance (≥8%) · Leg 2 Priority
             </span>
@@ -862,7 +865,7 @@ export function SwingerPage() {
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Turnaround Momentum Engine · 12% Close SL · Pure 25% Peak Trail @ +20% (No BE Lock) · 1000d Trough Memory · 200 EMA Clearance · Leg 2 Priority · Excl. Blacklist
+            Turnaround Momentum Engine · 12% Close SL · BE Shield @ +15% · Pure 25% Peak Trail @ +20% · 1000d Trough Memory · 200 EMA Clearance · Leg 2 Priority · Excl. Blacklist
           </p>
         </div>
 
