@@ -996,40 +996,40 @@ export function SwingerPage() {
         </div>
       </div>
 
-      {/* ================= 3. PRIMARY NAVIGATION TABS ================= */}
-      <div className="flex items-center justify-between bg-white p-2 rounded-2xl border border-slate-200/80 shadow-xs gap-2 flex-wrap">
+      {/* ================= 3. PRIMARY NAVIGATION TABS (SIMPLIFIED) ================= */}
+      <div className="flex items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-xs gap-2">
         <div className="flex items-center gap-1.5 flex-wrap">
           <button
             type="button"
             onClick={() => setActiveTab("all")}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
               activeTab === "all"
                 ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
-            <Zap className="size-3.5" />
-            All Triggers & Feed
+            <Layers className="size-3.5" />
+            Stocks & Feed
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === "all" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
               }`}
             >
-              {distinctStocks.length} Stocks · {unifiedTriggers.length} Triggers
+              {distinctStocks.length}
             </span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveTab("holdings")}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
               activeTab === "holdings"
                 ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
             <ShieldCheck className="size-3.5" />
-            Active Positions
+            Active Portfolio
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === "holdings" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
@@ -1042,7 +1042,7 @@ export function SwingerPage() {
           <button
             type="button"
             onClick={() => setActiveTab("calendar")}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
               activeTab === "calendar"
                 ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -1062,7 +1062,7 @@ export function SwingerPage() {
           <button
             type="button"
             onClick={() => setActiveTab("radar")}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
               activeTab === "radar"
                 ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -1082,7 +1082,7 @@ export function SwingerPage() {
           <button
             type="button"
             onClick={() => setActiveTab("payoff")}
-            className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
               activeTab === "payoff"
                 ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
@@ -1099,76 +1099,101 @@ export function SwingerPage() {
             </span>
           </button>
         </div>
-
-        <div className="text-[11px] text-slate-400 font-medium px-2 hidden lg:block">
-          Click any stock symbol to view full 5-year interactive chart
-        </div>
       </div>
 
       {/* ================= TAB 1: ALL TRIGGERS & MASTER FEED ================= */}
       {activeTab === "all" && (
         <div className="space-y-4">
-          {/* Top Switcher: Distinct Stocks vs Chronological Stream */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-            <div className="flex items-center gap-2">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
-                View Mode:
-              </span>
-              <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200 gap-1">
+          {/* UNIFIED COMPACT CONTROL BAR */}
+          <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs space-y-2.5">
+            {/* Top Row: Mode Switcher + Live Overview Badges + Search & Sort */}
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
+              {/* Left: View Mode Segmented Pill */}
+              <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200/80 gap-1 self-start md:self-auto">
                 <button
                   type="button"
                   onClick={() => setFeedViewMode("stocks")}
                   className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
                     feedViewMode === "stocks"
-                      ? "bg-white text-emerald-700 shadow-xs border border-slate-200/60"
+                      ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   <Layers className="size-3.5 text-emerald-600" />
-                  Distinct Stocks Review ({distinctStocks.length})
+                  Distinct Stocks ({distinctStocks.length})
                 </button>
                 <button
                   type="button"
                   onClick={() => setFeedViewMode("stream")}
                   className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
                     feedViewMode === "stream"
-                      ? "bg-white text-emerald-700 shadow-xs border border-slate-200/60"
+                      ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
                       : "text-slate-600 hover:text-slate-900"
                   }`}
                 >
                   <Zap className="size-3.5 text-amber-500" />
-                  Chronological Stream ({unifiedTriggers.length})
+                  Trigger Stream ({unifiedTriggers.length})
                 </button>
+              </div>
+
+              {/* Center: Live Overview Badges */}
+              <div className="hidden lg:flex items-center gap-2 text-xs font-mono">
+                <span className="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 border border-sky-200/70 font-bold">
+                  {positions.length} Active in Portfolio
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/70 font-bold">
+                  {distinctStocks.filter((s) => s.totalPnl > 0).length} Net Green Stocks
+                </span>
+                <span className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200/70 font-bold flex items-center gap-1">
+                  <Flame className="size-3 text-purple-600" />
+                  {distinctStocks.filter((s) => s.isMultiBagger).length} Multi-Baggers
+                </span>
+              </div>
+
+              {/* Right: Search & Sort */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1 md:w-52">
+                  <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search stock..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
+                  />
+                  {searchQuery && (
+                    <button
+                      onClick={() => setSearchQuery("")}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                    >
+                      ×
+                    </button>
+                  )}
+                </div>
+
+                {feedViewMode === "stocks" && (
+                  <select
+                    value={distinctSort}
+                    onChange={(e) => setDistinctSort(e.target.value as any)}
+                    className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white cursor-pointer"
+                  >
+                    <option value="pnl">Sort: Net P&L</option>
+                    <option value="trades">Sort: Trades</option>
+                    <option value="winrate">Sort: Win Rate</option>
+                    <option value="alpha">Sort: Symbol (A-Z)</option>
+                  </select>
+                )}
               </div>
             </div>
 
-            {/* Quick Context Summary */}
-            <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
-              <span className="bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-md font-bold">
-                {positions.length} Active in Portfolio
-              </span>
-              <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
-                {distinctStocks.filter((s) => s.totalPnl > 0).length} Net Green Stocks
-              </span>
-              <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-md font-bold">
-                {distinctStocks.filter((s) => s.isMultiBagger).length} Multi-Baggers
-              </span>
-            </div>
-          </div>
-
-          {/* VIEW MODE A: DISTINCT STOCKS ACCORDION REVIEW */}
-          {feedViewMode === "stocks" ? (
-            <div className="space-y-4">
-              {/* Distinct Filter & Search Controls */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
-                    Filter:
-                  </span>
+            {/* Bottom Row: Compact Filter Pills */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-slate-100 scrollbar-none text-xs">
+              {feedViewMode === "stocks" ? (
+                <>
                   <button
                     type="button"
                     onClick={() => setDistinctFilter("ALL")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
                       distinctFilter === "ALL"
                         ? "bg-slate-900 text-white shadow-xs"
                         : "bg-slate-100 text-slate-600 hover:bg-slate-200"
@@ -1179,10 +1204,10 @@ export function SwingerPage() {
                   <button
                     type="button"
                     onClick={() => setDistinctFilter("PORTFOLIO")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
                       distinctFilter === "PORTFOLIO"
                         ? "bg-sky-600 text-white shadow-xs"
-                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                        : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
                     }`}
                   >
                     <ShieldCheck className="size-3" />
@@ -1191,10 +1216,10 @@ export function SwingerPage() {
                   <button
                     type="button"
                     onClick={() => setDistinctFilter("WINNERS")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
                       distinctFilter === "WINNERS"
                         ? "bg-emerald-600 text-white shadow-xs"
-                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
                     }`}
                   >
                     Profitable ({distinctStocks.filter((s) => s.totalPnl > 0).length})
@@ -1202,10 +1227,10 @@ export function SwingerPage() {
                   <button
                     type="button"
                     onClick={() => setDistinctFilter("MULTIBAGGER")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
                       distinctFilter === "MULTIBAGGER"
                         ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                        : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
                     }`}
                   >
                     <Flame className="size-3" />
@@ -1214,10 +1239,10 @@ export function SwingerPage() {
                   <button
                     type="button"
                     onClick={() => setDistinctFilter("MULTITRADE")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
                       distinctFilter === "MULTITRADE"
                         ? "bg-amber-600 text-white shadow-xs"
-                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
                     }`}
                   >
                     Multi-Trades ({distinctStocks.filter((s) => s.totalTrades > 1).length})
@@ -1225,45 +1250,92 @@ export function SwingerPage() {
                   <button
                     type="button"
                     onClick={() => setDistinctFilter("LOSSES")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
                       distinctFilter === "LOSSES"
                         ? "bg-rose-600 text-white shadow-xs"
-                        : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                        : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
                     }`}
                   >
                     Net Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
                   </button>
-                </div>
+                </>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("ALL")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                      filterType === "ALL"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    All Triggers ({unifiedTriggers.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("TODAY")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
+                      filterType === "TODAY"
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
+                    }`}
+                  >
+                    <Flame className="size-3" />
+                    Today's Hits ({dailySignals.count})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("ACTIVE")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                      filterType === "ACTIVE"
+                        ? "bg-sky-600 text-white shadow-xs"
+                        : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
+                    }`}
+                  >
+                    Active ({positions.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("WIN")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                      filterType === "WIN"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
+                    }`}
+                  >
+                    Winners ({trades.filter((t) => (t.pnl || 0) > 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("LOSS")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                      filterType === "LOSS"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
+                    }`}
+                  >
+                    Stop Loss ({trades.filter((t) => (t.pnl || 0) <= 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("RADAR")}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                      filterType === "RADAR"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
+                    }`}
+                  >
+                    Radar ({activeRadarList.length})
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
 
-                <div className="flex items-center gap-2 w-full sm:w-auto">
-                  {/* Sort Dropdown */}
-                  <div className="relative">
-                    <select
-                      value={distinctSort}
-                      onChange={(e) => setDistinctSort(e.target.value as any)}
-                      className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white"
-                    >
-                      <option value="pnl">Sort: Net P&L (High → Low)</option>
-                      <option value="trades">Sort: Most Trades Taken</option>
-                      <option value="winrate">Sort: Highest Win Rate</option>
-                      <option value="alpha">Sort: Symbol (A → Z)</option>
-                    </select>
-                  </div>
-
-                  {/* Search Box */}
-                  <div className="relative flex-1 sm:w-56">
-                    <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                    <input
-                      type="text"
-                      placeholder="Search stock..."
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
-                    />
-                  </div>
-                </div>
-              </div>
-
+          {/* VIEW MODE CONTENT */}
+          {feedViewMode === "stocks" ? (
+            <div className="space-y-4">
               {/* Distinct Stocks Table */}
               <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
