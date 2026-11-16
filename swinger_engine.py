@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "app_name": "Algo Astra Swinger Paper Pro",
     "enabled": True,
     "mode": "paper",
-    "strategy": "Elite RSI Cooldown Pullback · 12% Close SL · BE Shield @ +15% · Pyramid @ +20% · +25% Vault Lock @ +50% · 50 EMA Vol Breakdown + 25% Close Trail",
+    "strategy": "Elite RSI Cooldown Pullback · 12% Close SL · Momentum Runner (+30%) · 50 EMA Vol Breakdown + 25% Close Trail",
     "capital_allocated": 500000.0,
     "max_open_positions": 12,
     "base_position_size": 25000.0,
@@ -55,6 +55,7 @@ DEFAULT_CONFIG = {
     "initial_sl_type": "FIXED_12PCT_CLOSE",
     "initial_sl_pct": -12.0,
     "leg2_initial_sl_pct": -12.0,
+    "be_shield_enabled": False,
     "catastrophe_floor_pct": 15.0,
     "be_shield_trigger_pct": 15.0,
     "tp_target_pct": 30.0,
@@ -964,13 +965,15 @@ def update_positions_and_scan():
                 continue
                 
         # --- 2. CHECK BREAK-EVEN SHIELD ACTIVATION (+15% GAIN) ---
-        be_trigger = round(avg_price * (1.0 + be_shield_trigger_pct / 100.0), 2)
-        pos["be_trigger_price"] = be_trigger
-        if not pos.get("be_active", False) and day_high >= be_trigger:
-            pos["be_active"] = True
-            pos["sl_price"] = round(avg_price * 1.005, 2)  # cost + 0.5% fee buffer
-            pos["status"] = "SHIELDED"
-            print(f"[Swinger Paper] BE SHIELD TRIGGERED for {sym} (+{be_shield_trigger_pct:.0f}% touched)! SL moved to cost: Rs.{pos['sl_price']}")
+        be_shield_enabled = cfg.get("be_shield_enabled", False)
+        if be_shield_enabled:
+            be_trigger = round(avg_price * (1.0 + be_shield_trigger_pct / 100.0), 2)
+            pos["be_trigger_price"] = be_trigger
+            if not pos.get("be_active", False) and day_high >= be_trigger:
+                pos["be_active"] = True
+                pos["sl_price"] = round(avg_price * 1.005, 2)  # cost + 0.5% fee buffer
+                pos["status"] = "SHIELDED"
+                print(f"[Swinger Paper] BE SHIELD TRIGGERED for {sym} (+{be_shield_trigger_pct:.0f}% touched)! SL moved to cost: Rs.{pos['sl_price']}")
             
         # --- 2B. CHECK PYRAMID (ADD LOT 2 @ +20% GAIN) ---
         pyramid_enabled = cfg.get("pyramid_enabled", True)

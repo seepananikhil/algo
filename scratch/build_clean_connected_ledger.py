@@ -203,31 +203,19 @@ for cur_dt in all_market_dates:
         high_ret = (pos['highest_close'] - entry_p) / entry_p * 100.0
         is_leg2 = pos.get('leg') == 2
         trail_frac = 0.25 # 25% High-Watermark Peak Trail for Turnaround Runners
-        
-        # Break-Even Shield at +15% high watermark
-        if high_ret >= 15.0 and not pos['be_shield_active']:
-            pos['be_shield_active'] = True
-            pos['sl_price'] = round(entry_p * 1.01, 2)
-            
         exited = False
         exit_p = None
         exit_reason = None
-        trigger_sl = pos['trigger_sl']
         
-        # STOP-LOSS EVALUATION:
-        if not pos['be_shield_active']:
-            # Initial Stop: 12% Daily Candle Close Stop (Gives enough room for normal pullback breathing room)
+        # STOP-LOSS & RUNNER EXIT EVALUATION (BE SHIELD REMOVED):
+        if not pos['runner_mode']:
+            # Initial Stop: 12% Daily Candle Close Stop (Gives stock room to breathe)
             if c <= entry_p * 0.88:
                 exited = True
                 exit_p = c
                 exit_reason = "Initial SL (-12% Close)"
-        elif pos['be_shield_active'] and not pos['runner_mode']:
-            be_sl = entry_p * 1.01
-            if l <= be_sl:
-                exited = True
-                exit_p = min(o, be_sl) if o < be_sl else be_sl
-                exit_reason = "Break-Even Shield Exit (Cost Protected)"
-        elif pos['runner_mode']:
+        else:
+            # Runner Mode: activated at +30% high watermark
             peak_trail = pos['runner_peak'] * (1.0 - trail_frac)
             # Once up +20%, stop floor can never fall below cost
             if high_ret >= 20.0:
@@ -236,15 +224,14 @@ for cur_dt in all_market_dates:
                 exited = True
                 exit_p = min(o, peak_trail) if o < peak_trail else peak_trail
                 exit_reason = f"Peak Trail Stop ({int(trail_frac*100)}% from Peak)"
-        elif is_leg2 and pos['bars_held'] >= 5 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
-            exited = True
-            exit_p = c
-            exit_reason = "Institutional 50 EMA Volume Breakdown"
-        elif not is_leg2 and pos['bars_held'] >= 20 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
-            exited = True
-            exit_p = c
-            exit_reason = "Institutional 50 EMA Volume Breakdown"
-            
+            elif is_leg2 and pos['bars_held'] >= 5 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
+                exited = True
+                exit_p = c
+                exit_reason = "Institutional 50 EMA Volume Breakdown"
+            elif not is_leg2 and pos['bars_held'] >= 20 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
+                exited = True
+                exit_p = c
+                exit_reason = "Institutional 50 EMA Volume Breakdown"
         if exited:
             pnl_amt = round(pos['shares'] * (exit_p - entry_p), 2)
             pnl_pct = round((exit_p / entry_p - 1.0) * 100.0, 2)
@@ -527,7 +514,7 @@ for pos in positions:
     unreal_pct = (cmp_price - entry_p) / entry_p * 100.0
     
     current_sl = pos['sl_price']
-    status_str = 'RUNNER' if pos['runner_mode'] else ('SHIELDED' if pos['be_shield_active'] else 'ACTIVE')
+    status_str = 'RUNNER' if pos['runner_mode'] else 'ACTIVE'
     
     open_portfolio.append({
         'symbol': s,
