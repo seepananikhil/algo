@@ -628,26 +628,16 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
         dist_ema20 = (cur_c - ema20) / ema20 * 100.0 if ema20 > 0 else 0.0
         is_at_ema200_wall = abs(cur_c - ema200) / ema200 < 0.01 and cur_c < ema200 * 1.005
 
-        # 1. Quiet Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
-        # Bounces gently off 20 EMA after healthy cool-off, accepting natural volume contraction
+        # 1. Pure RSI Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
+        # Enters strictly when RSI has cooled down into neutral territory (40-60) right at the 20 EMA support
         is_ema_pullback = (
             (-3.0 <= dist_ema20 <= 3.5) and 
             (cur_c >= ema50 * 0.97) and 
             (cur_c >= cur_o) and 
             (0.8 <= cur_pct_gain <= 5.5) and 
-            (40.0 <= rsi_val <= 64.0) and 
+            (40.0 <= rsi_val <= 60.0) and  # Strict RSI Cool-down Reset
             (cur_vr >= 0.40) and 
             (upper_wick_ratio <= 0.45)
-        )
-
-        # 2. Stage-2 Base Breakout with Anti-Chasing Cap
-        # Breaks above the 20-25 day base resistance, but strictly rejects >8% circuit blow-offs
-        is_breakout = (
-            (cur_c >= base_h * 0.995) and 
-            (cur_vr >= min_vol_ratio) and 
-            (cur_c >= cur_o) and 
-            (cur_pct_gain <= 8.0) and  # Anti-chasing cap: never buy an exhausted +10-20% blast
-            (upper_wick_ratio <= 0.35)  # Rejects pin-bar traps
         )
 
         setup_dict['dist_ema20'] = round(float(dist_ema20), 1)
@@ -658,25 +648,21 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
         setup_dict['surge_price'] = round(float(c[s_idx]), 2)
         setup_dict['pullback_pct'] = round(float((cur_c / c[s_idx] - 1) * 100.0), 1) if c[s_idx] > 0 else 0.0
 
-        if (is_breakout or is_ema_pullback) and not is_at_ema200_wall:
-            if is_ema_pullback and not is_breakout:
-                setup_dict['status'] = 'PULLBACK BOUNCE TRIGGERED'
-                setup_dict['setup_type'] = 'MA_PULLBACK'
-                setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
-            else:
-                setup_dict['status'] = 'BREAKING OUT NOW'
-                setup_dict['setup_type'] = 'BASE_BREAKOUT'
-                setup_dict['strategy_leg'] = 'LEG2_BASE_BREAKOUT'
+        # Trigger strictly on true 20 EMA RSI Pullback Bounces (Rejects high-RSI momentum ceiling breakouts)
+        if is_ema_pullback and not is_at_ema200_wall:
+            setup_dict['status'] = 'PULLBACK BOUNCE TRIGGERED'
+            setup_dict['setup_type'] = 'MA_PULLBACK'
+            setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
             triggered.append(setup_dict)
-        elif -2.0 <= dist_ema20 <= 2.5 and 44.0 <= rsi_val <= 60.0 and cur_c >= ema50 * 0.98:
+        elif -2.0 <= dist_ema20 <= 2.5 and 40.0 <= rsi_val <= 60.0 and cur_c >= ema50 * 0.98:
             setup_dict['status'] = 'RESTING AT 20 EMA'
             setup_dict['setup_type'] = 'MA_PULLBACK'
             setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
             coiled.append(setup_dict)
-        elif dist_to_ceiling >= -5.0:
-            setup_dict['status'] = 'COILED (BREAKOUT IMMINENT)'
-            setup_dict['setup_type'] = 'BASE_BREAKOUT'
-            setup_dict['strategy_leg'] = 'LEG2_BASE_BREAKOUT'
+        elif -5.0 <= dist_to_ceiling <= 0.0 and 40.0 <= rsi_val <= 60.0:
+            setup_dict['status'] = 'COOLING IN BASE'
+            setup_dict['setup_type'] = 'MA_PULLBACK'
+            setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
             coiled.append(setup_dict)
             
     triggered.sort(key=lambda x: x['today_vol_mult'], reverse=True)

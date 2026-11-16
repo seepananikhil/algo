@@ -124,26 +124,19 @@ for s, first_leg1_dt in phoenix_first_dt.items():
         rng = h[i] - l[i]
         wick_ratio = ((h[i] - c[i]) / rng) if rng > 0 else 0.0
         
-        # 1. Quiet Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
+        # 1. Pure RSI Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
+        # Enters strictly when RSI has cooled down into neutral territory (40-60) right at the 20 EMA support
         is_ma_pullback = (
             (-3.0 <= dist_20 <= 3.5) and 
             (c[i] >= e50[i] * 0.97) and 
             (c[i] >= o[i]) and 
             (0.8 <= cur_pct <= 5.5) and 
-            (40.0 <= rsi[i] <= 64.0) and 
+            (40.0 <= rsi[i] <= 60.0) and 
             (vr50[i] >= 0.40) and 
             (wick_ratio <= 0.45)
         )
-        # 2. Stage-2 Base Breakout with Anti-Chasing Cap
-        is_breakout = (
-            (c[i] > base_c20[i]) and 
-            (vr50[i] >= 2.0) and 
-            (c[i] > o[i]) and 
-            (2.5 <= cur_pct <= 8.0) and # Anti-Chasing Cap <= 8%
-            (wick_ratio <= 0.35)
-        )
         
-        if is_breakout or is_ma_pullback:
+        if is_ma_pullback:
             # Overhead Resistance Check: Avoid breakout candles colliding directly into the 200 EMA wall
             if abs(c[i] - e200[i]) / e200[i] < 0.01 and c[i] < e200[i] * 1.005:
                 continue
@@ -157,10 +150,9 @@ for s, first_leg1_dt in phoenix_first_dt.items():
                     'vol_mult': vr50[i],
                     'score': vr50[i] * 1.5,
                     'leg': 2,
-                    'type': 'MA_PULLBACK' if is_ma_pullback and not is_breakout else 'BASE_BREAKOUT'
+                    'type': 'MA_PULLBACK'
                 })
                 last_trigger_idx = i
-
 all_signals = leg1_signals + leg2_signals
 df_signals = pd.DataFrame(all_signals).sort_values(by=['date', 'leg', 'score'], ascending=[True, True, False])
 
