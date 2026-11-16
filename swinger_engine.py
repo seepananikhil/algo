@@ -593,9 +593,11 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
         cur_c = c[-1]; cur_v = v[-1]; cur_vr = vol_ratio[-1]; cur_o = o[-1]
         dist_to_ceiling = (cur_c - base_h) / base_h * 100.0 if base_h > 0 else 0.0
         
+        cur_dt_str = df.index[-1].strftime('%Y-%m-%d') if hasattr(df.index[-1], 'strftime') else str(df.index[-1])[:10]
         setup_dict = {
             'symbol': s,
             'name': s,
+            'date': cur_dt_str,
             'leg': 2,
             'strategy_leg': 'LEG2_BREAKOUT',
             'current_price': round(float(cur_c), 2),
@@ -1130,10 +1132,11 @@ def update_positions_and_scan():
             be_trigger = round(last_close * (1.0 + be_shield_trigger_pct / 100.0), 2)
             tp_target = round(last_close * (1.0 + tp_target_pct / 100.0), 2)
             
+            cur_c_dt = (df.index[-1].strftime("%Y-%m-%d") if hasattr(df.index[-1], "strftime") else str(df.index[-1])[:10]) if not df.empty else datetime.now(IST).strftime("%Y-%m-%d")
             new_pos = {
                 "symbol": sym,
                 "name": cand.get("name", sym),
-                "entry_date": datetime.now(IST).strftime("%Y-%m-%d"),
+                "entry_date": cand.get("date", cur_c_dt),
                 "entry_price": round(last_close, 2),
                 "avg_price": round(last_close, 2),
                 "cmp": round(last_close, 2),
@@ -1210,7 +1213,7 @@ def update_positions_and_scan():
                         "name": sym2,
                         "leg": 2,
                         "strategy_leg": s_leg2,
-                        "entry_date": datetime.now(IST).strftime("%Y-%m-%d"),
+                        "entry_date": cand2.get("date", datetime.now(IST).strftime("%Y-%m-%d")),
                         "entry_price": c_p,
                         "avg_price": c_p,
                         "cmp": c_p,
