@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "app_name": "Algo Astra Swinger Paper Pro",
     "enabled": True,
     "mode": "paper",
-    "strategy": "Elite 4 & 5 Star Momentum · -25% Initial SL · BE Shield @ +15% · Pyramid @ +20% · +25% Vault Lock @ +50% · 50 EMA Vol Breakdown + 25% Close Trail",
+    "strategy": "Elite RSI Cooldown Pullback · Trigger Candle Low SL · BE Shield @ +15% · Pyramid @ +20% · +25% Vault Lock @ +50% · 50 EMA Vol Breakdown + 25% Close Trail",
     "capital_allocated": 500000.0,
     "max_open_positions": 12,
     "base_position_size": 25000.0,
@@ -52,8 +52,10 @@ DEFAULT_CONFIG = {
     "min_volume_surge_mult": 1.5,
     "min_candle_gain_pct": 5.0,
     "candle_wick_rejection": True,
-    "initial_sl_pct": -25.0,
-    "leg2_initial_sl_pct": -12.0,
+    "initial_sl_type": "TRIGGER_CANDLE_LOW",
+    "initial_sl_pct": -5.0,
+    "leg2_initial_sl_pct": -5.0,
+    "catastrophe_floor_pct": 15.0,
     "be_shield_trigger_pct": 15.0,
     "tp_target_pct": 30.0,
     "runner_trail_pct": 25.0,
@@ -606,7 +608,8 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
             'surge_date': surge_dt.strftime('%Y-%m-%d') if hasattr(surge_dt, 'strftime') else str(surge_dt)[:10],
             'consol_days': int(consol_len),
             'today_vol_mult': round(float(cur_vr), 1),
-            'dist_to_ceiling': round(float(dist_to_ceiling), 1)
+            'dist_to_ceiling': round(float(dist_to_ceiling), 1),
+            'trigger_sl': round(float(l[-1]), 2)
         }
         
         # EMA calculations
@@ -905,18 +908,42 @@ def update_positions_and_scan():
                 })
                 continue
 
-        # --- 1. CHECK HARD STOP LOSS / BREAK-EVEN SHIELD STOP (DAILY CANDLE CLOSE) ---
+        # --- 1. CHECK TRIGGER CANDLE LOW STOP / BREAK-EVEN SHIELD STOP ---
         if not pos.get("runner_mode", False):
-            sl = float(pos["sl_price"])
+            # Catastrophe Hard Circuit Breaker Stop (15% Drop Protection against intraday flash crashes)
+            hard_floor = avg_price * 0.85
+            if day_low <= hard_floor and not pos.get("be_active", False):
+                exit_price = min(day_open, hard_floor)
+                trade_pnl = round((exit_price - avg_price) * current_qty, 2)
+                reason = "Catastrophe Stop (-15% Floor)"
+                print(f"[Swinger Paper] CATASTROPHE STOP HIT for {sym} @ Rs.{exit_price} ({reason}). PnL: Rs.{trade_pnl}")
+                closed_this_cycle.append({
+                    "symbol": sym,
+                    "name": pos.get("name", sym),
+                    "leg": pos.get("leg", 1),
+                    "strategy_leg": pos.get("strategy_leg", "LEG1_TURNAROUND"),
+                    "entry_date": pos["entry_date"],
+                    "exit_date": datetime.now(IST).strftime("%Y-%m-%d"),
+                    "entry_price": entry_price,
+                    "avg_price": avg_price,
+                    "exit_price": exit_price,
+                    "qty": current_qty,
+                    "reason": reason,
+                    "days_held": days_held,
+                    "pnl": trade_pnl,
+                    "pnl_pct": round(((exit_price / avg_price) - 1) * 100, 2)
+                })
+                continue
+
+            sl = float(pos.get("sl_price", avg_price * 0.95))
             # Evaluated on Daily Candle Close to avoid intraday wick shakeouts
             if cmp_price <= sl:
                 exit_price = cmp_price
                 trade_pnl = round((exit_price - avg_price) * current_qty, 2)
-                if pos.get("leg") == 2:
-                    sl_desc = f"Leg 2 Stop-Loss ({pos.get('initial_sl_pct', -12.0):.0f}% Close)"
+                if pos.get("be_active", False):
+                    reason = "Break-Even Shield Exit (Cost Protected)"
                 else:
-                    sl_desc = f"Initial Stop-Loss ({initial_sl_pct:.0f}% Close)"
-                reason = "Break-Even Shield Exit (Cost Protected)" if pos.get("be_active", False) else sl_desc
+                    reason = "Close Below Trigger Candle Low"
                 print(f"[Swinger Paper] CANDLE CLOSE STOP HIT for {sym} @ Rs.{exit_price} ({reason}). PnL: Rs.{trade_pnl}")
                 closed_this_cycle.append({
                     "symbol": sym,
@@ -1128,7 +1155,8 @@ def update_positions_and_scan():
             if qty <= 0:
                 continue
                 
-            initial_sl = round(last_close * (1.0 + initial_sl_pct / 100.0), 2)
+            trig_low = float(df["Low"].iloc[-1]) if ("Low" in df and len(df) > 0) else round(last_close * 0.95, 2)
+            initial_sl = trig_low
             be_trigger = round(last_close * (1.0 + be_shield_trigger_pct / 100.0), 2)
             tp_target = round(last_close * (1.0 + tp_target_pct / 100.0), 2)
             
@@ -1144,7 +1172,9 @@ def update_positions_and_scan():
                 "current_qty": qty,
                 "shares": qty,
                 "invested": round(qty * last_close, 2),
+                "initial_sl_pct": round((initial_sl / last_close - 1.0) * 100.0, 1),
                 "sl_price": initial_sl,
+                "trigger_sl": trig_low,
                 "be_active": False,
                 "be_trigger_price": be_trigger,
                 "tp_hit": False,
@@ -1203,10 +1233,11 @@ def update_positions_and_scan():
                     qty2 = int(alloc_per_slot // c_p)
                     if qty2 <= 0:
                         continue
-                    sl2 = round(c_p * (1.0 + leg2_sl_pct / 100.0), 2)
+                    trig_low2 = cand2.get("trigger_sl", round(c_p * 0.95, 2))
+                    sl2 = trig_low2
                     be2 = round(c_p * (1.0 + leg2_be_pct / 100.0), 2)
                     tp2 = round(c_p * 1.30, 2)
-                    s_leg2 = cand2.get("strategy_leg", "LEG2_BASE_BREAKOUT")
+                    s_leg2 = cand2.get("strategy_leg", "LEG2_MA_PULLBACK")
                     
                     new_pos2 = {
                         "symbol": sym2,
@@ -1221,8 +1252,9 @@ def update_positions_and_scan():
                         "current_qty": qty2,
                         "shares": qty2,
                         "invested": round(qty2 * c_p, 2),
-                        "initial_sl_pct": leg2_sl_pct,
+                        "initial_sl_pct": round((sl2 / c_p - 1.0) * 100.0, 1),
                         "sl_price": sl2,
+                        "trigger_sl": trig_low2,
                         "be_active": False,
                         "be_trigger_price": be2,
                         "tp_hit": False,

@@ -5,6 +5,8 @@ import json
 from datetime import datetime
 
 def pure_xirr(cash_flows):
+    if not cash_flows or len(cash_flows) < 2:
+        return 0.0
     t0 = cash_flows[0][0]
     def npv(r):
         return sum(cf / ((1.0 + r) ** ((dt - t0).days / 365.25)) for dt, cf in cash_flows)
@@ -26,7 +28,6 @@ with open('scratch/universe_4y_prices.pkl', 'rb') as f:
 
 dt_sim_start = pd.to_datetime('2022-01-01')
 
-leg1_signals = []
 stock_bars = {}
 
 for s, df in price_data.items():
@@ -57,49 +58,63 @@ for s, df in price_data.items():
     loss = pd.Series(np.where(delta < 0, -delta, 0)).rolling(14, min_periods=10).mean().values
     rs = np.where(loss > 0, gain / loss, 1.0)
     rsi = 100.0 - (100.0 / (1.0 + rs))
-    rsi_prev = np.roll(rsi, 1)
     
     prev_c = np.roll(c, 1)
     pct_chg = np.where(prev_c > 0, (c - prev_c) / prev_c * 100.0, 0.0)
-    ret_3d = np.zeros(n)
-    ret_3d[3:] = (c[3:] - c[:-3]) / c[:-3] * 100.0
-    
-    # 20-day base ceiling
-    base_c20 = pd.Series(c).shift(1).rolling(20, min_periods=10).max().values
     
     stock_bars[s] = {
         'dates': dates, 'date_map': {d: i for i, d in enumerate(dates)},
         'c': c, 'h': h, 'l': l, 'o': o, 'v': v,
         'e20': ema20, 'e50': ema50, 'e200': ema200, 'rsi': rsi,
-        'vsma50': vol_sma50, 'vr50': vr50,
-        'ret_3d': ret_3d, 'base_c20': base_c20, 'n': n
+        'vsma50': vol_sma50, 'vr50': vr50, 'vsma60': vol_sma60, 'vr60': vr60,
+        'pct_chg': pct_chg, 'max_1000': max_1000, 'n': n
     }
-    
-    leg1_mask = (
-        (c <= 0.40 * max_1000) &
-        (c < ema200) &
-        (c >= ema20) &
-        (c >= 20.0) &
-        (c > o) &
-        (pct_chg >= 5.0) &
-        (v >= vol_sma60 * 1.5) &
-        (rsi > 54) & (rsi <= 68) &
-        (rsi_prev <= 60) &
-        ((c - l) >= 0.65 * (h - l)) &
-        (dates >= dt_sim_start)
-    )
-    for idx in np.where(leg1_mask)[0]:
-        leg1_signals.append({
-            'symbol': s,
-            'date': dates[idx],
-            'price': c[idx],
-            'open_price': o[idx],
-            'vol_mult': vr60[idx],
-            'score': vr60[idx] * (pct_chg[idx] / 10.0),
-            'leg': 1,
-            'type': 'TURNAROUND'
-        })
 
+# 1. Generate Leg 1 Turnaround Pullback Signals:
+# Requires +5% ignition blast below 200 EMA, then enters on 1st 20 EMA pullback bounce!
+leg1_signals = []
+for s, b in stock_bars.items():
+    c = b['c']; h = b['h']; l = b['l']; o = b['o']; n = b['n']
+    e20 = b['e20']; e50 = b['e50']; e200 = b['e200']; rsi = b['rsi']
+    max_1000 = b['max_1000']; pct_chg = b['pct_chg']; vr60 = b['vr60']; vr50 = b['vr50']
+    dates = b['dates']
+    
+    blast_mask = (
+        (c <= 0.40 * max_1000) &
+        (c < e200) &
+        (pct_chg >= 5.0) &
+        (vr60 >= 1.5)
+    )
+    blast_indices = np.where(blast_mask)[0]
+    last_entry_idx = -999
+    
+    for b_idx in blast_indices:
+        # Scan for the 1st 20 EMA pullback bounce occurring 4 to 50 days after ignition
+        for j in range(b_idx + 4, min(b_idx + 50, n)):
+            if j <= last_entry_idx + 20: continue
+            dist_20 = (c[j] - e20[j]) / e20[j] * 100.0 if e20[j] > 0 else 0.0
+            rng = h[j] - l[j]
+            wick = ((h[j] - c[j]) / rng) if rng > 0 else 0.0
+            
+            # Pure RSI Cool-down Pullback Bounce at 20 EMA:
+            if (-3.5 <= dist_20 <= 3.5 and 
+                c[j] >= e50[j] * 0.97 and 
+                c[j] >= o[j] and 
+                0.8 <= pct_chg[j] <= 5.5 and 
+                40.0 <= rsi[j] <= 60.0 and 
+                vr50[j] >= 0.40 and 
+                wick <= 0.45 and 
+                dates[j] >= dt_sim_start):
+                
+                leg1_signals.append({
+                    'symbol': s, 'date': dates[j], 'price': c[j], 'open_price': o[j],
+                    'low_price': l[j], 'vol_mult': vr50[j], 'score': vr50[j] * 1.5,
+                    'leg': 1, 'type': 'TURNAROUND_PULLBACK'
+                })
+                last_entry_idx = j
+                break
+
+# 2. Generate Leg 2 Signals (Pure RSI Cool-down 20 EMA Pullbacks in Stage-2 uptrend)
 phoenix_first_dt = {}
 for sig in leg1_signals:
     s = sig['symbol']
@@ -110,22 +125,19 @@ leg2_signals = []
 for s, first_leg1_dt in phoenix_first_dt.items():
     b = stock_bars[s]
     c = b['c']; h = b['h']; l = b['l']; o = b['o']; dates = b['dates']
-    n = b['n']; vr50 = b['vr50']; base_c20 = b['base_c20']
-    e20 = b['e20']; e50 = b['e50']; e200 = b['e200']; rsi = b['rsi']
+    n = b['n']; vr50 = b['vr50']; e20 = b['e20']; e50 = b['e50']; e200 = b['e200']; rsi = b['rsi']
+    pct_chg = b['pct_chg']
     first_idx = b['date_map'][first_leg1_dt]
     last_trigger_idx = -999
     
     for i in range(first_idx + 15, n):
-        if i <= last_trigger_idx + 20:
-            continue
-            
-        cur_pct = (c[i] - c[i-1]) / c[i-1] * 100.0 if c[i-1] > 0 else 0.0
+        if i <= last_trigger_idx + 20: continue
+        cur_pct = pct_chg[i]
         dist_20 = (c[i] - e20[i]) / e20[i] * 100.0 if e20[i] > 0 else 0.0
         rng = h[i] - l[i]
         wick_ratio = ((h[i] - c[i]) / rng) if rng > 0 else 0.0
         
-        # 1. Pure RSI Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
-        # Enters strictly when RSI has cooled down into neutral territory (40-60) right at the 20 EMA support
+        # Pure RSI Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
         is_ma_pullback = (
             (-3.0 <= dist_20 <= 3.5) and 
             (c[i] >= e50[i] * 0.97) and 
@@ -135,24 +147,19 @@ for s, first_leg1_dt in phoenix_first_dt.items():
             (vr50[i] >= 0.40) and 
             (wick_ratio <= 0.45)
         )
-        
         if is_ma_pullback:
-            # Overhead Resistance Check: Avoid breakout candles colliding directly into the 200 EMA wall
+            # Overhead Resistance Check: Avoid breakout candles colliding directly into 200 EMA wall
             if abs(c[i] - e200[i]) / e200[i] < 0.01 and c[i] < e200[i] * 1.005:
                 continue
             d = dates[i]
             if d >= dt_sim_start:
                 leg2_signals.append({
-                    'symbol': s,
-                    'date': d,
-                    'price': c[i],
-                    'open_price': o[i],
-                    'vol_mult': vr50[i],
-                    'score': vr50[i] * 1.5,
-                    'leg': 2,
-                    'type': 'MA_PULLBACK'
+                    'symbol': s, 'date': d, 'price': c[i], 'open_price': o[i],
+                    'low_price': l[i], 'vol_mult': vr50[i], 'score': vr50[i] * 1.5,
+                    'leg': 2, 'type': 'MA_PULLBACK'
                 })
                 last_trigger_idx = i
+
 all_signals = leg1_signals + leg2_signals
 df_signals = pd.DataFrame(all_signals).sort_values(by=['date', 'leg', 'score'], ascending=[True, True, False])
 
@@ -163,12 +170,13 @@ for _, row in df_signals.iterrows():
 
 all_market_dates = sorted(list(set(d for b in stock_bars.values() for d in b['dates'] if d >= dt_sim_start)))
 
-SLOT_SIZE = 25000.0 # Fixed ₹25k standard lot per trade
-MAX_POS = 9999999 # UNLIMITED LOTS
+SLOT_SIZE = 25000.0 # Standard ₹25k lot per trade
+CAPITAL = 500000.0 # Base capital ₹500,000
 
 positions = []
 closed_trades = []
 trade_id = 1
+symbol_l1_attempts = {}
 
 for cur_dt in all_market_dates:
     surviving = []
@@ -184,7 +192,6 @@ for cur_dt in all_market_dates:
         e50 = b['e50'][i]; vsma50 = b['vsma50'][i]
         
         entry_p = pos['entry_price']
-        entry_o = pos.get('entry_open', entry_p)
         pos['days_held'] += 1
         pos['bars_held'] += 1
         if h > pos['highest_high']:
@@ -192,69 +199,66 @@ for cur_dt in all_market_dates:
         if c > pos['highest_close']:
             pos['highest_close'] = c
             
-        cur_ret = (c - entry_p) / entry_p * 100.0
         high_ret = (pos['highest_close'] - entry_p) / entry_p * 100.0
-        
         is_leg2 = pos.get('leg') == 2
-        sl_pct = -12.0 if is_leg2 else -25.0
-        trail_frac = 0.25  # Model 4: 25% High-Watermark Peak Trail for Turnaround Runners
+        trail_frac = 0.25 # 25% High-Watermark Peak Trail for Turnaround Runners
         
+        # Break-Even Shield at +15% high watermark
         if high_ret >= 15.0 and not pos['be_shield_active']:
             pos['be_shield_active'] = True
+            pos['sl_price'] = round(entry_p * 1.01, 2)
             
         exited = False
         exit_p = None
         exit_reason = None
+        trigger_sl = pos['trigger_sl']
         
-        # SMART EARLY REVERSAL SHIELD for Leg 2 (Days 1 to 2 post-entry):
-        # Fires ONLY on true structural or institutional breakdowns on LOSING trades (cur_ret < 0):
-        # 1. Price closes below the 50-day EMA on a red day while in a loss
-        # 2. Institutional dump volume (>= 1.3x SMA50) with drop <= -3.5%
-        # 3. Deep bearish engulfing breach below breakout day open (<= -5.0%)
-        if is_leg2 and pos['days_held'] in [1, 2]:
-            broke_e50 = (cur_ret < 0) and (c < e50) and (c < o)
-            heavy_vol_dump = (cur_ret <= -3.5) and (c < o) and (vsma50 > 0 and v / vsma50 >= 1.3)
-            deep_engulfing = (c < entry_o) and (cur_ret <= -5.0) and (c < o)
+        # STOP-LOSS EVALUATION:
+        if not pos['be_shield_active']:
+            # Catastrophe Hard Circuit Breaker Stop (15% Drop Protection against intraday flash crashes)
+            hard_catastrophe_floor = entry_p * 0.85
+            if l <= hard_catastrophe_floor:
+                exited = True
+                exit_p = min(o, hard_catastrophe_floor) if o < hard_catastrophe_floor else hard_catastrophe_floor
+                exit_reason = "Catastrophe Stop (-15% Floor)"
+            # Primary Stop: Daily Close below Trigger Candle Low
+            elif c < trigger_sl:
+                exited = True
+                exit_p = c
+                exit_reason = "Close Below Trigger Candle Low"
+        elif pos['be_shield_active'] and not pos['runner_mode']:
+            be_sl = entry_p * 1.01
+            if l <= be_sl:
+                exited = True
+                exit_p = min(o, be_sl) if o < be_sl else be_sl
+                exit_reason = "Break-Even Shield Exit (Cost Protected)"
+        elif pos['runner_mode']:
+            peak_trail = pos['runner_peak'] * (1.0 - trail_frac)
+            # Once up +20%, stop floor can never fall below cost
+            if high_ret >= 20.0:
+                peak_trail = max(peak_trail, entry_p)
+            if l <= peak_trail:
+                exited = True
+                exit_p = min(o, peak_trail) if o < peak_trail else peak_trail
+                exit_reason = f"Peak Trail Stop ({int(trail_frac*100)}% from Peak)"
+        elif is_leg2 and pos['bars_held'] >= 5 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
+            exited = True
+            exit_p = c
+            exit_reason = "Institutional 50 EMA Volume Breakdown"
+        elif not is_leg2 and pos['bars_held'] >= 20 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
+            exited = True
+            exit_p = c
+            exit_reason = "Institutional 50 EMA Volume Breakdown"
             
-            if broke_e50 or heavy_vol_dump or deep_engulfing:
-                exited = True
-                exit_p = c
-                if broke_e50:
-                    exit_reason = f"Early Shield: 50 EMA Breakdown (Day {pos['days_held']})"
-                elif heavy_vol_dump:
-                    exit_reason = f"Early Shield: Institutional Volume Dump (Day {pos['days_held']}, Vol={v/vsma50:.1f}x)"
-                else:
-                    exit_reason = f"Early Shield: Deep Engulfing Breach (Day {pos['days_held']})"
-        
-        # Regular Stop-Loss evaluated on Daily Candle Close to avoid intraday wick shakeouts
-        if not exited:
-            if c <= pos['sl_price']:
-                exit_p = c
-                exit_reason = f"Initial SL ({sl_pct:.0f}%)"
-                exited = True
-            elif pos['be_shield_active']:
-                trail_p = pos['highest_close'] * (1.0 - trail_frac)
-                # Universal Cost Protection Lock: Once up +20%, stop floor can never fall below cost
-                if high_ret >= 20.0:
-                    trail_p = max(trail_p, entry_p)
-                if c < trail_p:
-                    exit_p = c
-                    exit_reason = f"Leg {pos['leg']} Trail SL ({int(trail_frac*100)}% from Peak)"
-                    exited = True
-                elif c < e50 and vsma50 > 0 and (v / vsma50) >= 1.2 and cur_ret >= 10.0:
-                    exit_p = c
-                    exit_reason = "Institutional 50 EMA Volume Breakdown"
-                    exited = True
-                    
         if exited:
-            pnl_pct = (exit_p - entry_p) / entry_p * 100.0
-            pnl_amt = pos['shares'] * (exit_p - entry_p)
+            pnl_amt = round(pos['shares'] * (exit_p - entry_p), 2)
+            pnl_pct = round((exit_p / entry_p - 1.0) * 100.0, 2)
             closed_trades.append({
                 'trade_id': trade_id,
                 'symbol': s,
                 'name': s,
                 'leg': pos['leg'],
-                'strategy_leg': f"LEG{pos['leg']}_{pos.get('setup_type', 'BREAKOUT')}",
+                'strategy_leg': f"LEG{pos['leg']}_{pos.get('setup_type', 'PULLBACK')}",
                 'entry_date': pos['entry_date'].strftime('%Y-%m-%d'),
                 'exit_date': cur_dt.strftime('%Y-%m-%d'),
                 'entry_price': round(entry_p, 2),
@@ -268,15 +272,23 @@ for cur_dt in all_market_dates:
                 'holding_days': pos['days_held'],
                 'reason': exit_reason,
                 'exit_reason': exit_reason,
-                'pnl': round(pnl_amt, 2),
-                'pnl_pct': round(pnl_pct, 2),
-                'pct_return': round(pnl_pct, 2),
+                'pnl': pnl_amt,
+                'pnl_pct': pnl_pct,
+                'pct_return': pnl_pct,
                 'highest_high': round(pos['highest_high'], 2),
-                'stars': 4 if is_leg2 else 5,
+                'stars': 5,
                 'mode': 'PAPER'
             })
             trade_id += 1
         else:
+            # Runner mode activation at +30% high watermark
+            if high_ret >= 30.0 and not pos['runner_mode']:
+                pos['runner_mode'] = True
+                pos['runner_peak'] = pos['highest_close']
+                pos['status'] = 'RUNNER'
+            elif pos['runner_mode']:
+                if pos['highest_close'] > pos['runner_peak']:
+                    pos['runner_peak'] = pos['highest_close']
             surviving.append(pos)
             
     positions = surviving
@@ -288,24 +300,33 @@ for cur_dt in all_market_dates:
             s = sig['symbol']
             if s in held:
                 continue
+            
+            # Leg 1 Max Attempts Rule: Cap at 2 attempts per turnaround stock
+            if sig['leg'] == 1:
+                attempt = symbol_l1_attempts.get(s, 0) + 1
+                if attempt > 2:
+                    continue
+                symbol_l1_attempts[s] = attempt
+                
             p = sig['price']
             if p <= 0: continue
             shs = int(SLOT_SIZE / p)
             if shs < 1: continue
             
-            is_l2 = sig['leg'] == 2
-            sl_price = p * (0.88 if is_l2 else 0.75)
+            trig_low = sig.get('low_price', p * 0.95)
             
             positions.append({
                 'symbol': s,
                 'leg': sig['leg'],
-                'setup_type': sig.get('type', 'BREAKOUT'),
+                'setup_type': sig.get('type', 'PULLBACK'),
                 'entry_date': cur_dt,
                 'entry_price': p,
-                'entry_open': sig.get('open_price', p),
                 'shares': shs,
-                'sl_price': sl_price,
+                'trigger_sl': trig_low,
+                'sl_price': trig_low,
                 'be_shield_active': False,
+                'runner_mode': False,
+                'runner_peak': p,
                 'highest_high': p,
                 'highest_close': p,
                 'days_held': 0,
@@ -313,22 +334,18 @@ for cur_dt in all_market_dates:
             })
             held.add(s)
 
-# Calculate financial metrics
+# Financial metrics
 pnl_tot = sum(t['pnl'] for t in closed_trades)
 wins = [t for t in closed_trades if t['pnl'] > 0]
 losses = [t for t in closed_trades if t['pnl'] <= 0]
-win_rate = len(wins) / len(closed_trades) * 100.0
+win_rate = len(wins) / len(closed_trades) * 100.0 if closed_trades else 0.0
 
 gross_profit = sum(t['pnl'] for t in wins)
 gross_loss = abs(sum(t['pnl'] for t in losses))
 profit_factor = round(gross_profit / gross_loss, 2) if gross_loss > 0 else 99.0
 
-# Capital: Base capital ₹500,000
-CAPITAL = 500000.0
-
-# XIRR Calculation
 start_dt = pd.to_datetime('2022-01-01')
-end_dt = pd.to_datetime(closed_trades[-1]['exit_date'])
+end_dt = pd.to_datetime(closed_trades[-1]['exit_date']) if closed_trades else start_dt
 years = (end_dt - start_dt).days / 365.25
 
 # Account XIRR (Base 500k)
@@ -345,7 +362,7 @@ for t in closed_trades:
 cfs_active.append((end_dt, 250000.0))
 calc_xirr_active = round(pure_xirr(cfs_active), 1)
 
-# Cumulative Drawdown Analysis
+# Drawdown Analysis
 df_t = pd.DataFrame(closed_trades)
 df_t['cum_pnl'] = df_t['pnl'].cumsum()
 df_t['equity'] = CAPITAL + df_t['cum_pnl']
@@ -366,7 +383,6 @@ avg_loss = float(abs(sum(t['pnl'] for t in losses)) / len(losses)) if losses els
 payoff_ratio = round(avg_win / avg_loss, 2) if avg_loss > 0 else 99.0
 expectancy = round(pnl_tot / len(closed_trades), 2) if closed_trades else 0.0
 
-# Max consecutive losses
 streaks = []
 cur_streak = 0
 for t in closed_trades:
@@ -381,6 +397,9 @@ max_consec_losses = max(streaks) if streaks else 0
 ann_ret = (pnl_tot / CAPITAL * 100.0) / years if years > 0 else 0.0
 calmar_ratio = round(ann_ret / abs(max_dd_pct), 2) if max_dd_pct != 0 else 99.0
 
+print("="*80)
+print("PULLBACK ARCHITECTURE + TRIGGER CANDLE LOW STOP LOSS RESULTS")
+print("="*80)
 print(f"Total Trades: {len(closed_trades)}")
 print(f"Win Rate: {win_rate:.1f}%")
 print(f"Net P&L: ₹{pnl_tot:,.2f}")
@@ -389,6 +408,7 @@ print(f"Account XIRR: +{calc_xirr}% p.a.")
 print(f"Active Margin XIRR: +{calc_xirr_active}% p.a.")
 print(f"Max Drawdown: ₹{max_dd_amt:,.2f} ({max_dd_pct:.2f}%)")
 print(f"Payoff Ratio: {payoff_ratio}x | Expectancy: +₹{expectancy:,.2f} | Calmar: {calmar_ratio}")
+print(f"Average Win: ₹{avg_win:,.2f} | Average Loss: -₹{avg_loss:,.2f}")
 
 # Yearly Breakdown
 yearly = {}
@@ -491,7 +511,7 @@ ledger_data = {
 with open('paper/swinger/trades.json', 'w') as f:
     json.dump(ledger_data, f, indent=2)
 
-print("\nSaved updated paper/swinger/trades.json with UNLIMITED LOTS successfully!")
+print("\nSaved updated paper/swinger/trades.json successfully!")
 
 # Export surviving active open positions to paper/swinger/portfolio.json
 open_portfolio = []
@@ -505,6 +525,10 @@ for pos in positions:
     shs = pos['shares']
     unreal_pnl = shs * (cmp_price - entry_p)
     unreal_pct = (cmp_price - entry_p) / entry_p * 100.0
+    
+    current_sl = pos['sl_price']
+    status_str = 'RUNNER' if pos['runner_mode'] else ('SHIELDED' if pos['be_shield_active'] else 'ACTIVE')
+    
     open_portfolio.append({
         'symbol': s,
         'name': s,
@@ -520,13 +544,15 @@ for pos in positions:
         'unrealized_pct': round(unreal_pct, 2),
         'highest_close': round(high_c, 2),
         'peak_price': round(pos['highest_high'], 2),
-        'sl_price': round(pos['sl_price'], 2),
+        'sl_price': round(current_sl, 2),
+        'trigger_sl': round(pos['trigger_sl'], 2),
         'be_active': pos['be_shield_active'],
-        'runner_mode': pos['be_shield_active'],
+        'runner_mode': pos['runner_mode'],
         'days_held': pos['days_held'],
         'leg': pos['leg'],
-        'strategy_leg': f"LEG{pos['leg']}_{pos.get('setup_type', 'BREAKOUT')}",
-        'status': 'RUNNER' if pos['be_shield_active'] else 'ACTIVE'
+        'strategy_leg': f"LEG{pos['leg']}_{pos.get('setup_type', 'PULLBACK')}",
+        'status': status_str,
+        'stars': 5
     })
 
 with open('paper/swinger/portfolio.json', 'w') as f:
