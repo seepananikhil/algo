@@ -39,6 +39,7 @@ DEFAULT_CONFIG = {
     "app_name": "Algo Astra Swinger Paper Pro",
     "enabled": True,
     "mode": "paper",
+    "blacklist": ["V2RETAIL"],
     "strategy": "Elite RSI Cooldown Pullback · 12% Close SL · Momentum Runner (+30%) · 50 EMA Vol Breakdown + 25% Close Trail",
     "capital_allocated": 500000.0,
     "max_open_positions": 12,
@@ -540,7 +541,9 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
     3. Breakout Trigger: Today's Close breaks above the 20-30 day consolidation ceiling with volume >= 1.5x (or 2.0x) 50-day average.
     Restricted strictly to confirmed Phoenix Swinger stocks that have completed their Leg 1 turnaround!
     """
-    held_symbols = held_symbols or set()
+    cfg = load_config()
+    blacklist = set(cfg.get("blacklist", ["V2RETAIL"]))
+    held_symbols = (held_symbols or set()) | blacklist
     triggered = []
     coiled = []
 
@@ -683,7 +686,9 @@ def scan_cooldown_radar(price_data, held_symbols=None):
     3. Cooled-Down RSI: Current RSI has cooled from overbought down to 44 - 60.
     4. Settling at 20 EMA: Current price is within [-3.5%, +4.5%] of the 20 EMA and holding above 50 EMA.
     """
-    held_symbols = held_symbols or set()
+    cfg = load_config()
+    blacklist = set(cfg.get("blacklist", ["V2RETAIL"]))
+    held_symbols = (held_symbols or set()) | blacklist
     candidates = []
     
     for s, df in price_data.items():
@@ -1124,7 +1129,8 @@ def update_positions_and_scan():
     # --- FILL AVAILABLE SLOTS IN PAPER MODE ---
     max_slots = cfg.get("max_open_positions", 12)
     available_slots = max_slots - len(updated_positions)
-    held_symbols = {p["symbol"] for p in updated_positions}
+    blacklist = set(cfg.get("blacklist", ["V2RETAIL"]))
+    held_symbols = {p["symbol"] for p in updated_positions} | blacklist
     min_stars = cfg.get("min_star_rating", 4)
     
     if available_slots > 0 and cfg.get("enabled", True):

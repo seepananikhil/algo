@@ -26,12 +26,23 @@ def pure_xirr(cash_flows):
 with open('scratch/universe_4y_prices.pkl', 'rb') as f:
     price_data = pickle.load(f)
 
+CONFIG_PATH = "swinger_config.json"
+BLACKLIST = {"V2RETAIL"}
+try:
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        cfg = json.load(f)
+        BLACKLIST = set(cfg.get("blacklist", ["V2RETAIL"]))
+except Exception:
+    pass
+
+print(f"[Ledger Build] Loaded Blacklist ({len(BLACKLIST)} symbols): {BLACKLIST}")
+
 dt_sim_start = pd.to_datetime('2022-01-01')
 
 stock_bars = {}
 
 for s, df in price_data.items():
-    if len(df) < 150 or s in ['^NSEI', 'NIFTY']:
+    if len(df) < 150 or s in ['^NSEI', 'NIFTY'] or s in BLACKLIST:
         continue
     df = df.copy()
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -52,6 +63,7 @@ for s, df in price_data.items():
     ema50 = pd.Series(c).ewm(span=50, adjust=False).mean().values
     ema200 = pd.Series(c).ewm(span=200, adjust=False).mean().values
     max_1000 = pd.Series(h).rolling(1000, min_periods=100).max().values
+    lowest_30 = pd.Series(l).rolling(30, min_periods=5).min().values
     
     delta = pd.Series(c).diff().values
     gain = pd.Series(np.where(delta > 0, delta, 0)).rolling(14, min_periods=10).mean().values
@@ -67,20 +79,24 @@ for s, df in price_data.items():
         'c': c, 'h': h, 'l': l, 'o': o, 'v': v,
         'e20': ema20, 'e50': ema50, 'e200': ema200, 'rsi': rsi,
         'vsma50': vol_sma50, 'vr50': vr50, 'vsma60': vol_sma60, 'vr60': vr60,
-        'pct_chg': pct_chg, 'max_1000': max_1000, 'n': n
+        'pct_chg': pct_chg, 'max_1000': max_1000, 'lowest_30': lowest_30, 'n': n
     }
 
 # 1. Generate Leg 1 Turnaround Pullback Signals:
-# Requires +5% ignition blast below 200 EMA, then enters on 1st 20 EMA pullback bounce!
+# Requires +5% ignition blast below 200 EMA with Trough Memory (-60% trough or -55% close), then enters on 1st 20 EMA pullback bounce!
 leg1_signals = []
 for s, b in stock_bars.items():
     c = b['c']; h = b['h']; l = b['l']; o = b['o']; n = b['n']
     e20 = b['e20']; e50 = b['e50']; e200 = b['e200']; rsi = b['rsi']
-    max_1000 = b['max_1000']; pct_chg = b['pct_chg']; vr60 = b['vr60']; vr50 = b['vr50']
-    dates = b['dates']
+    max_1000 = b['max_1000']; lowest_30 = b['lowest_30']; pct_chg = b['pct_chg']
+    vr60 = b['vr60']; vr50 = b['vr50']; dates = b['dates']
+    
+    # Trough Memory crash condition:
+    # Captures deep -60% crashes even when the explosive +12% blast day closes at -55% or -50%
+    crash_condition = ((lowest_30 <= 0.40 * max_1000) & (c <= 0.50 * max_1000)) | (c <= 0.45 * max_1000)
     
     blast_mask = (
-        (c <= 0.40 * max_1000) &
+        crash_condition &
         (c < e200) &
         (pct_chg >= 5.0) &
         (vr60 >= 1.5)
@@ -287,6 +303,7 @@ for cur_dt in all_market_dates:
                 if attempt > 2:
                     continue
                 symbol_l1_attempts[s] = attempt
+                symbol_l2_attempts[s] = 0 # Cycle Reset: Fresh Leg 1 turnaround resets Leg 2 attempts for the new bull cycle!
             else:
                 attempt = symbol_l2_attempts.get(s, 0) + 1
                 if attempt > 3:
