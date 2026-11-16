@@ -47,6 +47,7 @@ export interface SwingerTradeTarget {
   base_high?: number
   base_low?: number
   surge_date?: string
+  stockTrades?: SwingerTradeTarget[]
 }
 
 interface CandleData {
@@ -174,9 +175,29 @@ export function SwingerTradeChartModal({
   const [showEMA200, setShowEMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
   const [activeRange, setActiveRange] = useState<"3m" | "6m" | "1y" | "2y" | "all">("1y")
+  const [activeTradeIndex, setActiveTradeIndex] = useState<number>(0)
 
   // Live Crosshair Hover Information
   const [hovered, setHovered] = useState<HoveredInfo | null>(null)
+
+  // Reset active trade index when trade symbol changes
+  useEffect(() => {
+    setActiveTradeIndex(0)
+  }, [trade?.symbol])
+
+  // Derive all trades for this stock (either passed via stockTrades or filtered from allTrades)
+  const symbolTrades: SwingerTradeTarget[] = useMemo(() => {
+    if (trade?.stockTrades && trade.stockTrades.length > 0) {
+      return trade.stockTrades
+    }
+    if (allTrades && trade) {
+      const matching = allTrades.filter((t) => t.symbol === trade.symbol)
+      if (matching.length > 1) return matching
+    }
+    return trade ? [trade] : []
+  }, [trade, allTrades])
+
+  const currentTrade = symbolTrades[activeTradeIndex] || trade
 
   // Keyboard navigation & ESC
   useEffect(() => {
@@ -408,9 +429,10 @@ export function SwingerTradeChartModal({
     // 4. Clean Milestone Price Lines (Only for active/historical trades)
     // NOTE: Removed PEAK HIGH and CRASH FLOOR from price series to prevent squishing candles vertically!
     if (showLevels) {
-      const entryPrice = trade.avg_price ?? trade.entry_price
+      const activeTargetTrade = currentTrade || trade
+      const entryPrice = activeTargetTrade.avg_price ?? activeTargetTrade.entry_price
       if (entryPrice && entryPrice > 0) {
-        const isLeg2 = (trade as any).leg === 2 || (trade as any).strategy_leg === "LEG2_BREAKOUT"
+        const isLeg2 = (activeTargetTrade as any).leg === 2 || (activeTargetTrade as any).strategy_leg === "LEG2_BREAKOUT"
         const slPrice = entryPrice * (isLeg2 ? 0.92 : 0.75) // Leg 2: -8%, Leg 1: -25%
         const bePrice = entryPrice * (isLeg2 ? 1.10 : 1.15) // BE Shield
         const tpPrice = entryPrice * 1.30 // +30% TP1
@@ -456,66 +478,68 @@ export function SwingerTradeChartModal({
         })
 
         // Exit Line (ONLY if truly closed - NOT active/open)
-        const isTradeActive = 
-          trade.status === "OPEN" || 
-          trade.status === "ACTIVE" ||
-          trade.status === "SHIELDED" ||
-          trade.status === "RUNNER" ||
-          trade.reason === "Active Position" || 
-          trade.reason === "Marked to Market / Active" ||
-          !trade.exit_date;
+        const isTradeActive =
+          activeTargetTrade.status === "OPEN" ||
+          activeTargetTrade.status === "ACTIVE" ||
+          activeTargetTrade.status === "SHIELDED" ||
+          activeTargetTrade.status === "RUNNER" ||
+          activeTargetTrade.reason === "Active Position" ||
+          activeTargetTrade.reason === "Marked to Market / Active" ||
+          !activeTargetTrade.exit_date
 
-        if (!isTradeActive && trade.exit_price && trade.exit_price > 0) {
+        if (!isTradeActive && activeTargetTrade.exit_price && activeTargetTrade.exit_price > 0) {
           mainSeries.createPriceLine({
-            price: trade.exit_price,
-            color: (trade.pnl ?? 0) >= 0 ? "#10b981" : "#e11d48",
+            price: activeTargetTrade.exit_price,
+            color: (activeTargetTrade.pnl ?? 0) >= 0 ? "#10b981" : "#e11d48",
             lineWidth: 1,
             lineStyle: LineStyle.Solid,
             axisLabelVisible: true,
-            title: `EXIT ₹${trade.exit_price.toFixed(1)}`
-          });
+            title: `EXIT ₹${activeTargetTrade.exit_price.toFixed(1)}`
+          })
         }
       }
     }
 
-    // 5. Series Markers (Buy & Exit Arrows)
+    // 5. Series Markers (Buy & Exit Arrows for ALL trades of this stock)
     const markers: SeriesMarker<Time>[] = []
-    const entryPrice = trade.avg_price ?? trade.entry_price
+    symbolTrades.forEach((st, idx) => {
+      const tradeNum = symbolTrades.length - idx
+      const stEntryPrice = st.avg_price ?? st.entry_price
+      const validEntryTime = sanitizeDateToCandleTime(st.entry_date, candles)
+      if (validEntryTime && stEntryPrice) {
+        markers.push({
+          time: validEntryTime as any,
+          position: "belowBar",
+          color: "#10b981",
+          shape: "arrowUp",
+          text: symbolTrades.length > 1 ? `BUY #${tradeNum} @ ₹${stEntryPrice.toFixed(1)}` : `BUY @ ₹${stEntryPrice.toFixed(1)}`,
+          size: 1.5
+        })
+      }
 
-    const validEntryTime = sanitizeDateToCandleTime(trade.entry_date, candles)
-    if (validEntryTime && entryPrice) {
-      markers.push({
-        time: validEntryTime as any,
-        position: "belowBar",
-        color: "#10b981",
-        shape: "arrowUp",
-        text: `BUY @ ₹${entryPrice.toFixed(1)}`,
-        size: 1.5
-      })
-    }
+      const validExitTime = sanitizeDateToCandleTime(st.exit_date, candles)
+      const isTradeActiveForMarker = 
+        st.status === "OPEN" || 
+        st.status === "ACTIVE" || 
+        st.status === "SHIELDED" || 
+        st.status === "RUNNER" || 
+        st.reason === "Active Position" || 
+        st.reason === "Marked to Market / Active" || 
+        !st.exit_date
 
-    const validExitTime = sanitizeDateToCandleTime(trade.exit_date, candles)
-    const isTradeActiveForMarker = 
-      trade.status === "OPEN" || 
-      trade.status === "ACTIVE" ||
-      trade.status === "SHIELDED" ||
-      trade.status === "RUNNER" ||
-      trade.reason === "Active Position" || 
-      trade.reason === "Marked to Market / Active" ||
-      !trade.exit_date;
-
-    if (!isTradeActiveForMarker && validExitTime && trade.exit_price) {
-      const isWin = (trade.pnl ?? 0) >= 0
-      const ret = trade.pnl_pct ?? trade.pct_return ?? 0
-      markers.push({
-        time: validExitTime as any,
-        position: "aboveBar",
-        color: isWin ? "#10b981" : "#ef4444",
-        shape: "arrowDown",
-        text: `EXIT (${isWin ? "+" : ""}${ret.toFixed(1)}%)`,
-        size: 1.5
-      })
-    }
+      if (!isTradeActiveForMarker && validExitTime && st.exit_price) {
+        const isWin = (st.pnl ?? 0) >= 0
+        const ret = st.pnl_pct ?? st.pct_return ?? 0
+        markers.push({
+          time: validExitTime as any,
+          position: "aboveBar",
+          color: isWin ? "#10b981" : "#ef4444",
+          shape: "arrowDown",
+          text: symbolTrades.length > 1 ? `EXIT #${tradeNum} (${isWin ? "+" : ""}${ret.toFixed(1)}%)` : `EXIT (${isWin ? "+" : ""}${ret.toFixed(1)}%)`,
+          size: 1.5
+        })
+      }
+    })
 
     if (markers.length > 0) {
       markers.sort((a, b) => (a.time as string).localeCompare(b.time as string))
@@ -621,6 +645,9 @@ export function SwingerTradeChartModal({
   }, [
     candles,
     trade,
+    currentTrade,
+    symbolTrades,
+    activeTradeIndex,
     showVolume,
     showEMA50,
     showEMA200,
@@ -666,20 +693,21 @@ export function SwingerTradeChartModal({
 
   if (!trade) return null
 
-  const pnl = trade.pnl ?? 0
-  const pnlPct = trade.pnl_pct ?? trade.pct_return ?? 0
+  const targetTradeForHeader = currentTrade || trade
+  const pnl = targetTradeForHeader.pnl ?? 0
+  const pnlPct = targetTradeForHeader.pnl_pct ?? targetTradeForHeader.pct_return ?? 0
   const isWin = pnl >= 0
-  const entryPrice = trade.avg_price ?? trade.entry_price
-  const hasTradeDetails = Boolean(trade.entry_date && entryPrice)
+  const entryPrice = targetTradeForHeader.avg_price ?? targetTradeForHeader.entry_price
+  const hasTradeDetails = Boolean(targetTradeForHeader.entry_date && entryPrice)
   const isOpen = 
     hasTradeDetails && (
-      !trade.exit_date || 
-      trade.status === "OPEN" || 
-      trade.status === "ACTIVE" || 
-      trade.status === "SHIELDED" || 
-      trade.status === "RUNNER" || 
-      trade.reason === "Active Position" || 
-      trade.reason === "Marked to Market / Active"
+      !targetTradeForHeader.exit_date || 
+      targetTradeForHeader.status === "OPEN" || 
+      targetTradeForHeader.status === "ACTIVE" || 
+      targetTradeForHeader.status === "SHIELDED" || 
+      targetTradeForHeader.status === "RUNNER" || 
+      targetTradeForHeader.reason === "Active Position" || 
+      targetTradeForHeader.reason === "Marked to Market / Active"
     )
 
   // Prev / Next trade in sequence
@@ -711,7 +739,7 @@ export function SwingerTradeChartModal({
                   {trade.name || trade.symbol}
                 </span>
 
-                {(trade as any).leg === 2 || (trade as any).strategy_leg === "LEG2_BREAKOUT" ? (
+                {(targetTradeForHeader as any).leg === 2 || (targetTradeForHeader as any).strategy_leg === "LEG2_BREAKOUT" ? (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-300 flex items-center gap-1">
                     <span className="size-1.5 rounded-full bg-purple-600 animate-pulse" />
                     LEG 2 · Base Breakout (-8% SL)
@@ -815,7 +843,7 @@ export function SwingerTradeChartModal({
                 </div>
                 <div className={`text-[11px] font-bold font-mono ${isWin ? "text-emerald-700" : "text-rose-700"}`}>
                   {isWin ? "+" : ""}
-                  {pnlPct.toFixed(2)}% Return
+                  {pnlPct.toFixed(2)}% Return{symbolTrades.length > 1 ? ` (Trade #${symbolTrades.length - activeTradeIndex})` : ""}
                 </div>
               </div>
             )}
@@ -904,6 +932,46 @@ export function SwingerTradeChartModal({
               All Data
             </button>
           </div>
+
+          {/* Center: Multi-Trade Flipper Pills (if this stock has taken multiple trades) */}
+          {symbolTrades.length > 1 && (
+            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
+              <span className="text-[10px] font-bold text-slate-500 uppercase px-1.5 font-mono">
+                Trades ({symbolTrades.length}):
+              </span>
+              {symbolTrades.map((st, i) => {
+                const isSel = i === activeTradeIndex
+                const ret = st.pnl_pct ?? st.pct_return ?? 0
+                const isOpenTrade = !st.exit_date || st.status === "ACTIVE" || st.status === "RUNNER"
+                const tradeNum = symbolTrades.length - i
+                return (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => setActiveTradeIndex(i)}
+                    className={`px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1.5 ${
+                      isSel
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span>#{tradeNum}</span>
+                    <span
+                      className={
+                        isOpenTrade
+                          ? isSel ? "text-sky-300" : "text-sky-600 font-black"
+                          : ret >= 0
+                          ? isSel ? "text-emerald-300" : "text-emerald-600"
+                          : isSel ? "text-rose-300" : "text-rose-600"
+                      }
+                    >
+                      {isOpenTrade ? "Active" : `${ret >= 0 ? "+" : ""}${ret.toFixed(0)}%`}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          )}
 
           {/* Right: Technical Layer Toggles */}
           <div className="flex items-center gap-1.5">

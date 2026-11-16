@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo } from "react"
 import {
   TrendingUp,
   RefreshCw,
@@ -9,8 +9,6 @@ import {
   Zap,
   CheckCircle2,
   LineChart,
-  ChevronDown,
-  ChevronUp,
   Search,
   Flame,
   Wallet,
@@ -176,20 +174,7 @@ export function SwingerPage() {
   const [feedViewMode, setFeedViewMode] = useState<"stocks" | "stream">("stocks")
   const [distinctFilter, setDistinctFilter] = useState<"ALL" | "PORTFOLIO" | "WINNERS" | "MULTIBAGGER" | "LOSSES" | "MULTITRADE">("ALL")
   const [distinctSort, setDistinctSort] = useState<"pnl" | "trades" | "winrate" | "alpha">("pnl")
-  const [expandedStockSymbols, setExpandedStockSymbols] = useState<Set<string>>(new Set())
   const [selectedMonthlyYear, setSelectedMonthlyYear] = useState<string>("2026")
-
-  const toggleExpandStock = (symbol: string) => {
-    setExpandedStockSymbols((prev) => {
-      const next = new Set(prev)
-      if (next.has(symbol)) {
-        next.delete(symbol)
-      } else {
-        next.add(symbol)
-      }
-      return next
-    })
-  }
 
   // Dynamic Annual Breakdown by Cohort vs Realized Exit
   const dynamicYearly = useMemo(() => {
@@ -526,17 +511,6 @@ export function SwingerPage() {
     return trades.filter((t) => t.exit_date === selectedDate || t.entry_date === selectedDate)
   }, [trades, selectedDate])
 
-  // All chartable trades/triggers for keyboard & button flipping inside chart modal
-  const chartableList = useMemo(() => {
-    if (activeTab === "calendar" && calendarSelectedTrades.length > 0) {
-      return calendarSelectedTrades as any[]
-    }
-    if (activeTab === "holdings") {
-      return positions as any[]
-    }
-    return filteredUnifiedTriggers.map((t) => t.raw)
-  }, [activeTab, calendarSelectedTrades, positions, filteredUnifiedTriggers])
-
   // Distinct Stocks Aggregation across closed trades & active positions
   interface DistinctStock {
     symbol: string
@@ -677,6 +651,31 @@ export function SwingerPage() {
       return 0
     })
   }, [distinctStocks, distinctFilter, distinctSort, searchQuery])
+
+  // All chartable trades/triggers for keyboard & button flipping inside chart modal
+  const chartableList = useMemo(() => {
+    if (activeTab === "calendar" && calendarSelectedTrades.length > 0) {
+      return calendarSelectedTrades as any[]
+    }
+    if (activeTab === "holdings") {
+      return positions as any[]
+    }
+    if (activeTab === "all" && feedViewMode === "stocks") {
+      return filteredDistinctStocks.map((s) => {
+        const primary = (s.activePosition as any) || s.trades[0]
+        return {
+          ...primary,
+          symbol: s.symbol,
+          name: s.name,
+          stockTrades: [
+            ...(s.activePosition ? [s.activePosition as any] : []),
+            ...s.trades
+          ]
+        }
+      })
+    }
+    return filteredUnifiedTriggers.map((t) => t.raw)
+  }, [activeTab, calendarSelectedTrades, positions, feedViewMode, filteredDistinctStocks, filteredUnifiedTriggers])
 
   // Cumulative Equity & Drawdown Curve Data
   const equityCurveData = useMemo(() => {
@@ -1362,345 +1361,159 @@ export function SwingerPage() {
                         </tr>
                       ) : (
                         filteredDistinctStocks.map((stock) => {
-                          const isExpanded = expandedStockSymbols.has(stock.symbol)
                           const isProfitable = stock.totalPnl > 0
                           const hasActive = !!stock.activePosition
+                          const openChartForStock = () => {
+                            const targetTrade = (stock.activePosition as any) || stock.trades[0]
+                            if (targetTrade) {
+                              setSelectedTradeForChart({
+                                ...targetTrade,
+                                symbol: stock.symbol,
+                                name: stock.name,
+                                stockTrades: [
+                                  ...(stock.activePosition ? [stock.activePosition as any] : []),
+                                  ...stock.trades
+                                ]
+                              })
+                            }
+                          }
 
                           return (
-                            <React.Fragment key={stock.symbol}>
-                              <tr
-                                onClick={() => toggleExpandStock(stock.symbol)}
-                                className={`hover:bg-slate-50/90 cursor-pointer transition group ${
-                                  isExpanded ? "bg-slate-50/70" : ""
-                                }`}
-                              >
-                                {/* Symbol & Company */}
-                                <td className="p-3.5">
-                                  <div className="flex items-center gap-2.5">
-                                    <div
-                                      className={`size-8 rounded-xl flex items-center justify-center font-bold text-white text-[11px] ${
-                                        stock.currentStatus === "RUNNER"
-                                          ? "bg-purple-600"
-                                          : stock.currentStatus === "ACTIVE"
-                                          ? "bg-sky-600"
-                                          : isProfitable
-                                          ? "bg-emerald-600"
-                                          : "bg-slate-700"
-                                      }`}
-                                    >
-                                      {stock.symbol.slice(0, 2)}
-                                    </div>
-                                    <div>
-                                      <div className="font-black text-slate-900 text-sm font-mono flex items-center gap-1.5 group-hover:text-emerald-700 transition">
-                                        <span className="hover:underline">{stock.symbol}</span>
-                                        {stock.isMultiBagger && (
-                                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-0.5">
-                                            <Flame className="size-2.5 text-purple-600" />
-                                            100%+
-                                          </span>
-                                        )}
-                                      </div>
-                                      <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]">
-                                        {stock.name}
-                                      </div>
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* Status */}
-                                <td className="p-3.5">
-                                  {stock.currentStatus === "RUNNER" ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
-                                      <Flame className="size-3 text-purple-600" />
-                                      RUNNER (+{(stock.activePosition?.unrealized_pct ?? 0).toFixed(0)}%)
-                                    </span>
-                                  ) : stock.currentStatus === "ACTIVE" ? (
-                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
-                                      <ShieldCheck className="size-3 text-sky-600" />
-                                      PORTFOLIO
-                                    </span>
-                                  ) : (
-                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                      CLOSED ({stock.trades.length}x)
-                                    </span>
-                                  )}
-                                </td>
-
-                                {/* Total Trades */}
-                                <td className="p-3.5 text-center">
-                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 font-mono text-xs font-bold text-slate-800">
-                                    <span>{stock.totalTrades} Trade{stock.totalTrades > 1 ? "s" : ""}</span>
-                                    <span className="text-[10px] text-slate-400">·</span>
-                                    <span className="text-emerald-700">{stock.wins}W</span>
-                                    <span className="text-rose-700">{stock.losses}L</span>
-                                  </div>
-                                </td>
-
-                                {/* Win Rate */}
-                                <td className="p-3.5 text-center">
-                                  <div className="flex flex-col items-center gap-1">
-                                    <span className="font-mono font-bold text-xs text-slate-900">
-                                      {stock.winRate.toFixed(1)}%
-                                    </span>
-                                    <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                      <div
-                                        className={`h-full rounded-full ${
-                                          stock.winRate >= 50 ? "bg-emerald-500" : "bg-rose-500"
-                                        }`}
-                                        style={{ width: `${Math.min(100, Math.max(5, stock.winRate))}%` }}
-                                      />
-                                    </div>
-                                  </div>
-                                </td>
-
-                                {/* Best Win */}
-                                <td className="p-3.5 text-right font-mono font-bold">
-                                  <span className={stock.bestPnlPct >= 100 ? "text-purple-700 font-black" : stock.bestPnlPct > 0 ? "text-emerald-600" : "text-slate-600"}>
-                                    {stock.bestPnlPct > 0 ? "+" : ""}{stock.bestPnlPct.toFixed(1)}%
-                                  </span>
-                                </td>
-
-                                {/* Realized P&L */}
-                                <td className="p-3.5 text-right font-mono font-medium">
-                                  <span className={stock.realizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                                    {stock.realizedPnl >= 0 ? "+" : ""}₹{stock.realizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                  </span>
-                                </td>
-
-                                {/* Open Unrealized */}
-                                <td className="p-3.5 text-right font-mono">
-                                  {hasActive ? (
-                                    <span className={stock.unrealizedPnl >= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
-                                      {stock.unrealizedPnl >= 0 ? "+" : ""}₹{stock.unrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                      <span className="block text-[10px] text-slate-400 font-normal">
-                                        ({stock.unrealizedPnl >= 0 ? "+" : ""}{(stock.activePosition?.unrealized_pct ?? 0).toFixed(1)}%)
-                                      </span>
-                                    </span>
-                                  ) : (
-                                    <span className="text-slate-400 text-xs">—</span>
-                                  )}
-                                </td>
-
-                                {/* Total Net P&L */}
-                                <td className="p-3.5 text-right font-mono font-black">
-                                  <span className={`text-sm ${isProfitable ? "text-emerald-700" : "text-rose-700"}`}>
-                                    {isProfitable ? "+" : ""}₹{stock.totalPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                  </span>
-                                </td>
-
-                                {/* Review / Expand Button */}
-                                <td className="p-3.5 text-center">
-                                  <Button
-                                    size="sm"
-                                    variant={isExpanded ? "default" : "outline"}
-                                    onClick={(e) => {
-                                      e.stopPropagation()
-                                      toggleExpandStock(stock.symbol)
-                                    }}
-                                    className={`h-7 px-2.5 text-xs font-bold rounded-lg gap-1 transition ${
-                                      isExpanded
-                                        ? "bg-slate-900 text-white"
-                                        : "text-slate-700 border-slate-200 hover:bg-slate-100"
+                            <tr
+                              key={stock.symbol}
+                              onClick={openChartForStock}
+                              className="hover:bg-slate-50/90 cursor-pointer transition group"
+                            >
+                              {/* Symbol & Company */}
+                              <td className="p-3.5">
+                                <div className="flex items-center gap-2.5">
+                                  <div
+                                    className={`size-8 rounded-xl flex items-center justify-center font-bold text-white text-[11px] ${
+                                      stock.currentStatus === "RUNNER"
+                                        ? "bg-purple-600"
+                                        : stock.currentStatus === "ACTIVE"
+                                        ? "bg-sky-600"
+                                        : isProfitable
+                                        ? "bg-emerald-600"
+                                        : "bg-slate-700"
                                     }`}
                                   >
-                                    {isExpanded ? (
-                                      <>
-                                        <ChevronUp className="size-3.5" />
-                                        Hide ({stock.totalTrades})
-                                      </>
-                                    ) : (
-                                      <>
-                                        <ChevronDown className="size-3.5" />
-                                        Review ({stock.totalTrades})
-                                      </>
-                                    )}
-                                  </Button>
-                                </td>
-                              </tr>
-
-                              {/* ACCORDION EXPANDED SUB-TABLE: ALL TRADES FOR THIS STOCK */}
-                              {isExpanded && (
-                                <tr className="bg-slate-50/90">
-                                  <td colSpan={9} className="p-4 border-b border-slate-200">
-                                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
-                                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-3">
-                                        <div>
-                                          <h4 className="font-black text-sm text-slate-900 flex items-center gap-2 font-mono">
-                                            <Sparkles className="size-4 text-emerald-600" />
-                                            Complete Trading History: {stock.symbol} ({stock.name})
-                                          </h4>
-                                          <p className="text-xs text-slate-500 font-medium">
-                                            Showing all {stock.totalTrades} positions & closed trades taken by Swinger Strategy. Click chart button to view trade on full candlestick chart.
-                                          </p>
-                                        </div>
-
-                                        <div className="flex items-center gap-3 text-xs font-mono">
-                                          <span className="text-slate-500">
-                                            Avg Hold: <strong>{stock.avgHoldingDays} Days</strong>
-                                          </span>
-                                          <span>·</span>
-                                          <span className="text-slate-500">
-                                            Win Rate: <strong className="text-emerald-700">{stock.winRate.toFixed(1)}%</strong>
-                                          </span>
-                                        </div>
-                                      </div>
-
-                                      {/* Sub-table */}
-                                      <div className="overflow-x-auto rounded-xl border border-slate-200/80">
-                                        <table className="w-full text-left text-xs border-collapse">
-                                          <thead>
-                                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
-                                              <th className="p-2.5">Trade</th>
-                                              <th className="p-2.5">Leg</th>
-                                              <th className="p-2.5">Status</th>
-                                              <th className="p-2.5 font-mono">Entry Date</th>
-                                              <th className="p-2.5 font-mono">Exit Date</th>
-                                              <th className="p-2.5 font-mono">Buy Price</th>
-                                              <th className="p-2.5 font-mono">Exit / CMP</th>
-                                              <th className="p-2.5 font-mono">Held</th>
-                                              <th className="p-2.5">Exit Reason / Milestone</th>
-                                              <th className="p-2.5 text-right font-mono">P&L (₹)</th>
-                                              <th className="p-2.5 text-right font-mono">Return</th>
-                                              <th className="p-2.5 text-center">Interactive Chart</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody className="divide-y divide-slate-100">
-                                            {/* 1. Active Position if currently held */}
-                                            {stock.activePosition && (
-                                              <tr className="bg-sky-50/50 hover:bg-sky-50 transition">
-                                                <td className="p-2.5 font-bold text-sky-900 font-mono">
-                                                  ACTIVE
-                                                </td>
-                                                <td className="p-2.5">
-                                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
-                                                    LEG {stock.activePosition.leg ?? 1}
-                                                  </span>
-                                                </td>
-                                                <td className="p-2.5">
-                                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-200 text-sky-900">
-                                                    {stock.activePosition.runner_mode ? "RUNNER TRAIL" : "IN PORTFOLIO"}
-                                                  </span>
-                                                </td>
-                                                <td className="p-2.5 font-mono text-slate-700">{stock.activePosition.entry_date}</td>
-                                                <td className="p-2.5 font-mono text-slate-400">Open (Holding)</td>
-                                                <td className="p-2.5 font-mono font-medium text-slate-900">
-                                                  ₹{(stock.activePosition.avg_price ?? stock.activePosition.entry_price).toFixed(2)}
-                                                </td>
-                                                <td className="p-2.5 font-mono font-bold text-sky-900">
-                                                  ₹{stock.activePosition.cmp.toFixed(2)}
-                                                </td>
-                                                <td className="p-2.5 font-mono text-slate-700">{stock.activePosition.days_held}d</td>
-                                                <td className="p-2.5 text-slate-600 font-medium">
-                                                  {stock.activePosition.runner_mode ? "25% Peak Trail SL Active" : "Initial 12% Close SL Active"}
-                                                </td>
-                                                <td className="p-2.5 text-right font-mono font-bold">
-                                                  <span className={(stock.activePosition.unrealized_pnl ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                                                    {(stock.activePosition.unrealized_pnl ?? 0) >= 0 ? "+" : ""}₹{(stock.activePosition.unrealized_pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                                  </span>
-                                                </td>
-                                                <td className="p-2.5 text-right font-mono font-bold">
-                                                  <span className={(stock.activePosition.unrealized_pct ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                                                    {(stock.activePosition.unrealized_pct ?? 0) >= 0 ? "+" : ""}{(stock.activePosition.unrealized_pct ?? 0).toFixed(1)}%
-                                                  </span>
-                                                </td>
-                                                <td className="p-2.5 text-center">
-                                                  <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    onClick={() => setSelectedTradeForChart(stock.activePosition as any)}
-                                                    className="h-6 px-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 rounded gap-1"
-                                                  >
-                                                    <LineChart className="size-3" />
-                                                    Chart
-                                                  </Button>
-                                                </td>
-                                              </tr>
-                                            )}
-
-                                            {/* 2. Closed Trades */}
-                                            {stock.trades.map((t, tidx) => {
-                                              const isWin = (t.pnl || 0) > 0
-                                              const retPct = t.pnl_pct ?? (t as any).pct_return ?? 0
-                                              const isMb = retPct >= 100.0
-
-                                              return (
-                                                <tr
-                                                  key={tidx}
-                                                  onClick={() => setSelectedTradeForChart(t as any)}
-                                                  className="hover:bg-slate-50 cursor-pointer transition group"
-                                                >
-                                                  <td className="p-2.5 font-mono text-slate-500 font-bold">
-                                                    #{stock.trades.length - tidx}
-                                                  </td>
-                                                  <td className="p-2.5">
-                                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
-                                                      t.leg === 2 ? "bg-purple-100 text-purple-800 border border-purple-200" : "bg-blue-50 text-blue-800 border border-blue-200"
-                                                    }`}>
-                                                      LEG {t.leg ?? 1}
-                                                    </span>
-                                                  </td>
-                                                  <td className="p-2.5">
-                                                    <span
-                                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                                                        isWin
-                                                          ? isMb
-                                                            ? "bg-purple-100 text-purple-800 border-purple-300"
-                                                            : "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                                          : "bg-rose-100 text-rose-800 border-rose-200"
-                                                      }`}
-                                                    >
-                                                      {isWin ? (isMb ? "100%+ RUNNER" : "WINNER") : "STOPPED"}
-                                                    </span>
-                                                  </td>
-                                                  <td className="p-2.5 font-mono text-slate-700">{t.entry_date}</td>
-                                                  <td className="p-2.5 font-mono text-slate-700">{t.exit_date}</td>
-                                                  <td className="p-2.5 font-mono font-medium text-slate-900">
-                                                    ₹{(t.avg_price ?? t.entry_price ?? 0).toFixed(2)}
-                                                  </td>
-                                                  <td className="p-2.5 font-mono font-bold text-slate-900">
-                                                    ₹{(t.exit_price ?? 0).toFixed(2)}
-                                                  </td>
-                                                  <td className="p-2.5 font-mono text-slate-700">
-                                                    {t.days_held ?? (t as any).holding_days ?? 0}d
-                                                  </td>
-                                                  <td className="p-2.5 text-slate-600 font-medium">
-                                                    {formatExitReason(t.reason || (t as any).exit_reason)}
-                                                  </td>
-                                                  <td className="p-2.5 text-right font-mono font-bold">
-                                                    <span className={isWin ? "text-emerald-600" : "text-rose-600"}>
-                                                      {isWin ? "+" : ""}₹{(t.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                                    </span>
-                                                  </td>
-                                                  <td className="p-2.5 text-right font-mono font-bold">
-                                                    <span className={isWin ? (isMb ? "text-purple-700 font-black" : "text-emerald-600") : "text-rose-600"}>
-                                                      {isWin ? "+" : ""}{retPct.toFixed(1)}%
-                                                    </span>
-                                                  </td>
-                                                  <td className="p-2.5 text-center">
-                                                    <Button
-                                                      size="sm"
-                                                      variant="ghost"
-                                                      onClick={(e) => {
-                                                        e.stopPropagation()
-                                                        setSelectedTradeForChart(t as any)
-                                                      }}
-                                                      className="h-6 px-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 rounded gap-1"
-                                                    >
-                                                      <LineChart className="size-3" />
-                                                      Chart
-                                                    </Button>
-                                                  </td>
-                                                </tr>
-                                              )
-                                            })}
-                                          </tbody>
-                                        </table>
-                                      </div>
+                                    {stock.symbol.slice(0, 2)}
+                                  </div>
+                                  <div>
+                                    <div className="font-black text-slate-900 text-sm font-mono flex items-center gap-1.5 group-hover:text-emerald-700 transition">
+                                      <span className="hover:underline">{stock.symbol}</span>
+                                      {stock.isMultiBagger && (
+                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-0.5">
+                                          <Flame className="size-2.5 text-purple-600" />
+                                          100%+
+                                        </span>
+                                      )}
                                     </div>
-                                  </td>
-                                </tr>
-                              )}
-                            </React.Fragment>
+                                    <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]">
+                                      {stock.name}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Status */}
+                              <td className="p-3.5">
+                                {stock.currentStatus === "RUNNER" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
+                                    <Flame className="size-3 text-purple-600" />
+                                    RUNNER (+{(stock.activePosition?.unrealized_pct ?? 0).toFixed(0)}%)
+                                  </span>
+                                ) : stock.currentStatus === "ACTIVE" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
+                                    <ShieldCheck className="size-3 text-sky-600" />
+                                    PORTFOLIO
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                    CLOSED ({stock.trades.length}x)
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Total Trades */}
+                              <td className="p-3.5 text-center">
+                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 font-mono text-xs font-bold text-slate-800">
+                                  <span>{stock.totalTrades} Trade{stock.totalTrades > 1 ? "s" : ""}</span>
+                                  <span className="text-[10px] text-slate-400">·</span>
+                                  <span className="text-emerald-700">{stock.wins}W</span>
+                                  <span className="text-rose-700">{stock.losses}L</span>
+                                </div>
+                              </td>
+
+                              {/* Win Rate */}
+                              <td className="p-3.5 text-center">
+                                <div className="flex flex-col items-center gap-1">
+                                  <span className="font-mono font-bold text-xs text-slate-900">
+                                    {stock.winRate.toFixed(1)}%
+                                  </span>
+                                  <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                    <div
+                                      className={`h-full rounded-full ${
+                                        stock.winRate >= 50 ? "bg-emerald-500" : "bg-rose-500"
+                                      }`}
+                                      style={{ width: `${Math.min(100, Math.max(5, stock.winRate))}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Best Win */}
+                              <td className="p-3.5 text-right font-mono font-bold">
+                                <span className={stock.bestPnlPct >= 100 ? "text-purple-700 font-black" : stock.bestPnlPct > 0 ? "text-emerald-600" : "text-slate-600"}>
+                                  {stock.bestPnlPct > 0 ? "+" : ""}{stock.bestPnlPct.toFixed(1)}%
+                                </span>
+                              </td>
+
+                              {/* Realized P&L */}
+                              <td className="p-3.5 text-right font-mono font-medium">
+                                <span className={stock.realizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                                  {stock.realizedPnl >= 0 ? "+" : ""}₹{stock.realizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                </span>
+                              </td>
+
+                              {/* Open Unrealized */}
+                              <td className="p-3.5 text-right font-mono">
+                                {hasActive ? (
+                                  <span className={stock.unrealizedPnl >= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
+                                    {stock.unrealizedPnl >= 0 ? "+" : ""}₹{stock.unrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                    <span className="block text-[10px] text-slate-400 font-normal">
+                                      ({stock.unrealizedPnl >= 0 ? "+" : ""}{(stock.activePosition?.unrealized_pct ?? 0).toFixed(1)}%)
+                                    </span>
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-xs">—</span>
+                                )}
+                              </td>
+
+                              {/* Total Net P&L */}
+                              <td className="p-3.5 text-right font-mono font-black">
+                                <span className={`text-sm ${isProfitable ? "text-emerald-700" : "text-rose-700"}`}>
+                                  {isProfitable ? "+" : ""}₹{stock.totalPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                </span>
+                              </td>
+
+                              {/* Direct Candlestick Chart Action */}
+                              <td className="p-3.5 text-center">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    openChartForStock()
+                                  }}
+                                  className="h-7 px-2.5 text-xs font-bold rounded-lg gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 transition shadow-2xs"
+                                >
+                                  <LineChart className="size-3.5" />
+                                  Chart ({stock.totalTrades})
+                                </Button>
+                              </td>
+                            </tr>
                           )
                         })
                       )}
