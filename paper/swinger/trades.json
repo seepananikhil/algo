@@ -1,26 +1,26 @@
 {
   "summary": {
-    "total_trades": 315,
-    "winning_trades": 120,
-    "losing_trades": 195,
-    "win_rate": 38.1,
-    "net_pnl": 1199656.45,
-    "total_pnl": 1199656.45,
-    "total_pnl_pct": 239.9,
+    "total_trades": 322,
+    "winning_trades": 133,
+    "losing_trades": 189,
+    "win_rate": 41.3,
+    "net_pnl": 1239545.16,
+    "total_pnl": 1239545.16,
+    "total_pnl_pct": 247.9,
     "initial_capital": 500000.0,
-    "current_capital": 1699656.45,
-    "profit_factor": 2.84,
-    "xirr": 51.7,
-    "xirr_active": 97.7,
-    "max_drawdown": -94553.7,
-    "max_drawdown_pct": -6.34,
-    "max_drawdown_active_pct": -11.37,
-    "avg_win": 15439.23,
-    "avg_loss": 3348.98,
-    "payoff_ratio": 4.61,
-    "expectancy": 3808.43,
-    "calmar_ratio": 7.82,
-    "max_consecutive_losses": 19,
+    "current_capital": 1739545.16,
+    "profit_factor": 3.01,
+    "xirr": 52.4,
+    "xirr_active": 98.7,
+    "max_drawdown": -62842.83,
+    "max_drawdown_pct": -5.17,
+    "max_drawdown_active_pct": -9.25,
+    "avg_win": 13945.21,
+    "avg_loss": 3254.86,
+    "payoff_ratio": 4.28,
+    "expectancy": 3849.52,
+    "calmar_ratio": 9.91,
+    "max_consecutive_losses": 18,
     "period_years": 4.8,
     "mode": "UNLIMITED_LOTS"
   },
@@ -365,32 +365,6 @@
     },
     {
       "trade_id": 14,
-      "symbol": "PAYTM",
-      "name": "PAYTM",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2022-06-17",
-      "exit_date": "2022-09-29",
-      "entry_price": 630.15,
-      "avg_price": 630.15,
-      "exit_price": 630.15,
-      "shares": 39,
-      "qty": 39,
-      "invested": 24575.85,
-      "days_held": 71,
-      "bars_held": 71,
-      "holding_days": 71,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 0.0,
-      "pnl_pct": 0.0,
-      "pct_return": 0.0,
-      "highest_high": 844.7,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 15,
       "symbol": "IBULLSLTD",
       "name": "IBULLSLTD",
       "leg": 1,
@@ -416,7 +390,59 @@
       "mode": "PAPER"
     },
     {
+      "trade_id": 15,
+      "symbol": "TEXRAIL",
+      "name": "TEXRAIL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2022-07-19",
+      "exit_date": "2022-10-12",
+      "entry_price": 43.55,
+      "avg_price": 43.55,
+      "exit_price": 47.55,
+      "shares": 574,
+      "qty": 574,
+      "invested": 24997.7,
+      "days_held": 57,
+      "bars_held": 57,
+      "holding_days": 57,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2296.0,
+      "pnl_pct": 9.18,
+      "pct_return": 9.18,
+      "highest_high": 56.15,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
       "trade_id": 16,
+      "symbol": "PAYTM",
+      "name": "PAYTM",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2022-06-17",
+      "exit_date": "2022-10-21",
+      "entry_price": 630.15,
+      "avg_price": 630.15,
+      "exit_price": 626.21,
+      "shares": 39,
+      "qty": 39,
+      "invested": 24575.85,
+      "days_held": 86,
+      "bars_held": 86,
+      "holding_days": 86,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -153.56,
+      "pnl_pct": -0.62,
+      "pct_return": -0.62,
+      "highest_high": 844.7,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 17,
       "symbol": "CARTRADE",
       "name": "CARTRADE",
       "leg": 1,
@@ -442,7 +468,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 17,
+      "trade_id": 18,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 1,
@@ -468,7 +494,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 18,
+      "trade_id": 19,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 1,
@@ -494,7 +520,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 19,
+      "trade_id": 20,
       "symbol": "PCJEWELLER",
       "name": "PCJEWELLER",
       "leg": 2,
@@ -516,32 +542,6 @@
       "pnl_pct": -14.73,
       "pct_return": -14.73,
       "highest_high": 10.02,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 20,
-      "symbol": "PAYTM",
-      "name": "PAYTM",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2022-10-07",
-      "exit_date": "2022-11-16",
-      "entry_price": 707.45,
-      "avg_price": 707.45,
-      "exit_price": 601.45,
-      "shares": 35,
-      "qty": 35,
-      "invested": 24760.75,
-      "days_held": 26,
-      "bars_held": 26,
-      "holding_days": 26,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3710.0,
-      "pnl_pct": -14.98,
-      "pct_return": -14.98,
-      "highest_high": 745.45,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -625,6 +625,32 @@
     },
     {
       "trade_id": 24,
+      "symbol": "JUBLPHARMA",
+      "name": "JUBLPHARMA",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2022-09-30",
+      "exit_date": "2022-12-28",
+      "entry_price": 326.79,
+      "avg_price": 326.79,
+      "exit_price": 364.43,
+      "shares": 76,
+      "qty": 76,
+      "invested": 24835.97,
+      "days_held": 60,
+      "bars_held": 60,
+      "holding_days": 60,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2861.0,
+      "pnl_pct": 11.52,
+      "pct_return": 11.52,
+      "highest_high": 412.34,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 25,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 1,
@@ -650,7 +676,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 25,
+      "trade_id": 26,
       "symbol": "POLICYBZR",
       "name": "POLICYBZR",
       "leg": 1,
@@ -676,7 +702,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 26,
+      "trade_id": 27,
       "symbol": "BAJAJHIND",
       "name": "BAJAJHIND",
       "leg": 1,
@@ -702,7 +728,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 27,
+      "trade_id": 28,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 1,
@@ -724,32 +750,6 @@
       "pnl_pct": -12.69,
       "pct_return": -12.69,
       "highest_high": 386.39,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 28,
-      "symbol": "TEXRAIL",
-      "name": "TEXRAIL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2022-07-19",
-      "exit_date": "2023-02-01",
-      "entry_price": 43.55,
-      "avg_price": 43.55,
-      "exit_price": 51.1,
-      "shares": 574,
-      "qty": 574,
-      "invested": 24997.7,
-      "days_held": 134,
-      "bars_held": 134,
-      "holding_days": 134,
-      "reason": "Institutional 50 EMA Volume Breakdown",
-      "exit_reason": "Institutional 50 EMA Volume Breakdown",
-      "pnl": 4333.7,
-      "pnl_pct": 17.34,
-      "pct_return": 17.34,
-      "highest_high": 65.25,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -781,6 +781,32 @@
     },
     {
       "trade_id": 30,
+      "symbol": "TEXRAIL",
+      "name": "TEXRAIL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2022-10-31",
+      "exit_date": "2023-02-01",
+      "entry_price": 49.1,
+      "avg_price": 49.1,
+      "exit_price": 51.1,
+      "shares": 509,
+      "qty": 509,
+      "invested": 24991.9,
+      "days_held": 65,
+      "bars_held": 65,
+      "holding_days": 65,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1018.0,
+      "pnl_pct": 4.07,
+      "pct_return": 4.07,
+      "highest_high": 65.25,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 31,
       "symbol": "EMBDL",
       "name": "EMBDL",
       "leg": 1,
@@ -806,7 +832,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 31,
+      "trade_id": 32,
       "symbol": "GRAPHITE",
       "name": "GRAPHITE",
       "leg": 2,
@@ -832,7 +858,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 32,
+      "trade_id": 33,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 1,
@@ -858,7 +884,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 33,
+      "trade_id": 34,
       "symbol": "MRPL",
       "name": "MRPL",
       "leg": 2,
@@ -884,7 +910,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 34,
+      "trade_id": 35,
       "symbol": "NAZARA",
       "name": "NAZARA",
       "leg": 2,
@@ -910,7 +936,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 35,
+      "trade_id": 36,
       "symbol": "PNBHOUSING",
       "name": "PNBHOUSING",
       "leg": 1,
@@ -932,32 +958,6 @@
       "pnl_pct": 50.01,
       "pct_return": 50.01,
       "highest_high": 535.4,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 36,
-      "symbol": "JUBLPHARMA",
-      "name": "JUBLPHARMA",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2022-09-30",
-      "exit_date": "2023-03-15",
-      "entry_price": 326.79,
-      "avg_price": 326.79,
-      "exit_price": 284.18,
-      "shares": 76,
-      "qty": 76,
-      "invested": 24835.97,
-      "days_held": 113,
-      "bars_held": 113,
-      "holding_days": 113,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3238.03,
-      "pnl_pct": -13.04,
-      "pct_return": -13.04,
-      "highest_high": 412.34,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -1665,6 +1665,32 @@
     },
     {
       "trade_id": 64,
+      "symbol": "PCJEWELLER",
+      "name": "PCJEWELLER",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2023-10-06",
+      "exit_date": "2023-11-15",
+      "entry_price": 2.71,
+      "avg_price": 2.71,
+      "exit_price": 2.87,
+      "shares": 9225,
+      "qty": 9225,
+      "invested": 24999.75,
+      "days_held": 26,
+      "bars_held": 26,
+      "holding_days": 26,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1429.87,
+      "pnl_pct": 5.72,
+      "pct_return": 5.72,
+      "highest_high": 3.58,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 65,
       "symbol": "TANLA",
       "name": "TANLA",
       "leg": 2,
@@ -1690,7 +1716,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 65,
+      "trade_id": 66,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 1,
@@ -1716,7 +1742,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 66,
+      "trade_id": 67,
       "symbol": "PAYTM",
       "name": "PAYTM",
       "leg": 2,
@@ -1742,7 +1768,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 67,
+      "trade_id": 68,
       "symbol": "BBOX",
       "name": "BBOX",
       "leg": 2,
@@ -1768,7 +1794,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 68,
+      "trade_id": 69,
       "symbol": "STOVEKRAFT",
       "name": "STOVEKRAFT",
       "leg": 2,
@@ -1794,7 +1820,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 69,
+      "trade_id": 70,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 1,
@@ -1820,7 +1846,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 70,
+      "trade_id": 71,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 1,
@@ -1846,7 +1872,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 71,
+      "trade_id": 72,
       "symbol": "BLISSGVS",
       "name": "BLISSGVS",
       "leg": 2,
@@ -1872,7 +1898,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 72,
+      "trade_id": 73,
       "symbol": "PNBHOUSING",
       "name": "PNBHOUSING",
       "leg": 2,
@@ -1898,7 +1924,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 73,
+      "trade_id": 74,
       "symbol": "IBULLSLTD",
       "name": "IBULLSLTD",
       "leg": 2,
@@ -1924,7 +1950,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 74,
+      "trade_id": 75,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 1,
@@ -1950,7 +1976,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 75,
+      "trade_id": 76,
       "symbol": "IOLCP",
       "name": "IOLCP",
       "leg": 2,
@@ -1972,32 +1998,6 @@
       "pnl_pct": 14.04,
       "pct_return": 14.04,
       "highest_high": 107.18,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 76,
-      "symbol": "PCJEWELLER",
-      "name": "PCJEWELLER",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2023-10-06",
-      "exit_date": "2024-02-13",
-      "entry_price": 2.71,
-      "avg_price": 2.71,
-      "exit_price": 4.82,
-      "shares": 9225,
-      "qty": 9225,
-      "invested": 24999.75,
-      "days_held": 86,
-      "bars_held": 86,
-      "holding_days": 86,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 19487.81,
-      "pnl_pct": 77.95,
-      "pct_return": 77.95,
-      "highest_high": 6.55,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -2263,32 +2263,6 @@
     },
     {
       "trade_id": 87,
-      "symbol": "TEXRAIL",
-      "name": "TEXRAIL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2023-11-10",
-      "exit_date": "2024-03-12",
-      "entry_price": 130.9,
-      "avg_price": 130.9,
-      "exit_price": 164.7,
-      "shares": 190,
-      "qty": 190,
-      "invested": 24871.0,
-      "days_held": 81,
-      "bars_held": 81,
-      "holding_days": 81,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 6422.0,
-      "pnl_pct": 25.82,
-      "pct_return": 25.82,
-      "highest_high": 231.8,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 88,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 2,
@@ -2314,7 +2288,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 89,
+      "trade_id": 88,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 1,
@@ -2340,7 +2314,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 90,
+      "trade_id": 89,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 2,
@@ -2366,7 +2340,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 91,
+      "trade_id": 90,
       "symbol": "KIRLOSENG",
       "name": "KIRLOSENG",
       "leg": 2,
@@ -2392,7 +2366,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 92,
+      "trade_id": 91,
       "symbol": "ADANIGREEN",
       "name": "ADANIGREEN",
       "leg": 1,
@@ -2418,7 +2392,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 93,
+      "trade_id": 92,
       "symbol": "OPTIEMUS",
       "name": "OPTIEMUS",
       "leg": 2,
@@ -2444,7 +2418,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 94,
+      "trade_id": 93,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 2,
@@ -2470,7 +2444,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 95,
+      "trade_id": 94,
       "symbol": "BOSCH-HCIL",
       "name": "BOSCH-HCIL",
       "leg": 2,
@@ -2496,7 +2470,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 96,
+      "trade_id": 95,
       "symbol": "STOVEKRAFT",
       "name": "STOVEKRAFT",
       "leg": 2,
@@ -2522,7 +2496,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 97,
+      "trade_id": 96,
       "symbol": "BAJAJHIND",
       "name": "BAJAJHIND",
       "leg": 2,
@@ -2548,7 +2522,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 98,
+      "trade_id": 97,
       "symbol": "BCG",
       "name": "BCG",
       "leg": 1,
@@ -2574,7 +2548,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 99,
+      "trade_id": 98,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 2,
@@ -2600,7 +2574,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 100,
+      "trade_id": 99,
       "symbol": "CHENNPETRO",
       "name": "CHENNPETRO",
       "leg": 2,
@@ -2626,7 +2600,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 101,
+      "trade_id": 100,
       "symbol": "POLICYBZR",
       "name": "POLICYBZR",
       "leg": 2,
@@ -2652,7 +2626,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 102,
+      "trade_id": 101,
       "symbol": "SUPRIYA",
       "name": "SUPRIYA",
       "leg": 2,
@@ -2678,7 +2652,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 103,
+      "trade_id": 102,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 2,
@@ -2704,7 +2678,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 104,
+      "trade_id": 103,
       "symbol": "BLISSGVS",
       "name": "BLISSGVS",
       "leg": 2,
@@ -2730,7 +2704,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 105,
+      "trade_id": 104,
       "symbol": "VEEDOL",
       "name": "VEEDOL",
       "leg": 2,
@@ -2756,7 +2730,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 106,
+      "trade_id": 105,
       "symbol": "GRAPHITE",
       "name": "GRAPHITE",
       "leg": 2,
@@ -2782,7 +2756,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 107,
+      "trade_id": 106,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 2,
@@ -2808,7 +2782,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 108,
+      "trade_id": 107,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 1,
@@ -2834,7 +2808,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 109,
+      "trade_id": 108,
       "symbol": "IOLCP",
       "name": "IOLCP",
       "leg": 2,
@@ -2860,7 +2834,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 110,
+      "trade_id": 109,
       "symbol": "OPTIEMUS",
       "name": "OPTIEMUS",
       "leg": 2,
@@ -2886,7 +2860,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 111,
+      "trade_id": 110,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 1,
@@ -2912,7 +2886,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 112,
+      "trade_id": 111,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 2,
@@ -2934,6 +2908,32 @@
       "pnl_pct": -14.75,
       "pct_return": -14.75,
       "highest_high": 242.7,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 112,
+      "symbol": "ATGL",
+      "name": "ATGL",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2024-05-14",
+      "exit_date": "2024-06-05",
+      "entry_price": 908.95,
+      "avg_price": 908.95,
+      "exit_price": 839.55,
+      "shares": 27,
+      "qty": 27,
+      "invested": 24541.65,
+      "days_held": 15,
+      "bars_held": 15,
+      "holding_days": 15,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1873.8,
+      "pnl_pct": -7.64,
+      "pct_return": -7.64,
+      "highest_high": 1190.0,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -2991,6 +2991,58 @@
     },
     {
       "trade_id": 115,
+      "symbol": "ADANIENSOL",
+      "name": "ADANIENSOL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-02-16",
+      "exit_date": "2024-08-12",
+      "entry_price": 1061.6,
+      "avg_price": 1061.6,
+      "exit_price": 1063.0,
+      "shares": 23,
+      "qty": 23,
+      "invested": 24416.8,
+      "days_held": 117,
+      "bars_held": 117,
+      "holding_days": 117,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 32.2,
+      "pnl_pct": 0.13,
+      "pct_return": 0.13,
+      "highest_high": 1348.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 116,
+      "symbol": "CAMPUS",
+      "name": "CAMPUS",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2024-05-16",
+      "exit_date": "2024-08-13",
+      "entry_price": 249.85,
+      "avg_price": 249.85,
+      "exit_price": 282.51,
+      "shares": 100,
+      "qty": 100,
+      "invested": 24985.2,
+      "days_held": 60,
+      "bars_held": 60,
+      "holding_days": 60,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 3265.39,
+      "pnl_pct": 13.07,
+      "pct_return": 13.07,
+      "highest_high": 317.04,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 117,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 2,
@@ -3016,33 +3068,85 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 116,
+      "trade_id": 118,
       "symbol": "ATGL",
       "name": "ATGL",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2024-05-14",
-      "exit_date": "2024-09-17",
-      "entry_price": 908.95,
-      "avg_price": 908.95,
-      "exit_price": 799.5,
-      "shares": 27,
-      "qty": 27,
-      "invested": 24541.65,
-      "days_held": 86,
-      "bars_held": 86,
-      "holding_days": 86,
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-06-05",
+      "exit_date": "2024-09-09",
+      "entry_price": 936.25,
+      "avg_price": 936.25,
+      "exit_price": 814.75,
+      "shares": 26,
+      "qty": 26,
+      "invested": 24342.5,
+      "days_held": 65,
+      "bars_held": 65,
+      "holding_days": 65,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -2955.15,
-      "pnl_pct": -12.04,
-      "pct_return": -12.04,
-      "highest_high": 1190.0,
+      "pnl": -3159.0,
+      "pnl_pct": -12.98,
+      "pct_return": -12.98,
+      "highest_high": 1013.95,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 117,
+      "trade_id": 119,
+      "symbol": "ADANIENSOL",
+      "name": "ADANIENSOL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-08-14",
+      "exit_date": "2024-09-18",
+      "entry_price": 1113.7,
+      "avg_price": 1113.7,
+      "exit_price": 979.9,
+      "shares": 22,
+      "qty": 22,
+      "invested": 24501.4,
+      "days_held": 24,
+      "bars_held": 24,
+      "holding_days": 24,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -2943.6,
+      "pnl_pct": -12.01,
+      "pct_return": -12.01,
+      "highest_high": 1138.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 120,
+      "symbol": "EMBDL",
+      "name": "EMBDL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-05-21",
+      "exit_date": "2024-09-19",
+      "entry_price": 128.55,
+      "avg_price": 128.55,
+      "exit_price": 120.26,
+      "shares": 194,
+      "qty": 194,
+      "invested": 24938.7,
+      "days_held": 84,
+      "bars_held": 84,
+      "holding_days": 84,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1607.77,
+      "pnl_pct": -6.45,
+      "pct_return": -6.45,
+      "highest_high": 164.36,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 121,
       "symbol": "POLICYBZR",
       "name": "POLICYBZR",
       "leg": 2,
@@ -3068,7 +3172,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 118,
+      "trade_id": 122,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 2,
@@ -3094,7 +3198,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 119,
+      "trade_id": 123,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 1,
@@ -3120,33 +3224,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 120,
-      "symbol": "ADANIENSOL",
-      "name": "ADANIENSOL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-02-16",
-      "exit_date": "2024-10-07",
-      "entry_price": 1061.6,
-      "avg_price": 1061.6,
-      "exit_price": 934.2,
-      "shares": 23,
-      "qty": 23,
-      "invested": 24416.8,
-      "days_held": 155,
-      "bars_held": 155,
-      "holding_days": 155,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -2930.2,
-      "pnl_pct": -12.0,
-      "pct_return": -12.0,
-      "highest_high": 1348.0,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 121,
+      "trade_id": 124,
       "symbol": "VEEDOL",
       "name": "VEEDOL",
       "leg": 2,
@@ -3172,7 +3250,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 122,
+      "trade_id": 125,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 2,
@@ -3198,7 +3276,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 123,
+      "trade_id": 126,
       "symbol": "TANLA",
       "name": "TANLA",
       "leg": 2,
@@ -3224,7 +3302,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 124,
+      "trade_id": 127,
       "symbol": "UFBL",
       "name": "UFBL",
       "leg": 1,
@@ -3250,7 +3328,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 125,
+      "trade_id": 128,
+      "symbol": "EMBDL",
+      "name": "EMBDL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-09-25",
+      "exit_date": "2024-10-22",
+      "entry_price": 129.64,
+      "avg_price": 129.64,
+      "exit_price": 113.93,
+      "shares": 192,
+      "qty": 192,
+      "invested": 24890.88,
+      "days_held": 18,
+      "bars_held": 18,
+      "holding_days": 18,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -3016.32,
+      "pnl_pct": -12.12,
+      "pct_return": -12.12,
+      "highest_high": 135.18,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 129,
       "symbol": "BAJAJHIND",
       "name": "BAJAJHIND",
       "leg": 2,
@@ -3276,7 +3380,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 126,
+      "trade_id": 130,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 2,
@@ -3302,7 +3406,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 127,
+      "trade_id": 131,
+      "symbol": "IOLCP",
+      "name": "IOLCP",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-07-24",
+      "exit_date": "2024-10-23",
+      "entry_price": 83.07,
+      "avg_price": 83.07,
+      "exit_price": 77.44,
+      "shares": 300,
+      "qty": 300,
+      "invested": 24921.0,
+      "days_held": 63,
+      "bars_held": 63,
+      "holding_days": 63,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1689.75,
+      "pnl_pct": -6.78,
+      "pct_return": -6.78,
+      "highest_high": 107.54,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 132,
       "symbol": "BOSCH-HCIL",
       "name": "BOSCH-HCIL",
       "leg": 2,
@@ -3328,7 +3458,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 128,
+      "trade_id": 133,
       "symbol": "SMSPHARMA",
       "name": "SMSPHARMA",
       "leg": 2,
@@ -3354,33 +3484,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 129,
-      "symbol": "EMBDL",
-      "name": "EMBDL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-05-21",
-      "exit_date": "2024-10-25",
-      "entry_price": 128.55,
-      "avg_price": 128.55,
-      "exit_price": 107.65,
-      "shares": 194,
-      "qty": 194,
-      "invested": 24938.7,
-      "days_held": 109,
-      "bars_held": 109,
-      "holding_days": 109,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -4054.6,
-      "pnl_pct": -16.26,
-      "pct_return": -16.26,
-      "highest_high": 164.36,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 130,
+      "trade_id": 134,
       "symbol": "SUPRIYA",
       "name": "SUPRIYA",
       "leg": 2,
@@ -3406,7 +3510,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 131,
+      "trade_id": 135,
+      "symbol": "BLISSGVS",
+      "name": "BLISSGVS",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-08-07",
+      "exit_date": "2024-10-25",
+      "entry_price": 112.7,
+      "avg_price": 112.7,
+      "exit_price": 108.93,
+      "shares": 221,
+      "qty": 221,
+      "invested": 24906.7,
+      "days_held": 55,
+      "bars_held": 55,
+      "holding_days": 55,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": -833.17,
+      "pnl_pct": -3.35,
+      "pct_return": -3.35,
+      "highest_high": 143.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 136,
       "symbol": "BBOX",
       "name": "BBOX",
       "leg": 2,
@@ -3432,7 +3562,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 132,
+      "trade_id": 137,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 1,
@@ -3458,7 +3588,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 133,
+      "trade_id": 138,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 2,
@@ -3484,7 +3614,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 134,
+      "trade_id": 139,
       "symbol": "STOVEKRAFT",
       "name": "STOVEKRAFT",
       "leg": 2,
@@ -3510,7 +3640,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 135,
+      "trade_id": 140,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 2,
@@ -3536,7 +3666,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 136,
+      "trade_id": 141,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 1,
@@ -3562,7 +3692,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 137,
+      "trade_id": 142,
       "symbol": "ADANIGREEN",
       "name": "ADANIGREEN",
       "leg": 2,
@@ -3588,7 +3718,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 138,
+      "trade_id": 143,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 2,
@@ -3614,7 +3744,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 139,
+      "trade_id": 144,
       "symbol": "SMSPHARMA",
       "name": "SMSPHARMA",
       "leg": 2,
@@ -3640,7 +3770,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 140,
+      "trade_id": 145,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 2,
@@ -3666,7 +3796,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 141,
+      "trade_id": 146,
       "symbol": "PNBHOUSING",
       "name": "PNBHOUSING",
       "leg": 2,
@@ -3692,7 +3822,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 142,
+      "trade_id": 147,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 2,
@@ -3718,59 +3848,59 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 143,
+      "trade_id": 148,
       "symbol": "CAMPUS",
       "name": "CAMPUS",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2024-05-16",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-09-10",
       "exit_date": "2024-11-14",
-      "entry_price": 249.85,
-      "avg_price": 249.85,
+      "entry_price": 287.5,
+      "avg_price": 287.5,
       "exit_price": 272.47,
-      "shares": 100,
-      "qty": 100,
-      "invested": 24985.2,
-      "days_held": 125,
-      "bars_held": 125,
-      "holding_days": 125,
+      "shares": 86,
+      "qty": 86,
+      "invested": 24725.25,
+      "days_held": 46,
+      "bars_held": 46,
+      "holding_days": 46,
       "reason": "Peak Trail Stop (25% from Peak)",
       "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 2262.27,
-      "pnl_pct": 9.05,
-      "pct_return": 9.05,
+      "pnl": -1292.43,
+      "pnl_pct": -5.23,
+      "pct_return": -5.23,
       "highest_high": 368.0,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 144,
-      "symbol": "IOLCP",
-      "name": "IOLCP",
+      "trade_id": 149,
+      "symbol": "ADANIENSOL",
+      "name": "ADANIENSOL",
       "leg": 2,
       "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-07-24",
-      "exit_date": "2024-11-18",
-      "entry_price": 83.07,
-      "avg_price": 83.07,
-      "exit_price": 69.78,
-      "shares": 300,
-      "qty": 300,
-      "invested": 24921.0,
-      "days_held": 80,
-      "bars_held": 80,
-      "holding_days": 80,
+      "entry_date": "2024-09-20",
+      "exit_date": "2024-11-14",
+      "entry_price": 1007.15,
+      "avg_price": 1007.15,
+      "exit_price": 879.7,
+      "shares": 24,
+      "qty": 24,
+      "invested": 24171.6,
+      "days_held": 38,
+      "bars_held": 38,
+      "holding_days": 38,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3987.0,
-      "pnl_pct": -16.0,
-      "pct_return": -16.0,
-      "highest_high": 107.54,
+      "pnl": -3058.8,
+      "pnl_pct": -12.65,
+      "pct_return": -12.65,
+      "highest_high": 1090.95,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 145,
+      "trade_id": 150,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 1,
@@ -3796,33 +3926,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 146,
-      "symbol": "ADANIENSOL",
-      "name": "ADANIENSOL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-10-31",
-      "exit_date": "2024-11-21",
-      "entry_price": 976.2,
-      "avg_price": 976.2,
-      "exit_price": 697.25,
-      "shares": 25,
-      "qty": 25,
-      "invested": 24405.0,
-      "days_held": 13,
-      "bars_held": 13,
-      "holding_days": 13,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -6973.75,
-      "pnl_pct": -28.58,
-      "pct_return": -28.58,
-      "highest_high": 1090.95,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 147,
+      "trade_id": 151,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 2,
@@ -3848,7 +3952,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 148,
+      "trade_id": 152,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 2,
@@ -3874,7 +3978,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 149,
+      "trade_id": 153,
       "symbol": "JUBLPHARMA",
       "name": "JUBLPHARMA",
       "leg": 2,
@@ -3900,7 +4004,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 150,
+      "trade_id": 154,
       "symbol": "IBULLSLTD",
       "name": "IBULLSLTD",
       "leg": 2,
@@ -3926,7 +4030,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 151,
+      "trade_id": 155,
       "symbol": "PAYTM",
       "name": "PAYTM",
       "leg": 2,
@@ -3952,7 +4056,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 152,
+      "trade_id": 156,
       "symbol": "PPLPHARMA",
       "name": "PPLPHARMA",
       "leg": 2,
@@ -3978,7 +4082,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 153,
+      "trade_id": 157,
+      "symbol": "OPTIEMUS",
+      "name": "OPTIEMUS",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-11-22",
+      "exit_date": "2025-01-10",
+      "entry_price": 638.75,
+      "avg_price": 638.75,
+      "exit_price": 698.8,
+      "shares": 39,
+      "qty": 39,
+      "invested": 24911.25,
+      "days_held": 34,
+      "bars_held": 34,
+      "holding_days": 34,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2341.95,
+      "pnl_pct": 9.4,
+      "pct_return": 9.4,
+      "highest_high": 812.4,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 158,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 2,
@@ -4004,7 +4134,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 154,
+      "trade_id": 159,
       "symbol": "SUPRIYA",
       "name": "SUPRIYA",
       "leg": 2,
@@ -4030,7 +4160,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 155,
+      "trade_id": 160,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 1,
@@ -4056,7 +4186,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 156,
+      "trade_id": 161,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 2,
@@ -4082,7 +4212,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 157,
+      "trade_id": 162,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 2,
@@ -4108,7 +4238,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 158,
+      "trade_id": 163,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 1,
@@ -4134,7 +4264,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 159,
+      "trade_id": 164,
       "symbol": "ADANIENSOL",
       "name": "ADANIENSOL",
       "leg": 1,
@@ -4160,7 +4290,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 160,
+      "trade_id": 165,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 2,
@@ -4186,7 +4316,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 161,
+      "trade_id": 166,
       "symbol": "CARTRADE",
       "name": "CARTRADE",
       "leg": 2,
@@ -4212,7 +4342,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 162,
+      "trade_id": 167,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 2,
@@ -4238,7 +4368,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 163,
+      "trade_id": 168,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 1,
@@ -4264,7 +4394,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 164,
+      "trade_id": 169,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 2,
@@ -4290,59 +4420,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 165,
-      "symbol": "OPTIEMUS",
-      "name": "OPTIEMUS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-11-22",
-      "exit_date": "2025-02-12",
-      "entry_price": 638.75,
-      "avg_price": 638.75,
-      "exit_price": 554.95,
-      "shares": 39,
-      "qty": 39,
-      "invested": 24911.25,
-      "days_held": 58,
-      "bars_held": 58,
-      "holding_days": 58,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3268.2,
-      "pnl_pct": -13.12,
-      "pct_return": -13.12,
-      "highest_high": 812.4,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 166,
-      "symbol": "BLISSGVS",
-      "name": "BLISSGVS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-08-07",
-      "exit_date": "2025-02-14",
-      "entry_price": 112.7,
-      "avg_price": 112.7,
-      "exit_price": 133.84,
-      "shares": 221,
-      "qty": 221,
-      "invested": 24906.7,
-      "days_held": 133,
-      "bars_held": 133,
-      "holding_days": 133,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 4671.39,
-      "pnl_pct": 18.76,
-      "pct_return": 18.76,
-      "highest_high": 185.5,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 167,
+      "trade_id": 170,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 2,
@@ -4368,7 +4446,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 168,
+      "trade_id": 171,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 2,
@@ -4394,33 +4472,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 169,
-      "symbol": "ADANIENSOL",
-      "name": "ADANIENSOL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-02-05",
-      "exit_date": "2025-02-18",
-      "entry_price": 775.5,
-      "avg_price": 775.5,
-      "exit_price": 677.15,
-      "shares": 32,
-      "qty": 32,
-      "invested": 24816.0,
-      "days_held": 9,
-      "bars_held": 9,
-      "holding_days": 9,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3147.2,
-      "pnl_pct": -12.68,
-      "pct_return": -12.68,
-      "highest_high": 788.2,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 170,
+      "trade_id": 172,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 2,
@@ -4446,7 +4498,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 171,
+      "trade_id": 173,
       "symbol": "EMBDL",
       "name": "EMBDL",
       "leg": 2,
@@ -4472,7 +4524,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 172,
+      "trade_id": 174,
       "symbol": "CAMPUS",
       "name": "CAMPUS",
       "leg": 2,
@@ -4498,7 +4550,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 173,
+      "trade_id": 175,
       "symbol": "JUBLPHARMA",
       "name": "JUBLPHARMA",
       "leg": 2,
@@ -4524,7 +4576,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 174,
+      "trade_id": 176,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 1,
@@ -4550,7 +4602,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 175,
+      "trade_id": 177,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 2,
@@ -4576,7 +4628,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 176,
+      "trade_id": 178,
       "symbol": "PPLPHARMA",
       "name": "PPLPHARMA",
       "leg": 2,
@@ -4602,33 +4654,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 177,
+      "trade_id": 179,
       "symbol": "SMSPHARMA",
       "name": "SMSPHARMA",
       "leg": 2,
       "strategy_leg": "LEG2_MA_PULLBACK",
       "entry_date": "2025-04-08",
-      "exit_date": "2025-06-19",
+      "exit_date": "2025-07-02",
       "entry_price": 207.78,
       "avg_price": 207.78,
-      "exit_price": 207.78,
+      "exit_price": 238.5,
       "shares": 120,
       "qty": 120,
       "invested": 24933.6,
-      "days_held": 48,
-      "bars_held": 48,
-      "holding_days": 48,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 0.0,
-      "pnl_pct": 0.0,
-      "pct_return": 0.0,
+      "days_held": 57,
+      "bars_held": 57,
+      "holding_days": 57,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 3686.4,
+      "pnl_pct": 14.78,
+      "pct_return": 14.78,
       "highest_high": 275.0,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 178,
+      "trade_id": 180,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 2,
@@ -4654,7 +4706,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 179,
+      "trade_id": 181,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 1,
@@ -4680,7 +4732,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 180,
+      "trade_id": 182,
       "symbol": "PARAS",
       "name": "PARAS",
       "leg": 1,
@@ -4706,33 +4758,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 181,
-      "symbol": "EMBDL",
-      "name": "EMBDL",
+      "trade_id": 183,
+      "symbol": "TTML",
+      "name": "TTML",
       "leg": 2,
       "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-07-09",
-      "exit_date": "2025-08-01",
-      "entry_price": 118.59,
-      "avg_price": 118.59,
-      "exit_price": 102.93,
-      "shares": 210,
-      "qty": 210,
-      "invested": 24903.9,
-      "days_held": 17,
-      "bars_held": 17,
-      "holding_days": 17,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3288.6,
-      "pnl_pct": -13.21,
-      "pct_return": -13.21,
-      "highest_high": 121.85,
+      "entry_date": "2025-04-21",
+      "exit_date": "2025-07-31",
+      "entry_price": 60.7,
+      "avg_price": 60.7,
+      "exit_price": 57.68,
+      "shares": 411,
+      "qty": 411,
+      "invested": 24947.7,
+      "days_held": 72,
+      "bars_held": 72,
+      "holding_days": 72,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1243.27,
+      "pnl_pct": -4.98,
+      "pct_return": -4.98,
+      "highest_high": 81.12,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 182,
+      "trade_id": 184,
       "symbol": "UFBL",
       "name": "UFBL",
       "leg": 2,
@@ -4758,7 +4810,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 183,
+      "trade_id": 185,
       "symbol": "BALAMINES",
       "name": "BALAMINES",
       "leg": 1,
@@ -4784,7 +4836,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 184,
+      "trade_id": 186,
       "symbol": "AKUMS",
       "name": "AKUMS",
       "leg": 1,
@@ -4810,7 +4862,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 185,
+      "trade_id": 187,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 1,
@@ -4836,7 +4888,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 186,
+      "trade_id": 188,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 2,
@@ -4862,7 +4914,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 187,
+      "trade_id": 189,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 2,
@@ -4888,7 +4940,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 188,
+      "trade_id": 190,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 2,
@@ -4914,7 +4966,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 189,
+      "trade_id": 191,
       "symbol": "DREDGECORP",
       "name": "DREDGECORP",
       "leg": 1,
@@ -4940,7 +4992,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 190,
+      "trade_id": 192,
+      "symbol": "CAMPUS",
+      "name": "CAMPUS",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2025-05-12",
+      "exit_date": "2025-08-14",
+      "entry_price": 247.28,
+      "avg_price": 247.28,
+      "exit_price": 251.4,
+      "shares": 101,
+      "qty": 101,
+      "invested": 24975.33,
+      "days_held": 68,
+      "bars_held": 68,
+      "holding_days": 68,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 415.84,
+      "pnl_pct": 1.66,
+      "pct_return": 1.66,
+      "highest_high": 301.99,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 193,
       "symbol": "NAZARA",
       "name": "NAZARA",
       "leg": 2,
@@ -4966,7 +5044,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 191,
+      "trade_id": 194,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 2,
@@ -4992,7 +5070,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 192,
+      "trade_id": 195,
+      "symbol": "RELAXO",
+      "name": "RELAXO",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-05-14",
+      "exit_date": "2025-09-19",
+      "entry_price": 427.65,
+      "avg_price": 427.65,
+      "exit_price": 469.65,
+      "shares": 58,
+      "qty": 58,
+      "invested": 24803.7,
+      "days_held": 90,
+      "bars_held": 90,
+      "holding_days": 90,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2436.0,
+      "pnl_pct": 9.82,
+      "pct_return": 9.82,
+      "highest_high": 526.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 196,
       "symbol": "TANLA",
       "name": "TANLA",
       "leg": 1,
@@ -5018,7 +5122,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 193,
+      "trade_id": 197,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 2,
@@ -5044,7 +5148,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 194,
+      "trade_id": 198,
       "symbol": "DELHIVERY",
       "name": "DELHIVERY",
       "leg": 1,
@@ -5070,7 +5174,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 195,
+      "trade_id": 199,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 1,
@@ -5096,7 +5200,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 196,
+      "trade_id": 200,
       "symbol": "BCG",
       "name": "BCG",
       "leg": 2,
@@ -5122,7 +5226,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 197,
+      "trade_id": 201,
       "symbol": "RBA",
       "name": "RBA",
       "leg": 1,
@@ -5148,7 +5252,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 198,
+      "trade_id": 202,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 1,
@@ -5174,7 +5278,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 199,
+      "trade_id": 203,
       "symbol": "NETWORK18",
       "name": "NETWORK18",
       "leg": 1,
@@ -5200,7 +5304,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 200,
+      "trade_id": 204,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 2,
@@ -5226,7 +5330,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 201,
+      "trade_id": 205,
       "symbol": "BALAMINES",
       "name": "BALAMINES",
       "leg": 2,
@@ -5252,33 +5356,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 202,
-      "symbol": "TTML",
-      "name": "TTML",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-04-21",
-      "exit_date": "2025-11-18",
-      "entry_price": 60.7,
-      "avg_price": 60.7,
-      "exit_price": 52.49,
-      "shares": 411,
-      "qty": 411,
-      "invested": 24947.7,
-      "days_held": 145,
-      "bars_held": 145,
-      "holding_days": 145,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3374.31,
-      "pnl_pct": -13.53,
-      "pct_return": -13.53,
-      "highest_high": 81.12,
+      "trade_id": 206,
+      "symbol": "SHARDAMOTR",
+      "name": "SHARDAMOTR",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-06-27",
+      "exit_date": "2025-11-12",
+      "entry_price": 936.96,
+      "avg_price": 936.96,
+      "exit_price": 1032.07,
+      "shares": 26,
+      "qty": 26,
+      "invested": 24361.07,
+      "days_held": 93,
+      "bars_held": 93,
+      "holding_days": 93,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2472.63,
+      "pnl_pct": 10.15,
+      "pct_return": 10.15,
+      "highest_high": 1221.68,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 203,
+      "trade_id": 207,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 2,
@@ -5304,7 +5408,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 204,
+      "trade_id": 208,
+      "symbol": "ATGL",
+      "name": "ATGL",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-03-27",
+      "exit_date": "2025-12-08",
+      "entry_price": 611.9,
+      "avg_price": 611.9,
+      "exit_price": 585.56,
+      "shares": 40,
+      "qty": 40,
+      "invested": 24476.0,
+      "days_held": 172,
+      "bars_held": 172,
+      "holding_days": 172,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1053.5,
+      "pnl_pct": -4.3,
+      "pct_return": -4.3,
+      "highest_high": 798.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 209,
       "symbol": "VEEDOL",
       "name": "VEEDOL",
       "leg": 2,
@@ -5330,7 +5460,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 205,
+      "trade_id": 210,
       "symbol": "PPLPHARMA",
       "name": "PPLPHARMA",
       "leg": 2,
@@ -5356,7 +5486,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 206,
+      "trade_id": 211,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 1,
@@ -5382,7 +5512,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 207,
+      "trade_id": 212,
       "symbol": "JSLL",
       "name": "JSLL",
       "leg": 1,
@@ -5408,7 +5538,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 208,
+      "trade_id": 213,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 2,
@@ -5434,7 +5564,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 209,
+      "trade_id": 214,
       "symbol": "CARTRADE",
       "name": "CARTRADE",
       "leg": 2,
@@ -5460,7 +5590,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 210,
+      "trade_id": 215,
+      "symbol": "ADANIGREEN",
+      "name": "ADANIGREEN",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-04-15",
+      "exit_date": "2025-12-10",
+      "entry_price": 936.65,
+      "avg_price": 936.65,
+      "exit_price": 989.8,
+      "shares": 26,
+      "qty": 26,
+      "invested": 24352.9,
+      "days_held": 164,
+      "bars_held": 164,
+      "holding_days": 164,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1381.9,
+      "pnl_pct": 5.67,
+      "pct_return": 5.67,
+      "highest_high": 1177.55,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 216,
       "symbol": "MRPL",
       "name": "MRPL",
       "leg": 1,
@@ -5486,7 +5642,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 211,
+      "trade_id": 217,
       "symbol": "REDTAPE",
       "name": "REDTAPE",
       "leg": 1,
@@ -5512,7 +5668,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 212,
+      "trade_id": 218,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 2,
@@ -5538,7 +5694,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 213,
+      "trade_id": 219,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 2,
@@ -5564,7 +5720,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 214,
+      "trade_id": 220,
       "symbol": "DELHIVERY",
       "name": "DELHIVERY",
       "leg": 2,
@@ -5590,7 +5746,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 215,
+      "trade_id": 221,
       "symbol": "KABRAEXTRU",
       "name": "KABRAEXTRU",
       "leg": 1,
@@ -5616,85 +5772,85 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 216,
+      "trade_id": 222,
       "symbol": "SHARDAMOTR",
       "name": "SHARDAMOTR",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-06-27",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-01-02",
       "exit_date": "2026-01-19",
-      "entry_price": 936.96,
-      "avg_price": 936.96,
+      "entry_price": 944.7,
+      "avg_price": 944.7,
       "exit_price": 822.87,
       "shares": 26,
       "qty": 26,
-      "invested": 24361.07,
-      "days_held": 139,
-      "bars_held": 139,
-      "holding_days": 139,
+      "invested": 24562.14,
+      "days_held": 10,
+      "bars_held": 10,
+      "holding_days": 10,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -2966.39,
-      "pnl_pct": -12.18,
-      "pct_return": -12.18,
-      "highest_high": 1221.68,
+      "pnl": -3167.46,
+      "pnl_pct": -12.9,
+      "pct_return": -12.9,
+      "highest_high": 958.75,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 217,
-      "symbol": "ATGL",
-      "name": "ATGL",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-03-27",
+      "trade_id": 223,
+      "symbol": "ADANIGREEN",
+      "name": "ADANIGREEN",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2025-12-11",
       "exit_date": "2026-01-20",
-      "entry_price": 611.9,
-      "avg_price": 611.9,
-      "exit_price": 532.3,
-      "shares": 40,
-      "qty": 40,
-      "invested": 24476.0,
-      "days_held": 202,
-      "bars_held": 202,
-      "holding_days": 202,
+      "entry_price": 1018.8,
+      "avg_price": 1018.8,
+      "exit_price": 883.2,
+      "shares": 24,
+      "qty": 24,
+      "invested": 24451.2,
+      "days_held": 27,
+      "bars_held": 27,
+      "holding_days": 27,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3184.0,
-      "pnl_pct": -13.01,
-      "pct_return": -13.01,
-      "highest_high": 798.0,
+      "pnl": -3254.4,
+      "pnl_pct": -13.31,
+      "pct_return": -13.31,
+      "highest_high": 1058.7,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 218,
-      "symbol": "RELAXO",
-      "name": "RELAXO",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-05-14",
-      "exit_date": "2026-01-20",
-      "entry_price": 427.65,
-      "avg_price": 427.65,
-      "exit_price": 364.85,
-      "shares": 58,
-      "qty": 58,
-      "invested": 24803.7,
-      "days_held": 173,
-      "bars_held": 173,
-      "holding_days": 173,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3642.4,
-      "pnl_pct": -14.68,
-      "pct_return": -14.68,
-      "highest_high": 526.0,
+      "trade_id": 224,
+      "symbol": "PAYTM",
+      "name": "PAYTM",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2025-05-12",
+      "exit_date": "2026-01-21",
+      "entry_price": 866.05,
+      "avg_price": 866.05,
+      "exit_price": 1235.9,
+      "shares": 28,
+      "qty": 28,
+      "invested": 24249.4,
+      "days_held": 176,
+      "bars_held": 176,
+      "holding_days": 176,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 10355.8,
+      "pnl_pct": 42.71,
+      "pct_return": 42.71,
+      "highest_high": 1381.8,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 219,
+      "trade_id": 225,
       "symbol": "APOLLOPIPE",
       "name": "APOLLOPIPE",
       "leg": 1,
@@ -5720,7 +5876,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 220,
+      "trade_id": 226,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 1,
@@ -5746,33 +5902,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 221,
-      "symbol": "ADANIGREEN",
-      "name": "ADANIGREEN",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-04-15",
-      "exit_date": "2026-01-23",
-      "entry_price": 936.65,
-      "avg_price": 936.65,
-      "exit_price": 772.8,
-      "shares": 26,
-      "qty": 26,
-      "invested": 24352.9,
-      "days_held": 195,
-      "bars_held": 195,
-      "holding_days": 195,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -4260.1,
-      "pnl_pct": -17.49,
-      "pct_return": -17.49,
-      "highest_high": 1177.55,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 222,
+      "trade_id": 227,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 2,
@@ -5798,7 +5928,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 223,
+      "trade_id": 228,
       "symbol": "ORCHPHARMA",
       "name": "ORCHPHARMA",
       "leg": 1,
@@ -5824,7 +5954,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 224,
+      "trade_id": 229,
       "symbol": "JSLL",
       "name": "JSLL",
       "leg": 1,
@@ -5850,7 +5980,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 225,
+      "trade_id": 230,
       "symbol": "DREDGECORP",
       "name": "DREDGECORP",
       "leg": 2,
@@ -5876,7 +6006,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 226,
+      "trade_id": 231,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 2,
@@ -5902,7 +6032,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 227,
+      "trade_id": 232,
       "symbol": "RELAXO",
       "name": "RELAXO",
       "leg": 2,
@@ -5928,7 +6058,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 228,
+      "trade_id": 233,
       "symbol": "ATGL",
       "name": "ATGL",
       "leg": 2,
@@ -5954,7 +6084,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 229,
+      "trade_id": 234,
       "symbol": "ELECTCAST",
       "name": "ELECTCAST",
       "leg": 1,
@@ -5980,7 +6110,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 230,
+      "trade_id": 235,
       "symbol": "CONFIPET",
       "name": "CONFIPET",
       "leg": 1,
@@ -6006,7 +6136,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 231,
+      "trade_id": 236,
       "symbol": "ADANIGREEN",
       "name": "ADANIGREEN",
       "leg": 2,
@@ -6032,7 +6162,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 232,
+      "trade_id": 237,
       "symbol": "MSTCLTD",
       "name": "MSTCLTD",
       "leg": 1,
@@ -6058,7 +6188,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 233,
+      "trade_id": 238,
       "symbol": "BCG",
       "name": "BCG",
       "leg": 2,
@@ -6084,7 +6214,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 234,
+      "trade_id": 239,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 1,
@@ -6110,7 +6240,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 235,
+      "trade_id": 240,
       "symbol": "KABRAEXTRU",
       "name": "KABRAEXTRU",
       "leg": 1,
@@ -6136,7 +6266,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 236,
+      "trade_id": 241,
       "symbol": "PARAS",
       "name": "PARAS",
       "leg": 2,
@@ -6162,7 +6292,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 237,
+      "trade_id": 242,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 1,
@@ -6188,7 +6318,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 238,
+      "trade_id": 243,
       "symbol": "RBA",
       "name": "RBA",
       "leg": 2,
@@ -6214,7 +6344,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 239,
+      "trade_id": 244,
       "symbol": "PARACABLES",
       "name": "PARACABLES",
       "leg": 1,
@@ -6240,33 +6370,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 240,
-      "symbol": "CAMPUS",
-      "name": "CAMPUS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-05-12",
-      "exit_date": "2026-03-30",
-      "entry_price": 247.28,
-      "avg_price": 247.28,
-      "exit_price": 217.36,
-      "shares": 101,
-      "qty": 101,
-      "invested": 24975.33,
-      "days_held": 221,
-      "bars_held": 221,
-      "holding_days": 221,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3021.95,
-      "pnl_pct": -12.1,
-      "pct_return": -12.1,
-      "highest_high": 301.99,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 241,
+      "trade_id": 245,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 2,
@@ -6292,7 +6396,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 242,
+      "trade_id": 246,
       "symbol": "JNKINDIA",
       "name": "JNKINDIA",
       "leg": 1,
@@ -6318,7 +6422,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 243,
+      "trade_id": 247,
       "symbol": "UFBL",
       "name": "UFBL",
       "leg": 2,
@@ -6344,7 +6448,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 244,
+      "trade_id": 248,
       "symbol": "JISLJALEQS",
       "name": "JISLJALEQS",
       "leg": 1,
@@ -6370,7 +6474,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 245,
+      "trade_id": 249,
       "symbol": "GANECOS",
       "name": "GANECOS",
       "leg": 1,
@@ -6396,7 +6500,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 246,
+      "trade_id": 250,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 2,
@@ -6422,7 +6526,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 247,
+      "trade_id": 251,
+      "symbol": "DELHIVERY",
+      "name": "DELHIVERY",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-01-27",
+      "exit_date": "2026-06-01",
+      "entry_price": 400.35,
+      "avg_price": 400.35,
+      "exit_price": 437.25,
+      "shares": 62,
+      "qty": 62,
+      "invested": 24821.7,
+      "days_held": 82,
+      "bars_held": 82,
+      "holding_days": 82,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2287.8,
+      "pnl_pct": 9.22,
+      "pct_return": 9.22,
+      "highest_high": 487.5,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 252,
       "symbol": "NETWORK18",
       "name": "NETWORK18",
       "leg": 1,
@@ -6448,7 +6578,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 248,
+      "trade_id": 253,
       "symbol": "ELECTCAST",
       "name": "ELECTCAST",
       "leg": 1,
@@ -6474,7 +6604,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 249,
+      "trade_id": 254,
+      "symbol": "TRENT",
+      "name": "TRENT",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-05-21",
+      "exit_date": "2026-07-07",
+      "entry_price": 2776.16,
+      "avg_price": 2776.16,
+      "exit_price": 2927.8,
+      "shares": 9,
+      "qty": 9,
+      "invested": 24985.48,
+      "days_held": 31,
+      "bars_held": 31,
+      "holding_days": 31,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1364.72,
+      "pnl_pct": 5.46,
+      "pct_return": 5.46,
+      "highest_high": 3399.7,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 255,
       "symbol": "JWL",
       "name": "JWL",
       "leg": 1,
@@ -6500,7 +6656,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 250,
+      "trade_id": 256,
+      "symbol": "BCG",
+      "name": "BCG",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-05-19",
+      "exit_date": "2026-07-15",
+      "entry_price": 9.54,
+      "avg_price": 9.54,
+      "exit_price": 9.81,
+      "shares": 2620,
+      "qty": 2620,
+      "invested": 24994.8,
+      "days_held": 39,
+      "bars_held": 39,
+      "holding_days": 39,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 707.4,
+      "pnl_pct": 2.83,
+      "pct_return": 2.83,
+      "highest_high": 13.1,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 257,
       "symbol": "VINDHYATEL",
       "name": "VINDHYATEL",
       "leg": 1,
@@ -6526,7 +6708,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 251,
+      "trade_id": 258,
       "symbol": "MANINFRA",
       "name": "MANINFRA",
       "leg": 1,
@@ -6552,7 +6734,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 252,
+      "trade_id": 259,
       "symbol": "RPOWER",
       "name": "RPOWER",
       "leg": 1,
@@ -6578,7 +6760,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 253,
+      "trade_id": 260,
       "symbol": "CAMPUS",
       "name": "CAMPUS",
       "leg": 1,
@@ -6604,7 +6786,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 254,
+      "trade_id": 261,
       "symbol": "RBA",
       "name": "RBA",
       "leg": 2,
@@ -6630,7 +6812,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 255,
+      "trade_id": 262,
       "symbol": "PRAJIND",
       "name": "PRAJIND",
       "leg": 1,
@@ -6656,7 +6838,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 256,
+      "trade_id": 263,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 2,
@@ -6682,7 +6864,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 257,
+      "trade_id": 264,
       "symbol": "SERVOTECH",
       "name": "SERVOTECH",
       "leg": 1,
@@ -6708,7 +6890,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 258,
+      "trade_id": 265,
       "symbol": "WEBELSOLAR",
       "name": "WEBELSOLAR",
       "leg": 1,
@@ -6734,7 +6916,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 259,
+      "trade_id": 266,
+      "symbol": "BAJAJHIND",
+      "name": "BAJAJHIND",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-03-10",
+      "exit_date": "2026-08-03",
+      "entry_price": 16.65,
+      "avg_price": 16.65,
+      "exit_price": 17.52,
+      "shares": 1501,
+      "qty": 1501,
+      "invested": 24991.65,
+      "days_held": 97,
+      "bars_held": 97,
+      "holding_days": 97,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1305.87,
+      "pnl_pct": 5.23,
+      "pct_return": 5.23,
+      "highest_high": 21.02,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 267,
       "symbol": "JNKINDIA",
       "name": "JNKINDIA",
       "leg": 1,
@@ -6760,7 +6968,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 260,
+      "trade_id": 268,
       "symbol": "SFL",
       "name": "SFL",
       "leg": 1,
@@ -6786,7 +6994,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 261,
+      "trade_id": 269,
       "symbol": "UNICHEMLAB",
       "name": "UNICHEMLAB",
       "leg": 1,
@@ -6812,7 +7020,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 262,
+      "trade_id": 270,
       "symbol": "RAYMONDREL",
       "name": "RAYMONDREL",
       "leg": 1,
@@ -6838,7 +7046,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 263,
+      "trade_id": 271,
+      "symbol": "REDTAPE",
+      "name": "REDTAPE",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-01-30",
+      "exit_date": "2026-08-11",
+      "entry_price": 123.68,
+      "avg_price": 123.68,
+      "exit_price": 127.59,
+      "shares": 202,
+      "qty": 202,
+      "invested": 24983.36,
+      "days_held": 129,
+      "bars_held": 129,
+      "holding_days": 129,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 789.82,
+      "pnl_pct": 3.16,
+      "pct_return": 3.16,
+      "highest_high": 158.99,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 272,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 2,
@@ -6864,7 +7098,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 264,
+      "trade_id": 273,
       "symbol": "JISLJALEQS",
       "name": "JISLJALEQS",
       "leg": 1,
@@ -6890,33 +7124,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 265,
-      "symbol": "ADANIGREEN",
-      "name": "ADANIGREEN",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-07-01",
-      "exit_date": "2026-08-12",
-      "entry_price": 1535.0,
-      "avg_price": 1535.0,
-      "exit_price": 1332.3,
-      "shares": 16,
-      "qty": 16,
-      "invested": 24560.0,
-      "days_held": 30,
-      "bars_held": 30,
-      "holding_days": 30,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3243.2,
-      "pnl_pct": -13.21,
-      "pct_return": -13.21,
-      "highest_high": 1631.5,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 266,
+      "trade_id": 274,
       "symbol": "EPACK",
       "name": "EPACK",
       "leg": 1,
@@ -6942,7 +7150,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 267,
+      "trade_id": 275,
       "symbol": "CAMLINFINE",
       "name": "CAMLINFINE",
       "leg": 1,
@@ -6968,7 +7176,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 268,
+      "trade_id": 276,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 2,
@@ -6994,7 +7202,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 269,
+      "trade_id": 277,
       "symbol": "ASHOKA",
       "name": "ASHOKA",
       "leg": 1,
@@ -7020,7 +7228,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 270,
+      "trade_id": 278,
       "symbol": "HGINFRA",
       "name": "HGINFRA",
       "leg": 1,
@@ -7046,7 +7254,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 271,
+      "trade_id": 279,
+      "symbol": "ATGL",
+      "name": "ATGL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-05-21",
+      "exit_date": "2026-08-19",
+      "entry_price": 638.1,
+      "avg_price": 638.1,
+      "exit_price": 664.25,
+      "shares": 39,
+      "qty": 39,
+      "invested": 24885.9,
+      "days_held": 62,
+      "bars_held": 62,
+      "holding_days": 62,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1019.85,
+      "pnl_pct": 4.1,
+      "pct_return": 4.1,
+      "highest_high": 859.85,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 280,
       "symbol": "JAICORPLTD",
       "name": "JAICORPLTD",
       "leg": 1,
@@ -7072,7 +7306,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 272,
+      "trade_id": 281,
       "symbol": "FIRSTCRY",
       "name": "FIRSTCRY",
       "leg": 1,
@@ -7098,7 +7332,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 273,
+      "trade_id": 282,
       "symbol": "GANECOS",
       "name": "GANECOS",
       "leg": 2,
@@ -7124,7 +7358,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 274,
+      "trade_id": 283,
       "symbol": "DBREALTY",
       "name": "DBREALTY",
       "leg": 1,
@@ -7150,7 +7384,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 275,
+      "trade_id": 284,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 2,
@@ -7176,7 +7410,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 276,
+      "trade_id": 285,
       "symbol": "HAPPSTMNDS",
       "name": "HAPPSTMNDS",
       "leg": 1,
@@ -7202,7 +7436,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 277,
+      "trade_id": 286,
       "symbol": "INDOTECH",
       "name": "INDOTECH",
       "leg": 1,
@@ -7228,7 +7462,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 278,
+      "trade_id": 287,
       "symbol": "MAPMYINDIA",
       "name": "MAPMYINDIA",
       "leg": 1,
@@ -7254,7 +7488,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 279,
+      "trade_id": 288,
       "symbol": "APOLLOPIPE",
       "name": "APOLLOPIPE",
       "leg": 2,
@@ -7280,7 +7514,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 280,
+      "trade_id": 289,
       "symbol": "JWL",
       "name": "JWL",
       "leg": 1,
@@ -7306,7 +7540,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 281,
+      "trade_id": 290,
+      "symbol": "ORISSAMINE",
+      "name": "ORISSAMINE",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-06-04",
+      "exit_date": "2026-09-24",
+      "entry_price": 4124.8,
+      "avg_price": 4124.8,
+      "exit_price": 3752.78,
+      "shares": 6,
+      "qty": 6,
+      "invested": 24748.8,
+      "days_held": 78,
+      "bars_held": 78,
+      "holding_days": 78,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -2232.15,
+      "pnl_pct": -9.02,
+      "pct_return": -9.02,
+      "highest_high": 5199.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 291,
       "symbol": "PARACABLES",
       "name": "PARACABLES",
       "leg": 2,
@@ -7332,7 +7592,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 282,
+      "trade_id": 292,
       "symbol": "EMSLIMITED",
       "name": "EMSLIMITED",
       "leg": 1,
@@ -7358,7 +7618,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 283,
+      "trade_id": 293,
       "symbol": "DREDGECORP",
       "name": "DREDGECORP",
       "leg": 2,
@@ -7384,7 +7644,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 284,
+      "trade_id": 294,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 2,
@@ -7410,33 +7670,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 285,
-      "symbol": "ORISSAMINE",
-      "name": "ORISSAMINE",
+      "trade_id": 295,
+      "symbol": "TRENT",
+      "name": "TRENT",
       "leg": 1,
       "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2026-06-04",
+      "entry_date": "2026-07-27",
       "exit_date": "2026-10-01",
-      "entry_price": 4124.8,
-      "avg_price": 4124.8,
-      "exit_price": 3538.6,
-      "shares": 6,
-      "qty": 6,
-      "invested": 24748.8,
-      "days_held": 83,
-      "bars_held": 83,
-      "holding_days": 83,
+      "entry_price": 2938.3,
+      "avg_price": 2938.3,
+      "exit_price": 2580.0,
+      "shares": 8,
+      "qty": 8,
+      "invested": 23506.4,
+      "days_held": 47,
+      "bars_held": 47,
+      "holding_days": 47,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3517.2,
-      "pnl_pct": -14.21,
-      "pct_return": -14.21,
-      "highest_high": 5199.0,
+      "pnl": -2866.4,
+      "pnl_pct": -12.19,
+      "pct_return": -12.19,
+      "highest_high": 3244.5,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 286,
+      "trade_id": 296,
       "symbol": "AWFIS",
       "name": "AWFIS",
       "leg": 1,
@@ -7462,7 +7722,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 287,
+      "trade_id": 297,
       "symbol": "BALAMINES",
       "name": "BALAMINES",
       "leg": 2,
@@ -7488,7 +7748,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 288,
+      "trade_id": 298,
       "symbol": "JSLL",
       "name": "JSLL",
       "leg": 2,
@@ -7514,7 +7774,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 289,
+      "trade_id": 299,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 2,
@@ -7540,7 +7800,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 290,
+      "trade_id": 300,
       "symbol": "PRAJIND",
       "name": "PRAJIND",
       "leg": 2,
@@ -7566,33 +7826,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 291,
-      "symbol": "CAMPUS",
-      "name": "CAMPUS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-08-05",
-      "exit_date": "2026-10-08",
-      "entry_price": 226.54,
-      "avg_price": 226.54,
-      "exit_price": 199.0,
-      "shares": 110,
-      "qty": 110,
-      "invested": 24919.4,
-      "days_held": 44,
-      "bars_held": 44,
-      "holding_days": 44,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3029.4,
-      "pnl_pct": -12.16,
-      "pct_return": -12.16,
-      "highest_high": 233.55,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 292,
+      "trade_id": 301,
       "symbol": "JINDWORLD",
       "name": "JINDWORLD",
       "leg": 1,
@@ -7618,7 +7852,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 293,
+      "trade_id": 302,
       "symbol": "AKUMS",
       "name": "AKUMS",
       "leg": 2,
@@ -7644,7 +7878,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 294,
+      "trade_id": 303,
       "symbol": "ORCHPHARMA",
       "name": "ORCHPHARMA",
       "leg": 2,
@@ -7670,7 +7904,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 295,
+      "trade_id": 304,
       "symbol": "EXICOM",
       "name": "EXICOM",
       "leg": 1,
@@ -7696,33 +7930,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 296,
-      "symbol": "ATGL",
-      "name": "ATGL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-05-21",
-      "exit_date": "2026-10-21",
-      "entry_price": 638.1,
-      "avg_price": 638.1,
-      "exit_price": 559.4,
-      "shares": 39,
-      "qty": 39,
-      "invested": 24885.9,
-      "days_held": 104,
-      "bars_held": 104,
-      "holding_days": 104,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3069.3,
-      "pnl_pct": -12.33,
-      "pct_return": -12.33,
-      "highest_high": 859.85,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 297,
+      "trade_id": 305,
       "symbol": "CONFIPET",
       "name": "CONFIPET",
       "leg": 2,
@@ -7748,7 +7956,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 298,
+      "trade_id": 306,
       "symbol": "INDOTECH",
       "name": "INDOTECH",
       "leg": 2,
@@ -7774,33 +7982,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 299,
-      "symbol": "REDTAPE",
-      "name": "REDTAPE",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2026-01-30",
-      "exit_date": "2026-10-22",
-      "entry_price": 123.68,
-      "avg_price": 123.68,
-      "exit_price": 107.48,
-      "shares": 202,
-      "qty": 202,
-      "invested": 24983.36,
-      "days_held": 178,
-      "bars_held": 178,
-      "holding_days": 178,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3272.4,
-      "pnl_pct": -13.1,
-      "pct_return": -13.1,
-      "highest_high": 158.99,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 300,
+      "trade_id": 307,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 2,
@@ -7826,7 +8008,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 301,
+      "trade_id": 308,
+      "symbol": "UFBL",
+      "name": "UFBL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-07-24",
+      "exit_date": "2026-10-22",
+      "entry_price": 674.85,
+      "avg_price": 674.85,
+      "exit_price": 611.1,
+      "shares": 37,
+      "qty": 37,
+      "invested": 24969.45,
+      "days_held": 61,
+      "bars_held": 61,
+      "holding_days": 61,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -2358.75,
+      "pnl_pct": -9.45,
+      "pct_return": -9.45,
+      "highest_high": 850.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 309,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 2,
@@ -7852,33 +8060,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 302,
-      "symbol": "BAJAJHIND",
-      "name": "BAJAJHIND",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2026-03-10",
-      "exit_date": "2026-10-23",
-      "entry_price": 16.65,
-      "avg_price": 16.65,
-      "exit_price": 18.17,
-      "shares": 1501,
-      "qty": 1501,
-      "invested": 24991.65,
-      "days_held": 153,
-      "bars_held": 153,
-      "holding_days": 153,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 2285.27,
-      "pnl_pct": 9.14,
-      "pct_return": 9.14,
-      "highest_high": 26.0,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 303,
+      "trade_id": 310,
       "symbol": "PARAS",
       "name": "PARAS",
       "leg": 2,
@@ -7904,7 +8086,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 304,
+      "trade_id": 311,
       "symbol": "SHAREINDIA",
       "name": "SHAREINDIA",
       "leg": 1,
@@ -7930,7 +8112,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 305,
+      "trade_id": 312,
       "symbol": "MSTCLTD",
       "name": "MSTCLTD",
       "leg": 1,
@@ -7956,7 +8138,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 306,
+      "trade_id": 313,
       "symbol": "TEXRAIL",
       "name": "TEXRAIL",
       "leg": 1,
@@ -7982,7 +8164,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 307,
+      "trade_id": 314,
+      "symbol": "DELHIVERY",
+      "name": "DELHIVERY",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-06-12",
+      "exit_date": "2026-10-23",
+      "entry_price": 440.5,
+      "avg_price": 440.5,
+      "exit_price": 370.0,
+      "shares": 56,
+      "qty": 56,
+      "invested": 24668.0,
+      "days_held": 91,
+      "bars_held": 91,
+      "holding_days": 91,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -3948.0,
+      "pnl_pct": -16.0,
+      "pct_return": -16.0,
+      "highest_high": 524.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 315,
       "symbol": "ELECTCAST",
       "name": "ELECTCAST",
       "leg": 2,
@@ -8008,7 +8216,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 308,
+      "trade_id": 316,
+      "symbol": "REDTAPE",
+      "name": "REDTAPE",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-09-23",
+      "exit_date": "2026-10-23",
+      "entry_price": 121.1,
+      "avg_price": 121.1,
+      "exit_price": 104.06,
+      "shares": 206,
+      "qty": 206,
+      "invested": 24946.6,
+      "days_held": 20,
+      "bars_held": 20,
+      "holding_days": 20,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -3510.24,
+      "pnl_pct": -14.07,
+      "pct_return": -14.07,
+      "highest_high": 123.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 317,
       "symbol": "KABRAEXTRU",
       "name": "KABRAEXTRU",
       "leg": 2,
@@ -8034,33 +8268,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 309,
-      "symbol": "BCG",
-      "name": "BCG",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-05-19",
-      "exit_date": "2026-10-26",
-      "entry_price": 9.54,
-      "avg_price": 9.54,
-      "exit_price": 8.3,
-      "shares": 2620,
-      "qty": 2620,
-      "invested": 24994.8,
-      "days_held": 109,
-      "bars_held": 109,
-      "holding_days": 109,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3248.8,
-      "pnl_pct": -13.0,
-      "pct_return": -13.0,
-      "highest_high": 13.1,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 310,
+      "trade_id": 318,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 2,
@@ -8086,7 +8294,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 311,
+      "trade_id": 319,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 2,
@@ -8112,7 +8320,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 312,
+      "trade_id": 320,
       "symbol": "MAPMYINDIA",
       "name": "MAPMYINDIA",
       "leg": 2,
@@ -8138,7 +8346,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 313,
+      "trade_id": 321,
       "symbol": "FIRSTCRY",
       "name": "FIRSTCRY",
       "leg": 2,
@@ -8164,33 +8372,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 314,
-      "symbol": "UFBL",
-      "name": "UFBL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-07-24",
-      "exit_date": "2026-11-03",
-      "entry_price": 674.85,
-      "avg_price": 674.85,
-      "exit_price": 573.15,
-      "shares": 37,
-      "qty": 37,
-      "invested": 24969.45,
-      "days_held": 69,
-      "bars_held": 69,
-      "holding_days": 69,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3762.9,
-      "pnl_pct": -15.07,
-      "pct_return": -15.07,
-      "highest_high": 850.0,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 315,
+      "trade_id": 322,
       "symbol": "GANECOS",
       "name": "GANECOS",
       "leg": 2,
@@ -8557,32 +8739,6 @@
     },
     {
       "trade_id": 14,
-      "symbol": "PAYTM",
-      "name": "PAYTM",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2022-06-17",
-      "exit_date": "2022-09-29",
-      "entry_price": 630.15,
-      "avg_price": 630.15,
-      "exit_price": 630.15,
-      "shares": 39,
-      "qty": 39,
-      "invested": 24575.85,
-      "days_held": 71,
-      "bars_held": 71,
-      "holding_days": 71,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 0.0,
-      "pnl_pct": 0.0,
-      "pct_return": 0.0,
-      "highest_high": 844.7,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 15,
       "symbol": "IBULLSLTD",
       "name": "IBULLSLTD",
       "leg": 1,
@@ -8608,7 +8764,59 @@
       "mode": "PAPER"
     },
     {
+      "trade_id": 15,
+      "symbol": "TEXRAIL",
+      "name": "TEXRAIL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2022-07-19",
+      "exit_date": "2022-10-12",
+      "entry_price": 43.55,
+      "avg_price": 43.55,
+      "exit_price": 47.55,
+      "shares": 574,
+      "qty": 574,
+      "invested": 24997.7,
+      "days_held": 57,
+      "bars_held": 57,
+      "holding_days": 57,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2296.0,
+      "pnl_pct": 9.18,
+      "pct_return": 9.18,
+      "highest_high": 56.15,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
       "trade_id": 16,
+      "symbol": "PAYTM",
+      "name": "PAYTM",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2022-06-17",
+      "exit_date": "2022-10-21",
+      "entry_price": 630.15,
+      "avg_price": 630.15,
+      "exit_price": 626.21,
+      "shares": 39,
+      "qty": 39,
+      "invested": 24575.85,
+      "days_held": 86,
+      "bars_held": 86,
+      "holding_days": 86,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -153.56,
+      "pnl_pct": -0.62,
+      "pct_return": -0.62,
+      "highest_high": 844.7,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 17,
       "symbol": "CARTRADE",
       "name": "CARTRADE",
       "leg": 1,
@@ -8634,7 +8842,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 17,
+      "trade_id": 18,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 1,
@@ -8660,7 +8868,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 18,
+      "trade_id": 19,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 1,
@@ -8686,7 +8894,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 19,
+      "trade_id": 20,
       "symbol": "PCJEWELLER",
       "name": "PCJEWELLER",
       "leg": 2,
@@ -8708,32 +8916,6 @@
       "pnl_pct": -14.73,
       "pct_return": -14.73,
       "highest_high": 10.02,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 20,
-      "symbol": "PAYTM",
-      "name": "PAYTM",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2022-10-07",
-      "exit_date": "2022-11-16",
-      "entry_price": 707.45,
-      "avg_price": 707.45,
-      "exit_price": 601.45,
-      "shares": 35,
-      "qty": 35,
-      "invested": 24760.75,
-      "days_held": 26,
-      "bars_held": 26,
-      "holding_days": 26,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3710.0,
-      "pnl_pct": -14.98,
-      "pct_return": -14.98,
-      "highest_high": 745.45,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -8817,6 +8999,32 @@
     },
     {
       "trade_id": 24,
+      "symbol": "JUBLPHARMA",
+      "name": "JUBLPHARMA",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2022-09-30",
+      "exit_date": "2022-12-28",
+      "entry_price": 326.79,
+      "avg_price": 326.79,
+      "exit_price": 364.43,
+      "shares": 76,
+      "qty": 76,
+      "invested": 24835.97,
+      "days_held": 60,
+      "bars_held": 60,
+      "holding_days": 60,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2861.0,
+      "pnl_pct": 11.52,
+      "pct_return": 11.52,
+      "highest_high": 412.34,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 25,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 1,
@@ -8842,7 +9050,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 25,
+      "trade_id": 26,
       "symbol": "POLICYBZR",
       "name": "POLICYBZR",
       "leg": 1,
@@ -8868,7 +9076,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 26,
+      "trade_id": 27,
       "symbol": "BAJAJHIND",
       "name": "BAJAJHIND",
       "leg": 1,
@@ -8894,7 +9102,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 27,
+      "trade_id": 28,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 1,
@@ -8916,32 +9124,6 @@
       "pnl_pct": -12.69,
       "pct_return": -12.69,
       "highest_high": 386.39,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 28,
-      "symbol": "TEXRAIL",
-      "name": "TEXRAIL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2022-07-19",
-      "exit_date": "2023-02-01",
-      "entry_price": 43.55,
-      "avg_price": 43.55,
-      "exit_price": 51.1,
-      "shares": 574,
-      "qty": 574,
-      "invested": 24997.7,
-      "days_held": 134,
-      "bars_held": 134,
-      "holding_days": 134,
-      "reason": "Institutional 50 EMA Volume Breakdown",
-      "exit_reason": "Institutional 50 EMA Volume Breakdown",
-      "pnl": 4333.7,
-      "pnl_pct": 17.34,
-      "pct_return": 17.34,
-      "highest_high": 65.25,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -8973,6 +9155,32 @@
     },
     {
       "trade_id": 30,
+      "symbol": "TEXRAIL",
+      "name": "TEXRAIL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2022-10-31",
+      "exit_date": "2023-02-01",
+      "entry_price": 49.1,
+      "avg_price": 49.1,
+      "exit_price": 51.1,
+      "shares": 509,
+      "qty": 509,
+      "invested": 24991.9,
+      "days_held": 65,
+      "bars_held": 65,
+      "holding_days": 65,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1018.0,
+      "pnl_pct": 4.07,
+      "pct_return": 4.07,
+      "highest_high": 65.25,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 31,
       "symbol": "EMBDL",
       "name": "EMBDL",
       "leg": 1,
@@ -8998,7 +9206,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 31,
+      "trade_id": 32,
       "symbol": "GRAPHITE",
       "name": "GRAPHITE",
       "leg": 2,
@@ -9024,7 +9232,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 32,
+      "trade_id": 33,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 1,
@@ -9050,7 +9258,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 33,
+      "trade_id": 34,
       "symbol": "MRPL",
       "name": "MRPL",
       "leg": 2,
@@ -9076,7 +9284,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 34,
+      "trade_id": 35,
       "symbol": "NAZARA",
       "name": "NAZARA",
       "leg": 2,
@@ -9102,7 +9310,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 35,
+      "trade_id": 36,
       "symbol": "PNBHOUSING",
       "name": "PNBHOUSING",
       "leg": 1,
@@ -9124,32 +9332,6 @@
       "pnl_pct": 50.01,
       "pct_return": 50.01,
       "highest_high": 535.4,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 36,
-      "symbol": "JUBLPHARMA",
-      "name": "JUBLPHARMA",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2022-09-30",
-      "exit_date": "2023-03-15",
-      "entry_price": 326.79,
-      "avg_price": 326.79,
-      "exit_price": 284.18,
-      "shares": 76,
-      "qty": 76,
-      "invested": 24835.97,
-      "days_held": 113,
-      "bars_held": 113,
-      "holding_days": 113,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3238.03,
-      "pnl_pct": -13.04,
-      "pct_return": -13.04,
-      "highest_high": 412.34,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -9857,6 +10039,32 @@
     },
     {
       "trade_id": 64,
+      "symbol": "PCJEWELLER",
+      "name": "PCJEWELLER",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2023-10-06",
+      "exit_date": "2023-11-15",
+      "entry_price": 2.71,
+      "avg_price": 2.71,
+      "exit_price": 2.87,
+      "shares": 9225,
+      "qty": 9225,
+      "invested": 24999.75,
+      "days_held": 26,
+      "bars_held": 26,
+      "holding_days": 26,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1429.87,
+      "pnl_pct": 5.72,
+      "pct_return": 5.72,
+      "highest_high": 3.58,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 65,
       "symbol": "TANLA",
       "name": "TANLA",
       "leg": 2,
@@ -9882,7 +10090,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 65,
+      "trade_id": 66,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 1,
@@ -9908,7 +10116,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 66,
+      "trade_id": 67,
       "symbol": "PAYTM",
       "name": "PAYTM",
       "leg": 2,
@@ -9934,7 +10142,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 67,
+      "trade_id": 68,
       "symbol": "BBOX",
       "name": "BBOX",
       "leg": 2,
@@ -9960,7 +10168,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 68,
+      "trade_id": 69,
       "symbol": "STOVEKRAFT",
       "name": "STOVEKRAFT",
       "leg": 2,
@@ -9986,7 +10194,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 69,
+      "trade_id": 70,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 1,
@@ -10012,7 +10220,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 70,
+      "trade_id": 71,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 1,
@@ -10038,7 +10246,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 71,
+      "trade_id": 72,
       "symbol": "BLISSGVS",
       "name": "BLISSGVS",
       "leg": 2,
@@ -10064,7 +10272,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 72,
+      "trade_id": 73,
       "symbol": "PNBHOUSING",
       "name": "PNBHOUSING",
       "leg": 2,
@@ -10090,7 +10298,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 73,
+      "trade_id": 74,
       "symbol": "IBULLSLTD",
       "name": "IBULLSLTD",
       "leg": 2,
@@ -10116,7 +10324,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 74,
+      "trade_id": 75,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 1,
@@ -10142,7 +10350,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 75,
+      "trade_id": 76,
       "symbol": "IOLCP",
       "name": "IOLCP",
       "leg": 2,
@@ -10164,32 +10372,6 @@
       "pnl_pct": 14.04,
       "pct_return": 14.04,
       "highest_high": 107.18,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 76,
-      "symbol": "PCJEWELLER",
-      "name": "PCJEWELLER",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2023-10-06",
-      "exit_date": "2024-02-13",
-      "entry_price": 2.71,
-      "avg_price": 2.71,
-      "exit_price": 4.82,
-      "shares": 9225,
-      "qty": 9225,
-      "invested": 24999.75,
-      "days_held": 86,
-      "bars_held": 86,
-      "holding_days": 86,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 19487.81,
-      "pnl_pct": 77.95,
-      "pct_return": 77.95,
-      "highest_high": 6.55,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -10455,32 +10637,6 @@
     },
     {
       "trade_id": 87,
-      "symbol": "TEXRAIL",
-      "name": "TEXRAIL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2023-11-10",
-      "exit_date": "2024-03-12",
-      "entry_price": 130.9,
-      "avg_price": 130.9,
-      "exit_price": 164.7,
-      "shares": 190,
-      "qty": 190,
-      "invested": 24871.0,
-      "days_held": 81,
-      "bars_held": 81,
-      "holding_days": 81,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 6422.0,
-      "pnl_pct": 25.82,
-      "pct_return": 25.82,
-      "highest_high": 231.8,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 88,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 2,
@@ -10506,7 +10662,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 89,
+      "trade_id": 88,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 1,
@@ -10532,7 +10688,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 90,
+      "trade_id": 89,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 2,
@@ -10558,7 +10714,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 91,
+      "trade_id": 90,
       "symbol": "KIRLOSENG",
       "name": "KIRLOSENG",
       "leg": 2,
@@ -10584,7 +10740,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 92,
+      "trade_id": 91,
       "symbol": "ADANIGREEN",
       "name": "ADANIGREEN",
       "leg": 1,
@@ -10610,7 +10766,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 93,
+      "trade_id": 92,
       "symbol": "OPTIEMUS",
       "name": "OPTIEMUS",
       "leg": 2,
@@ -10636,7 +10792,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 94,
+      "trade_id": 93,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 2,
@@ -10662,7 +10818,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 95,
+      "trade_id": 94,
       "symbol": "BOSCH-HCIL",
       "name": "BOSCH-HCIL",
       "leg": 2,
@@ -10688,7 +10844,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 96,
+      "trade_id": 95,
       "symbol": "STOVEKRAFT",
       "name": "STOVEKRAFT",
       "leg": 2,
@@ -10714,7 +10870,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 97,
+      "trade_id": 96,
       "symbol": "BAJAJHIND",
       "name": "BAJAJHIND",
       "leg": 2,
@@ -10740,7 +10896,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 98,
+      "trade_id": 97,
       "symbol": "BCG",
       "name": "BCG",
       "leg": 1,
@@ -10766,7 +10922,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 99,
+      "trade_id": 98,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 2,
@@ -10792,7 +10948,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 100,
+      "trade_id": 99,
       "symbol": "CHENNPETRO",
       "name": "CHENNPETRO",
       "leg": 2,
@@ -10818,7 +10974,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 101,
+      "trade_id": 100,
       "symbol": "POLICYBZR",
       "name": "POLICYBZR",
       "leg": 2,
@@ -10844,7 +11000,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 102,
+      "trade_id": 101,
       "symbol": "SUPRIYA",
       "name": "SUPRIYA",
       "leg": 2,
@@ -10870,7 +11026,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 103,
+      "trade_id": 102,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 2,
@@ -10896,7 +11052,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 104,
+      "trade_id": 103,
       "symbol": "BLISSGVS",
       "name": "BLISSGVS",
       "leg": 2,
@@ -10922,7 +11078,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 105,
+      "trade_id": 104,
       "symbol": "VEEDOL",
       "name": "VEEDOL",
       "leg": 2,
@@ -10948,7 +11104,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 106,
+      "trade_id": 105,
       "symbol": "GRAPHITE",
       "name": "GRAPHITE",
       "leg": 2,
@@ -10974,7 +11130,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 107,
+      "trade_id": 106,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 2,
@@ -11000,7 +11156,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 108,
+      "trade_id": 107,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 1,
@@ -11026,7 +11182,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 109,
+      "trade_id": 108,
       "symbol": "IOLCP",
       "name": "IOLCP",
       "leg": 2,
@@ -11052,7 +11208,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 110,
+      "trade_id": 109,
       "symbol": "OPTIEMUS",
       "name": "OPTIEMUS",
       "leg": 2,
@@ -11078,7 +11234,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 111,
+      "trade_id": 110,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 1,
@@ -11104,7 +11260,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 112,
+      "trade_id": 111,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 2,
@@ -11126,6 +11282,32 @@
       "pnl_pct": -14.75,
       "pct_return": -14.75,
       "highest_high": 242.7,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 112,
+      "symbol": "ATGL",
+      "name": "ATGL",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2024-05-14",
+      "exit_date": "2024-06-05",
+      "entry_price": 908.95,
+      "avg_price": 908.95,
+      "exit_price": 839.55,
+      "shares": 27,
+      "qty": 27,
+      "invested": 24541.65,
+      "days_held": 15,
+      "bars_held": 15,
+      "holding_days": 15,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1873.8,
+      "pnl_pct": -7.64,
+      "pct_return": -7.64,
+      "highest_high": 1190.0,
       "stars": 5,
       "mode": "PAPER"
     },
@@ -11183,6 +11365,58 @@
     },
     {
       "trade_id": 115,
+      "symbol": "ADANIENSOL",
+      "name": "ADANIENSOL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-02-16",
+      "exit_date": "2024-08-12",
+      "entry_price": 1061.6,
+      "avg_price": 1061.6,
+      "exit_price": 1063.0,
+      "shares": 23,
+      "qty": 23,
+      "invested": 24416.8,
+      "days_held": 117,
+      "bars_held": 117,
+      "holding_days": 117,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 32.2,
+      "pnl_pct": 0.13,
+      "pct_return": 0.13,
+      "highest_high": 1348.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 116,
+      "symbol": "CAMPUS",
+      "name": "CAMPUS",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2024-05-16",
+      "exit_date": "2024-08-13",
+      "entry_price": 249.85,
+      "avg_price": 249.85,
+      "exit_price": 282.51,
+      "shares": 100,
+      "qty": 100,
+      "invested": 24985.2,
+      "days_held": 60,
+      "bars_held": 60,
+      "holding_days": 60,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 3265.39,
+      "pnl_pct": 13.07,
+      "pct_return": 13.07,
+      "highest_high": 317.04,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 117,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 2,
@@ -11208,33 +11442,85 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 116,
+      "trade_id": 118,
       "symbol": "ATGL",
       "name": "ATGL",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2024-05-14",
-      "exit_date": "2024-09-17",
-      "entry_price": 908.95,
-      "avg_price": 908.95,
-      "exit_price": 799.5,
-      "shares": 27,
-      "qty": 27,
-      "invested": 24541.65,
-      "days_held": 86,
-      "bars_held": 86,
-      "holding_days": 86,
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-06-05",
+      "exit_date": "2024-09-09",
+      "entry_price": 936.25,
+      "avg_price": 936.25,
+      "exit_price": 814.75,
+      "shares": 26,
+      "qty": 26,
+      "invested": 24342.5,
+      "days_held": 65,
+      "bars_held": 65,
+      "holding_days": 65,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -2955.15,
-      "pnl_pct": -12.04,
-      "pct_return": -12.04,
-      "highest_high": 1190.0,
+      "pnl": -3159.0,
+      "pnl_pct": -12.98,
+      "pct_return": -12.98,
+      "highest_high": 1013.95,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 117,
+      "trade_id": 119,
+      "symbol": "ADANIENSOL",
+      "name": "ADANIENSOL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-08-14",
+      "exit_date": "2024-09-18",
+      "entry_price": 1113.7,
+      "avg_price": 1113.7,
+      "exit_price": 979.9,
+      "shares": 22,
+      "qty": 22,
+      "invested": 24501.4,
+      "days_held": 24,
+      "bars_held": 24,
+      "holding_days": 24,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -2943.6,
+      "pnl_pct": -12.01,
+      "pct_return": -12.01,
+      "highest_high": 1138.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 120,
+      "symbol": "EMBDL",
+      "name": "EMBDL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-05-21",
+      "exit_date": "2024-09-19",
+      "entry_price": 128.55,
+      "avg_price": 128.55,
+      "exit_price": 120.26,
+      "shares": 194,
+      "qty": 194,
+      "invested": 24938.7,
+      "days_held": 84,
+      "bars_held": 84,
+      "holding_days": 84,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1607.77,
+      "pnl_pct": -6.45,
+      "pct_return": -6.45,
+      "highest_high": 164.36,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 121,
       "symbol": "POLICYBZR",
       "name": "POLICYBZR",
       "leg": 2,
@@ -11260,7 +11546,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 118,
+      "trade_id": 122,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 2,
@@ -11286,7 +11572,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 119,
+      "trade_id": 123,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 1,
@@ -11312,33 +11598,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 120,
-      "symbol": "ADANIENSOL",
-      "name": "ADANIENSOL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-02-16",
-      "exit_date": "2024-10-07",
-      "entry_price": 1061.6,
-      "avg_price": 1061.6,
-      "exit_price": 934.2,
-      "shares": 23,
-      "qty": 23,
-      "invested": 24416.8,
-      "days_held": 155,
-      "bars_held": 155,
-      "holding_days": 155,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -2930.2,
-      "pnl_pct": -12.0,
-      "pct_return": -12.0,
-      "highest_high": 1348.0,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 121,
+      "trade_id": 124,
       "symbol": "VEEDOL",
       "name": "VEEDOL",
       "leg": 2,
@@ -11364,7 +11624,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 122,
+      "trade_id": 125,
       "symbol": "NIACL",
       "name": "NIACL",
       "leg": 2,
@@ -11390,7 +11650,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 123,
+      "trade_id": 126,
       "symbol": "TANLA",
       "name": "TANLA",
       "leg": 2,
@@ -11416,7 +11676,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 124,
+      "trade_id": 127,
       "symbol": "UFBL",
       "name": "UFBL",
       "leg": 1,
@@ -11442,7 +11702,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 125,
+      "trade_id": 128,
+      "symbol": "EMBDL",
+      "name": "EMBDL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-09-25",
+      "exit_date": "2024-10-22",
+      "entry_price": 129.64,
+      "avg_price": 129.64,
+      "exit_price": 113.93,
+      "shares": 192,
+      "qty": 192,
+      "invested": 24890.88,
+      "days_held": 18,
+      "bars_held": 18,
+      "holding_days": 18,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -3016.32,
+      "pnl_pct": -12.12,
+      "pct_return": -12.12,
+      "highest_high": 135.18,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 129,
       "symbol": "BAJAJHIND",
       "name": "BAJAJHIND",
       "leg": 2,
@@ -11468,7 +11754,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 126,
+      "trade_id": 130,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 2,
@@ -11494,7 +11780,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 127,
+      "trade_id": 131,
+      "symbol": "IOLCP",
+      "name": "IOLCP",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-07-24",
+      "exit_date": "2024-10-23",
+      "entry_price": 83.07,
+      "avg_price": 83.07,
+      "exit_price": 77.44,
+      "shares": 300,
+      "qty": 300,
+      "invested": 24921.0,
+      "days_held": 63,
+      "bars_held": 63,
+      "holding_days": 63,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1689.75,
+      "pnl_pct": -6.78,
+      "pct_return": -6.78,
+      "highest_high": 107.54,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 132,
       "symbol": "BOSCH-HCIL",
       "name": "BOSCH-HCIL",
       "leg": 2,
@@ -11520,7 +11832,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 128,
+      "trade_id": 133,
       "symbol": "SMSPHARMA",
       "name": "SMSPHARMA",
       "leg": 2,
@@ -11546,33 +11858,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 129,
-      "symbol": "EMBDL",
-      "name": "EMBDL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-05-21",
-      "exit_date": "2024-10-25",
-      "entry_price": 128.55,
-      "avg_price": 128.55,
-      "exit_price": 107.65,
-      "shares": 194,
-      "qty": 194,
-      "invested": 24938.7,
-      "days_held": 109,
-      "bars_held": 109,
-      "holding_days": 109,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -4054.6,
-      "pnl_pct": -16.26,
-      "pct_return": -16.26,
-      "highest_high": 164.36,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 130,
+      "trade_id": 134,
       "symbol": "SUPRIYA",
       "name": "SUPRIYA",
       "leg": 2,
@@ -11598,7 +11884,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 131,
+      "trade_id": 135,
+      "symbol": "BLISSGVS",
+      "name": "BLISSGVS",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-08-07",
+      "exit_date": "2024-10-25",
+      "entry_price": 112.7,
+      "avg_price": 112.7,
+      "exit_price": 108.93,
+      "shares": 221,
+      "qty": 221,
+      "invested": 24906.7,
+      "days_held": 55,
+      "bars_held": 55,
+      "holding_days": 55,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": -833.17,
+      "pnl_pct": -3.35,
+      "pct_return": -3.35,
+      "highest_high": 143.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 136,
       "symbol": "BBOX",
       "name": "BBOX",
       "leg": 2,
@@ -11624,7 +11936,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 132,
+      "trade_id": 137,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 1,
@@ -11650,7 +11962,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 133,
+      "trade_id": 138,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 2,
@@ -11676,7 +11988,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 134,
+      "trade_id": 139,
       "symbol": "STOVEKRAFT",
       "name": "STOVEKRAFT",
       "leg": 2,
@@ -11702,7 +12014,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 135,
+      "trade_id": 140,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 2,
@@ -11728,7 +12040,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 136,
+      "trade_id": 141,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 1,
@@ -11754,7 +12066,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 137,
+      "trade_id": 142,
       "symbol": "ADANIGREEN",
       "name": "ADANIGREEN",
       "leg": 2,
@@ -11780,7 +12092,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 138,
+      "trade_id": 143,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 2,
@@ -11806,7 +12118,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 139,
+      "trade_id": 144,
       "symbol": "SMSPHARMA",
       "name": "SMSPHARMA",
       "leg": 2,
@@ -11832,7 +12144,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 140,
+      "trade_id": 145,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 2,
@@ -11858,7 +12170,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 141,
+      "trade_id": 146,
       "symbol": "PNBHOUSING",
       "name": "PNBHOUSING",
       "leg": 2,
@@ -11884,7 +12196,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 142,
+      "trade_id": 147,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 2,
@@ -11910,59 +12222,59 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 143,
+      "trade_id": 148,
       "symbol": "CAMPUS",
       "name": "CAMPUS",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2024-05-16",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-09-10",
       "exit_date": "2024-11-14",
-      "entry_price": 249.85,
-      "avg_price": 249.85,
+      "entry_price": 287.5,
+      "avg_price": 287.5,
       "exit_price": 272.47,
-      "shares": 100,
-      "qty": 100,
-      "invested": 24985.2,
-      "days_held": 125,
-      "bars_held": 125,
-      "holding_days": 125,
+      "shares": 86,
+      "qty": 86,
+      "invested": 24725.25,
+      "days_held": 46,
+      "bars_held": 46,
+      "holding_days": 46,
       "reason": "Peak Trail Stop (25% from Peak)",
       "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 2262.27,
-      "pnl_pct": 9.05,
-      "pct_return": 9.05,
+      "pnl": -1292.43,
+      "pnl_pct": -5.23,
+      "pct_return": -5.23,
       "highest_high": 368.0,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 144,
-      "symbol": "IOLCP",
-      "name": "IOLCP",
+      "trade_id": 149,
+      "symbol": "ADANIENSOL",
+      "name": "ADANIENSOL",
       "leg": 2,
       "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-07-24",
-      "exit_date": "2024-11-18",
-      "entry_price": 83.07,
-      "avg_price": 83.07,
-      "exit_price": 69.78,
-      "shares": 300,
-      "qty": 300,
-      "invested": 24921.0,
-      "days_held": 80,
-      "bars_held": 80,
-      "holding_days": 80,
+      "entry_date": "2024-09-20",
+      "exit_date": "2024-11-14",
+      "entry_price": 1007.15,
+      "avg_price": 1007.15,
+      "exit_price": 879.7,
+      "shares": 24,
+      "qty": 24,
+      "invested": 24171.6,
+      "days_held": 38,
+      "bars_held": 38,
+      "holding_days": 38,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3987.0,
-      "pnl_pct": -16.0,
-      "pct_return": -16.0,
-      "highest_high": 107.54,
+      "pnl": -3058.8,
+      "pnl_pct": -12.65,
+      "pct_return": -12.65,
+      "highest_high": 1090.95,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 145,
+      "trade_id": 150,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 1,
@@ -11988,33 +12300,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 146,
-      "symbol": "ADANIENSOL",
-      "name": "ADANIENSOL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-10-31",
-      "exit_date": "2024-11-21",
-      "entry_price": 976.2,
-      "avg_price": 976.2,
-      "exit_price": 697.25,
-      "shares": 25,
-      "qty": 25,
-      "invested": 24405.0,
-      "days_held": 13,
-      "bars_held": 13,
-      "holding_days": 13,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -6973.75,
-      "pnl_pct": -28.58,
-      "pct_return": -28.58,
-      "highest_high": 1090.95,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 147,
+      "trade_id": 151,
       "symbol": "CEMPRO",
       "name": "CEMPRO",
       "leg": 2,
@@ -12040,7 +12326,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 148,
+      "trade_id": 152,
       "symbol": "LUXIND",
       "name": "LUXIND",
       "leg": 2,
@@ -12066,7 +12352,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 149,
+      "trade_id": 153,
       "symbol": "JUBLPHARMA",
       "name": "JUBLPHARMA",
       "leg": 2,
@@ -12092,7 +12378,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 150,
+      "trade_id": 154,
       "symbol": "IBULLSLTD",
       "name": "IBULLSLTD",
       "leg": 2,
@@ -12118,7 +12404,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 151,
+      "trade_id": 155,
       "symbol": "PAYTM",
       "name": "PAYTM",
       "leg": 2,
@@ -12144,7 +12430,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 152,
+      "trade_id": 156,
       "symbol": "PPLPHARMA",
       "name": "PPLPHARMA",
       "leg": 2,
@@ -12170,7 +12456,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 153,
+      "trade_id": 157,
+      "symbol": "OPTIEMUS",
+      "name": "OPTIEMUS",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2024-11-22",
+      "exit_date": "2025-01-10",
+      "entry_price": 638.75,
+      "avg_price": 638.75,
+      "exit_price": 698.8,
+      "shares": 39,
+      "qty": 39,
+      "invested": 24911.25,
+      "days_held": 34,
+      "bars_held": 34,
+      "holding_days": 34,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2341.95,
+      "pnl_pct": 9.4,
+      "pct_return": 9.4,
+      "highest_high": 812.4,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 158,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 2,
@@ -12196,7 +12508,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 154,
+      "trade_id": 159,
       "symbol": "SUPRIYA",
       "name": "SUPRIYA",
       "leg": 2,
@@ -12222,7 +12534,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 155,
+      "trade_id": 160,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 1,
@@ -12248,7 +12560,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 156,
+      "trade_id": 161,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 2,
@@ -12274,7 +12586,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 157,
+      "trade_id": 162,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 2,
@@ -12300,7 +12612,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 158,
+      "trade_id": 163,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 1,
@@ -12326,7 +12638,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 159,
+      "trade_id": 164,
       "symbol": "ADANIENSOL",
       "name": "ADANIENSOL",
       "leg": 1,
@@ -12352,7 +12664,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 160,
+      "trade_id": 165,
       "symbol": "TTML",
       "name": "TTML",
       "leg": 2,
@@ -12378,7 +12690,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 161,
+      "trade_id": 166,
       "symbol": "CARTRADE",
       "name": "CARTRADE",
       "leg": 2,
@@ -12404,7 +12716,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 162,
+      "trade_id": 167,
       "symbol": "SIGMAADV",
       "name": "SIGMAADV",
       "leg": 2,
@@ -12430,7 +12742,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 163,
+      "trade_id": 168,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 1,
@@ -12456,7 +12768,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 164,
+      "trade_id": 169,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 2,
@@ -12482,59 +12794,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 165,
-      "symbol": "OPTIEMUS",
-      "name": "OPTIEMUS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-11-22",
-      "exit_date": "2025-02-12",
-      "entry_price": 638.75,
-      "avg_price": 638.75,
-      "exit_price": 554.95,
-      "shares": 39,
-      "qty": 39,
-      "invested": 24911.25,
-      "days_held": 58,
-      "bars_held": 58,
-      "holding_days": 58,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3268.2,
-      "pnl_pct": -13.12,
-      "pct_return": -13.12,
-      "highest_high": 812.4,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 166,
-      "symbol": "BLISSGVS",
-      "name": "BLISSGVS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2024-08-07",
-      "exit_date": "2025-02-14",
-      "entry_price": 112.7,
-      "avg_price": 112.7,
-      "exit_price": 133.84,
-      "shares": 221,
-      "qty": 221,
-      "invested": 24906.7,
-      "days_held": 133,
-      "bars_held": 133,
-      "holding_days": 133,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 4671.39,
-      "pnl_pct": 18.76,
-      "pct_return": 18.76,
-      "highest_high": 185.5,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 167,
+      "trade_id": 170,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 2,
@@ -12560,7 +12820,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 168,
+      "trade_id": 171,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 2,
@@ -12586,33 +12846,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 169,
-      "symbol": "ADANIENSOL",
-      "name": "ADANIENSOL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-02-05",
-      "exit_date": "2025-02-18",
-      "entry_price": 775.5,
-      "avg_price": 775.5,
-      "exit_price": 677.15,
-      "shares": 32,
-      "qty": 32,
-      "invested": 24816.0,
-      "days_held": 9,
-      "bars_held": 9,
-      "holding_days": 9,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3147.2,
-      "pnl_pct": -12.68,
-      "pct_return": -12.68,
-      "highest_high": 788.2,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 170,
+      "trade_id": 172,
       "symbol": "WOCKPHARMA",
       "name": "WOCKPHARMA",
       "leg": 2,
@@ -12638,7 +12872,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 171,
+      "trade_id": 173,
       "symbol": "EMBDL",
       "name": "EMBDL",
       "leg": 2,
@@ -12664,7 +12898,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 172,
+      "trade_id": 174,
       "symbol": "CAMPUS",
       "name": "CAMPUS",
       "leg": 2,
@@ -12690,7 +12924,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 173,
+      "trade_id": 175,
       "symbol": "JUBLPHARMA",
       "name": "JUBLPHARMA",
       "leg": 2,
@@ -12716,7 +12950,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 174,
+      "trade_id": 176,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 1,
@@ -12742,7 +12976,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 175,
+      "trade_id": 177,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 2,
@@ -12768,7 +13002,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 176,
+      "trade_id": 178,
       "symbol": "PPLPHARMA",
       "name": "PPLPHARMA",
       "leg": 2,
@@ -12794,33 +13028,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 177,
+      "trade_id": 179,
       "symbol": "SMSPHARMA",
       "name": "SMSPHARMA",
       "leg": 2,
       "strategy_leg": "LEG2_MA_PULLBACK",
       "entry_date": "2025-04-08",
-      "exit_date": "2025-06-19",
+      "exit_date": "2025-07-02",
       "entry_price": 207.78,
       "avg_price": 207.78,
-      "exit_price": 207.78,
+      "exit_price": 238.5,
       "shares": 120,
       "qty": 120,
       "invested": 24933.6,
-      "days_held": 48,
-      "bars_held": 48,
-      "holding_days": 48,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 0.0,
-      "pnl_pct": 0.0,
-      "pct_return": 0.0,
+      "days_held": 57,
+      "bars_held": 57,
+      "holding_days": 57,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 3686.4,
+      "pnl_pct": 14.78,
+      "pct_return": 14.78,
       "highest_high": 275.0,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 178,
+      "trade_id": 180,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 2,
@@ -12846,7 +13080,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 179,
+      "trade_id": 181,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 1,
@@ -12872,7 +13106,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 180,
+      "trade_id": 182,
       "symbol": "PARAS",
       "name": "PARAS",
       "leg": 1,
@@ -12898,33 +13132,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 181,
-      "symbol": "EMBDL",
-      "name": "EMBDL",
+      "trade_id": 183,
+      "symbol": "TTML",
+      "name": "TTML",
       "leg": 2,
       "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-07-09",
-      "exit_date": "2025-08-01",
-      "entry_price": 118.59,
-      "avg_price": 118.59,
-      "exit_price": 102.93,
-      "shares": 210,
-      "qty": 210,
-      "invested": 24903.9,
-      "days_held": 17,
-      "bars_held": 17,
-      "holding_days": 17,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3288.6,
-      "pnl_pct": -13.21,
-      "pct_return": -13.21,
-      "highest_high": 121.85,
+      "entry_date": "2025-04-21",
+      "exit_date": "2025-07-31",
+      "entry_price": 60.7,
+      "avg_price": 60.7,
+      "exit_price": 57.68,
+      "shares": 411,
+      "qty": 411,
+      "invested": 24947.7,
+      "days_held": 72,
+      "bars_held": 72,
+      "holding_days": 72,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1243.27,
+      "pnl_pct": -4.98,
+      "pct_return": -4.98,
+      "highest_high": 81.12,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 182,
+      "trade_id": 184,
       "symbol": "UFBL",
       "name": "UFBL",
       "leg": 2,
@@ -12950,7 +13184,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 183,
+      "trade_id": 185,
       "symbol": "BALAMINES",
       "name": "BALAMINES",
       "leg": 1,
@@ -12976,7 +13210,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 184,
+      "trade_id": 186,
       "symbol": "AKUMS",
       "name": "AKUMS",
       "leg": 1,
@@ -13002,7 +13236,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 185,
+      "trade_id": 187,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 1,
@@ -13028,7 +13262,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 186,
+      "trade_id": 188,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 2,
@@ -13054,7 +13288,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 187,
+      "trade_id": 189,
       "symbol": "JINDALPOLY",
       "name": "JINDALPOLY",
       "leg": 2,
@@ -13080,7 +13314,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 188,
+      "trade_id": 190,
       "symbol": "RAJESHEXPO",
       "name": "RAJESHEXPO",
       "leg": 2,
@@ -13106,7 +13340,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 189,
+      "trade_id": 191,
       "symbol": "DREDGECORP",
       "name": "DREDGECORP",
       "leg": 1,
@@ -13132,7 +13366,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 190,
+      "trade_id": 192,
+      "symbol": "CAMPUS",
+      "name": "CAMPUS",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2025-05-12",
+      "exit_date": "2025-08-14",
+      "entry_price": 247.28,
+      "avg_price": 247.28,
+      "exit_price": 251.4,
+      "shares": 101,
+      "qty": 101,
+      "invested": 24975.33,
+      "days_held": 68,
+      "bars_held": 68,
+      "holding_days": 68,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 415.84,
+      "pnl_pct": 1.66,
+      "pct_return": 1.66,
+      "highest_high": 301.99,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 193,
       "symbol": "NAZARA",
       "name": "NAZARA",
       "leg": 2,
@@ -13158,7 +13418,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 191,
+      "trade_id": 194,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 2,
@@ -13184,7 +13444,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 192,
+      "trade_id": 195,
+      "symbol": "RELAXO",
+      "name": "RELAXO",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-05-14",
+      "exit_date": "2025-09-19",
+      "entry_price": 427.65,
+      "avg_price": 427.65,
+      "exit_price": 469.65,
+      "shares": 58,
+      "qty": 58,
+      "invested": 24803.7,
+      "days_held": 90,
+      "bars_held": 90,
+      "holding_days": 90,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2436.0,
+      "pnl_pct": 9.82,
+      "pct_return": 9.82,
+      "highest_high": 526.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 196,
       "symbol": "TANLA",
       "name": "TANLA",
       "leg": 1,
@@ -13210,7 +13496,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 193,
+      "trade_id": 197,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 2,
@@ -13236,7 +13522,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 194,
+      "trade_id": 198,
       "symbol": "DELHIVERY",
       "name": "DELHIVERY",
       "leg": 1,
@@ -13262,7 +13548,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 195,
+      "trade_id": 199,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 1,
@@ -13288,7 +13574,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 196,
+      "trade_id": 200,
       "symbol": "BCG",
       "name": "BCG",
       "leg": 2,
@@ -13314,7 +13600,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 197,
+      "trade_id": 201,
       "symbol": "RBA",
       "name": "RBA",
       "leg": 1,
@@ -13340,7 +13626,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 198,
+      "trade_id": 202,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 1,
@@ -13366,7 +13652,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 199,
+      "trade_id": 203,
       "symbol": "NETWORK18",
       "name": "NETWORK18",
       "leg": 1,
@@ -13392,7 +13678,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 200,
+      "trade_id": 204,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 2,
@@ -13418,7 +13704,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 201,
+      "trade_id": 205,
       "symbol": "BALAMINES",
       "name": "BALAMINES",
       "leg": 2,
@@ -13444,33 +13730,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 202,
-      "symbol": "TTML",
-      "name": "TTML",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-04-21",
-      "exit_date": "2025-11-18",
-      "entry_price": 60.7,
-      "avg_price": 60.7,
-      "exit_price": 52.49,
-      "shares": 411,
-      "qty": 411,
-      "invested": 24947.7,
-      "days_held": 145,
-      "bars_held": 145,
-      "holding_days": 145,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3374.31,
-      "pnl_pct": -13.53,
-      "pct_return": -13.53,
-      "highest_high": 81.12,
+      "trade_id": 206,
+      "symbol": "SHARDAMOTR",
+      "name": "SHARDAMOTR",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-06-27",
+      "exit_date": "2025-11-12",
+      "entry_price": 936.96,
+      "avg_price": 936.96,
+      "exit_price": 1032.07,
+      "shares": 26,
+      "qty": 26,
+      "invested": 24361.07,
+      "days_held": 93,
+      "bars_held": 93,
+      "holding_days": 93,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2472.63,
+      "pnl_pct": 10.15,
+      "pct_return": 10.15,
+      "highest_high": 1221.68,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 203,
+      "trade_id": 207,
       "symbol": "STLTECH",
       "name": "STLTECH",
       "leg": 2,
@@ -13496,7 +13782,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 204,
+      "trade_id": 208,
+      "symbol": "ATGL",
+      "name": "ATGL",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-03-27",
+      "exit_date": "2025-12-08",
+      "entry_price": 611.9,
+      "avg_price": 611.9,
+      "exit_price": 585.56,
+      "shares": 40,
+      "qty": 40,
+      "invested": 24476.0,
+      "days_held": 172,
+      "bars_held": 172,
+      "holding_days": 172,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -1053.5,
+      "pnl_pct": -4.3,
+      "pct_return": -4.3,
+      "highest_high": 798.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 209,
       "symbol": "VEEDOL",
       "name": "VEEDOL",
       "leg": 2,
@@ -13522,7 +13834,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 205,
+      "trade_id": 210,
       "symbol": "PPLPHARMA",
       "name": "PPLPHARMA",
       "leg": 2,
@@ -13548,7 +13860,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 206,
+      "trade_id": 211,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 1,
@@ -13574,7 +13886,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 207,
+      "trade_id": 212,
       "symbol": "JSLL",
       "name": "JSLL",
       "leg": 1,
@@ -13600,7 +13912,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 208,
+      "trade_id": 213,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 2,
@@ -13626,7 +13938,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 209,
+      "trade_id": 214,
       "symbol": "CARTRADE",
       "name": "CARTRADE",
       "leg": 2,
@@ -13652,7 +13964,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 210,
+      "trade_id": 215,
+      "symbol": "ADANIGREEN",
+      "name": "ADANIGREEN",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2025-04-15",
+      "exit_date": "2025-12-10",
+      "entry_price": 936.65,
+      "avg_price": 936.65,
+      "exit_price": 989.8,
+      "shares": 26,
+      "qty": 26,
+      "invested": 24352.9,
+      "days_held": 164,
+      "bars_held": 164,
+      "holding_days": 164,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1381.9,
+      "pnl_pct": 5.67,
+      "pct_return": 5.67,
+      "highest_high": 1177.55,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 216,
       "symbol": "MRPL",
       "name": "MRPL",
       "leg": 1,
@@ -13678,7 +14016,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 211,
+      "trade_id": 217,
       "symbol": "REDTAPE",
       "name": "REDTAPE",
       "leg": 1,
@@ -13704,7 +14042,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 212,
+      "trade_id": 218,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 2,
@@ -13730,7 +14068,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 213,
+      "trade_id": 219,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 2,
@@ -13756,7 +14094,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 214,
+      "trade_id": 220,
       "symbol": "DELHIVERY",
       "name": "DELHIVERY",
       "leg": 2,
@@ -13782,7 +14120,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 215,
+      "trade_id": 221,
       "symbol": "KABRAEXTRU",
       "name": "KABRAEXTRU",
       "leg": 1,
@@ -13808,85 +14146,85 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 216,
+      "trade_id": 222,
       "symbol": "SHARDAMOTR",
       "name": "SHARDAMOTR",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-06-27",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-01-02",
       "exit_date": "2026-01-19",
-      "entry_price": 936.96,
-      "avg_price": 936.96,
+      "entry_price": 944.7,
+      "avg_price": 944.7,
       "exit_price": 822.87,
       "shares": 26,
       "qty": 26,
-      "invested": 24361.07,
-      "days_held": 139,
-      "bars_held": 139,
-      "holding_days": 139,
+      "invested": 24562.14,
+      "days_held": 10,
+      "bars_held": 10,
+      "holding_days": 10,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -2966.39,
-      "pnl_pct": -12.18,
-      "pct_return": -12.18,
-      "highest_high": 1221.68,
+      "pnl": -3167.46,
+      "pnl_pct": -12.9,
+      "pct_return": -12.9,
+      "highest_high": 958.75,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 217,
-      "symbol": "ATGL",
-      "name": "ATGL",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-03-27",
+      "trade_id": 223,
+      "symbol": "ADANIGREEN",
+      "name": "ADANIGREEN",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2025-12-11",
       "exit_date": "2026-01-20",
-      "entry_price": 611.9,
-      "avg_price": 611.9,
-      "exit_price": 532.3,
-      "shares": 40,
-      "qty": 40,
-      "invested": 24476.0,
-      "days_held": 202,
-      "bars_held": 202,
-      "holding_days": 202,
+      "entry_price": 1018.8,
+      "avg_price": 1018.8,
+      "exit_price": 883.2,
+      "shares": 24,
+      "qty": 24,
+      "invested": 24451.2,
+      "days_held": 27,
+      "bars_held": 27,
+      "holding_days": 27,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3184.0,
-      "pnl_pct": -13.01,
-      "pct_return": -13.01,
-      "highest_high": 798.0,
+      "pnl": -3254.4,
+      "pnl_pct": -13.31,
+      "pct_return": -13.31,
+      "highest_high": 1058.7,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 218,
-      "symbol": "RELAXO",
-      "name": "RELAXO",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-05-14",
-      "exit_date": "2026-01-20",
-      "entry_price": 427.65,
-      "avg_price": 427.65,
-      "exit_price": 364.85,
-      "shares": 58,
-      "qty": 58,
-      "invested": 24803.7,
-      "days_held": 173,
-      "bars_held": 173,
-      "holding_days": 173,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3642.4,
-      "pnl_pct": -14.68,
-      "pct_return": -14.68,
-      "highest_high": 526.0,
+      "trade_id": 224,
+      "symbol": "PAYTM",
+      "name": "PAYTM",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2025-05-12",
+      "exit_date": "2026-01-21",
+      "entry_price": 866.05,
+      "avg_price": 866.05,
+      "exit_price": 1235.9,
+      "shares": 28,
+      "qty": 28,
+      "invested": 24249.4,
+      "days_held": 176,
+      "bars_held": 176,
+      "holding_days": 176,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 10355.8,
+      "pnl_pct": 42.71,
+      "pct_return": 42.71,
+      "highest_high": 1381.8,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 219,
+      "trade_id": 225,
       "symbol": "APOLLOPIPE",
       "name": "APOLLOPIPE",
       "leg": 1,
@@ -13912,7 +14250,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 220,
+      "trade_id": 226,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 1,
@@ -13938,33 +14276,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 221,
-      "symbol": "ADANIGREEN",
-      "name": "ADANIGREEN",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2025-04-15",
-      "exit_date": "2026-01-23",
-      "entry_price": 936.65,
-      "avg_price": 936.65,
-      "exit_price": 772.8,
-      "shares": 26,
-      "qty": 26,
-      "invested": 24352.9,
-      "days_held": 195,
-      "bars_held": 195,
-      "holding_days": 195,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -4260.1,
-      "pnl_pct": -17.49,
-      "pct_return": -17.49,
-      "highest_high": 1177.55,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 222,
+      "trade_id": 227,
       "symbol": "STAR",
       "name": "STAR",
       "leg": 2,
@@ -13990,7 +14302,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 223,
+      "trade_id": 228,
       "symbol": "ORCHPHARMA",
       "name": "ORCHPHARMA",
       "leg": 1,
@@ -14016,7 +14328,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 224,
+      "trade_id": 229,
       "symbol": "JSLL",
       "name": "JSLL",
       "leg": 1,
@@ -14042,7 +14354,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 225,
+      "trade_id": 230,
       "symbol": "DREDGECORP",
       "name": "DREDGECORP",
       "leg": 2,
@@ -14068,7 +14380,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 226,
+      "trade_id": 231,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 2,
@@ -14094,7 +14406,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 227,
+      "trade_id": 232,
       "symbol": "RELAXO",
       "name": "RELAXO",
       "leg": 2,
@@ -14120,7 +14432,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 228,
+      "trade_id": 233,
       "symbol": "ATGL",
       "name": "ATGL",
       "leg": 2,
@@ -14146,7 +14458,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 229,
+      "trade_id": 234,
       "symbol": "ELECTCAST",
       "name": "ELECTCAST",
       "leg": 1,
@@ -14172,7 +14484,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 230,
+      "trade_id": 235,
       "symbol": "CONFIPET",
       "name": "CONFIPET",
       "leg": 1,
@@ -14198,7 +14510,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 231,
+      "trade_id": 236,
       "symbol": "ADANIGREEN",
       "name": "ADANIGREEN",
       "leg": 2,
@@ -14224,7 +14536,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 232,
+      "trade_id": 237,
       "symbol": "MSTCLTD",
       "name": "MSTCLTD",
       "leg": 1,
@@ -14250,7 +14562,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 233,
+      "trade_id": 238,
       "symbol": "BCG",
       "name": "BCG",
       "leg": 2,
@@ -14276,7 +14588,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 234,
+      "trade_id": 239,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 1,
@@ -14302,7 +14614,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 235,
+      "trade_id": 240,
       "symbol": "KABRAEXTRU",
       "name": "KABRAEXTRU",
       "leg": 1,
@@ -14328,7 +14640,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 236,
+      "trade_id": 241,
       "symbol": "PARAS",
       "name": "PARAS",
       "leg": 2,
@@ -14354,7 +14666,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 237,
+      "trade_id": 242,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 1,
@@ -14380,7 +14692,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 238,
+      "trade_id": 243,
       "symbol": "RBA",
       "name": "RBA",
       "leg": 2,
@@ -14406,7 +14718,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 239,
+      "trade_id": 244,
       "symbol": "PARACABLES",
       "name": "PARACABLES",
       "leg": 1,
@@ -14432,33 +14744,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 240,
-      "symbol": "CAMPUS",
-      "name": "CAMPUS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2025-05-12",
-      "exit_date": "2026-03-30",
-      "entry_price": 247.28,
-      "avg_price": 247.28,
-      "exit_price": 217.36,
-      "shares": 101,
-      "qty": 101,
-      "invested": 24975.33,
-      "days_held": 221,
-      "bars_held": 221,
-      "holding_days": 221,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3021.95,
-      "pnl_pct": -12.1,
-      "pct_return": -12.1,
-      "highest_high": 301.99,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 241,
+      "trade_id": 245,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 2,
@@ -14484,7 +14770,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 242,
+      "trade_id": 246,
       "symbol": "JNKINDIA",
       "name": "JNKINDIA",
       "leg": 1,
@@ -14510,7 +14796,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 243,
+      "trade_id": 247,
       "symbol": "UFBL",
       "name": "UFBL",
       "leg": 2,
@@ -14536,7 +14822,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 244,
+      "trade_id": 248,
       "symbol": "JISLJALEQS",
       "name": "JISLJALEQS",
       "leg": 1,
@@ -14562,7 +14848,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 245,
+      "trade_id": 249,
       "symbol": "GANECOS",
       "name": "GANECOS",
       "leg": 1,
@@ -14588,7 +14874,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 246,
+      "trade_id": 250,
       "symbol": "TATVA",
       "name": "TATVA",
       "leg": 2,
@@ -14614,7 +14900,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 247,
+      "trade_id": 251,
+      "symbol": "DELHIVERY",
+      "name": "DELHIVERY",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-01-27",
+      "exit_date": "2026-06-01",
+      "entry_price": 400.35,
+      "avg_price": 400.35,
+      "exit_price": 437.25,
+      "shares": 62,
+      "qty": 62,
+      "invested": 24821.7,
+      "days_held": 82,
+      "bars_held": 82,
+      "holding_days": 82,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 2287.8,
+      "pnl_pct": 9.22,
+      "pct_return": 9.22,
+      "highest_high": 487.5,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 252,
       "symbol": "NETWORK18",
       "name": "NETWORK18",
       "leg": 1,
@@ -14640,7 +14952,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 248,
+      "trade_id": 253,
       "symbol": "ELECTCAST",
       "name": "ELECTCAST",
       "leg": 1,
@@ -14666,7 +14978,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 249,
+      "trade_id": 254,
+      "symbol": "TRENT",
+      "name": "TRENT",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-05-21",
+      "exit_date": "2026-07-07",
+      "entry_price": 2776.16,
+      "avg_price": 2776.16,
+      "exit_price": 2927.8,
+      "shares": 9,
+      "qty": 9,
+      "invested": 24985.48,
+      "days_held": 31,
+      "bars_held": 31,
+      "holding_days": 31,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1364.72,
+      "pnl_pct": 5.46,
+      "pct_return": 5.46,
+      "highest_high": 3399.7,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 255,
       "symbol": "JWL",
       "name": "JWL",
       "leg": 1,
@@ -14692,7 +15030,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 250,
+      "trade_id": 256,
+      "symbol": "BCG",
+      "name": "BCG",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-05-19",
+      "exit_date": "2026-07-15",
+      "entry_price": 9.54,
+      "avg_price": 9.54,
+      "exit_price": 9.81,
+      "shares": 2620,
+      "qty": 2620,
+      "invested": 24994.8,
+      "days_held": 39,
+      "bars_held": 39,
+      "holding_days": 39,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 707.4,
+      "pnl_pct": 2.83,
+      "pct_return": 2.83,
+      "highest_high": 13.1,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 257,
       "symbol": "VINDHYATEL",
       "name": "VINDHYATEL",
       "leg": 1,
@@ -14718,7 +15082,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 251,
+      "trade_id": 258,
       "symbol": "MANINFRA",
       "name": "MANINFRA",
       "leg": 1,
@@ -14744,7 +15108,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 252,
+      "trade_id": 259,
       "symbol": "RPOWER",
       "name": "RPOWER",
       "leg": 1,
@@ -14770,7 +15134,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 253,
+      "trade_id": 260,
       "symbol": "CAMPUS",
       "name": "CAMPUS",
       "leg": 1,
@@ -14796,7 +15160,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 254,
+      "trade_id": 261,
       "symbol": "RBA",
       "name": "RBA",
       "leg": 2,
@@ -14822,7 +15186,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 255,
+      "trade_id": 262,
       "symbol": "PRAJIND",
       "name": "PRAJIND",
       "leg": 1,
@@ -14848,7 +15212,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 256,
+      "trade_id": 263,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 2,
@@ -14874,7 +15238,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 257,
+      "trade_id": 264,
       "symbol": "SERVOTECH",
       "name": "SERVOTECH",
       "leg": 1,
@@ -14900,7 +15264,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 258,
+      "trade_id": 265,
       "symbol": "WEBELSOLAR",
       "name": "WEBELSOLAR",
       "leg": 1,
@@ -14926,7 +15290,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 259,
+      "trade_id": 266,
+      "symbol": "BAJAJHIND",
+      "name": "BAJAJHIND",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-03-10",
+      "exit_date": "2026-08-03",
+      "entry_price": 16.65,
+      "avg_price": 16.65,
+      "exit_price": 17.52,
+      "shares": 1501,
+      "qty": 1501,
+      "invested": 24991.65,
+      "days_held": 97,
+      "bars_held": 97,
+      "holding_days": 97,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1305.87,
+      "pnl_pct": 5.23,
+      "pct_return": 5.23,
+      "highest_high": 21.02,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 267,
       "symbol": "JNKINDIA",
       "name": "JNKINDIA",
       "leg": 1,
@@ -14952,7 +15342,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 260,
+      "trade_id": 268,
       "symbol": "SFL",
       "name": "SFL",
       "leg": 1,
@@ -14978,7 +15368,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 261,
+      "trade_id": 269,
       "symbol": "UNICHEMLAB",
       "name": "UNICHEMLAB",
       "leg": 1,
@@ -15004,7 +15394,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 262,
+      "trade_id": 270,
       "symbol": "RAYMONDREL",
       "name": "RAYMONDREL",
       "leg": 1,
@@ -15030,7 +15420,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 263,
+      "trade_id": 271,
+      "symbol": "REDTAPE",
+      "name": "REDTAPE",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-01-30",
+      "exit_date": "2026-08-11",
+      "entry_price": 123.68,
+      "avg_price": 123.68,
+      "exit_price": 127.59,
+      "shares": 202,
+      "qty": 202,
+      "invested": 24983.36,
+      "days_held": 129,
+      "bars_held": 129,
+      "holding_days": 129,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 789.82,
+      "pnl_pct": 3.16,
+      "pct_return": 3.16,
+      "highest_high": 158.99,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 272,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 2,
@@ -15056,7 +15472,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 264,
+      "trade_id": 273,
       "symbol": "JISLJALEQS",
       "name": "JISLJALEQS",
       "leg": 1,
@@ -15082,33 +15498,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 265,
-      "symbol": "ADANIGREEN",
-      "name": "ADANIGREEN",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-07-01",
-      "exit_date": "2026-08-12",
-      "entry_price": 1535.0,
-      "avg_price": 1535.0,
-      "exit_price": 1332.3,
-      "shares": 16,
-      "qty": 16,
-      "invested": 24560.0,
-      "days_held": 30,
-      "bars_held": 30,
-      "holding_days": 30,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3243.2,
-      "pnl_pct": -13.21,
-      "pct_return": -13.21,
-      "highest_high": 1631.5,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 266,
+      "trade_id": 274,
       "symbol": "EPACK",
       "name": "EPACK",
       "leg": 1,
@@ -15134,7 +15524,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 267,
+      "trade_id": 275,
       "symbol": "CAMLINFINE",
       "name": "CAMLINFINE",
       "leg": 1,
@@ -15160,7 +15550,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 268,
+      "trade_id": 276,
       "symbol": "V2RETAIL",
       "name": "V2RETAIL",
       "leg": 2,
@@ -15186,7 +15576,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 269,
+      "trade_id": 277,
       "symbol": "ASHOKA",
       "name": "ASHOKA",
       "leg": 1,
@@ -15212,7 +15602,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 270,
+      "trade_id": 278,
       "symbol": "HGINFRA",
       "name": "HGINFRA",
       "leg": 1,
@@ -15238,7 +15628,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 271,
+      "trade_id": 279,
+      "symbol": "ATGL",
+      "name": "ATGL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-05-21",
+      "exit_date": "2026-08-19",
+      "entry_price": 638.1,
+      "avg_price": 638.1,
+      "exit_price": 664.25,
+      "shares": 39,
+      "qty": 39,
+      "invested": 24885.9,
+      "days_held": 62,
+      "bars_held": 62,
+      "holding_days": 62,
+      "reason": "Institutional 50 EMA Volume Breakdown",
+      "exit_reason": "Institutional 50 EMA Volume Breakdown",
+      "pnl": 1019.85,
+      "pnl_pct": 4.1,
+      "pct_return": 4.1,
+      "highest_high": 859.85,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 280,
       "symbol": "JAICORPLTD",
       "name": "JAICORPLTD",
       "leg": 1,
@@ -15264,7 +15680,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 272,
+      "trade_id": 281,
       "symbol": "FIRSTCRY",
       "name": "FIRSTCRY",
       "leg": 1,
@@ -15290,7 +15706,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 273,
+      "trade_id": 282,
       "symbol": "GANECOS",
       "name": "GANECOS",
       "leg": 2,
@@ -15316,7 +15732,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 274,
+      "trade_id": 283,
       "symbol": "DBREALTY",
       "name": "DBREALTY",
       "leg": 1,
@@ -15342,7 +15758,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 275,
+      "trade_id": 284,
       "symbol": "IDEAFORGE",
       "name": "IDEAFORGE",
       "leg": 2,
@@ -15368,7 +15784,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 276,
+      "trade_id": 285,
       "symbol": "HAPPSTMNDS",
       "name": "HAPPSTMNDS",
       "leg": 1,
@@ -15394,7 +15810,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 277,
+      "trade_id": 286,
       "symbol": "INDOTECH",
       "name": "INDOTECH",
       "leg": 1,
@@ -15420,7 +15836,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 278,
+      "trade_id": 287,
       "symbol": "MAPMYINDIA",
       "name": "MAPMYINDIA",
       "leg": 1,
@@ -15446,7 +15862,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 279,
+      "trade_id": 288,
       "symbol": "APOLLOPIPE",
       "name": "APOLLOPIPE",
       "leg": 2,
@@ -15472,7 +15888,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 280,
+      "trade_id": 289,
       "symbol": "JWL",
       "name": "JWL",
       "leg": 1,
@@ -15498,7 +15914,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 281,
+      "trade_id": 290,
+      "symbol": "ORISSAMINE",
+      "name": "ORISSAMINE",
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
+      "entry_date": "2026-06-04",
+      "exit_date": "2026-09-24",
+      "entry_price": 4124.8,
+      "avg_price": 4124.8,
+      "exit_price": 3752.78,
+      "shares": 6,
+      "qty": 6,
+      "invested": 24748.8,
+      "days_held": 78,
+      "bars_held": 78,
+      "holding_days": 78,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -2232.15,
+      "pnl_pct": -9.02,
+      "pct_return": -9.02,
+      "highest_high": 5199.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 291,
       "symbol": "PARACABLES",
       "name": "PARACABLES",
       "leg": 2,
@@ -15524,7 +15966,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 282,
+      "trade_id": 292,
       "symbol": "EMSLIMITED",
       "name": "EMSLIMITED",
       "leg": 1,
@@ -15550,7 +15992,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 283,
+      "trade_id": 293,
       "symbol": "DREDGECORP",
       "name": "DREDGECORP",
       "leg": 2,
@@ -15576,7 +16018,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 284,
+      "trade_id": 294,
       "symbol": "NYKAA",
       "name": "NYKAA",
       "leg": 2,
@@ -15602,33 +16044,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 285,
-      "symbol": "ORISSAMINE",
-      "name": "ORISSAMINE",
+      "trade_id": 295,
+      "symbol": "TRENT",
+      "name": "TRENT",
       "leg": 1,
       "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2026-06-04",
+      "entry_date": "2026-07-27",
       "exit_date": "2026-10-01",
-      "entry_price": 4124.8,
-      "avg_price": 4124.8,
-      "exit_price": 3538.6,
-      "shares": 6,
-      "qty": 6,
-      "invested": 24748.8,
-      "days_held": 83,
-      "bars_held": 83,
-      "holding_days": 83,
+      "entry_price": 2938.3,
+      "avg_price": 2938.3,
+      "exit_price": 2580.0,
+      "shares": 8,
+      "qty": 8,
+      "invested": 23506.4,
+      "days_held": 47,
+      "bars_held": 47,
+      "holding_days": 47,
       "reason": "Initial SL (-12% Close)",
       "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3517.2,
-      "pnl_pct": -14.21,
-      "pct_return": -14.21,
-      "highest_high": 5199.0,
+      "pnl": -2866.4,
+      "pnl_pct": -12.19,
+      "pct_return": -12.19,
+      "highest_high": 3244.5,
       "stars": 5,
       "mode": "PAPER"
     },
     {
-      "trade_id": 286,
+      "trade_id": 296,
       "symbol": "AWFIS",
       "name": "AWFIS",
       "leg": 1,
@@ -15654,7 +16096,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 287,
+      "trade_id": 297,
       "symbol": "BALAMINES",
       "name": "BALAMINES",
       "leg": 2,
@@ -15680,7 +16122,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 288,
+      "trade_id": 298,
       "symbol": "JSLL",
       "name": "JSLL",
       "leg": 2,
@@ -15706,7 +16148,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 289,
+      "trade_id": 299,
       "symbol": "POLYPLEX",
       "name": "POLYPLEX",
       "leg": 2,
@@ -15732,7 +16174,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 290,
+      "trade_id": 300,
       "symbol": "PRAJIND",
       "name": "PRAJIND",
       "leg": 2,
@@ -15758,33 +16200,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 291,
-      "symbol": "CAMPUS",
-      "name": "CAMPUS",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-08-05",
-      "exit_date": "2026-10-08",
-      "entry_price": 226.54,
-      "avg_price": 226.54,
-      "exit_price": 199.0,
-      "shares": 110,
-      "qty": 110,
-      "invested": 24919.4,
-      "days_held": 44,
-      "bars_held": 44,
-      "holding_days": 44,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3029.4,
-      "pnl_pct": -12.16,
-      "pct_return": -12.16,
-      "highest_high": 233.55,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 292,
+      "trade_id": 301,
       "symbol": "JINDWORLD",
       "name": "JINDWORLD",
       "leg": 1,
@@ -15810,7 +16226,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 293,
+      "trade_id": 302,
       "symbol": "AKUMS",
       "name": "AKUMS",
       "leg": 2,
@@ -15836,7 +16252,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 294,
+      "trade_id": 303,
       "symbol": "ORCHPHARMA",
       "name": "ORCHPHARMA",
       "leg": 2,
@@ -15862,7 +16278,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 295,
+      "trade_id": 304,
       "symbol": "EXICOM",
       "name": "EXICOM",
       "leg": 1,
@@ -15888,33 +16304,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 296,
-      "symbol": "ATGL",
-      "name": "ATGL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-05-21",
-      "exit_date": "2026-10-21",
-      "entry_price": 638.1,
-      "avg_price": 638.1,
-      "exit_price": 559.4,
-      "shares": 39,
-      "qty": 39,
-      "invested": 24885.9,
-      "days_held": 104,
-      "bars_held": 104,
-      "holding_days": 104,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3069.3,
-      "pnl_pct": -12.33,
-      "pct_return": -12.33,
-      "highest_high": 859.85,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 297,
+      "trade_id": 305,
       "symbol": "CONFIPET",
       "name": "CONFIPET",
       "leg": 2,
@@ -15940,7 +16330,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 298,
+      "trade_id": 306,
       "symbol": "INDOTECH",
       "name": "INDOTECH",
       "leg": 2,
@@ -15966,33 +16356,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 299,
-      "symbol": "REDTAPE",
-      "name": "REDTAPE",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2026-01-30",
-      "exit_date": "2026-10-22",
-      "entry_price": 123.68,
-      "avg_price": 123.68,
-      "exit_price": 107.48,
-      "shares": 202,
-      "qty": 202,
-      "invested": 24983.36,
-      "days_held": 178,
-      "bars_held": 178,
-      "holding_days": 178,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3272.4,
-      "pnl_pct": -13.1,
-      "pct_return": -13.1,
-      "highest_high": 158.99,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 300,
+      "trade_id": 307,
       "symbol": "MOREPENLAB",
       "name": "MOREPENLAB",
       "leg": 2,
@@ -16018,7 +16382,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 301,
+      "trade_id": 308,
+      "symbol": "UFBL",
+      "name": "UFBL",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-07-24",
+      "exit_date": "2026-10-22",
+      "entry_price": 674.85,
+      "avg_price": 674.85,
+      "exit_price": 611.1,
+      "shares": 37,
+      "qty": 37,
+      "invested": 24969.45,
+      "days_held": 61,
+      "bars_held": 61,
+      "holding_days": 61,
+      "reason": "Peak Trail Stop (25% from Peak)",
+      "exit_reason": "Peak Trail Stop (25% from Peak)",
+      "pnl": -2358.75,
+      "pnl_pct": -9.45,
+      "pct_return": -9.45,
+      "highest_high": 850.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 309,
       "symbol": "SPARC",
       "name": "SPARC",
       "leg": 2,
@@ -16044,33 +16434,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 302,
-      "symbol": "BAJAJHIND",
-      "name": "BAJAJHIND",
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND_PULLBACK",
-      "entry_date": "2026-03-10",
-      "exit_date": "2026-10-23",
-      "entry_price": 16.65,
-      "avg_price": 16.65,
-      "exit_price": 18.17,
-      "shares": 1501,
-      "qty": 1501,
-      "invested": 24991.65,
-      "days_held": 153,
-      "bars_held": 153,
-      "holding_days": 153,
-      "reason": "Peak Trail Stop (25% from Peak)",
-      "exit_reason": "Peak Trail Stop (25% from Peak)",
-      "pnl": 2285.27,
-      "pnl_pct": 9.14,
-      "pct_return": 9.14,
-      "highest_high": 26.0,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 303,
+      "trade_id": 310,
       "symbol": "PARAS",
       "name": "PARAS",
       "leg": 2,
@@ -16096,7 +16460,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 304,
+      "trade_id": 311,
       "symbol": "SHAREINDIA",
       "name": "SHAREINDIA",
       "leg": 1,
@@ -16122,7 +16486,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 305,
+      "trade_id": 312,
       "symbol": "MSTCLTD",
       "name": "MSTCLTD",
       "leg": 1,
@@ -16148,7 +16512,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 306,
+      "trade_id": 313,
       "symbol": "TEXRAIL",
       "name": "TEXRAIL",
       "leg": 1,
@@ -16174,7 +16538,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 307,
+      "trade_id": 314,
+      "symbol": "DELHIVERY",
+      "name": "DELHIVERY",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-06-12",
+      "exit_date": "2026-10-23",
+      "entry_price": 440.5,
+      "avg_price": 440.5,
+      "exit_price": 370.0,
+      "shares": 56,
+      "qty": 56,
+      "invested": 24668.0,
+      "days_held": 91,
+      "bars_held": 91,
+      "holding_days": 91,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -3948.0,
+      "pnl_pct": -16.0,
+      "pct_return": -16.0,
+      "highest_high": 524.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 315,
       "symbol": "ELECTCAST",
       "name": "ELECTCAST",
       "leg": 2,
@@ -16200,7 +16590,33 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 308,
+      "trade_id": 316,
+      "symbol": "REDTAPE",
+      "name": "REDTAPE",
+      "leg": 2,
+      "strategy_leg": "LEG2_MA_PULLBACK",
+      "entry_date": "2026-09-23",
+      "exit_date": "2026-10-23",
+      "entry_price": 121.1,
+      "avg_price": 121.1,
+      "exit_price": 104.06,
+      "shares": 206,
+      "qty": 206,
+      "invested": 24946.6,
+      "days_held": 20,
+      "bars_held": 20,
+      "holding_days": 20,
+      "reason": "Initial SL (-12% Close)",
+      "exit_reason": "Initial SL (-12% Close)",
+      "pnl": -3510.24,
+      "pnl_pct": -14.07,
+      "pct_return": -14.07,
+      "highest_high": 123.0,
+      "stars": 5,
+      "mode": "PAPER"
+    },
+    {
+      "trade_id": 317,
       "symbol": "KABRAEXTRU",
       "name": "KABRAEXTRU",
       "leg": 2,
@@ -16226,33 +16642,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 309,
-      "symbol": "BCG",
-      "name": "BCG",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-05-19",
-      "exit_date": "2026-10-26",
-      "entry_price": 9.54,
-      "avg_price": 9.54,
-      "exit_price": 8.3,
-      "shares": 2620,
-      "qty": 2620,
-      "invested": 24994.8,
-      "days_held": 109,
-      "bars_held": 109,
-      "holding_days": 109,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3248.8,
-      "pnl_pct": -13.0,
-      "pct_return": -13.0,
-      "highest_high": 13.1,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 310,
+      "trade_id": 318,
       "symbol": "AWL",
       "name": "AWL",
       "leg": 2,
@@ -16278,7 +16668,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 311,
+      "trade_id": 319,
       "symbol": "ALKYLAMINE",
       "name": "ALKYLAMINE",
       "leg": 2,
@@ -16304,7 +16694,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 312,
+      "trade_id": 320,
       "symbol": "MAPMYINDIA",
       "name": "MAPMYINDIA",
       "leg": 2,
@@ -16330,7 +16720,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 313,
+      "trade_id": 321,
       "symbol": "FIRSTCRY",
       "name": "FIRSTCRY",
       "leg": 2,
@@ -16356,33 +16746,7 @@
       "mode": "PAPER"
     },
     {
-      "trade_id": 314,
-      "symbol": "UFBL",
-      "name": "UFBL",
-      "leg": 2,
-      "strategy_leg": "LEG2_MA_PULLBACK",
-      "entry_date": "2026-07-24",
-      "exit_date": "2026-11-03",
-      "entry_price": 674.85,
-      "avg_price": 674.85,
-      "exit_price": 573.15,
-      "shares": 37,
-      "qty": 37,
-      "invested": 24969.45,
-      "days_held": 69,
-      "bars_held": 69,
-      "holding_days": 69,
-      "reason": "Initial SL (-12% Close)",
-      "exit_reason": "Initial SL (-12% Close)",
-      "pnl": -3762.9,
-      "pnl_pct": -15.07,
-      "pct_return": -15.07,
-      "highest_high": 850.0,
-      "stars": 5,
-      "mode": "PAPER"
-    },
-    {
-      "trade_id": 315,
+      "trade_id": 322,
       "symbol": "GANECOS",
       "name": "GANECOS",
       "leg": 2,
@@ -16412,114 +16776,114 @@
     {
       "year": "2022",
       "label": "2022",
-      "trades": 23,
-      "wins": 4,
-      "losses": 19,
-      "win_rate": 17.4,
-      "profit_factor": 1.71,
-      "pnl": 43726.27,
-      "pnl_pct": 17.5
+      "trades": 24,
+      "wins": 6,
+      "losses": 18,
+      "win_rate": 25.0,
+      "profit_factor": 1.9,
+      "pnl": 52439.71,
+      "pnl_pct": 21.0
     },
     {
       "year": "2023",
       "label": "2023",
       "trades": 45,
-      "wins": 21,
-      "losses": 24,
-      "win_rate": 46.7,
-      "profit_factor": 2.87,
-      "pnl": 148529.87,
-      "pnl_pct": 59.4
+      "wins": 22,
+      "losses": 23,
+      "win_rate": 48.9,
+      "profit_factor": 2.96,
+      "pnl": 149882.07,
+      "pnl_pct": 60.0
     },
     {
       "year": "2024",
       "label": "2024",
-      "trades": 81,
-      "wins": 43,
-      "losses": 38,
-      "win_rate": 53.1,
-      "profit_factor": 7.48,
-      "pnl": 880996.03,
-      "pnl_pct": 352.4
+      "trades": 84,
+      "wins": 42,
+      "losses": 42,
+      "win_rate": 50.0,
+      "profit_factor": 7.38,
+      "pnl": 857547.6,
+      "pnl_pct": 343.0
     },
     {
       "year": "2025",
       "label": "2025",
-      "trades": 61,
-      "wins": 21,
-      "losses": 40,
-      "win_rate": 34.4,
-      "profit_factor": 1.31,
-      "pnl": 40154.73,
-      "pnl_pct": 16.1
+      "trades": 63,
+      "wins": 26,
+      "losses": 37,
+      "win_rate": 41.3,
+      "profit_factor": 1.49,
+      "pnl": 58999.6,
+      "pnl_pct": 23.6
     },
     {
       "year": "2026",
       "label": "2026",
-      "trades": 105,
-      "wins": 31,
-      "losses": 74,
-      "win_rate": 29.5,
-      "profit_factor": 1.35,
-      "pnl": 86249.55,
-      "pnl_pct": 34.5
+      "trades": 106,
+      "wins": 37,
+      "losses": 69,
+      "win_rate": 34.9,
+      "profit_factor": 1.54,
+      "pnl": 120676.18,
+      "pnl_pct": 48.3
     }
   ],
   "yearly": [
     {
       "year": "2022",
       "label": "2022",
-      "trades": 23,
-      "wins": 4,
-      "losses": 19,
-      "win_rate": 17.4,
-      "profit_factor": 1.71,
-      "pnl": 43726.27,
-      "pnl_pct": 17.5
+      "trades": 24,
+      "wins": 6,
+      "losses": 18,
+      "win_rate": 25.0,
+      "profit_factor": 1.9,
+      "pnl": 52439.71,
+      "pnl_pct": 21.0
     },
     {
       "year": "2023",
       "label": "2023",
       "trades": 45,
-      "wins": 21,
-      "losses": 24,
-      "win_rate": 46.7,
-      "profit_factor": 2.87,
-      "pnl": 148529.87,
-      "pnl_pct": 59.4
+      "wins": 22,
+      "losses": 23,
+      "win_rate": 48.9,
+      "profit_factor": 2.96,
+      "pnl": 149882.07,
+      "pnl_pct": 60.0
     },
     {
       "year": "2024",
       "label": "2024",
-      "trades": 81,
-      "wins": 43,
-      "losses": 38,
-      "win_rate": 53.1,
-      "profit_factor": 7.48,
-      "pnl": 880996.03,
-      "pnl_pct": 352.4
+      "trades": 84,
+      "wins": 42,
+      "losses": 42,
+      "win_rate": 50.0,
+      "profit_factor": 7.38,
+      "pnl": 857547.6,
+      "pnl_pct": 343.0
     },
     {
       "year": "2025",
       "label": "2025",
-      "trades": 61,
-      "wins": 21,
-      "losses": 40,
-      "win_rate": 34.4,
-      "profit_factor": 1.31,
-      "pnl": 40154.73,
-      "pnl_pct": 16.1
+      "trades": 63,
+      "wins": 26,
+      "losses": 37,
+      "win_rate": 41.3,
+      "profit_factor": 1.49,
+      "pnl": 58999.6,
+      "pnl_pct": 23.6
     },
     {
       "year": "2026",
       "label": "2026",
-      "trades": 105,
-      "wins": 31,
-      "losses": 74,
-      "win_rate": 29.5,
-      "profit_factor": 1.35,
-      "pnl": 86249.55,
-      "pnl_pct": 34.5
+      "trades": 106,
+      "wins": 37,
+      "losses": 69,
+      "win_rate": 34.9,
+      "profit_factor": 1.54,
+      "pnl": 120676.18,
+      "pnl_pct": 48.3
     }
   ],
   "monthly": [
@@ -16570,9 +16934,9 @@
     {
       "month": "2022-09",
       "label": "Sep 2022",
-      "trades": 4,
+      "trades": 3,
       "wins": 0,
-      "losses": 4,
+      "losses": 3,
       "win_rate": 0.0,
       "profit_factor": 0.0,
       "pnl": -10897.07,
@@ -16581,35 +16945,35 @@
     {
       "month": "2022-10",
       "label": "Oct 2022",
-      "trades": 1,
-      "wins": 0,
-      "losses": 1,
-      "win_rate": 0.0,
-      "profit_factor": 0.0,
-      "pnl": -3120.0,
-      "pnl_pct": -1.2
+      "trades": 3,
+      "wins": 1,
+      "losses": 2,
+      "win_rate": 33.3,
+      "profit_factor": 0.7,
+      "pnl": -977.56,
+      "pnl_pct": -0.4
     },
     {
       "month": "2022-11",
       "label": "Nov 2022",
-      "trades": 6,
+      "trades": 5,
       "wins": 1,
-      "losses": 5,
-      "win_rate": 16.7,
-      "profit_factor": 1.02,
-      "pnl": 392.96,
-      "pnl_pct": 0.2
+      "losses": 4,
+      "win_rate": 20.0,
+      "profit_factor": 1.3,
+      "pnl": 4102.96,
+      "pnl_pct": 1.6
     },
     {
       "month": "2022-12",
       "label": "Dec 2022",
-      "trades": 2,
-      "wins": 0,
+      "trades": 3,
+      "wins": 1,
       "losses": 2,
-      "win_rate": 0.0,
-      "profit_factor": 0.0,
-      "pnl": -7155.39,
-      "pnl_pct": -2.9
+      "win_rate": 33.3,
+      "profit_factor": 0.4,
+      "pnl": -4294.39,
+      "pnl_pct": -1.7
     },
     {
       "month": "2023-01",
@@ -16629,20 +16993,20 @@
       "wins": 2,
       "losses": 6,
       "win_rate": 25.0,
-      "profit_factor": 0.41,
-      "pnl": -11081.3,
-      "pnl_pct": -4.4
+      "profit_factor": 0.24,
+      "pnl": -14397.0,
+      "pnl_pct": -5.8
     },
     {
       "month": "2023-03",
       "label": "Mar 2023",
-      "trades": 6,
+      "trades": 5,
       "wins": 1,
-      "losses": 5,
-      "win_rate": 16.7,
-      "profit_factor": 0.76,
-      "pnl": -3949.45,
-      "pnl_pct": -1.6
+      "losses": 4,
+      "win_rate": 20.0,
+      "profit_factor": 0.95,
+      "pnl": -711.42,
+      "pnl_pct": -0.3
     },
     {
       "month": "2023-05",
@@ -16702,13 +17066,13 @@
     {
       "month": "2023-11",
       "label": "Nov 2023",
-      "trades": 5,
-      "wins": 4,
+      "trades": 6,
+      "wins": 5,
       "losses": 1,
-      "win_rate": 80.0,
-      "profit_factor": 13.57,
-      "pnl": 36789.5,
-      "pnl_pct": 14.7
+      "win_rate": 83.3,
+      "profit_factor": 14.06,
+      "pnl": 38219.37,
+      "pnl_pct": 15.3
     },
     {
       "month": "2023-12",
@@ -16735,24 +17099,24 @@
     {
       "month": "2024-02",
       "label": "Feb 2024",
-      "trades": 9,
-      "wins": 2,
+      "trades": 8,
+      "wins": 1,
       "losses": 7,
-      "win_rate": 22.2,
-      "profit_factor": 1.04,
-      "pnl": 856.84,
-      "pnl_pct": 0.3
+      "win_rate": 12.5,
+      "profit_factor": 0.16,
+      "pnl": -18630.97,
+      "pnl_pct": -7.5
     },
     {
       "month": "2024-03",
       "label": "Mar 2024",
-      "trades": 16,
-      "wins": 10,
+      "trades": 15,
+      "wins": 9,
       "losses": 6,
-      "win_rate": 62.5,
-      "profit_factor": 10.04,
-      "pnl": 201566.45,
-      "pnl_pct": 80.6
+      "win_rate": 60.0,
+      "profit_factor": 9.76,
+      "pnl": 195144.45,
+      "pnl_pct": 78.1
     },
     {
       "month": "2024-05",
@@ -16768,13 +17132,13 @@
     {
       "month": "2024-06",
       "label": "Jun 2024",
-      "trades": 9,
+      "trades": 10,
       "wins": 3,
-      "losses": 6,
-      "win_rate": 33.3,
-      "profit_factor": 1.95,
-      "pnl": 20029.62,
-      "pnl_pct": 8.0
+      "losses": 7,
+      "win_rate": 30.0,
+      "profit_factor": 1.79,
+      "pnl": 18155.82,
+      "pnl_pct": 7.3
     },
     {
       "month": "2024-07",
@@ -16790,46 +17154,46 @@
     {
       "month": "2024-08",
       "label": "Aug 2024",
-      "trades": 2,
-      "wins": 1,
+      "trades": 4,
+      "wins": 3,
       "losses": 1,
-      "win_rate": 50.0,
-      "profit_factor": 2.02,
-      "pnl": 3502.9,
-      "pnl_pct": 1.4
+      "win_rate": 75.0,
+      "profit_factor": 2.98,
+      "pnl": 6800.49,
+      "pnl_pct": 2.7
     },
     {
       "month": "2024-09",
       "label": "Sep 2024",
-      "trades": 2,
+      "trades": 4,
       "wins": 1,
-      "losses": 1,
-      "win_rate": 50.0,
-      "profit_factor": 2.23,
-      "pnl": 3646.4,
-      "pnl_pct": 1.5
+      "losses": 3,
+      "win_rate": 25.0,
+      "profit_factor": 0.86,
+      "pnl": -1108.82,
+      "pnl_pct": -0.4
     },
     {
       "month": "2024-10",
       "label": "Oct 2024",
-      "trades": 19,
+      "trades": 20,
       "wins": 11,
-      "losses": 8,
-      "win_rate": 57.9,
-      "profit_factor": 15.43,
-      "pnl": 428899.8,
-      "pnl_pct": 171.6
+      "losses": 9,
+      "win_rate": 55.0,
+      "profit_factor": 16.22,
+      "pnl": 430345.36,
+      "pnl_pct": 172.1
     },
     {
       "month": "2024-11",
       "label": "Nov 2024",
-      "trades": 12,
-      "wins": 5,
+      "trades": 11,
+      "wins": 4,
       "losses": 7,
-      "win_rate": 41.7,
-      "profit_factor": 2.51,
-      "pnl": 41619.28,
-      "pnl_pct": 16.6
+      "win_rate": 36.4,
+      "profit_factor": 3.19,
+      "pnl": 45966.53,
+      "pnl_pct": 18.4
     },
     {
       "month": "2024-12",
@@ -16845,24 +17209,24 @@
     {
       "month": "2025-01",
       "label": "Jan 2025",
-      "trades": 15,
-      "wins": 8,
+      "trades": 16,
+      "wins": 9,
       "losses": 7,
-      "win_rate": 53.3,
-      "profit_factor": 3.06,
-      "pnl": 52216.61,
-      "pnl_pct": 20.9
+      "win_rate": 56.2,
+      "profit_factor": 3.15,
+      "pnl": 54558.56,
+      "pnl_pct": 21.8
     },
     {
       "month": "2025-02",
       "label": "Feb 2025",
-      "trades": 7,
-      "wins": 2,
-      "losses": 5,
-      "win_rate": 28.6,
-      "profit_factor": 0.77,
-      "pnl": -3948.88,
-      "pnl_pct": -1.6
+      "trades": 4,
+      "wins": 1,
+      "losses": 3,
+      "win_rate": 25.0,
+      "profit_factor": 0.8,
+      "pnl": -2204.87,
+      "pnl_pct": -0.9
     },
     {
       "month": "2025-03",
@@ -16889,9 +17253,9 @@
     {
       "month": "2025-06",
       "label": "Jun 2025",
-      "trades": 2,
+      "trades": 1,
       "wins": 0,
-      "losses": 2,
+      "losses": 1,
       "win_rate": 0.0,
       "profit_factor": 0.0,
       "pnl": -2989.98,
@@ -16900,35 +17264,35 @@
     {
       "month": "2025-07",
       "label": "Jul 2025",
-      "trades": 3,
-      "wins": 0,
-      "losses": 3,
-      "win_rate": 0.0,
-      "profit_factor": 0.0,
-      "pnl": -9365.7,
-      "pnl_pct": -3.7
+      "trades": 5,
+      "wins": 1,
+      "losses": 4,
+      "win_rate": 20.0,
+      "profit_factor": 0.35,
+      "pnl": -6922.57,
+      "pnl_pct": -2.8
     },
     {
       "month": "2025-08",
       "label": "Aug 2025",
       "trades": 11,
-      "wins": 3,
-      "losses": 8,
-      "win_rate": 27.3,
-      "profit_factor": 0.49,
-      "pnl": -14135.52,
-      "pnl_pct": -5.7
+      "wins": 4,
+      "losses": 7,
+      "win_rate": 36.4,
+      "profit_factor": 0.57,
+      "pnl": -10431.08,
+      "pnl_pct": -4.2
     },
     {
       "month": "2025-09",
       "label": "Sep 2025",
-      "trades": 3,
-      "wins": 2,
+      "trades": 4,
+      "wins": 3,
       "losses": 1,
-      "win_rate": 66.7,
-      "profit_factor": 4.78,
-      "pnl": 11607.6,
-      "pnl_pct": 4.6
+      "win_rate": 75.0,
+      "profit_factor": 5.58,
+      "pnl": 14043.6,
+      "pnl_pct": 5.6
     },
     {
       "month": "2025-10",
@@ -16945,34 +17309,34 @@
       "month": "2025-11",
       "label": "Nov 2025",
       "trades": 5,
-      "wins": 1,
-      "losses": 4,
-      "win_rate": 20.0,
-      "profit_factor": 1.02,
-      "pnl": 241.61,
-      "pnl_pct": 0.1
+      "wins": 2,
+      "losses": 3,
+      "win_rate": 40.0,
+      "profit_factor": 1.62,
+      "pnl": 6088.55,
+      "pnl_pct": 2.4
     },
     {
       "month": "2025-12",
       "label": "Dec 2025",
-      "trades": 8,
-      "wins": 4,
-      "losses": 4,
+      "trades": 10,
+      "wins": 5,
+      "losses": 5,
       "win_rate": 50.0,
-      "profit_factor": 2.61,
-      "pnl": 22458.12,
-      "pnl_pct": 9.0
+      "profit_factor": 2.52,
+      "pnl": 22786.52,
+      "pnl_pct": 9.1
     },
     {
       "month": "2026-01",
       "label": "Jan 2026",
-      "trades": 12,
-      "wins": 2,
-      "losses": 10,
-      "win_rate": 16.7,
-      "profit_factor": 0.73,
-      "pnl": -8910.42,
-      "pnl_pct": -3.6
+      "trades": 11,
+      "wins": 3,
+      "losses": 8,
+      "win_rate": 27.3,
+      "profit_factor": 1.35,
+      "pnl": 9076.41,
+      "pnl_pct": 3.6
     },
     {
       "month": "2026-02",
@@ -16988,13 +17352,13 @@
     {
       "month": "2026-03",
       "label": "Mar 2026",
-      "trades": 19,
+      "trades": 18,
       "wins": 1,
-      "losses": 18,
-      "win_rate": 5.3,
-      "profit_factor": 0.21,
-      "pnl": -47091.55,
-      "pnl_pct": -18.8
+      "losses": 17,
+      "win_rate": 5.6,
+      "profit_factor": 0.22,
+      "pnl": -44069.6,
+      "pnl_pct": -17.6
     },
     {
       "month": "2026-05",
@@ -17010,69 +17374,69 @@
     {
       "month": "2026-06",
       "label": "Jun 2026",
-      "trades": 2,
-      "wins": 0,
+      "trades": 3,
+      "wins": 1,
       "losses": 2,
-      "win_rate": 0.0,
-      "profit_factor": 0.0,
-      "pnl": -6587.64,
-      "pnl_pct": -2.6
+      "win_rate": 33.3,
+      "profit_factor": 0.35,
+      "pnl": -4299.84,
+      "pnl_pct": -1.7
     },
     {
       "month": "2026-07",
       "label": "Jul 2026",
-      "trades": 10,
-      "wins": 5,
+      "trades": 12,
+      "wins": 7,
       "losses": 5,
-      "win_rate": 50.0,
-      "profit_factor": 2.45,
-      "pnl": 23341.1,
-      "pnl_pct": 9.3
+      "win_rate": 58.3,
+      "profit_factor": 2.58,
+      "pnl": 25413.22,
+      "pnl_pct": 10.2
     },
     {
       "month": "2026-08",
       "label": "Aug 2026",
-      "trades": 14,
-      "wins": 6,
-      "losses": 8,
-      "win_rate": 42.9,
-      "profit_factor": 2.05,
-      "pnl": 27925.4,
-      "pnl_pct": 11.2
+      "trades": 16,
+      "wins": 9,
+      "losses": 7,
+      "win_rate": 56.2,
+      "profit_factor": 2.48,
+      "pnl": 34284.14,
+      "pnl_pct": 13.7
     },
     {
       "month": "2026-09",
       "label": "Sep 2026",
-      "trades": 11,
+      "trades": 12,
       "wins": 4,
-      "losses": 7,
-      "win_rate": 36.4,
-      "profit_factor": 0.54,
-      "pnl": -10245.34,
-      "pnl_pct": -4.1
+      "losses": 8,
+      "win_rate": 33.3,
+      "profit_factor": 0.49,
+      "pnl": -12477.49,
+      "pnl_pct": -5.0
     },
     {
       "month": "2026-10",
       "label": "Oct 2026",
-      "trades": 30,
-      "wins": 12,
-      "losses": 18,
-      "win_rate": 40.0,
-      "profit_factor": 3.03,
-      "pnl": 121636.46,
-      "pnl_pct": 48.7
+      "trades": 28,
+      "wins": 11,
+      "losses": 17,
+      "win_rate": 39.3,
+      "profit_factor": 3.18,
+      "pnl": 122804.9,
+      "pnl_pct": 49.1
     },
     {
       "month": "2026-11",
       "label": "Nov 2026",
-      "trades": 2,
+      "trades": 1,
       "wins": 0,
-      "losses": 2,
+      "losses": 1,
       "win_rate": 0.0,
       "profit_factor": 0.0,
-      "pnl": -6953.0,
-      "pnl_pct": -2.8
+      "pnl": -3190.1,
+      "pnl_pct": -1.3
     }
   ],
-  "last_updated": "2026-11-16 18:11:56"
+  "last_updated": "2026-11-16 18:48:02"
 }

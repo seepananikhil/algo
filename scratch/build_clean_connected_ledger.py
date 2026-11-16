@@ -207,7 +207,7 @@ for cur_dt in all_market_dates:
         exit_p = None
         exit_reason = None
         
-        # STOP-LOSS & RUNNER EXIT EVALUATION (BE SHIELD REMOVED):
+        # STOP-LOSS & RUNNER EXIT EVALUATION (PURE TRAILING STOP - NO BE LOCK):
         if not pos['runner_mode']:
             # Initial Stop: 12% Daily Candle Close Stop (Gives stock room to breathe)
             if c <= entry_p * 0.88:
@@ -215,11 +215,9 @@ for cur_dt in all_market_dates:
                 exit_p = c
                 exit_reason = "Initial SL (-12% Close)"
         else:
-            # Runner Mode: activated at +30% high watermark
+            # Runner Mode: activated at +20% high watermark
             peak_trail = pos['runner_peak'] * (1.0 - trail_frac)
-            # Once up +20%, stop floor can never fall below cost
-            if high_ret >= 20.0:
-                peak_trail = max(peak_trail, entry_p)
+            # Pure Trailing Stop: NO BE lock (cost floor removed so normal swing pullbacks don't trigger premature exits)
             if l <= peak_trail:
                 exited = True
                 exit_p = min(o, peak_trail) if o < peak_trail else peak_trail
@@ -263,8 +261,8 @@ for cur_dt in all_market_dates:
             })
             trade_id += 1
         else:
-            # Runner mode activation at +30% high watermark
-            if high_ret >= 30.0 and not pos['runner_mode']:
+            # Runner mode activation at +20% high watermark (Pure Trailing Stop)
+            if high_ret >= 20.0 and not pos['runner_mode']:
                 pos['runner_mode'] = True
                 pos['runner_peak'] = pos['highest_close']
                 pos['status'] = 'RUNNER'
@@ -513,7 +511,7 @@ for pos in positions:
     unreal_pnl = shs * (cmp_price - entry_p)
     unreal_pct = (cmp_price - entry_p) / entry_p * 100.0
     
-    current_sl = pos['sl_price']
+    current_sl = round(pos['runner_peak'] * 0.75, 2) if pos['runner_mode'] else pos['sl_price']
     status_str = 'RUNNER' if pos['runner_mode'] else 'ACTIVE'
     
     open_portfolio.append({

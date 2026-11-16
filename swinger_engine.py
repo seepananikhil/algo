@@ -58,7 +58,7 @@ DEFAULT_CONFIG = {
     "be_shield_enabled": False,
     "catastrophe_floor_pct": 15.0,
     "be_shield_trigger_pct": 15.0,
-    "tp_target_pct": 30.0,
+    "tp_target_pct": 20.0,
     "runner_trail_pct": 25.0,
     "profit_vault_trigger_pct": 50.0,
     "profit_vault_floor_pct": 25.0,
@@ -239,7 +239,7 @@ def save_trades(data):
         "avg_holding_days": avg_hold,
         "base_slot_size": 25000.0,
         "mode": "PAPER",
-        "strategy": "Pure Chartink Match · -25% Initial SL · BE Shield @ +20% · TP 50% @ +30% · 25% Runner Trail",
+        "strategy": "Pullback Architecture · 12% Close SL · Pure 25% Peak Trail @ +20% (No BE Lock) · 50 EMA Vol Breakdown",
         "last_updated": datetime.now(IST).isoformat()
     }
     data["yearly_breakdown"] = yearly
@@ -1033,9 +1033,7 @@ def update_positions_and_scan():
                 pos["highest_close"] = round(cmp_price, 2)
             
             trail_calc = round(pos["highest_close"] * (1.0 - trail_pct / 100.0), 2)
-            # Universal Cost Protection Lock: Once up +20%, stop floor can never fall below cost
-            if ((pos["highest_close"] - avg_price) / avg_price) * 100.0 >= 20.0:
-                trail_calc = max(trail_calc, avg_price)
+            # Pure Trailing Stop: No artificial BE lock at cost
             vault_floor = pos.get("vault_floor_sl", 0.0)
             pos["runner_trail_sl"] = max(trail_calc, vault_floor)
             pos["sl_price"] = pos["runner_trail_sl"]
