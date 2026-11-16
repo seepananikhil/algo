@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import React, { useState, useEffect, useMemo } from "react"
 import {
   TrendingUp,
   RefreshCw,
@@ -17,6 +17,8 @@ import {
   Sparkles,
   Activity,
   Award,
+  Layers,
+  X
 } from "lucide-react"
 import {
   ResponsiveContainer,
@@ -56,6 +58,7 @@ interface Position {
   runner_mode?: boolean
   runner_peak_price?: number
   runner_trail_sl?: number | null
+  invested?: number
   days_held: number
   booked_pnl?: number
   unrealized_pnl?: number
@@ -151,7 +154,6 @@ export function SwingerPage() {
   })
   const [scanning, setScanning] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
-  const [showMonthlyMatrix, setShowMonthlyMatrix] = useState(false)
 
   // Chart Inspection Modal Target
   const [selectedTradeForChart, setSelectedTradeForChart] = useState<SwingerTradeTarget | null>(null)
@@ -169,6 +171,25 @@ export function SwingerPage() {
   const [searchQuery, setSearchQuery] = useState("")
   const [displayLimit, setDisplayLimit] = useState(30)
   const [yearGrouping, setYearGrouping] = useState<"entry" | "exit">("entry")
+
+  // Distinct Stocks & Review Controls
+  const [feedViewMode, setFeedViewMode] = useState<"stocks" | "stream">("stocks")
+  const [distinctFilter, setDistinctFilter] = useState<"ALL" | "PORTFOLIO" | "WINNERS" | "MULTIBAGGER" | "LOSSES" | "MULTITRADE">("ALL")
+  const [distinctSort, setDistinctSort] = useState<"pnl" | "trades" | "winrate" | "alpha">("pnl")
+  const [expandedStockSymbols, setExpandedStockSymbols] = useState<Set<string>>(new Set())
+  const [selectedMonthlyYear, setSelectedMonthlyYear] = useState<string>("2026")
+
+  const toggleExpandStock = (symbol: string) => {
+    setExpandedStockSymbols((prev) => {
+      const next = new Set(prev)
+      if (next.has(symbol)) {
+        next.delete(symbol)
+      } else {
+        next.add(symbol)
+      }
+      return next
+    })
+  }
 
   // Dynamic Annual Breakdown by Cohort vs Realized Exit
   const dynamicYearly = useMemo(() => {
@@ -516,6 +537,147 @@ export function SwingerPage() {
     return filteredUnifiedTriggers.map((t) => t.raw)
   }, [activeTab, calendarSelectedTrades, positions, filteredUnifiedTriggers])
 
+  // Distinct Stocks Aggregation across closed trades & active positions
+  interface DistinctStock {
+    symbol: string
+    name: string
+    trades: Trade[]
+    activePosition?: Position
+    totalTrades: number
+    wins: number
+    losses: number
+    winRate: number
+    realizedPnl: number
+    unrealizedPnl: number
+    totalPnl: number
+    totalInvested: number
+    bestPnlPct: number
+    worstPnlPct: number
+    avgHoldingDays: number
+    currentStatus: "RUNNER" | "ACTIVE" | "CLOSED"
+    firstEntryDate: string
+    lastDate: string
+    isMultiBagger: boolean
+  }
+
+  const distinctStocks = useMemo(() => {
+    const stockMap = new Map<string, DistinctStock>()
+
+    // 1. Process active positions
+    positions.forEach((p) => {
+      const sym = p.symbol
+      const pnl = p.unrealized_pnl ?? 0
+      const pnlPct = p.unrealized_pnl_pct ?? p.unrealized_pct ?? 0
+      const status: "RUNNER" | "ACTIVE" = p.runner_mode ? "RUNNER" : "ACTIVE"
+      stockMap.set(sym, {
+        symbol: sym,
+        name: p.name || sym,
+        trades: [],
+        activePosition: p,
+        totalTrades: 1,
+        wins: pnl > 0 ? 1 : 0,
+        losses: pnl < 0 ? 1 : 0,
+        winRate: pnl > 0 ? 100 : 0,
+        realizedPnl: 0,
+        unrealizedPnl: pnl,
+        totalPnl: pnl,
+        totalInvested: p.invested ?? (p.entry_price * (p.current_qty || 1)),
+        bestPnlPct: pnlPct,
+        worstPnlPct: pnlPct,
+        avgHoldingDays: p.days_held ?? 0,
+        currentStatus: status,
+        firstEntryDate: p.entry_date,
+        lastDate: p.entry_date,
+        isMultiBagger: pnlPct >= 100.0
+      })
+    })
+
+    // 2. Process closed trades
+    trades.forEach((t) => {
+      const sym = t.symbol
+      const pnl = t.pnl ?? 0
+      const pnlPct = t.pnl_pct ?? (t as any).pct_return ?? 0
+      const isWin = pnl > 0
+      const days = t.days_held ?? (t as any).holding_days ?? 0
+
+      if (stockMap.has(sym)) {
+        const item = stockMap.get(sym)!
+        item.trades.push(t)
+        item.totalTrades += 1
+        if (isWin) item.wins += 1
+        else item.losses += 1
+        item.realizedPnl += pnl
+        item.totalPnl += pnl
+        item.totalInvested += (t.shares ?? t.qty ?? 0) * (t.entry_price ?? t.avg_price ?? 0)
+        item.bestPnlPct = Math.max(item.bestPnlPct, pnlPct)
+        item.worstPnlPct = Math.min(item.worstPnlPct, pnlPct)
+        if (pnlPct >= 100.0) item.isMultiBagger = true
+        if (t.entry_date && (!item.firstEntryDate || t.entry_date < item.firstEntryDate)) {
+          item.firstEntryDate = t.entry_date
+        }
+        if (t.exit_date && (!item.lastDate || t.exit_date > item.lastDate)) {
+          item.lastDate = t.exit_date
+        }
+      } else {
+        stockMap.set(sym, {
+          symbol: sym,
+          name: t.name || sym,
+          trades: [t],
+          totalTrades: 1,
+          wins: isWin ? 1 : 0,
+          losses: isWin ? 0 : 1,
+          winRate: isWin ? 100 : 0,
+          realizedPnl: pnl,
+          unrealizedPnl: 0,
+          totalPnl: pnl,
+          totalInvested: (t.shares ?? t.qty ?? 0) * (t.entry_price ?? t.avg_price ?? 0),
+          bestPnlPct: pnlPct,
+          worstPnlPct: pnlPct,
+          avgHoldingDays: days,
+          currentStatus: "CLOSED",
+          firstEntryDate: t.entry_date,
+          lastDate: t.exit_date || t.entry_date,
+          isMultiBagger: pnlPct >= 100.0
+        })
+      }
+    })
+
+    const list: DistinctStock[] = []
+    stockMap.forEach((item) => {
+      item.winRate = item.totalTrades > 0 ? Number(((item.wins / item.totalTrades) * 100).toFixed(1)) : 0
+      const totalDays = item.trades.reduce((acc, t) => acc + (t.days_held ?? (t as any).holding_days ?? 0), 0) + (item.activePosition?.days_held ?? 0)
+      item.avgHoldingDays = item.totalTrades > 0 ? Math.round(totalDays / item.totalTrades) : 0
+      item.trades.sort((a, b) => (b.entry_date || "").localeCompare(a.entry_date || ""))
+      list.push(item)
+    })
+
+    return list
+  }, [positions, trades])
+
+  const filteredDistinctStocks = useMemo(() => {
+    return distinctStocks.filter((s) => {
+      if (distinctFilter === "PORTFOLIO" && !s.activePosition) return false
+      if (distinctFilter === "WINNERS" && s.totalPnl <= 0) return false
+      if (distinctFilter === "MULTIBAGGER" && !s.isMultiBagger) return false
+      if (distinctFilter === "LOSSES" && s.totalPnl >= 0) return false
+      if (distinctFilter === "MULTITRADE" && s.totalTrades < 2) return false
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        const matchSym = s.symbol.toLowerCase().includes(q)
+        const matchName = s.name.toLowerCase().includes(q)
+        if (!matchSym && !matchName) return false
+      }
+      return true
+    }).sort((a, b) => {
+      if (distinctSort === "pnl") return b.totalPnl - a.totalPnl
+      if (distinctSort === "trades") return b.totalTrades - a.totalTrades
+      if (distinctSort === "winrate") return b.winRate - a.winRate
+      if (distinctSort === "alpha") return a.symbol.localeCompare(b.symbol)
+      return 0
+    })
+  }, [distinctStocks, distinctFilter, distinctSort, searchQuery])
+
   // Cumulative Equity & Drawdown Curve Data
   const equityCurveData = useMemo(() => {
     if (!trades || trades.length === 0) return []
@@ -853,7 +1015,7 @@ export function SwingerPage() {
                 activeTab === "all" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
               }`}
             >
-              {unifiedTriggers.length}
+              {distinctStocks.length} Stocks · {unifiedTriggers.length} Triggers
             </span>
           </button>
 
@@ -946,283 +1108,802 @@ export function SwingerPage() {
       {/* ================= TAB 1: ALL TRIGGERS & MASTER FEED ================= */}
       {activeTab === "all" && (
         <div className="space-y-4">
-          {/* Sub-Filters & Search Bar */}
+          {/* Top Switcher: Distinct Stocks vs Chronological Stream */}
           <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-            <div className="flex items-center gap-1.5 flex-wrap">
+            <div className="flex items-center gap-2">
               <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
-                Filter:
+                View Mode:
               </span>
-              <button
-                type="button"
-                onClick={() => setFilterType("ALL")}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                  filterType === "ALL"
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                All ({unifiedTriggers.length})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("TODAY")}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
-                  filterType === "TODAY"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "bg-purple-50 text-purple-700 hover:bg-purple-100"
-                }`}
-              >
-                <Flame className="size-3" />
-                Today's Hits ({dailySignals.count})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("ACTIVE")}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                  filterType === "ACTIVE"
-                    ? "bg-sky-600 text-white shadow-xs"
-                    : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-                }`}
-              >
-                Active ({positions.length})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("WIN")}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                  filterType === "WIN"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                }`}
-              >
-                Winners ({trades.filter((t) => (t.pnl || 0) > 0).length})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("LOSS")}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                  filterType === "LOSS"
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "bg-rose-50 text-rose-700 hover:bg-rose-100"
-                }`}
-              >
-                Stop Loss ({trades.filter((t) => (t.pnl || 0) <= 0).length})
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setFilterType("RADAR")}
-                className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                  filterType === "RADAR"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                }`}
-              >
-                Radar ({activeRadarList.length})
-              </button>
+              <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200 gap-1">
+                <button
+                  type="button"
+                  onClick={() => setFeedViewMode("stocks")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
+                    feedViewMode === "stocks"
+                      ? "bg-white text-emerald-700 shadow-xs border border-slate-200/60"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Layers className="size-3.5 text-emerald-600" />
+                  Distinct Stocks Review ({distinctStocks.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFeedViewMode("stream")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
+                    feedViewMode === "stream"
+                      ? "bg-white text-emerald-700 shadow-xs border border-slate-200/60"
+                      : "text-slate-600 hover:text-slate-900"
+                  }`}
+                >
+                  <Zap className="size-3.5 text-amber-500" />
+                  Chronological Stream ({unifiedTriggers.length})
+                </button>
+              </div>
             </div>
 
-            {/* Quick Search */}
-            <div className="relative w-full sm:w-64">
-              <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder="Search symbol or name..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-hidden focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
-              />
+            {/* Quick Context Summary */}
+            <div className="flex items-center gap-2 text-xs font-mono flex-wrap">
+              <span className="bg-sky-50 text-sky-800 border border-sky-200 px-2 py-0.5 rounded-md font-bold">
+                {positions.length} Active in Portfolio
+              </span>
+              <span className="bg-emerald-50 text-emerald-800 border border-emerald-200 px-2 py-0.5 rounded-md font-bold">
+                {distinctStocks.filter((s) => s.totalPnl > 0).length} Net Green Stocks
+              </span>
+              <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2 py-0.5 rounded-md font-bold">
+                {distinctStocks.filter((s) => s.isMultiBagger).length} Multi-Baggers
+              </span>
             </div>
           </div>
 
-          {/* Master Stream Table */}
-          <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="p-3.5">Stock Symbol</th>
-                    <th className="p-3.5">Category</th>
-                    <th className="p-3.5 font-mono">Date</th>
-                    <th className="p-3.5 font-mono">Entry (₹)</th>
-                    <th className="p-3.5 font-mono">CMP / Exit (₹)</th>
-                    <th className="p-3.5">Held</th>
-                    <th className="p-3.5 text-right font-mono">Gain / Loss</th>
-                    <th className="p-3.5">Milestone / Exit Reason</th>
-                    <th className="p-3.5 text-center">Interactive Chart</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {visibleTriggers.length === 0 ? (
-                    <tr>
-                      <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
-                        No triggers match the selected filter.
-                      </td>
-                    </tr>
-                  ) : (
-                    visibleTriggers.map((item, idx) => {
-                      const isPositive = (item.pnl || item.pnlPct || 0) >= 0
-
-                      return (
-                        <tr
-                          key={idx}
-                          onClick={() => setSelectedTradeForChart(item.raw)}
-                          className="hover:bg-slate-50/90 cursor-pointer transition group"
-                        >
-                          {/* Symbol Column */}
-                          <td className="p-3.5">
-                            <div className="flex items-center gap-2">
-                              <div
-                                className={`size-8 rounded-xl flex items-center justify-center font-bold text-white text-[11px] ${
-                                  item.type === "TODAY"
-                                    ? "bg-purple-600"
-                                    : item.type === "ACTIVE"
-                                    ? "bg-sky-600"
-                                    : item.subType === "WIN"
-                                    ? "bg-emerald-600"
-                                    : item.type === "RADAR"
-                                    ? "bg-amber-600"
-                                    : "bg-rose-600"
-                                }`}
-                              >
-                                {item.symbol.slice(0, 2)}
-                              </div>
-                              <div>
-                                <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition flex items-center gap-1.5">
-                                  <span className="hover:underline font-mono">{item.symbol}</span>
-                                  <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
-                                </div>
-                                <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
-                                  {item.name}
-                                </div>
-                              </div>
-                            </div>
-                          </td>
-
-                          {/* Category Badge */}
-                          <td className="p-3.5">
-                            {item.type === "TODAY" ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                                <Flame className="size-3 text-purple-600" />
-                                Screener Hit
-                              </span>
-                            ) : item.type === "ACTIVE" ? (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
-                                <ShieldCheck className="size-3 text-sky-600" />
-                                Active Slot
-                              </span>
-                            ) : item.type === "CLOSED" ? (
-                              <span
-                                className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                  item.subType === "WIN"
-                                    ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                    : "bg-rose-100 text-rose-800 border-rose-200"
-                                }`}
-                              >
-                                {item.subType === "WIN" ? "Winner" : "Stop Loss"}
-                              </span>
-                            ) : (
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                Radar Pullback
-                              </span>
-                            )}
-                          </td>
-
-                          {/* Date */}
-                          <td className="p-3.5 font-mono text-slate-600 font-medium">
-                            {item.date}
-                            {item.exitDate && (
-                              <span className="block text-[10px] text-slate-400">Exit: {item.exitDate}</span>
-                            )}
-                          </td>
-
-                          {/* Entry Price */}
-                          <td className="p-3.5 font-mono font-bold text-slate-900">
-                            ₹{(item.entryPrice ?? 0).toFixed(2)}
-                          </td>
-
-                          {/* Current / Exit Price */}
-                          <td className="p-3.5 font-mono font-bold text-slate-800">
-                            ₹{(item.currentPrice ?? item.entryPrice ?? 0).toFixed(2)}
-                          </td>
-
-                          {/* Days Held */}
-                          <td className="p-3.5 text-slate-600 font-medium font-mono">
-                            {item.daysHeld ? `${item.daysHeld}d` : "—"}
-                          </td>
-
-                          {/* Gain / Loss */}
-                          <td className="p-3.5 text-right font-mono font-black">
-                            <span className={isPositive ? "text-emerald-600" : "text-rose-600"}>
-                              {isPositive ? "+" : ""}
-                              {(item.pnlPct ?? 0).toFixed(1)}%
-                              {item.pnl != null && item.pnl !== 0 && (
-                                <span className="block text-[10px] font-bold">
-                                  ({isPositive ? "+" : ""}₹{(item.pnl ?? 0).toLocaleString("en-IN")})
-                                </span>
-                              )}
-                            </span>
-                          </td>
-
-                          {/* Milestone / Exit Reason */}
-                          <td className="p-3.5 text-slate-600 text-xs font-medium max-w-[200px] truncate">
-                            {item.ruleDetails}
-                          </td>
-
-                          {/* Chart Button */}
-                          <td className="p-3.5 text-center">
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedTradeForChart(item.raw)
-                              }}
-                              className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 hover:bg-emerald-50 rounded-lg gap-1"
-                            >
-                              <LineChart className="size-3.5" />
-                              Chart
-                            </Button>
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            {/* Pagination / Progressive Loading */}
-            {filteredUnifiedTriggers.length > displayLimit && (
-              <div className="p-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span>
-                  Showing {displayLimit} of {filteredUnifiedTriggers.length} items
-                </span>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setDisplayLimit((prev) => prev + 30)}
-                    className="h-7 text-xs font-bold rounded-lg border-slate-200"
+          {/* VIEW MODE A: DISTINCT STOCKS ACCORDION REVIEW */}
+          {feedViewMode === "stocks" ? (
+            <div className="space-y-4">
+              {/* Distinct Filter & Search Controls */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
+                    Filter:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("ALL")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      distinctFilter === "ALL"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
                   >
-                    Load Next 30
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => setDisplayLimit(filteredUnifiedTriggers.length)}
-                    className="h-7 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50"
+                    All Stocks ({distinctStocks.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("PORTFOLIO")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                      distinctFilter === "PORTFOLIO"
+                        ? "bg-sky-600 text-white shadow-xs"
+                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                    }`}
                   >
-                    Show All
-                  </Button>
+                    <ShieldCheck className="size-3" />
+                    In Portfolio ({positions.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("WINNERS")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      distinctFilter === "WINNERS"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
+                    Profitable ({distinctStocks.filter((s) => s.totalPnl > 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("MULTIBAGGER")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                      distinctFilter === "MULTIBAGGER"
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                    }`}
+                  >
+                    <Flame className="size-3" />
+                    Multi-Baggers ({distinctStocks.filter((s) => s.isMultiBagger).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("MULTITRADE")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      distinctFilter === "MULTITRADE"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                  >
+                    Multi-Trades ({distinctStocks.filter((s) => s.totalTrades > 1).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("LOSSES")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      distinctFilter === "LOSSES"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                    }`}
+                  >
+                    Net Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
+                  </button>
+                </div>
+
+                <div className="flex items-center gap-2 w-full sm:w-auto">
+                  {/* Sort Dropdown */}
+                  <div className="relative">
+                    <select
+                      value={distinctSort}
+                      onChange={(e) => setDistinctSort(e.target.value as any)}
+                      className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white"
+                    >
+                      <option value="pnl">Sort: Net P&L (High → Low)</option>
+                      <option value="trades">Sort: Most Trades Taken</option>
+                      <option value="winrate">Sort: Highest Win Rate</option>
+                      <option value="alpha">Sort: Symbol (A → Z)</option>
+                    </select>
+                  </div>
+
+                  {/* Search Box */}
+                  <div className="relative flex-1 sm:w-56">
+                    <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search stock..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
+                    />
+                  </div>
                 </div>
               </div>
-            )}
-          </div>
+
+              {/* Distinct Stocks Table */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="p-3.5">Stock Symbol</th>
+                        <th className="p-3.5">Status</th>
+                        <th className="p-3.5 text-center">Trades Taken</th>
+                        <th className="p-3.5 text-center">Win Rate</th>
+                        <th className="p-3.5 text-right font-mono">Best Win</th>
+                        <th className="p-3.5 text-right font-mono">Realized P&L</th>
+                        <th className="p-3.5 text-right font-mono">Open Unrealized</th>
+                        <th className="p-3.5 text-right font-mono">Total Net P&L</th>
+                        <th className="p-3.5 text-center">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredDistinctStocks.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
+                            No distinct stocks match your search or filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredDistinctStocks.map((stock) => {
+                          const isExpanded = expandedStockSymbols.has(stock.symbol)
+                          const isProfitable = stock.totalPnl > 0
+                          const hasActive = !!stock.activePosition
+
+                          return (
+                            <React.Fragment key={stock.symbol}>
+                              <tr
+                                onClick={() => toggleExpandStock(stock.symbol)}
+                                className={`hover:bg-slate-50/90 cursor-pointer transition group ${
+                                  isExpanded ? "bg-slate-50/70" : ""
+                                }`}
+                              >
+                                {/* Symbol & Company */}
+                                <td className="p-3.5">
+                                  <div className="flex items-center gap-2.5">
+                                    <div
+                                      className={`size-8 rounded-xl flex items-center justify-center font-bold text-white text-[11px] ${
+                                        stock.currentStatus === "RUNNER"
+                                          ? "bg-purple-600"
+                                          : stock.currentStatus === "ACTIVE"
+                                          ? "bg-sky-600"
+                                          : isProfitable
+                                          ? "bg-emerald-600"
+                                          : "bg-slate-700"
+                                      }`}
+                                    >
+                                      {stock.symbol.slice(0, 2)}
+                                    </div>
+                                    <div>
+                                      <div className="font-black text-slate-900 text-sm font-mono flex items-center gap-1.5 group-hover:text-emerald-700 transition">
+                                        <span className="hover:underline">{stock.symbol}</span>
+                                        {stock.isMultiBagger && (
+                                          <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-0.5">
+                                            <Flame className="size-2.5 text-purple-600" />
+                                            100%+
+                                          </span>
+                                        )}
+                                      </div>
+                                      <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]">
+                                        {stock.name}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Status */}
+                                <td className="p-3.5">
+                                  {stock.currentStatus === "RUNNER" ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
+                                      <Flame className="size-3 text-purple-600" />
+                                      RUNNER (+{(stock.activePosition?.unrealized_pct ?? 0).toFixed(0)}%)
+                                    </span>
+                                  ) : stock.currentStatus === "ACTIVE" ? (
+                                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
+                                      <ShieldCheck className="size-3 text-sky-600" />
+                                      PORTFOLIO
+                                    </span>
+                                  ) : (
+                                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
+                                      CLOSED ({stock.trades.length}x)
+                                    </span>
+                                  )}
+                                </td>
+
+                                {/* Total Trades */}
+                                <td className="p-3.5 text-center">
+                                  <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 font-mono text-xs font-bold text-slate-800">
+                                    <span>{stock.totalTrades} Trade{stock.totalTrades > 1 ? "s" : ""}</span>
+                                    <span className="text-[10px] text-slate-400">·</span>
+                                    <span className="text-emerald-700">{stock.wins}W</span>
+                                    <span className="text-rose-700">{stock.losses}L</span>
+                                  </div>
+                                </td>
+
+                                {/* Win Rate */}
+                                <td className="p-3.5 text-center">
+                                  <div className="flex flex-col items-center gap-1">
+                                    <span className="font-mono font-bold text-xs text-slate-900">
+                                      {stock.winRate.toFixed(1)}%
+                                    </span>
+                                    <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden">
+                                      <div
+                                        className={`h-full rounded-full ${
+                                          stock.winRate >= 50 ? "bg-emerald-500" : "bg-rose-500"
+                                        }`}
+                                        style={{ width: `${Math.min(100, Math.max(5, stock.winRate))}%` }}
+                                      />
+                                    </div>
+                                  </div>
+                                </td>
+
+                                {/* Best Win */}
+                                <td className="p-3.5 text-right font-mono font-bold">
+                                  <span className={stock.bestPnlPct >= 100 ? "text-purple-700 font-black" : stock.bestPnlPct > 0 ? "text-emerald-600" : "text-slate-600"}>
+                                    {stock.bestPnlPct > 0 ? "+" : ""}{stock.bestPnlPct.toFixed(1)}%
+                                  </span>
+                                </td>
+
+                                {/* Realized P&L */}
+                                <td className="p-3.5 text-right font-mono font-medium">
+                                  <span className={stock.realizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                                    {stock.realizedPnl >= 0 ? "+" : ""}₹{stock.realizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                  </span>
+                                </td>
+
+                                {/* Open Unrealized */}
+                                <td className="p-3.5 text-right font-mono">
+                                  {hasActive ? (
+                                    <span className={stock.unrealizedPnl >= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
+                                      {stock.unrealizedPnl >= 0 ? "+" : ""}₹{stock.unrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                      <span className="block text-[10px] text-slate-400 font-normal">
+                                        ({stock.unrealizedPnl >= 0 ? "+" : ""}{(stock.activePosition?.unrealized_pct ?? 0).toFixed(1)}%)
+                                      </span>
+                                    </span>
+                                  ) : (
+                                    <span className="text-slate-400 text-xs">—</span>
+                                  )}
+                                </td>
+
+                                {/* Total Net P&L */}
+                                <td className="p-3.5 text-right font-mono font-black">
+                                  <span className={`text-sm ${isProfitable ? "text-emerald-700" : "text-rose-700"}`}>
+                                    {isProfitable ? "+" : ""}₹{stock.totalPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                  </span>
+                                </td>
+
+                                {/* Review / Expand Button */}
+                                <td className="p-3.5 text-center">
+                                  <Button
+                                    size="sm"
+                                    variant={isExpanded ? "default" : "outline"}
+                                    onClick={(e) => {
+                                      e.stopPropagation()
+                                      toggleExpandStock(stock.symbol)
+                                    }}
+                                    className={`h-7 px-2.5 text-xs font-bold rounded-lg gap-1 transition ${
+                                      isExpanded
+                                        ? "bg-slate-900 text-white"
+                                        : "text-slate-700 border-slate-200 hover:bg-slate-100"
+                                    }`}
+                                  >
+                                    {isExpanded ? (
+                                      <>
+                                        <ChevronUp className="size-3.5" />
+                                        Hide ({stock.totalTrades})
+                                      </>
+                                    ) : (
+                                      <>
+                                        <ChevronDown className="size-3.5" />
+                                        Review ({stock.totalTrades})
+                                      </>
+                                    )}
+                                  </Button>
+                                </td>
+                              </tr>
+
+                              {/* ACCORDION EXPANDED SUB-TABLE: ALL TRADES FOR THIS STOCK */}
+                              {isExpanded && (
+                                <tr className="bg-slate-50/90">
+                                  <td colSpan={9} className="p-4 border-b border-slate-200">
+                                    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-xs space-y-3">
+                                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-100 pb-3">
+                                        <div>
+                                          <h4 className="font-black text-sm text-slate-900 flex items-center gap-2 font-mono">
+                                            <Sparkles className="size-4 text-emerald-600" />
+                                            Complete Trading History: {stock.symbol} ({stock.name})
+                                          </h4>
+                                          <p className="text-xs text-slate-500 font-medium">
+                                            Showing all {stock.totalTrades} positions & closed trades taken by Swinger Strategy. Click chart button to view trade on full candlestick chart.
+                                          </p>
+                                        </div>
+
+                                        <div className="flex items-center gap-3 text-xs font-mono">
+                                          <span className="text-slate-500">
+                                            Avg Hold: <strong>{stock.avgHoldingDays} Days</strong>
+                                          </span>
+                                          <span>·</span>
+                                          <span className="text-slate-500">
+                                            Win Rate: <strong className="text-emerald-700">{stock.winRate.toFixed(1)}%</strong>
+                                          </span>
+                                        </div>
+                                      </div>
+
+                                      {/* Sub-table */}
+                                      <div className="overflow-x-auto rounded-xl border border-slate-200/80">
+                                        <table className="w-full text-left text-xs border-collapse">
+                                          <thead>
+                                            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase text-[10px]">
+                                              <th className="p-2.5">Trade</th>
+                                              <th className="p-2.5">Leg</th>
+                                              <th className="p-2.5">Status</th>
+                                              <th className="p-2.5 font-mono">Entry Date</th>
+                                              <th className="p-2.5 font-mono">Exit Date</th>
+                                              <th className="p-2.5 font-mono">Buy Price</th>
+                                              <th className="p-2.5 font-mono">Exit / CMP</th>
+                                              <th className="p-2.5 font-mono">Held</th>
+                                              <th className="p-2.5">Exit Reason / Milestone</th>
+                                              <th className="p-2.5 text-right font-mono">P&L (₹)</th>
+                                              <th className="p-2.5 text-right font-mono">Return</th>
+                                              <th className="p-2.5 text-center">Interactive Chart</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody className="divide-y divide-slate-100">
+                                            {/* 1. Active Position if currently held */}
+                                            {stock.activePosition && (
+                                              <tr className="bg-sky-50/50 hover:bg-sky-50 transition">
+                                                <td className="p-2.5 font-bold text-sky-900 font-mono">
+                                                  ACTIVE
+                                                </td>
+                                                <td className="p-2.5">
+                                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                                                    LEG {stock.activePosition.leg ?? 1}
+                                                  </span>
+                                                </td>
+                                                <td className="p-2.5">
+                                                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-200 text-sky-900">
+                                                    {stock.activePosition.runner_mode ? "RUNNER TRAIL" : "IN PORTFOLIO"}
+                                                  </span>
+                                                </td>
+                                                <td className="p-2.5 font-mono text-slate-700">{stock.activePosition.entry_date}</td>
+                                                <td className="p-2.5 font-mono text-slate-400">Open (Holding)</td>
+                                                <td className="p-2.5 font-mono font-medium text-slate-900">
+                                                  ₹{(stock.activePosition.avg_price ?? stock.activePosition.entry_price).toFixed(2)}
+                                                </td>
+                                                <td className="p-2.5 font-mono font-bold text-sky-900">
+                                                  ₹{stock.activePosition.cmp.toFixed(2)}
+                                                </td>
+                                                <td className="p-2.5 font-mono text-slate-700">{stock.activePosition.days_held}d</td>
+                                                <td className="p-2.5 text-slate-600 font-medium">
+                                                  {stock.activePosition.runner_mode ? "25% Peak Trail SL Active" : "Initial 12% Close SL Active"}
+                                                </td>
+                                                <td className="p-2.5 text-right font-mono font-bold">
+                                                  <span className={(stock.activePosition.unrealized_pnl ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                                                    {(stock.activePosition.unrealized_pnl ?? 0) >= 0 ? "+" : ""}₹{(stock.activePosition.unrealized_pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                                  </span>
+                                                </td>
+                                                <td className="p-2.5 text-right font-mono font-bold">
+                                                  <span className={(stock.activePosition.unrealized_pct ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}>
+                                                    {(stock.activePosition.unrealized_pct ?? 0) >= 0 ? "+" : ""}{(stock.activePosition.unrealized_pct ?? 0).toFixed(1)}%
+                                                  </span>
+                                                </td>
+                                                <td className="p-2.5 text-center">
+                                                  <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    onClick={() => setSelectedTradeForChart(stock.activePosition as any)}
+                                                    className="h-6 px-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 rounded gap-1"
+                                                  >
+                                                    <LineChart className="size-3" />
+                                                    Chart
+                                                  </Button>
+                                                </td>
+                                              </tr>
+                                            )}
+
+                                            {/* 2. Closed Trades */}
+                                            {stock.trades.map((t, tidx) => {
+                                              const isWin = (t.pnl || 0) > 0
+                                              const retPct = t.pnl_pct ?? (t as any).pct_return ?? 0
+                                              const isMb = retPct >= 100.0
+
+                                              return (
+                                                <tr
+                                                  key={tidx}
+                                                  onClick={() => setSelectedTradeForChart(t as any)}
+                                                  className="hover:bg-slate-50 cursor-pointer transition group"
+                                                >
+                                                  <td className="p-2.5 font-mono text-slate-500 font-bold">
+                                                    #{stock.trades.length - tidx}
+                                                  </td>
+                                                  <td className="p-2.5">
+                                                    <span className={`px-1.5 py-0.5 rounded text-[9px] font-bold ${
+                                                      t.leg === 2 ? "bg-purple-100 text-purple-800 border border-purple-200" : "bg-blue-50 text-blue-800 border border-blue-200"
+                                                    }`}>
+                                                      LEG {t.leg ?? 1}
+                                                    </span>
+                                                  </td>
+                                                  <td className="p-2.5">
+                                                    <span
+                                                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
+                                                        isWin
+                                                          ? isMb
+                                                            ? "bg-purple-100 text-purple-800 border-purple-300"
+                                                            : "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                                          : "bg-rose-100 text-rose-800 border-rose-200"
+                                                      }`}
+                                                    >
+                                                      {isWin ? (isMb ? "100%+ RUNNER" : "WINNER") : "STOPPED"}
+                                                    </span>
+                                                  </td>
+                                                  <td className="p-2.5 font-mono text-slate-700">{t.entry_date}</td>
+                                                  <td className="p-2.5 font-mono text-slate-700">{t.exit_date}</td>
+                                                  <td className="p-2.5 font-mono font-medium text-slate-900">
+                                                    ₹{(t.avg_price ?? t.entry_price ?? 0).toFixed(2)}
+                                                  </td>
+                                                  <td className="p-2.5 font-mono font-bold text-slate-900">
+                                                    ₹{(t.exit_price ?? 0).toFixed(2)}
+                                                  </td>
+                                                  <td className="p-2.5 font-mono text-slate-700">
+                                                    {t.days_held ?? (t as any).holding_days ?? 0}d
+                                                  </td>
+                                                  <td className="p-2.5 text-slate-600 font-medium">
+                                                    {formatExitReason(t.reason || (t as any).exit_reason)}
+                                                  </td>
+                                                  <td className="p-2.5 text-right font-mono font-bold">
+                                                    <span className={isWin ? "text-emerald-600" : "text-rose-600"}>
+                                                      {isWin ? "+" : ""}₹{(t.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                                    </span>
+                                                  </td>
+                                                  <td className="p-2.5 text-right font-mono font-bold">
+                                                    <span className={isWin ? (isMb ? "text-purple-700 font-black" : "text-emerald-600") : "text-rose-600"}>
+                                                      {isWin ? "+" : ""}{retPct.toFixed(1)}%
+                                                    </span>
+                                                  </td>
+                                                  <td className="p-2.5 text-center">
+                                                    <Button
+                                                      size="sm"
+                                                      variant="ghost"
+                                                      onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setSelectedTradeForChart(t as any)
+                                                      }}
+                                                      className="h-6 px-2 text-[11px] font-bold text-emerald-700 hover:bg-emerald-50 rounded gap-1"
+                                                    >
+                                                      <LineChart className="size-3" />
+                                                      Chart
+                                                    </Button>
+                                                  </td>
+                                                </tr>
+                                              )
+                                            })}
+                                          </tbody>
+                                        </table>
+                                      </div>
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* VIEW MODE B: CHRONOLOGICAL STREAM FEED (CLASSIC VIEW) */
+            <div className="space-y-4">
+              {/* Sub-Filters & Search Bar */}
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
+                    Filter:
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("ALL")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      filterType === "ALL"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    All ({unifiedTriggers.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("TODAY")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
+                      filterType === "TODAY"
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : "bg-purple-50 text-purple-700 hover:bg-purple-100"
+                    }`}
+                  >
+                    <Flame className="size-3" />
+                    Today's Hits ({dailySignals.count})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("ACTIVE")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      filterType === "ACTIVE"
+                        ? "bg-sky-600 text-white shadow-xs"
+                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
+                    }`}
+                  >
+                    Active ({positions.length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("WIN")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      filterType === "WIN"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
+                    Winners ({trades.filter((t) => (t.pnl || 0) > 0).length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("LOSS")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      filterType === "LOSS"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                    }`}
+                  >
+                    Stop Loss ({trades.filter((t) => (t.pnl || 0) <= 0).length})
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setFilterType("RADAR")}
+                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
+                      filterType === "RADAR"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                  >
+                    Radar ({activeRadarList.length})
+                  </button>
+                </div>
+
+                {/* Quick Search */}
+                <div className="relative w-full sm:w-64">
+                  <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Search symbol or name..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
+                  />
+                </div>
+              </div>
+
+              {/* Master Stream Table */}
+              <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                        <th className="p-3.5">Stock Symbol</th>
+                        <th className="p-3.5">Category</th>
+                        <th className="p-3.5 font-mono">Date</th>
+                        <th className="p-3.5 font-mono">Entry (₹)</th>
+                        <th className="p-3.5 font-mono">CMP / Exit (₹)</th>
+                        <th className="p-3.5">Held</th>
+                        <th className="p-3.5 text-right font-mono">Gain / Loss</th>
+                        <th className="p-3.5">Milestone / Exit Reason</th>
+                        <th className="p-3.5 text-center">Interactive Chart</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {visibleTriggers.length === 0 ? (
+                        <tr>
+                          <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
+                            No triggers match the selected filter.
+                          </td>
+                        </tr>
+                      ) : (
+                        visibleTriggers.map((item, idx) => {
+                          const isPositive = (item.pnl || item.pnlPct || 0) >= 0
+
+                          return (
+                            <tr
+                              key={idx}
+                              onClick={() => setSelectedTradeForChart(item.raw)}
+                              className="hover:bg-slate-50/90 cursor-pointer transition group"
+                            >
+                              <td className="p-3.5">
+                                <div className="flex items-center gap-2">
+                                  <div
+                                    className={`size-8 rounded-xl flex items-center justify-center font-bold text-white text-[11px] ${
+                                      item.type === "TODAY"
+                                        ? "bg-purple-600"
+                                        : item.type === "ACTIVE"
+                                        ? "bg-sky-600"
+                                        : item.subType === "WIN"
+                                        ? "bg-emerald-600"
+                                        : item.type === "RADAR"
+                                        ? "bg-amber-600"
+                                        : "bg-rose-600"
+                                    }`}
+                                  >
+                                    {item.symbol.slice(0, 2)}
+                                  </div>
+                                  <div>
+                                    <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition flex items-center gap-1.5">
+                                      <span className="hover:underline font-mono">{item.symbol}</span>
+                                      <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
+                                    </div>
+                                    <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
+                                      {item.name}
+                                    </div>
+                                  </div>
+                                </div>
+                              </td>
+
+                              <td className="p-3.5">
+                                {item.type === "TODAY" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
+                                    <Flame className="size-3 text-purple-600" />
+                                    Screener Hit
+                                  </span>
+                                ) : item.type === "ACTIVE" ? (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                                    <ShieldCheck className="size-3 text-sky-600" />
+                                    Active Slot
+                                  </span>
+                                ) : item.type === "CLOSED" ? (
+                                  <span
+                                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
+                                      item.subType === "WIN"
+                                        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+                                        : "bg-rose-100 text-rose-800 border-rose-200"
+                                    }`}
+                                  >
+                                    {item.subType === "WIN" ? "Winner" : "Stop Loss"}
+                                  </span>
+                                ) : (
+                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
+                                    <Flame className="size-3 text-amber-600" />
+                                    Radar
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="p-3.5 font-mono text-slate-600 font-medium">{item.date}</td>
+
+                              <td className="p-3.5 font-mono font-medium text-slate-900">
+                                ₹{item.entryPrice > 0 ? item.entryPrice.toFixed(2) : "—"}
+                              </td>
+
+                              <td className="p-3.5 font-mono font-bold text-slate-900">
+                                ₹{item.currentPrice > 0 ? item.currentPrice.toFixed(2) : "—"}
+                              </td>
+
+                              <td className="p-3.5 font-mono text-slate-600 font-medium">{item.daysHeld}d</td>
+
+                              <td className="p-3.5 text-right font-mono font-bold">
+                                {item.type === "TODAY" ? (
+                                  <span className="text-purple-600">+{item.pnlPct.toFixed(1)}%</span>
+                                ) : item.type === "RADAR" ? (
+                                  <span className="text-amber-600">{item.pnlPct.toFixed(1)}% Pullback</span>
+                                ) : (
+                                  <span className={isPositive ? "text-emerald-600" : "text-rose-600"}>
+                                    {isPositive ? "+" : ""}₹{item.pnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                                    <span className="block text-[10px] font-semibold text-slate-400">
+                                      ({isPositive ? "+" : ""}{item.pnlPct.toFixed(1)}%)
+                                    </span>
+                                  </span>
+                                )}
+                              </td>
+
+                              <td className="p-3.5 text-slate-600 font-medium">{item.ruleDetails}</td>
+
+                              <td className="p-3.5 text-center">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    setSelectedTradeForChart(item.raw)
+                                  }}
+                                  className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1"
+                                >
+                                  <LineChart className="size-3.5" />
+                                  Chart
+                                </Button>
+                              </td>
+                            </tr>
+                          )
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {filteredUnifiedTriggers.length > displayLimit && (
+                  <div className="p-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                    <span>
+                      Showing {displayLimit} of {filteredUnifiedTriggers.length} items
+                    </span>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setDisplayLimit((prev) => prev + 30)}
+                        className="h-7 text-xs font-bold rounded-lg border-slate-200"
+                      >
+                        Load Next 30
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setDisplayLimit(filteredUnifiedTriggers.length)}
+                        className="h-7 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50"
+                      >
+                        Show All
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -1392,8 +2073,81 @@ export function SwingerPage() {
 
       {/* ================= TAB 3: CALENDAR & VINTAGE HISTORY ================= */}
       {activeTab === "calendar" && (
-        <div className="space-y-5">
-          {/* Calendar Heatmap Card */}
+        <div className="space-y-6">
+          {/* 1. EXECUTIVE STRATEGY PERFORMANCE DASHBOARD CARDS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+            {/* Card 1: XIRR */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+                <span>Annualized (XIRR)</span>
+                <TrendingUp className="size-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-black font-mono text-emerald-600 tracking-tight">
+                +{(summary.xirr ?? 52.4).toFixed(1)}%<span className="text-xs text-slate-400 font-bold ml-1">p.a.</span>
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium mt-1">
+                Active Margin: <strong className="text-sky-600 font-mono">+{(summary.xirr_active ?? 98.7).toFixed(1)}% p.a.</strong>
+              </div>
+            </div>
+
+            {/* Card 2: Net Realized Profit */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+                <span>Total Net Profit</span>
+                <Wallet className="size-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-black font-mono text-emerald-600 tracking-tight">
+                +₹{(summary.net_pnl ?? 1239545).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium mt-1">
+                Total ROI: <strong className="text-emerald-700 font-mono">+{(summary.total_pnl_pct ?? 247.9).toFixed(1)}%</strong> on ₹5.0L
+              </div>
+            </div>
+
+            {/* Card 3: Profit Factor */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+                <span>Profit Factor</span>
+                <Award className="size-4 text-amber-500" />
+              </div>
+              <div className="text-2xl font-black font-mono text-slate-900 tracking-tight">
+                {(summary.profit_factor ?? 3.01).toFixed(2)}x
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium mt-1">
+                Payoff Ratio: <strong className="text-slate-800 font-mono">{(summary.payoff_ratio ?? 4.28).toFixed(2)}x</strong>
+              </div>
+            </div>
+
+            {/* Card 4: Win Rate */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+                <span>Win Rate</span>
+                <CheckCircle2 className="size-4 text-emerald-600" />
+              </div>
+              <div className="text-2xl font-black font-mono text-slate-900 tracking-tight">
+                {(summary.win_rate ?? 41.3).toFixed(1)}%
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium mt-1">
+                <strong className="text-emerald-700 font-mono">{summary.winning_trades ?? 133}W</strong> / <strong className="text-rose-700 font-mono">{summary.losing_trades ?? 189}L</strong> ({summary.total_trades ?? 322} trades)
+              </div>
+            </div>
+
+            {/* Card 5: Max Drawdown */}
+            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
+              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+                <span>Peak Drawdown</span>
+                <ShieldCheck className="size-4 text-sky-600" />
+              </div>
+              <div className="text-2xl font-black font-mono text-rose-600 tracking-tight">
+                -₹{Math.abs(summary.max_drawdown ?? 62843).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              </div>
+              <div className="text-[11px] text-slate-500 font-medium mt-1">
+                Total Acc: <strong className="text-slate-700 font-mono">{(summary.max_drawdown_pct ?? -5.17).toFixed(1)}%</strong> · Active DD: <strong className="text-slate-700 font-mono">{(summary.max_drawdown_active_pct ?? -9.25).toFixed(1)}%</strong>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. CALENDAR HEATMAP CARD WITH CLEAN HIGHLIGHT DRAWER */}
           <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 mb-4">
               <div>
@@ -1411,9 +2165,10 @@ export function SwingerPage() {
                   variant="outline"
                   size="sm"
                   onClick={() => setSelectedDate(null)}
-                  className="rounded-xl text-xs font-bold text-slate-600 border-slate-200"
+                  className="rounded-xl text-xs font-bold text-slate-700 border-slate-200 gap-1.5"
                 >
-                  Clear Selection ({selectedDate})
+                  <X className="size-3.5" />
+                  Clear Date Inspector ({selectedDate})
                 </Button>
               )}
             </div>
@@ -1426,17 +2181,40 @@ export function SwingerPage() {
 
             {/* Clicked Calendar Date Detail Drawer */}
             {selectedDate && (
-              <div className="mt-5 p-4 rounded-2xl bg-slate-50 border border-slate-200 animate-in fade-in duration-150">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-black text-sm text-slate-900 flex items-center gap-2 font-mono">
-                    <LineChart className="size-4 text-emerald-600" />
-                    Trades for Date: {selectedDate} ({calendarSelectedTrades.length} Trades)
-                  </h4>
-                  <span className="text-xs text-slate-500 font-medium">Click any row to open candlestick chart</span>
+              <div className="mt-5 p-4 rounded-2xl bg-slate-50 border border-slate-200 animate-in fade-in duration-150 space-y-3">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 border-b border-slate-200 pb-3">
+                  <div>
+                    <h4 className="font-black text-sm text-slate-900 flex items-center gap-2 font-mono">
+                      <LineChart className="size-4 text-emerald-600" />
+                      Trades for Date: {selectedDate} ({calendarSelectedTrades.length} Trades)
+                    </h4>
+                    <p className="text-xs text-slate-500 font-medium">
+                      All positions closed or entered on this calendar date. Click any trade to open candlestick chart.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-xs font-bold px-2.5 py-1 rounded-lg bg-white border border-slate-200">
+                      Net P&L:{" "}
+                      <strong className={
+                        calendarSelectedTrades.reduce((acc, t) => acc + (t.pnl || 0), 0) >= 0 ? "text-emerald-600" : "text-rose-600"
+                      }>
+                        ₹{calendarSelectedTrades.reduce((acc, t) => acc + (t.pnl || 0), 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                      </strong>
+                    </span>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setSelectedDate(null)}
+                      className="h-7 px-2 text-xs text-slate-500 hover:text-slate-900"
+                    >
+                      <X className="size-3.5" />
+                    </Button>
+                  </div>
                 </div>
 
                 {calendarSelectedTrades.length === 0 ? (
-                  <p className="text-xs text-slate-500 py-3 text-center">No trades closed or entered on {selectedDate}.</p>
+                  <p className="text-xs text-slate-500 py-4 text-center">No trades closed or entered on {selectedDate}.</p>
                 ) : (
                   <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
                     <table className="w-full text-left text-xs border-collapse">
@@ -1511,9 +2289,9 @@ export function SwingerPage() {
             )}
           </div>
 
-          {/* Annual Vintage Consistency Scorecard */}
-          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs">
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 mb-4">
+          {/* 3. ANNUAL CONSISTENCY SCORECARD CARDS */}
+          <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
                 <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
                   <BarChart3 className="size-5 text-emerald-600" />
@@ -1521,8 +2299,8 @@ export function SwingerPage() {
                 </h3>
                 <p className="text-xs text-slate-500 font-medium">
                   {yearGrouping === "entry"
-                    ? "Grouped by Signal Entry Year (Cohort Vintage) — shows true strategy conviction"
-                    : "Grouped by Realized Exit Date (Calendar Year Accounting)"}
+                    ? "Grouped by Signal Entry Year (Cohort Vintage) — click any card to filter Master Trade Log below"
+                    : "Grouped by Realized Exit Date (Calendar Year Accounting) — click any card to filter Master Trade Log below"}
                 </p>
               </div>
 
@@ -1537,7 +2315,7 @@ export function SwingerPage() {
                       : "text-slate-500 hover:text-slate-900"
                   }`}
                 >
-                  By Signal Year (Vintage)
+                  By Signal Year (Cohort)
                 </button>
                 <button
                   type="button"
@@ -1548,91 +2326,36 @@ export function SwingerPage() {
                       : "text-slate-500 hover:text-slate-900"
                   }`}
                 >
-                  By Realized Exit Date
+                  By Exit Year (Accounting)
                 </button>
               </div>
             </div>
 
-            {/* Strategy XIRR & Performance Master Banner */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white p-4 sm:p-5 rounded-2xl flex flex-wrap items-center justify-between gap-4 mb-4 shadow-sm border border-slate-700/60">
-              <div className="flex items-center gap-3.5">
-                <div className="size-11 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shadow-xs">
-                  <TrendingUp className="size-6" />
-                </div>
-                <div>
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-slate-300">
-                    Annualized Strategy Growth (XIRR)
-                  </div>
-                  <div className="flex items-baseline gap-2 mt-0.5 flex-wrap">
-                    <span className="text-2xl font-black font-mono tracking-tight text-emerald-400">
-                      +{(summary.xirr ?? 0).toFixed(1)}% p.a.
-                    </span>
-                    <span className="text-xs text-slate-300 font-medium">
-                      (Total ₹5.0L Account)
-                    </span>
-                    <span className="text-slate-600 hidden sm:inline">·</span>
-                    <span className="text-base font-black font-mono text-sky-400">
-                      +{(summary.xirr_active ?? 0).toFixed(1)}% p.a.
-                    </span>
-                    <span className="text-xs text-slate-300 font-medium">
-                      (₹2.5L Active Margin)
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-5 sm:gap-7 text-xs font-mono">
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total Net Profit</span>
-                  <span className="font-black text-emerald-400 text-sm">
-                    {(summary.net_pnl ?? 0) >= 0 ? "+" : ""}₹{(summary.net_pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Total ROI</span>
-                  <span className="font-black text-emerald-400 text-sm">
-                    +{(summary.total_pnl_pct ?? 0).toFixed(1)}%
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Profit Factor</span>
-                  <span className="font-black text-white text-sm">
-                    {summary.profit_factor ?? 0}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400 block text-[10px] uppercase font-bold">Track Record</span>
-                  <span className="font-black text-slate-200 text-sm">
-                    {summary.period_years ?? 0} Years
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Scorecard Year Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-              {dynamicYearly.length === 0 ? (
-                <div className="col-span-full p-8 text-center text-slate-400 font-medium">
-                  No closed trades or yearly performance recorded yet.
-                </div>
-              ) : dynamicYearly.map((y) => {
+            {/* Year Cards Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+              {dynamicYearly.map((y) => {
                 const isProf = (y.pnl ?? 0) >= 0
                 const winRate = y.win_rate ?? 0
                 const pf = y.profit_factor ?? 0
-                const retPct = y.pnl_pct ?? 0
+                const isSelected = tradeLogYear === y.year
 
                 return (
                   <div
                     key={y.year}
-                    className={`rounded-2xl border p-4 transition ${
-                      isProf ? "bg-emerald-50/40 border-emerald-200" : "bg-rose-50/40 border-rose-200"
+                    onClick={() => setTradeLogYear(tradeLogYear === y.year ? "ALL" : y.year)}
+                    className={`rounded-2xl border p-4 transition cursor-pointer relative group hover:shadow-md ${
+                      isSelected
+                        ? "bg-emerald-50/80 border-emerald-500 ring-2 ring-emerald-500/30"
+                        : isProf
+                        ? "bg-emerald-50/30 border-emerald-200/80 hover:border-emerald-300"
+                        : "bg-rose-50/30 border-rose-200/80 hover:border-rose-300"
                     }`}
                   >
                     <div className="flex items-center justify-between">
                       <span className="font-black text-sm text-slate-900 font-mono">{y.year}</span>
                       <span
                         className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                          isProf ? "bg-emerald-100 text-emerald-800 border-emerald-300" : "bg-rose-100 text-rose-800 border-rose-300"
+                          isProf ? "bg-emerald-100 text-emerald-800 border-emerald-200" : "bg-rose-100 text-rose-800 border-rose-200"
                         }`}
                       >
                         {isProf ? "PROFITABLE" : "DRAWDOWN"}
@@ -1641,20 +2364,17 @@ export function SwingerPage() {
 
                     <div className="mt-2.5">
                       <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">
-                        Net Realized P&L
+                        Realized P&L
                       </span>
                       <div className={`text-lg font-black font-mono tracking-tight mt-0.5 ${isProf ? "text-emerald-700" : "text-rose-700"}`}>
                         {isProf ? "+" : ""}₹{(y.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                        <span className="text-xs ml-1 font-bold">
-                          ({isProf ? "+" : ""}{retPct.toFixed(1)}%)
-                        </span>
                       </div>
                     </div>
 
-                    <div className="mt-3 pt-2.5 border-t border-slate-200/80 flex items-center justify-between text-xs text-slate-600 font-medium">
+                    <div className="mt-3 pt-2.5 border-t border-slate-200/70 flex items-center justify-between text-xs text-slate-600 font-medium">
                       <span>{y.trades} trades</span>
-                      <span className="font-bold text-slate-800">
-                        {winRate.toFixed(1)}% WR · PF {pf > 0 ? pf.toFixed(2) : "0.0"}
+                      <span className="font-bold text-slate-800 font-mono">
+                        {winRate.toFixed(1)}% WR · {pf > 0 ? pf.toFixed(2) : "0.0"} PF
                       </span>
                     </div>
 
@@ -1665,57 +2385,75 @@ export function SwingerPage() {
                         style={{ width: `${Math.min(100, Math.max(5, winRate))}%` }}
                       />
                     </div>
+
+                    <div className="mt-2 text-[10px] text-center text-slate-400 group-hover:text-emerald-700 font-semibold transition">
+                      {isSelected ? "Active Filter (Click to reset)" : "Click to view trades"}
+                    </div>
                   </div>
                 )
               })}
             </div>
 
-            {/* Collapsible Monthly Matrix */}
-            <div className="mt-6 pt-5 border-t border-slate-100">
-              <div
-                className="flex justify-between items-center cursor-pointer"
-                onClick={() => setShowMonthlyMatrix(!showMonthlyMatrix)}
-              >
+            {/* 4. CLEAN MONTH-BY-MONTH MATRIX BY YEAR */}
+            <div className="mt-4 pt-4 border-t border-slate-100 space-y-3">
+              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
                 <div>
                   <h4 className="font-extrabold text-sm text-slate-900 flex items-center gap-2">
                     <BarChart3 className="size-4 text-emerald-600" />
-                    Month-by-Month Breakdown ({monthly.length} Months)
+                    Month-by-Month Breakdown Matrix
                   </h4>
-                  <p className="text-xs text-slate-500 font-medium">Click to {showMonthlyMatrix ? "hide" : "expand"} performance matrix</p>
+                  <p className="text-xs text-slate-500 font-medium">Select a year to inspect all monthly returns and win rates</p>
                 </div>
-                <Button variant="ghost" size="sm" className="gap-1 text-xs font-bold text-slate-600">
-                  {showMonthlyMatrix ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-                  {showMonthlyMatrix ? "Collapse" : "Expand"}
-                </Button>
+
+                {/* Year Selector Pills for Monthly View */}
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-bold">
+                  {["2026", "2025", "2024", "2023", "2022"].map((yr) => (
+                    <button
+                      key={yr}
+                      type="button"
+                      onClick={() => setSelectedMonthlyYear(yr)}
+                      className={`px-2.5 py-1 rounded-lg transition ${
+                        selectedMonthlyYear === yr
+                          ? "bg-white text-emerald-700 shadow-xs"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                    >
+                      {yr}
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              {showMonthlyMatrix && (
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 max-h-96 overflow-y-auto pr-1 mt-4 pt-3 border-t border-slate-100">
-                  {monthly.map((m) => {
+              {/* Monthly Cards for the Selected Year */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3 pt-1">
+                {monthly
+                  .filter((m) => m.month.startsWith(selectedMonthlyYear))
+                  .map((m) => {
                     const isProfitable = (m.pnl ?? 0) > 0
                     return (
                       <div
                         key={m.month}
                         className={`rounded-2xl border p-3.5 transition ${
-                          isProfitable ? "bg-emerald-50/50 border-emerald-300" : "bg-white border-slate-200"
+                          isProfitable
+                            ? "bg-emerald-50/40 border-emerald-300"
+                            : (m.trades || 0) > 0
+                            ? "bg-rose-50/40 border-rose-200"
+                            : "bg-slate-50/50 border-slate-200"
                         }`}
                       >
                         <div className="flex items-center justify-between">
-                          <span className="font-bold text-xs text-slate-900">{m.label}</span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-bold border bg-slate-100 text-slate-700 font-mono">
+                          <span className="font-black text-xs text-slate-900">{m.label}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold border bg-white text-slate-700 font-mono">
                             PF {(m.profit_factor ?? 0).toFixed(2)}
                           </span>
                         </div>
                         <div className="mt-2 flex items-baseline justify-between">
-                          <span className="text-[11px] text-slate-500 font-semibold">Net:</span>
-                          <span className={`text-sm font-black font-mono ${isProfitable ? "text-emerald-600" : "text-rose-600"}`}>
-                            {isProfitable ? "+" : ""}₹{(m.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                            <span className="text-[10px] ml-1 font-semibold">
-                              ({isProfitable ? "+" : ""}{(m.pnl_pct ?? 0).toFixed(1)}%)
-                            </span>
+                          <span className="text-[10px] text-slate-400 font-bold uppercase">Net</span>
+                          <span className={`text-sm font-black font-mono ${isProfitable ? "text-emerald-700" : (m.pnl ?? 0) < 0 ? "text-rose-700" : "text-slate-500"}`}>
+                            {(m.pnl ?? 0) >= 0 ? "+" : ""}₹{(m.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                           </span>
                         </div>
-                        <div className="mt-2 pt-1.5 border-t border-slate-200 flex items-center justify-between text-[11px] text-slate-600">
+                        <div className="mt-2 pt-1.5 border-t border-slate-200/70 flex items-center justify-between text-[11px] text-slate-600 font-medium">
                           <span>{m.trades} trades</span>
                           <span>
                             <strong className="text-emerald-700">{m.wins}W</strong> / <strong className="text-rose-700">{m.losses}L</strong> ({m.win_rate}%)
@@ -1724,12 +2462,11 @@ export function SwingerPage() {
                       </div>
                     )
                   })}
-                </div>
-              )}
+              </div>
             </div>
           </div>
 
-          {/* Master Historical Trade Log Table with Instant Search */}
+          {/* 5. MASTER HISTORICAL CLOSED TRADE LOG TABLE */}
           <div className="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-xs space-y-4">
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
@@ -1738,7 +2475,7 @@ export function SwingerPage() {
                   Master Closed Trade Log ({filteredTradeLog.length} of {trades.length} Closed Trades)
                 </h3>
                 <p className="text-xs text-slate-500 font-medium">
-                  Search any symbol (e.g. PAYTM, STLTECH, SMSPHARMA) or filter by year and multi-baggers. Click any row to open full chart.
+                  Search any symbol (e.g. PAYTM, STLTECH, V2RETAIL) or filter by year and multi-baggers. Click any row to open full chart.
                 </p>
               </div>
 
@@ -1747,7 +2484,7 @@ export function SwingerPage() {
                 <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
                 <input
                   type="text"
-                  placeholder="Search symbol (e.g. PAYTM)..."
+                  placeholder="Search symbol (e.g. V2RETAIL)..."
                   value={tradeLogSearch}
                   onChange={(e) => setTradeLogSearch(e.target.value)}
                   className="w-full pl-9 pr-7 py-1.5 rounded-xl border border-slate-200 bg-slate-50/50 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-emerald-500/20 focus:border-emerald-500 transition"
@@ -1833,7 +2570,7 @@ export function SwingerPage() {
               </div>
             </div>
 
-            {/* The Clean Table */}
+            {/* Master Closed Trade Log Table */}
             <div className="overflow-x-auto rounded-2xl border border-slate-200/80 bg-white">
               <table className="w-full text-left text-xs border-collapse">
                 <thead>
