@@ -177,6 +177,7 @@ positions = []
 closed_trades = []
 trade_id = 1
 symbol_l1_attempts = {}
+symbol_l2_attempts = {}
 
 for cur_dt in all_market_dates:
     surviving = []
@@ -215,17 +216,11 @@ for cur_dt in all_market_dates:
         
         # STOP-LOSS EVALUATION:
         if not pos['be_shield_active']:
-            # Catastrophe Hard Circuit Breaker Stop (15% Drop Protection against intraday flash crashes)
-            hard_catastrophe_floor = entry_p * 0.85
-            if l <= hard_catastrophe_floor:
-                exited = True
-                exit_p = min(o, hard_catastrophe_floor) if o < hard_catastrophe_floor else hard_catastrophe_floor
-                exit_reason = "Catastrophe Stop (-15% Floor)"
-            # Primary Stop: Daily Close below Trigger Candle Low
-            elif c < trigger_sl:
+            # Initial Stop: 12% Daily Candle Close Stop (Gives enough room for normal pullback breathing room)
+            if c <= entry_p * 0.88:
                 exited = True
                 exit_p = c
-                exit_reason = "Close Below Trigger Candle Low"
+                exit_reason = "Initial SL (-12% Close)"
         elif pos['be_shield_active'] and not pos['runner_mode']:
             be_sl = entry_p * 1.01
             if l <= be_sl:
@@ -301,19 +296,24 @@ for cur_dt in all_market_dates:
             if s in held:
                 continue
             
-            # Leg 1 Max Attempts Rule: Cap at 2 attempts per turnaround stock
+            # Max Attempts Rule: Cap at 2 attempts for Leg 1 and 3 for Leg 2
             if sig['leg'] == 1:
                 attempt = symbol_l1_attempts.get(s, 0) + 1
                 if attempt > 2:
                     continue
                 symbol_l1_attempts[s] = attempt
+            else:
+                attempt = symbol_l2_attempts.get(s, 0) + 1
+                if attempt > 3:
+                    continue
+                symbol_l2_attempts[s] = attempt
                 
             p = sig['price']
             if p <= 0: continue
             shs = int(SLOT_SIZE / p)
             if shs < 1: continue
             
-            trig_low = sig.get('low_price', p * 0.95)
+            sl_12pct = round(p * 0.88, 2)
             
             positions.append({
                 'symbol': s,
@@ -322,8 +322,8 @@ for cur_dt in all_market_dates:
                 'entry_date': cur_dt,
                 'entry_price': p,
                 'shares': shs,
-                'trigger_sl': trig_low,
-                'sl_price': trig_low,
+                'trigger_sl': sl_12pct,
+                'sl_price': sl_12pct,
                 'be_shield_active': False,
                 'runner_mode': False,
                 'runner_peak': p,

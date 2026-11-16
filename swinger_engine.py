@@ -39,7 +39,7 @@ DEFAULT_CONFIG = {
     "app_name": "Algo Astra Swinger Paper Pro",
     "enabled": True,
     "mode": "paper",
-    "strategy": "Elite RSI Cooldown Pullback · Trigger Candle Low SL · BE Shield @ +15% · Pyramid @ +20% · +25% Vault Lock @ +50% · 50 EMA Vol Breakdown + 25% Close Trail",
+    "strategy": "Elite RSI Cooldown Pullback · 12% Close SL · BE Shield @ +15% · Pyramid @ +20% · +25% Vault Lock @ +50% · 50 EMA Vol Breakdown + 25% Close Trail",
     "capital_allocated": 500000.0,
     "max_open_positions": 12,
     "base_position_size": 25000.0,
@@ -52,9 +52,9 @@ DEFAULT_CONFIG = {
     "min_volume_surge_mult": 1.5,
     "min_candle_gain_pct": 5.0,
     "candle_wick_rejection": True,
-    "initial_sl_type": "TRIGGER_CANDLE_LOW",
-    "initial_sl_pct": -5.0,
-    "leg2_initial_sl_pct": -5.0,
+    "initial_sl_type": "FIXED_12PCT_CLOSE",
+    "initial_sl_pct": -12.0,
+    "leg2_initial_sl_pct": -12.0,
     "catastrophe_floor_pct": 15.0,
     "be_shield_trigger_pct": 15.0,
     "tp_target_pct": 30.0,
@@ -935,7 +935,7 @@ def update_positions_and_scan():
                 })
                 continue
 
-            sl = float(pos.get("sl_price", avg_price * 0.95))
+            sl = float(pos.get("sl_price", avg_price * 0.88))
             # Evaluated on Daily Candle Close to avoid intraday wick shakeouts
             if cmp_price <= sl:
                 exit_price = cmp_price
@@ -943,7 +943,7 @@ def update_positions_and_scan():
                 if pos.get("be_active", False):
                     reason = "Break-Even Shield Exit (Cost Protected)"
                 else:
-                    reason = "Close Below Trigger Candle Low"
+                    reason = f"Initial SL ({pos.get('initial_sl_pct', -12.0):.0f}% Close)"
                 print(f"[Swinger Paper] CANDLE CLOSE STOP HIT for {sym} @ Rs.{exit_price} ({reason}). PnL: Rs.{trade_pnl}")
                 closed_this_cycle.append({
                     "symbol": sym,
@@ -1156,7 +1156,7 @@ def update_positions_and_scan():
                 continue
                 
             trig_low = float(df["Low"].iloc[-1]) if ("Low" in df and len(df) > 0) else round(last_close * 0.95, 2)
-            initial_sl = trig_low
+            initial_sl = round(last_close * (1.0 + initial_sl_pct / 100.0), 2)
             be_trigger = round(last_close * (1.0 + be_shield_trigger_pct / 100.0), 2)
             tp_target = round(last_close * (1.0 + tp_target_pct / 100.0), 2)
             
@@ -1234,7 +1234,7 @@ def update_positions_and_scan():
                     if qty2 <= 0:
                         continue
                     trig_low2 = cand2.get("trigger_sl", round(c_p * 0.95, 2))
-                    sl2 = trig_low2
+                    sl2 = round(c_p * (1.0 + leg2_sl_pct / 100.0), 2)
                     be2 = round(c_p * (1.0 + leg2_be_pct / 100.0), 2)
                     tp2 = round(c_p * 1.30, 2)
                     s_leg2 = cand2.get("strategy_leg", "LEG2_MA_PULLBACK")
