@@ -854,6 +854,9 @@ export function SwingerPage() {
             <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
               Paper Mode (₹25k / Slot)
             </span>
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Enforces institutional quality: Market Cap >= Rs.2,000 Cr and High-Velocity Swing ATR >= 3.2%">
+              Mcap ≥ ₹2k Cr · ATR ≥ 3.2%
+            </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Protects profits by moving stop to Cost+1% once gain reaches +15%">
               BE Shield @ +15%
             </span>
@@ -865,7 +868,7 @@ export function SwingerPage() {
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Turnaround Momentum Engine · 12% Close SL · BE Shield @ +15% · Pure 25% Peak Trail @ +20% · 1000d Trough Memory · 200 EMA Clearance · Leg 2 Priority · Excl. Blacklist
+            Turnaround Momentum Engine · 12% Close SL · BE Shield @ +15% · Pure 25% Peak Trail @ +20% · 1000d Trough Memory · Mcap ≥ ₹2k Cr · ATR ≥ 3.2% · 200 EMA Clearance · Leg 2 Priority · Excl. Blacklist
           </p>
         </div>
 

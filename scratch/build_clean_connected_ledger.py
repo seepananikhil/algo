@@ -37,12 +37,24 @@ except Exception:
 
 print(f"[Ledger Build] Loaded Blacklist ({len(BLACKLIST)} symbols): {BLACKLIST}")
 
+MCAP_PATH = "scratch/marketcap_2000_symbols.json"
+MCAP_2000_SET = set()
+try:
+    with open(MCAP_PATH, "r", encoding="utf-8") as f:
+        MCAP_2000_SET = set(json.load(f))
+except Exception as e:
+    print(f"Warning: could not load {MCAP_PATH}: {e}")
+
+print(f"[Ledger Build] Loaded Market Cap >= 2000 Cr Filter ({len(MCAP_2000_SET)} symbols)")
+
 dt_sim_start = pd.to_datetime('2022-01-01')
 
 stock_bars = {}
 
 for s, df in price_data.items():
     if len(df) < 150 or s in ['^NSEI', 'NIFTY'] or s in BLACKLIST:
+        continue
+    if MCAP_2000_SET and s not in MCAP_2000_SET:
         continue
     df = df.copy()
     if not isinstance(df.index, pd.DatetimeIndex):
@@ -65,13 +77,18 @@ for s, df in price_data.items():
     max_1000 = pd.Series(h).rolling(1000, min_periods=100).max().values
     lowest_30 = pd.Series(l).rolling(30, min_periods=5).min().values
     
+    prev_c = np.roll(c, 1)
+    prev_c[0] = c[0]
+    tr = np.maximum(h - l, np.maximum(abs(h - prev_c), abs(l - prev_c)))
+    atr14 = pd.Series(tr).rolling(14, min_periods=5).mean().values
+    atr_pct = np.where(c > 0, (atr14 / c) * 100.0, 0.0)
+    
     delta = pd.Series(c).diff().values
     gain = pd.Series(np.where(delta > 0, delta, 0)).rolling(14, min_periods=10).mean().values
     loss = pd.Series(np.where(delta < 0, -delta, 0)).rolling(14, min_periods=10).mean().values
     rs = np.where(loss > 0, gain / loss, 1.0)
     rsi = 100.0 - (100.0 / (1.0 + rs))
     
-    prev_c = np.roll(c, 1)
     pct_chg = np.where(prev_c > 0, (c - prev_c) / prev_c * 100.0, 0.0)
     
     stock_bars[s] = {
@@ -79,7 +96,7 @@ for s, df in price_data.items():
         'c': c, 'h': h, 'l': l, 'o': o, 'v': v,
         'e20': ema20, 'e50': ema50, 'e200': ema200, 'rsi': rsi,
         'vsma50': vol_sma50, 'vr50': vr50, 'vsma60': vol_sma60, 'vr60': vr60,
-        'pct_chg': pct_chg, 'max_1000': max_1000, 'lowest_30': lowest_30, 'n': n
+        'atr_pct': atr_pct, 'pct_chg': pct_chg, 'max_1000': max_1000, 'lowest_30': lowest_30, 'n': n
     }
 
 # 1. Generate Leg 1 Turnaround Pullback Signals:
@@ -126,6 +143,7 @@ for s, b in stock_bars.items():
                 40.0 <= rsi[j] <= 60.0 and 
                 vr50[j] >= 0.40 and 
                 wick <= 0.45 and 
+                b['atr_pct'][j] >= 3.2 and 
                 dates[j] >= dt_sim_start):
                 
                 leg1_signals.append({
@@ -167,7 +185,8 @@ for s, first_leg1_dt in phoenix_first_dt.items():
             (0.8 <= cur_pct <= 5.5) and 
             (40.0 <= rsi[i] <= 60.0) and 
             (vr50[i] >= 0.40) and 
-            (wick_ratio <= 0.45)
+            (wick_ratio <= 0.45) and 
+            (b['atr_pct'][i] >= 3.2)
         )
         if is_ma_pullback:
             # Overhead Clearance Check: Avoid entries colliding into 200 EMA ceiling (<8% room)

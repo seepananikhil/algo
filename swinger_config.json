@@ -13,6 +13,8 @@
   "optimal_slots": 12,
   "max_slots_cap": 25,
   "min_stock_price": 20.0,
+  "min_market_cap_cr": 2000.0,
+  "min_atr_pct": 3.2,
   "min_star_rating": 4,
   "require_below_ema200": true,
   "overhead_ema200_min_room_pct": 8.0,
