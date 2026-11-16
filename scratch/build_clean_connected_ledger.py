@@ -99,7 +99,7 @@ for s, b in stock_bars.items():
         crash_condition &
         (c < e200) &
         (pct_chg >= 5.0) &
-        (vr60 >= 1.5)
+        (vr60 >= 2.0)
     )
     blast_indices = np.where(blast_mask)[0]
     last_entry_idx = -999
@@ -112,6 +112,12 @@ for s, b in stock_bars.items():
             rng = h[j] - l[j]
             wick = ((h[j] - c[j]) / rng) if rng > 0 else 0.0
             
+            # Overhead Clearance Check: Avoid entries colliding into 200 EMA ceiling (<8% room)
+            if c[j] < e200[j]:
+                dist_to_200 = (e200[j] - c[j]) / c[j] * 100.0
+                if dist_to_200 < 8.0:
+                    continue
+
             # Pure RSI Cool-down Pullback Bounce at 20 EMA:
             if (-3.5 <= dist_20 <= 3.5 and 
                 c[j] >= e50[j] * 0.97 and 
@@ -164,7 +170,11 @@ for s, first_leg1_dt in phoenix_first_dt.items():
             (wick_ratio <= 0.45)
         )
         if is_ma_pullback:
-            # Overhead Resistance Check: Avoid breakout candles colliding directly into 200 EMA wall
+            # Overhead Clearance Check: Avoid entries colliding into 200 EMA ceiling (<8% room)
+            if c[i] < e200[i]:
+                dist_to_200 = (e200[i] - c[i]) / c[i] * 100.0
+                if dist_to_200 < 8.0:
+                    continue
             if abs(c[i] - e200[i]) / e200[i] < 0.01 and c[i] < e200[i] * 1.005:
                 continue
             d = dates[i]
@@ -177,7 +187,8 @@ for s, first_leg1_dt in phoenix_first_dt.items():
                 last_trigger_idx = i
 
 all_signals = leg1_signals + leg2_signals
-df_signals = pd.DataFrame(all_signals).sort_values(by=['date', 'leg', 'score'], ascending=[True, True, False])
+# Sort Leg 2 before Leg 1 (leg descending: 2 before 1) to prioritize proven Stage-2 pullbacks
+df_signals = pd.DataFrame(all_signals).sort_values(by=['date', 'leg', 'score'], ascending=[True, False, False])
 
 sig_by_date = {}
 for _, row in df_signals.iterrows():
