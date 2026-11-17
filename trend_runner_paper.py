@@ -336,6 +336,9 @@ class TrendRunnerPaperEngine:
         o = float(bar["open"])
         h = float(bar["high"])
         l = float(bar["low"])
+        candle_rng = h - l
+        candle_body = abs(c - o)
+        body_ratio = candle_body / candle_rng if candle_rng > 0 else 0.0
         vwap = float(bar["vwap"])
         atr = float(bar["atr14"]) if "atr14" in bar and pd.notna(bar["atr14"]) else 30.0
 
