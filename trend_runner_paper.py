@@ -195,24 +195,24 @@ class TrendRunnerPaperEngine:
         pyramid: bool = True,
         reentry: bool = False,
         max_trades_per_day: int = 2,
-        vix_th: float = 2.5,
+        vix_th: float = 1.8,
         vix_call_th: Optional[float] = None,
         vix_put_th: Optional[float] = 0.0,
         target_pts: Optional[float] = None,
         be_trigger: Optional[float] = None,
         be_lock: float = 10.0,
         r1_trigger: float = 70.0,
-        r1_lock: float = 20.0,
-        r2_trigger: float = 130.0,
-        r2_lock: float = 60.0,
-        r3_trigger: float = 180.0,
-        r3_lock: float = 110.0,
-        r4_trigger: Optional[float] = 230.0,
-        r4_lock: float = 165.0,
-        r5_trigger: Optional[float] = 280.0,
-        r5_lock: float = 220.0,
-        r6_trigger: Optional[float] = 330.0,
-        r6_lock: float = 270.0,
+        r1_lock: float = 25.0,
+        r2_trigger: float = 95.0,
+        r2_lock: float = 50.0,
+        r3_trigger: float = 135.0,
+        r3_lock: float = 85.0,
+        r4_trigger: Optional[float] = 180.0,
+        r4_lock: float = 125.0,
+        r5_trigger: Optional[float] = 230.0,
+        r5_lock: float = 175.0,
+        r6_trigger: Optional[float] = 290.0,
+        r6_lock: float = 230.0,
         williams_fallback: bool = True,
         strike_mode: str = "itm150",
         reentry_be_trigger: Optional[float] = None,
@@ -393,9 +393,9 @@ class TrendRunnerPaperEngine:
                 pos["max_fav"] = fav
 
             # --- Tier 0: Pre-Ratchet Retention Guard ---
-            # Guard A: +40 pts (Nifty) / +130 pts (Sensex) -> Pull SL to Entry - 15 (Nifty) / Entry - 40 (Sensex)
-            t0_trig_1 = 40.0 if not (self.symbol == "SENSEX") else 130.0
-            t0_lk_1 = -15.0 if not (self.symbol == "SENSEX") else -40.0
+            # Guard A: +35 pts (Nifty) / +115 pts (Sensex) -> Pull SL to Entry - 12 (Nifty) / Entry - 40 (Sensex)
+            t0_trig_1 = 35.0 if not (self.symbol == "SENSEX") else 115.0
+            t0_lk_1 = -12.0 if not (self.symbol == "SENSEX") else -40.0
             if pos["max_fav"] >= t0_trig_1:
                 t0_level_1 = entry_px + t0_lk_1 if sig == "LONG" else entry_px - t0_lk_1
                 if (sig == "LONG" and t0_level_1 > curr_sl) or (sig == "SHORT" and t0_level_1 < curr_sl):
@@ -405,8 +405,8 @@ class TrendRunnerPaperEngine:
                         print(f"  [TIER 0A RETENTION GUARD] Reached +{pos['max_fav']:.1f} pts! Stop pulled to {curr_sl:.2f} (Max loss capped to {abs(t0_lk_1):.1f} pts)")
                     pos["last_ratchet"] = "Tier 0A"
 
-            # Guard B: +55 pts (Nifty) / +180 pts (Sensex) -> Lock Entry + 5 (Nifty) / Entry + 15 (Sensex)
-            t0_trig_2 = 55.0 if not (self.symbol == "SENSEX") else 180.0
+            # Guard B: +50 pts (Nifty) / +180 pts (Sensex) -> Lock Entry + 5 (Nifty) / Entry + 15 (Sensex)
+            t0_trig_2 = 50.0 if not (self.symbol == "SENSEX") else 180.0
             t0_lk_2 = 5.0 if not (self.symbol == "SENSEX") else 15.0
             if pos["max_fav"] >= t0_trig_2:
                 t0_level_2 = entry_px + t0_lk_2 if sig == "LONG" else entry_px - t0_lk_2

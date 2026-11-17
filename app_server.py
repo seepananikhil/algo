@@ -913,14 +913,30 @@ def trend_runner_forward_loop() -> None:
             enable_trap = setups_cfg.get("vix_trap", True)
 
             from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
+            nifty_ratchet = port_cfg.get("spot_ratchet_settings", {})
             if engine is None:
                 lots_cfg = int(cfg.get("trend_runner_lots", 1))
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
                 engine = TrendRunnerPaperEngine(
-                    sl_points=28.0,
+                    symbol="NIFTY",
+                    sl_points=float(nifty_ratchet.get("initial_sl_pts", 28.0)),
                     sl_mode="fixed",
                     lots=lots_cfg,
                     sizing_mode=sizing_cfg,
+                    vix_th=float(nifty_ratchet.get("vix_th", 1.8)),
+                    vix_call_th=float(nifty_ratchet.get("vix_call_th", 1.8)),
+                    r1_trigger=float(nifty_ratchet.get("tier1_trigger_pts", 70.0)),
+                    r1_lock=float(nifty_ratchet.get("tier1_lock_pts", 25.0)),
+                    r2_trigger=float(nifty_ratchet.get("tier2_trigger_pts", 95.0)),
+                    r2_lock=float(nifty_ratchet.get("tier2_lock_pts", 50.0)),
+                    r3_trigger=float(nifty_ratchet.get("tier3_trigger_pts", 135.0)),
+                    r3_lock=float(nifty_ratchet.get("tier3_lock_pts", 85.0)),
+                    r4_trigger=float(nifty_ratchet.get("tier4_trigger_pts", 180.0)),
+                    r4_lock=float(nifty_ratchet.get("tier4_lock_pts", 125.0)),
+                    r5_trigger=float(nifty_ratchet.get("tier5_trigger_pts", 230.0)),
+                    r5_lock=float(nifty_ratchet.get("tier5_lock_pts", 175.0)),
+                    r6_trigger=float(nifty_ratchet.get("tier6_trigger_pts", 290.0)),
+                    r6_lock=float(nifty_ratchet.get("tier6_lock_pts", 230.0)),
                     reentry=True,
                     notify_telegram=True,
                     enable_trend_runner=enable_trend,
@@ -931,6 +947,19 @@ def trend_runner_forward_loop() -> None:
             else:
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
+                if nifty_ratchet:
+                    engine.r1_trigger = float(nifty_ratchet.get("tier1_trigger_pts", 70.0))
+                    engine.r1_lock = float(nifty_ratchet.get("tier1_lock_pts", 25.0))
+                    engine.r2_trigger = float(nifty_ratchet.get("tier2_trigger_pts", 95.0))
+                    engine.r2_lock = float(nifty_ratchet.get("tier2_lock_pts", 50.0))
+                    engine.r3_trigger = float(nifty_ratchet.get("tier3_trigger_pts", 135.0))
+                    engine.r3_lock = float(nifty_ratchet.get("tier3_lock_pts", 85.0))
+                    engine.r4_trigger = float(nifty_ratchet.get("tier4_trigger_pts", 180.0))
+                    engine.r4_lock = float(nifty_ratchet.get("tier4_lock_pts", 125.0))
+                    engine.r5_trigger = float(nifty_ratchet.get("tier5_trigger_pts", 230.0))
+                    engine.r5_lock = float(nifty_ratchet.get("tier5_lock_pts", 175.0))
+                    engine.r6_trigger = float(nifty_ratchet.get("tier6_trigger_pts", 290.0))
+                    engine.r6_lock = float(nifty_ratchet.get("tier6_lock_pts", 230.0))
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
@@ -988,9 +1017,30 @@ def trend_runner_forward_loop() -> None:
                         opt_ltp = float(q["ltp"])
                         pos["option_symbol"] = q.get("symbol", pos.get("option_symbol"))
                         pos["option_ltp"] = opt_ltp
+
+                        # Set realistic option entry price if missing or zero
+                        if not pos.get("option_entry_price") or float(pos.get("option_entry_price", 0)) == 0:
+                            entry_spot = float(pos.get("entry_price", 0))
+                            if pos.get("side") in ("LONG", "CALL"):
+                                intrinsic_entry = max(0.0, entry_spot - strike)
+                            else:
+                                intrinsic_entry = max(0.0, strike - entry_spot)
+                            cur_spot = float(live_spot or entry_spot)
+                            cur_intrinsic = max(0.0, cur_spot - strike) if pos.get("side") in ("LONG", "CALL") else max(0.0, strike - cur_spot)
+                            cur_extrinsic = max(5.0, opt_ltp - cur_intrinsic)
+                            pos["option_entry_price"] = round(intrinsic_entry + cur_extrinsic * 1.15, 1)
+
+                        if pos.get("pyramided") and (not pos.get("pyramid_option_entry") or float(pos.get("pyramid_option_entry", 0)) == 0):
+                            pyr_spot = float(pos.get("pyramid_entry_px", 0))
+                            if pos.get("side") in ("LONG", "CALL"):
+                                pyr_intrinsic = max(0.0, pyr_spot - strike)
+                            else:
+                                pyr_intrinsic = max(0.0, strike - pyr_spot)
+                            pos["pyramid_option_entry"] = round(pyr_intrinsic + 20.0, 1)
+
                         lot_size = 65
                         base_lots = int(pos.get("base_lots") or 1)
-                        opt_entry = float(pos.get("option_entry_price") or opt_ltp)
+                        opt_entry = float(pos["option_entry_price"])
                         pnl1 = (opt_ltp - opt_entry) * (base_lots * lot_size)
                         pnl2 = 0.0
                         if pos.get("pyramided") and pos.get("pyramid_option_entry"):

@@ -66,22 +66,22 @@ type PortfolioConfig = {
 
 const DEFAULT_NIFTY_RATCHET: SpotRatchetSettings = {
   initial_sl_pts: 28.0,
-  tier0a_trigger_pts: 40.0,
-  tier0a_lock_pts: -15.0,
-  tier0b_breakeven_trigger_pts: 55.0,
+  tier0a_trigger_pts: 35.0,
+  tier0a_lock_pts: -12.0,
+  tier0b_breakeven_trigger_pts: 50.0,
   tier0b_breakeven_lock_pts: 5.0,
   tier1_trigger_pts: 70.0,
-  tier1_lock_pts: 20.0,
-  tier2_trigger_pts: 130.0,
-  tier2_lock_pts: 60.0,
-  tier3_trigger_pts: 180.0,
-  tier3_lock_pts: 110.0,
-  tier4_trigger_pts: 230.0,
-  tier4_lock_pts: 165.0,
-  tier5_trigger_pts: 280.0,
-  tier5_lock_pts: 220.0,
-  tier6_trigger_pts: 340.0,
-  tier6_lock_pts: 270.0,
+  tier1_lock_pts: 25.0,
+  tier2_trigger_pts: 95.0,
+  tier2_lock_pts: 50.0,
+  tier3_trigger_pts: 135.0,
+  tier3_lock_pts: 85.0,
+  tier4_trigger_pts: 180.0,
+  tier4_lock_pts: 125.0,
+  tier5_trigger_pts: 230.0,
+  tier5_lock_pts: 175.0,
+  tier6_trigger_pts: 290.0,
+  tier6_lock_pts: 230.0,
 }
 
 const DEFAULT_SENSEX_RATCHET: SpotRatchetSettings = {
@@ -1017,7 +1017,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                     />
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    {isSx ? "At +240 pt peak, locks +80 pt profit" : "At +70 pt peak, locks +20 pt profit"}
+                    {isSx ? "At +240 pt peak, locks +80 pt profit" : "At +70 pt peak, locks +25 pt profit"}
                   </p>
                 </div>
               </div>
@@ -1032,19 +1032,19 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                       type="number"
                       step={0.5}
                       value={currentRatchet.tier2_trigger_pts}
-                      onChange={(e) => updateRatchetField("tier2_trigger_pts", parseFloat(e.target.value) || (isSx ? 400.0 : 130.0))}
+                      onChange={(e) => updateRatchetField("tier2_trigger_pts", parseFloat(e.target.value) || (isSx ? 340.0 : 95.0))}
                       className="h-8 text-xs flex-1"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={currentRatchet.tier2_lock_pts}
-                      onChange={(e) => updateRatchetField("tier2_lock_pts", parseFloat(e.target.value) || (isSx ? 200.0 : 60.0))}
+                      onChange={(e) => updateRatchetField("tier2_lock_pts", parseFloat(e.target.value) || (isSx ? 180.0 : 50.0))}
                       className="h-8 text-xs w-16"
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    {isSx ? "At +400 pt → +200 pt" : "At +130 pt → +60 pt"}
+                    {isSx ? "At +340 pt → +180 pt" : "At +95 pt → +50 pt"}
                   </p>
                 </div>
 
@@ -1056,19 +1056,19 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                       type="number"
                       step={0.5}
                       value={currentRatchet.tier3_trigger_pts}
-                      onChange={(e) => updateRatchetField("tier3_trigger_pts", parseFloat(e.target.value) || (isSx ? 600.0 : 180.0))}
+                      onChange={(e) => updateRatchetField("tier3_trigger_pts", parseFloat(e.target.value) || (isSx ? 480.0 : 135.0))}
                       className="h-8 text-xs flex-1"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={currentRatchet.tier3_lock_pts}
-                      onChange={(e) => updateRatchetField("tier3_lock_pts", parseFloat(e.target.value) || (isSx ? 360.0 : 110.0))}
+                      onChange={(e) => updateRatchetField("tier3_lock_pts", parseFloat(e.target.value) || (isSx ? 280.0 : 85.0))}
                       className="h-8 text-xs w-16"
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    {isSx ? "At +600 pt → +360 pt" : "At +180 pt → +110 pt"}
+                    {isSx ? "At +480 pt → +280 pt" : "At +135 pt → +85 pt"}
                   </p>
                 </div>
 
@@ -1080,19 +1080,19 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                       type="number"
                       step={0.5}
                       value={currentRatchet.tier4_trigger_pts}
-                      onChange={(e) => updateRatchetField("tier4_trigger_pts", parseFloat(e.target.value) || (isSx ? 850.0 : 230.0))}
+                      onChange={(e) => updateRatchetField("tier4_trigger_pts", parseFloat(e.target.value) || (isSx ? 650.0 : 180.0))}
                       className="h-8 text-xs flex-1"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={currentRatchet.tier4_lock_pts}
-                      onChange={(e) => updateRatchetField("tier4_lock_pts", parseFloat(e.target.value) || (isSx ? 550.0 : 165.0))}
+                      onChange={(e) => updateRatchetField("tier4_lock_pts", parseFloat(e.target.value) || (isSx ? 420.0 : 125.0))}
                       className="h-8 text-xs w-16"
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    {isSx ? "At +850 pt → +550 pt" : "At +230 pt → +165 pt"}
+                    {isSx ? "At +650 pt → +420 pt" : "At +180 pt → +125 pt"}
                   </p>
                 </div>
 
@@ -1103,20 +1103,20 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                     <Input
                       type="number"
                       step={0.5}
-                      value={currentRatchet.tier5_trigger_pts ?? (isSx ? 1200.0 : 280.0)}
-                      onChange={(e) => updateRatchetField("tier5_trigger_pts", parseFloat(e.target.value) || (isSx ? 1200.0 : 280.0))}
+                      value={currentRatchet.tier5_trigger_pts ?? (isSx ? 850.0 : 230.0)}
+                      onChange={(e) => updateRatchetField("tier5_trigger_pts", parseFloat(e.target.value) || (isSx ? 850.0 : 230.0))}
                       className="h-8 text-xs flex-1"
                     />
                     <Input
                       type="number"
                       step={0.5}
-                      value={currentRatchet.tier5_lock_pts ?? (isSx ? 850.0 : 220.0)}
-                      onChange={(e) => updateRatchetField("tier5_lock_pts", parseFloat(e.target.value) || (isSx ? 850.0 : 220.0))}
+                      value={currentRatchet.tier5_lock_pts ?? (isSx ? 600.0 : 175.0)}
+                      onChange={(e) => updateRatchetField("tier5_lock_pts", parseFloat(e.target.value) || (isSx ? 600.0 : 175.0))}
                       className="h-8 text-xs w-16"
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    {isSx ? "At +1,200 pt → +850 pt" : "At +280 pt → +220 pt"}
+                    {isSx ? "At +850 pt → +600 pt" : "At +230 pt → +175 pt"}
                   </p>
                 </div>
 
@@ -1127,20 +1127,20 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                     <Input
                       type="number"
                       step={0.5}
-                      value={currentRatchet.tier6_trigger_pts ?? (isSx ? 1500.0 : 340.0)}
-                      onChange={(e) => updateRatchetField("tier6_trigger_pts", parseFloat(e.target.value) || (isSx ? 1500.0 : 340.0))}
+                      value={currentRatchet.tier6_trigger_pts ?? (isSx ? 1100.0 : 290.0)}
+                      onChange={(e) => updateRatchetField("tier6_trigger_pts", parseFloat(e.target.value) || (isSx ? 1100.0 : 290.0))}
                       className="h-8 text-xs flex-1"
                     />
                     <Input
                       type="number"
                       step={0.5}
-                      value={currentRatchet.tier6_lock_pts ?? (isSx ? 1100.0 : 270.0)}
-                      onChange={(e) => updateRatchetField("tier6_lock_pts", parseFloat(e.target.value) || (isSx ? 1100.0 : 270.0))}
+                      value={currentRatchet.tier6_lock_pts ?? (isSx ? 850.0 : 230.0)}
+                      onChange={(e) => updateRatchetField("tier6_lock_pts", parseFloat(e.target.value) || (isSx ? 850.0 : 230.0))}
                       className="h-8 text-xs w-16"
                     />
                   </div>
                   <p className="text-[10px] text-muted-foreground">
-                    {isSx ? "At +1,500 pt → +1,100 pt" : "At +340 pt → +270 pt"}
+                    {isSx ? "At +1,100 pt → +850 pt" : "At +290 pt → +230 pt"}
                   </p>
                 </div>
               </div>
