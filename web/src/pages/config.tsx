@@ -323,7 +323,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const sensexRatchet = config.sensex_spot_ratchet_settings || DEFAULT_SENSEX_RATCHET
 
   return (
-    <div className={embedded ? "space-y-6 pt-1" : "flex-1 space-y-6 p-4 md:p-8 pt-6 max-w-6xl mx-auto"}>
+    <div className={embedded ? "w-full space-y-5" : "w-full flex-1 space-y-5 p-1 sm:p-2 md:p-3"}>
       {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
         <div>

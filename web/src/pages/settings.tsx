@@ -200,9 +200,9 @@ export function SettingsPage() {
   const isValid = Boolean(data.kotak_session_valid)
 
   return (
-    <div className="mx-auto flex max-w-5xl flex-col gap-6 p-4 md:p-8 pt-6">
+    <div className="w-full flex flex-col gap-5 p-1 sm:p-2 md:p-3">
       {/* Top Title Banner & Tab Switcher */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Settings &amp; Configuration</h1>
           <p className="text-xs sm:text-sm text-muted-foreground mt-1">
@@ -294,249 +294,255 @@ export function SettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Available Balance Card */}
-      <Card>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-lg">Trading Margin Balance</CardTitle>
-              <CardDescription>Available equity margin fetched live from your Kotak Neo account.</CardDescription>
-            </div>
-            <Button variant="outline" size="sm" onClick={checkFunds} disabled={fundsLoading} className="gap-2">
-              <RefreshCw className={cn("size-3.5", fundsLoading && "animate-spin")} />
-              {fundsLoading ? "Checking…" : "Refresh Margin"}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {funds?.ok ? (
-            <div className="flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold tabular-nums tracking-tight text-emerald-400">
-                ₹{funds.available_equity_funds.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-              </span>
-              <span className="text-xs text-muted-foreground font-mono">Available Equity Margin</span>
-            </div>
-          ) : funds ? (
-            <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg font-mono text-xs">
-              {funds.error}
-            </p>
-          ) : (
-            <p className="text-sm text-muted-foreground">Log in to Kotak Neo to view live available funds.</p>
-          )}
-        </CardContent>
-      </Card>
-
-      {/* Kotak Neo Setup Card */}
-      <Card className="border-sky-500/40">
-        <CardHeader>
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-lg flex items-center gap-2">
-                <ShieldCheck className="size-5 text-sky-400" />
-                Kotak Neo API Credentials
-              </CardTitle>
-              <CardDescription>
-                Credentials saved here are written directly to <code className="text-xs text-sky-400">neo_config.json</code> on your server.
-              </CardDescription>
-            </div>
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowSecrets(!showSecrets)}
-              className="text-xs text-muted-foreground gap-1.5 self-start sm:self-auto"
-            >
-              {showSecrets ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
-              {showSecrets ? "Hide Secrets" : "Reveal Secrets"}
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <div className="grid gap-3.5 sm:grid-cols-2">
-            <div className="grid gap-1.5 sm:col-span-2">
-              <Label htmlFor="kotak-ck" className="flex items-center justify-between">
-                <span>Consumer Key</span>
-                {data.kotak_consumer_key_set && (
-                  <span className="text-emerald-500 text-xs font-medium">✓ Configured</span>
-                )}
-              </Label>
-              <Input
-                id="kotak-ck"
-                type={showSecrets ? "text" : "password"}
-                placeholder="From Kotak Neo Developer Portal (e.g. 1deb9014-...)"
-                value={kotakForm.consumer_key}
-                onChange={(e) => setKotakForm({ ...kotakForm, consumer_key: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="kotak-mob">Registered Mobile Number</Label>
-              <Input
-                id="kotak-mob"
-                placeholder="+918142036003"
-                value={kotakForm.mobile_number}
-                onChange={(e) => setKotakForm({ ...kotakForm, mobile_number: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="kotak-ucc">Client Code (UCC)</Label>
-              <Input
-                id="kotak-ucc"
-                placeholder="e.g. Y4KQT"
-                value={kotakForm.ucc}
-                onChange={(e) => setKotakForm({ ...kotakForm, ucc: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="kotak-mpin" className="flex items-center justify-between">
-                <span>6-Digit MPIN</span>
-                {data.kotak_mpin_set && (
-                  <span className="text-emerald-500 text-xs font-medium">✓ Configured</span>
-                )}
-              </Label>
-              <Input
-                id="kotak-mpin"
-                type={showSecrets ? "text" : "password"}
-                maxLength={6}
-                placeholder={data.kotak_mpin_set ? "•••••• (Configured)" : "Your 6-digit App PIN"}
-                value={kotakForm.mpin}
-                onChange={(e) => setKotakForm({ ...kotakForm, mpin: e.target.value })}
-              />
-            </div>
-            <div className="grid gap-1.5">
-              <Label htmlFor="kotak-totp-sec" className="flex items-center justify-between">
-                <span>TOTP Secret Key (Auto-Login)</span>
-                {data.kotak_totp_secret_set && (
-                  <span className="text-emerald-500 text-xs font-medium">✓ Configured</span>
-                )}
-              </Label>
-              <Input
-                id="kotak-totp-sec"
-                type={showSecrets ? "text" : "password"}
-                placeholder={data.kotak_totp_secret_set ? "•••••••••••• (Configured)" : "Base32 Authenticator Secret"}
-                value={kotakForm.totp_secret}
-                onChange={(e) => setKotakForm({ ...kotakForm, totp_secret: e.target.value })}
-              />
-            </div>
-          </div>
-
-          <p className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
-            💡 <strong>Auto-Authentication:</strong> With MPIN and TOTP Secret configured, AlgoNeo automatically generates your daily session tokens silently at 09:14 IST before the market opens without requiring any manual intervention.
-          </p>
-
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t">
-            <div className="flex items-center gap-2">
-              {!data.kotak_totp_secret_set && !kotakForm.totp_secret && (
-                <Input
-                  placeholder="6-digit TOTP code"
-                  maxLength={6}
-                  className="w-36 h-9 text-sm"
-                  value={kotakTotp}
-                  onChange={(e) => setKotakTotp(e.target.value)}
-                />
-              )}
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-              <Button
-                variant="outline"
-                onClick={saveKotakCredentials}
-                size="sm"
-                className="gap-1.5"
-              >
-                <Save className="size-3.5" /> Save Only
-              </Button>
-              <Button
-                onClick={saveAndLogin}
-                disabled={savingAndLoggingIn || kotakLoggingIn}
-                size="sm"
-                className="bg-sky-500 hover:bg-sky-600 text-white gap-2 font-medium"
-              >
-                <Zap className={cn("size-3.5", savingAndLoggingIn && "animate-spin")} />
-                {savingAndLoggingIn ? "Authenticating…" : "Save & Log In Now"}
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Capital Guardian & Circuit Breaker Card */}
-      <Card className={status.status?.risk_guardian?.is_locked ? "border-rose-500/50 bg-rose-500/5" : "border-emerald-500/30"}>
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <ShieldAlert className={cn("size-5", status.status?.risk_guardian?.is_locked ? "text-rose-500 animate-pulse" : "text-emerald-500")} />
-              <CardTitle className="text-lg">Risk Guardian Circuit Breaker</CardTitle>
-            </div>
-            <Badge
-              variant="outline"
-              className={status.status?.risk_guardian?.is_locked ? "border-rose-500/40 text-rose-400 bg-rose-500/10 font-bold" : "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"}
-            >
-              {status.status?.risk_guardian?.is_locked ? "CIRCUIT BREAKER LOCKED" : "ACTIVE MONITORING"}
-            </Badge>
-          </div>
-          <CardDescription>
-            Two-tier automated capital defense: Per-trade max loss auto-cut and daily portfolio circuit breaker.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          {/* Rules Summary Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-            <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20 flex flex-col justify-between">
-              <span className="text-muted-foreground text-[11px]">Daily Account Circuit Breaker</span>
-              <span className="font-mono font-semibold text-foreground mt-0.5">
-                -₹{(status.status?.risk_guardian?.daily_loss_limit || data?.daily_loss_limit || 2000).toLocaleString('en-IN')}
-              </span>
-              <span className="text-[10px] text-muted-foreground mt-0.5">
-                Buffer: ₹{Math.max(0, status.status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
-              </span>
-            </div>
-            <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20 flex flex-col justify-between">
-              <span className="text-muted-foreground text-[11px]">Per-Trade Max Loss Auto-Cut</span>
-              <span className="font-mono font-semibold text-amber-400 mt-0.5">
-                -₹{(status.status?.risk_guardian?.per_trade_loss_limit || 650).toLocaleString('en-IN')}/lot (-{status.status?.risk_guardian?.per_trade_loss_pct || 20}%)
-              </span>
-              <span className="text-[10px] text-muted-foreground mt-0.5">
-                {status.status?.risk_guardian?.per_trade_auto_cut !== false ? "Dynamic: Scales automatically by position lots (~10 pts SL)" : "Alert only"}
-              </span>
-            </div>
-          </div>
-
-          {status.status?.risk_guardian?.is_locked ? (
-            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-400">
-              <div className="text-xs">
-                <div className="font-bold">⚠️ Trading Halted: Daily Loss Limit Breached</div>
-                <div className="text-[11px] opacity-85 mt-0.5">{status.status?.risk_guardian?.lock_info?.reason || "Max daily loss limit reached. Positions squared off."}</div>
-              </div>
-              <Button
-                onClick={handleResetGuardian}
-                disabled={resettingGuardian}
-                size="sm"
-                className="bg-rose-600 hover:bg-rose-700 text-white font-bold shrink-0 gap-1.5"
-              >
-                <RefreshCw className={cn("size-3.5", resettingGuardian && "animate-spin")} />
-                {resettingGuardian ? "Resetting…" : "Reset Guardian Lock"}
-              </Button>
-            </div>
-          ) : (
-            <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20 text-xs">
+      {/* Main 2-Column Responsive Grid on Desktop */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
+        {/* Left Column: Kotak Neo API Credentials */}
+        <Card className="border-sky-500/40">
+          <CardHeader>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div>
-                <span className="font-semibold text-foreground">Current Status: Safe</span>
-                <span className="text-muted-foreground block text-[11px] mt-0.5">
-                  Remaining loss buffer: ₹{Math.max(0, status.status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
-                </span>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="size-5 text-sky-400" />
+                  Kotak Neo API Credentials
+                </CardTitle>
+                <CardDescription>
+                  Credentials saved here are written directly to <code className="text-xs text-sky-400">neo_config.json</code> on your server.
+                </CardDescription>
               </div>
               <Button
-                variant="outline"
+                type="button"
+                variant="ghost"
                 size="sm"
-                className="text-xs cursor-pointer"
-                onClick={() => handleTabChange("strategy")}
+                onClick={() => setShowSecrets(!showSecrets)}
+                className="text-xs text-muted-foreground gap-1.5 self-start sm:self-auto"
               >
-                Change Limit in Strategy &rarr;
+                {showSecrets ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+                {showSecrets ? "Hide Secrets" : "Reveal Secrets"}
               </Button>
             </div>
-          )}
-        </CardContent>
-      </Card>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-4">
+            <div className="grid gap-3.5 sm:grid-cols-2">
+              <div className="grid gap-1.5 sm:col-span-2">
+                <Label htmlFor="kotak-ck" className="flex items-center justify-between">
+                  <span>Consumer Key</span>
+                  {data.kotak_consumer_key_set && (
+                    <span className="text-emerald-500 text-xs font-medium">✓ Configured</span>
+                  )}
+                </Label>
+                <Input
+                  id="kotak-ck"
+                  type={showSecrets ? "text" : "password"}
+                  placeholder="From Kotak Neo Developer Portal (e.g. 1deb9014-...)"
+                  value={kotakForm.consumer_key}
+                  onChange={(e) => setKotakForm({ ...kotakForm, consumer_key: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="kotak-mob">Registered Mobile Number</Label>
+                <Input
+                  id="kotak-mob"
+                  placeholder="+918142036003"
+                  value={kotakForm.mobile_number}
+                  onChange={(e) => setKotakForm({ ...kotakForm, mobile_number: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="kotak-ucc">Client Code (UCC)</Label>
+                <Input
+                  id="kotak-ucc"
+                  placeholder="e.g. Y4KQT"
+                  value={kotakForm.ucc}
+                  onChange={(e) => setKotakForm({ ...kotakForm, ucc: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="kotak-mpin" className="flex items-center justify-between">
+                  <span>6-Digit MPIN</span>
+                  {data.kotak_mpin_set && (
+                    <span className="text-emerald-500 text-xs font-medium">✓ Configured</span>
+                  )}
+                </Label>
+                <Input
+                  id="kotak-mpin"
+                  type={showSecrets ? "text" : "password"}
+                  maxLength={6}
+                  placeholder={data.kotak_mpin_set ? "•••••• (Configured)" : "Your 6-digit App PIN"}
+                  value={kotakForm.mpin}
+                  onChange={(e) => setKotakForm({ ...kotakForm, mpin: e.target.value })}
+                />
+              </div>
+              <div className="grid gap-1.5">
+                <Label htmlFor="kotak-totp-sec" className="flex items-center justify-between">
+                  <span>TOTP Secret Key (Auto-Login)</span>
+                  {data.kotak_totp_secret_set && (
+                    <span className="text-emerald-500 text-xs font-medium">✓ Configured</span>
+                  )}
+                </Label>
+                <Input
+                  id="kotak-totp-sec"
+                  type={showSecrets ? "text" : "password"}
+                  placeholder={data.kotak_totp_secret_set ? "•••••••••••• (Configured)" : "Base32 Authenticator Secret"}
+                  value={kotakForm.totp_secret}
+                  onChange={(e) => setKotakForm({ ...kotakForm, totp_secret: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <p className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
+              💡 <strong>Auto-Authentication:</strong> With MPIN and TOTP Secret configured, AlgoNeo automatically generates your daily session tokens silently at 09:14 IST before the market opens without requiring any manual intervention.
+            </p>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t">
+              <div className="flex items-center gap-2">
+                {!data.kotak_totp_secret_set && !kotakForm.totp_secret && (
+                  <Input
+                    placeholder="6-digit TOTP code"
+                    maxLength={6}
+                    className="w-36 h-9 text-sm"
+                    value={kotakTotp}
+                    onChange={(e) => setKotakTotp(e.target.value)}
+                  />
+                )}
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+                <Button
+                  variant="outline"
+                  onClick={saveKotakCredentials}
+                  size="sm"
+                  className="gap-1.5"
+                >
+                  <Save className="size-3.5" /> Save Only
+                </Button>
+                <Button
+                  onClick={saveAndLogin}
+                  disabled={savingAndLoggingIn || kotakLoggingIn}
+                  size="sm"
+                  className="bg-sky-500 hover:bg-sky-600 text-white gap-2 font-medium"
+                >
+                  <Zap className={cn("size-3.5", savingAndLoggingIn && "animate-spin")} />
+                  {savingAndLoggingIn ? "Authenticating…" : "Save & Log In Now"}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Right Column: Margin Balance & Capital Guardian */}
+        <div className="flex flex-col gap-5">
+          {/* Available Balance Card */}
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Trading Margin Balance</CardTitle>
+                  <CardDescription>Available equity margin fetched live from your Kotak Neo account.</CardDescription>
+                </div>
+                <Button variant="outline" size="sm" onClick={checkFunds} disabled={fundsLoading} className="gap-2">
+                  <RefreshCw className={cn("size-3.5", fundsLoading && "animate-spin")} />
+                  {fundsLoading ? "Checking…" : "Refresh Margin"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {funds?.ok ? (
+                <div className="flex items-baseline gap-2">
+                  <span className="text-3xl font-extrabold tabular-nums tracking-tight text-emerald-400">
+                    ₹{funds.available_equity_funds.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  </span>
+                  <span className="text-xs text-muted-foreground font-mono">Available Equity Margin</span>
+                </div>
+              ) : funds ? (
+                <p className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 p-2.5 rounded-lg font-mono text-xs">
+                  {funds.error}
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">Log in to Kotak Neo to view live available funds.</p>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Capital Guardian & Circuit Breaker Card */}
+          <Card className={status.status?.risk_guardian?.is_locked ? "border-rose-500/50 bg-rose-500/5" : "border-emerald-500/30"}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className={cn("size-5", status.status?.risk_guardian?.is_locked ? "text-rose-500 animate-pulse" : "text-emerald-500")} />
+                  <CardTitle className="text-lg">Risk Guardian Circuit Breaker</CardTitle>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={status.status?.risk_guardian?.is_locked ? "border-rose-500/40 text-rose-400 bg-rose-500/10 font-bold" : "border-emerald-500/40 text-emerald-400 bg-emerald-500/10"}
+                >
+                  {status.status?.risk_guardian?.is_locked ? "CIRCUIT BREAKER LOCKED" : "ACTIVE MONITORING"}
+                </Badge>
+              </div>
+              <CardDescription>
+                Two-tier automated capital defense: Per-trade max loss auto-cut and daily portfolio circuit breaker.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3">
+              {/* Rules Summary Strip */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20 flex flex-col justify-between">
+                  <span className="text-muted-foreground text-[11px]">Daily Account Circuit Breaker</span>
+                  <span className="font-mono font-semibold text-foreground mt-0.5">
+                    -₹{(status.status?.risk_guardian?.daily_loss_limit || data?.daily_loss_limit || 2000).toLocaleString('en-IN')}
+                  </span>
+                  <span className="text-[10px] text-muted-foreground mt-0.5">
+                    Buffer: ₹{Math.max(0, status.status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
+                  </span>
+                </div>
+                <div className="p-2.5 rounded-lg border border-border/60 bg-muted/20 flex flex-col justify-between">
+                  <span className="text-muted-foreground text-[11px]">Per-Trade Max Loss Auto-Cut</span>
+                  <span className="font-mono font-semibold text-amber-400 mt-0.5">
+                    -₹{(status.status?.risk_guardian?.per_trade_loss_limit || 650).toLocaleString('en-IN')}/lot (-{status.status?.risk_guardian?.per_trade_loss_pct || 20}%)
+                  </span>
+                  <span className="text-[10px] text-muted-foreground mt-0.5">
+                    {status.status?.risk_guardian?.per_trade_auto_cut !== false ? "Dynamic: Scales automatically by position lots (~10 pts SL)" : "Alert only"}
+                  </span>
+                </div>
+              </div>
+
+              {status.status?.risk_guardian?.is_locked ? (
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 rounded-lg border border-rose-500/40 bg-rose-500/10 text-rose-400">
+                  <div className="text-xs">
+                    <div className="font-bold">⚠️ Trading Halted: Daily Loss Limit Breached</div>
+                    <div className="text-[11px] opacity-85 mt-0.5">{status.status?.risk_guardian?.lock_info?.reason || "Max daily loss limit reached. Positions squared off."}</div>
+                  </div>
+                  <Button
+                    onClick={handleResetGuardian}
+                    disabled={resettingGuardian}
+                    size="sm"
+                    className="bg-rose-600 hover:bg-rose-700 text-white font-bold shrink-0 gap-1.5"
+                  >
+                    <RefreshCw className={cn("size-3.5", resettingGuardian && "animate-spin")} />
+                    {resettingGuardian ? "Resetting…" : "Reset Guardian Lock"}
+                  </Button>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20 text-xs">
+                  <div>
+                    <span className="font-semibold text-foreground">Current Status: Safe</span>
+                    <span className="text-muted-foreground block text-[11px] mt-0.5">
+                      Remaining loss buffer: ₹{Math.max(0, status.status?.risk_guardian?.remaining_buffer || 0).toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="text-xs cursor-pointer"
+                    onClick={() => handleTabChange("strategy")}
+                  >
+                    Change Limit in Strategy &rarr;
+                  </Button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
 
       {/* Strategy Setups Link Card */}
       <Card className="border-sky-500/30 bg-sky-500/5">
