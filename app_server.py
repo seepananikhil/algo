@@ -880,6 +880,7 @@ def trend_runner_forward_loop() -> None:
     engine = None
     last_processed_5m = ""
     last_processed_1m = ""
+    processed_times = set()
 
     while True:
         try:
@@ -896,6 +897,7 @@ def trend_runner_forward_loop() -> None:
                 engine = None
                 last_processed_5m = ""
                 last_processed_1m = ""
+                processed_times.clear()
 
             if not live_file.exists():
                 time.sleep(5)
@@ -944,6 +946,21 @@ def trend_runner_forward_loop() -> None:
             cum_vol1 = vol1.cumsum()
             df1["vwap"] = np.where(cum_vol1 > 0, cum_pv1 / cum_vol1, tp1.expanding().mean())
 
+            vix_curr = get_vix_change_pct(today_str)
+            ENGINE_LIVE_STATE["nifty"]["vix_chg"] = round(vix_curr, 2)
+
+            # Replay and evaluate all completed 1-minute bars sequentially
+            for idx in range(len(df1) - 1):
+                completed_bar = df1.iloc[idx]
+                curr_1m_time = str(completed_bar["time_str"])
+                if curr_1m_time not in processed_times:
+                    next_open = float(df1.iloc[idx + 1]["open"]) if idx + 1 < len(df1) else None
+                    res = engine.evaluate_bar(completed_bar, or_high, or_low, or_range, vix_curr, next_bar_open=next_open)
+                    if res:
+                        print(f"[{datetime.now(IST):%H:%M:%S}] [Apex Duo LIVE PAPER] Position Event: {res}")
+                        log_engine_telemetry("NIFTY", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
+                    processed_times.add(curr_1m_time)
+
             latest_1m = df1.iloc[-1]
             t1m = str(latest_1m.get("time_str", ""))
             c1m = float(latest_1m.get("close", 0.0))
@@ -967,16 +984,8 @@ def trend_runner_forward_loop() -> None:
                 dist_h = or_high - c1m
                 dist_l = c1m - or_low
                 status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else (f"Breakout Above OR High (+{c1m - or_high:.1f} pt)" if c1m > or_high else f"Breakdown Below OR Low (-{or_low - c1m:.1f} pt)")
-                vix_curr = get_vix_change_pct(today_str)
-                ENGINE_LIVE_STATE["nifty"]["vix_chg"] = round(vix_curr, 2)
                 vix_str = f"VIX Bias: {vix_curr:+.2f}%"
                 log_engine_telemetry("NIFTY", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo Active")
-
-                # Evaluate with 1-Minute Candle Close Precision!
-                res = engine.evaluate_bar(latest_1m, or_high, or_low, or_range, vix_curr)
-                if res:
-                    print(f"[{datetime.now(IST):%H:%M:%S}] [Apex Duo LIVE PAPER] Position Event: {res}")
-                    log_engine_telemetry("NIFTY", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
         except Exception as e:
             traceback.print_exc()
@@ -990,6 +999,7 @@ def sensex_runner_forward_loop() -> None:
     engine = None
     last_processed_5m = ""
     last_processed_1m = ""
+    processed_times = set()
 
     while True:
         try:
@@ -1005,6 +1015,7 @@ def sensex_runner_forward_loop() -> None:
                 engine = None
                 last_processed_5m = ""
                 last_processed_1m = ""
+                processed_times.clear()
 
             if not live_file.exists():
                 time.sleep(5)
@@ -1055,6 +1066,21 @@ def sensex_runner_forward_loop() -> None:
             cum_vol1 = vol1.cumsum()
             df1["vwap"] = np.where(cum_vol1 > 0, cum_pv1 / cum_vol1, tp1.expanding().mean())
 
+            vix_curr = get_vix_change_pct(today_str)
+            ENGINE_LIVE_STATE["sensex"]["vix_chg"] = round(vix_curr, 2)
+
+            # Replay and evaluate all completed 1-minute bars sequentially
+            for idx in range(len(df1) - 1):
+                completed_bar = df1.iloc[idx]
+                curr_1m_time = str(completed_bar["time_str"])
+                if curr_1m_time not in processed_times:
+                    next_open = float(df1.iloc[idx + 1]["open"]) if idx + 1 < len(df1) else None
+                    res = engine.evaluate_bar(completed_bar, or_high, or_low, or_range, vix_curr, next_bar_open=next_open)
+                    if res:
+                        print(f"[{datetime.now(IST):%H:%M:%S}] [Sensex Apex Duo LIVE PAPER] Position Event: {res}")
+                        log_engine_telemetry("SENSEX", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
+                    processed_times.add(curr_1m_time)
+
             latest_1m = df1.iloc[-1]
             t1m = str(latest_1m.get("time_str", ""))
             c1m = float(latest_1m.get("close", 0.0))
@@ -1078,16 +1104,8 @@ def sensex_runner_forward_loop() -> None:
                 dist_h = or_high - c1m
                 dist_l = c1m - or_low
                 status_desc = f"Inside OR ({dist_h:.1f} pt to High, {dist_l:.1f} pt to Low) - Standby" if (or_low <= c1m <= or_high) else (f"Breakout Above OR High (+{c1m - or_high:.1f} pt)" if c1m > or_high else f"Breakdown Below OR Low (-{or_low - c1m:.1f} pt)")
-                vix_curr = get_vix_change_pct(today_str)
-                ENGINE_LIVE_STATE["sensex"]["vix_chg"] = round(vix_curr, 2)
                 vix_str = f"VIX Bias: {vix_curr:+.2f}%"
                 log_engine_telemetry("SENSEX", "Apex Duo", "INFO", f"1m Bar [{t1m}] Spot {c1m:.2f} | OR [{or_low:.2f} - {or_high:.2f}] | {status_desc} | {vix_str} | Apex Duo Active")
-
-                # Evaluate with 1-Minute Candle Close Precision!
-                res = engine.evaluate_bar(latest_1m, or_high, or_low, or_range, vix_curr)
-                if res:
-                    print(f"[{datetime.now(IST):%H:%M:%S}] [Sensex Apex Duo LIVE PAPER] Position Event: {res}")
-                    log_engine_telemetry("SENSEX", "Trend Runner", "SIGNAL", f"Position Event: {res.get('stage')} | {res.get('side')} @ {res.get('entry_px')} | SL {res.get('sl')}")
 
         except Exception as e:
             traceback.print_exc()
