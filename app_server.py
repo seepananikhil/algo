@@ -192,14 +192,16 @@ def swinger_daily_cycle_loop() -> None:
         time.sleep(30)
 
 def daily_backtest_sync_loop() -> None:
-    """Trigger daily backtest sync after market close (16:35 IST on weekdays)."""
+    """Trigger daily backtest sync after market close (15:35 and 16:35 IST on weekdays)."""
     while True:
         try:
             now = datetime.now(IST)
-            if now.weekday() < 5 and now.hour == 16 and now.minute == 35:
+            if now.weekday() < 5 and ((now.hour == 15 and now.minute == 35) or (now.hour == 16 and now.minute == 35)):
                 today_str = now.strftime("%Y-%m-%d")
-                if _sync_state.get("last_sync_date") != today_str:
-                    trigger_backtest_sync(reason="daily_schedule_1635")
+                tag = f"{today_str}_{now.hour}_{now.minute}"
+                if _sync_state.get("last_sched_tag") != tag:
+                    _sync_state["last_sched_tag"] = tag
+                    trigger_backtest_sync(reason=f"daily_schedule_{now.hour}{now.minute}")
         except Exception as e:
             pass
         time.sleep(30)
@@ -231,6 +233,14 @@ def run_git_trades_sync(reason: str = "manual") -> dict:
 
             # Always pull latest remote data & backtests first
             subprocess.run(["git", "pull", "--rebase", "--autostash", "origin", "master"], cwd=ROOT, check=False)
+
+            # Sync finalized EOD trades directly into master backtests
+            sync_script = ROOT / "scripts" / "sync_eod_trades_to_backtest.py"
+            if sync_script.exists():
+                try:
+                    subprocess.run([sys.executable, str(sync_script)], cwd=ROOT, capture_output=True, timeout=45)
+                except Exception:
+                    pass
 
             subprocess.run(["git", "add", "-f", "performance/*trades*.csv", "captured_data/fyers/live/live_orders_*.csv", "captured_data/fyers/live/*paper*.csv", "captured_data/fyers/live/*signals*.csv"], cwd=ROOT, check=False)
             diff = subprocess.run(["git", "diff", "--cached", "--quiet"], cwd=ROOT)

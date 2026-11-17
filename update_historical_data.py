@@ -115,6 +115,15 @@ def rebuild_parquet_catalogs() -> bool:
 
 def run_backtest_pipeline() -> bool:
     """Run all strategy backtest engines (Trend Runner, VIX Trap, Apex Duo, Midpoint)."""
+    # 0. Sync finalized EOD paper & live trades first
+    sync_eod = ROOT / "scripts" / "sync_eod_trades_to_backtest.py"
+    if sync_eod.exists():
+        try:
+            print("Syncing finalized EOD paper/live trades into master backtests...")
+            subprocess.run([sys.executable, str(sync_eod)], capture_output=True, timeout=60)
+        except Exception as e:
+            print(f"Warning during EOD sync: {e}")
+
     # 1. Nifty Trend Runner
     print("Executing Nifty 10-year Trend Runner backtest engine...")
     cmd1 = [sys.executable, str(ROOT / "run_10y_backtest.py")]

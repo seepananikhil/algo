@@ -1013,6 +1013,15 @@ class TrendRunnerPaperEngine:
                     writer.writeheader()
                 writer.writerow(row_dict)
 
+        # Automatically sync finalized trade to master backtests
+        try:
+            import subprocess, sys
+            sync_script = ROOT / "scripts" / "sync_eod_trades_to_backtest.py"
+            if sync_script.exists():
+                subprocess.Popen([sys.executable, str(sync_script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except Exception:
+            pass
+
 
 def run_replay(
     target_date: str,
