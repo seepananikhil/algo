@@ -165,6 +165,8 @@ type Props = {
   fullDay?: boolean
   /** Changing this (e.g. the timeframe) drops any manual zoom and refits the session. */
   resetKey?: string
+  /** When true, hides all level lines, bands, and boxes, keeping only clean candles and entry/exit markers. */
+  simpleChart?: boolean
 }
 
 export function CandleChart({
@@ -185,6 +187,7 @@ export function CandleChart({
   hideToolbar = false,
   fullDay = false,
   resetKey = "",
+  simpleChart = false,
 }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
@@ -204,7 +207,10 @@ export function CandleChart({
 
   // Feature toggles: Levels, Volume, 50 EMA, 200 EMA, Fullscreen, and Prominent Hover HUD
   const [showVolume, setShowVolume] = useState<boolean>(true)
-  const [showLevelsState, setShowLevelsState] = useState<boolean>(Boolean(showKeyLevels || showTradeLevels || true))
+  const [showLevelsState, setShowLevelsState] = useState<boolean>(() => {
+    if (simpleChart) return false
+    return Boolean(showKeyLevels || showTradeLevels || true)
+  })
   const [showEMA50, setShowEMA50] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem("chart_show_ema50")
@@ -838,7 +844,7 @@ export function CandleChart({
 
     const bands: Band[] = []
 
-    if (showLevelsState) {
+    if (showLevelsState && !simpleChart) {
       // Subtle reference lines
       if (currentPrice != null) {
         add(currentPrice, "rgba(249, 115, 22, 0.7)", LineStyle.Dotted, false, "", 1)
@@ -1004,7 +1010,7 @@ export function CandleChart({
       })
     }
 
-    if (boxes && boxes.length > 0 && showLevelsState) {
+    if (boxes && boxes.length > 0 && showLevelsState && !simpleChart) {
       for (const b of boxes) {
         if (b.touch_times) {
           addTouches(b.touch_times, b.status !== "breakout_down")
@@ -1041,7 +1047,7 @@ export function CandleChart({
       console.warn("CandleChart: failed to set markers", e)
     }
 
-    if (boxes && boxes.length > 0 && showLevelsState) {
+    if (boxes && boxes.length > 0 && showLevelsState && !simpleChart) {
       const bBoxes: TimeBoundedBox[] = boxes.map((b, idx) => {
         const sTime = toTime(date, b.start_time)
         const eTime = toTime(date, b.end_time || b.break_time || "15:25")

@@ -436,6 +436,8 @@ export type CapitalReport = {
     diff_total_rs: number
     starting_capital?: number
     ending_capital?: number
+    return_pct?: number
+    peak_deployed_rs?: number
   }
   trades: CapitalTrade[]
   daily: CapitalDaily[]

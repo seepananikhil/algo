@@ -5,7 +5,17 @@ const WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
 
 export type CalendarDay = { date: string; value?: number; trades: number; pnl?: number }
 
-export function PnlCalendar({ daily, format, onPick }: { daily: CalendarDay[]; format: (v: number) => string; onPick: (date: string) => void }) {
+export function PnlCalendar({
+  daily,
+  format,
+  onPick,
+  selectedDate,
+}: {
+  daily: CalendarDay[]
+  format: (v: number) => string
+  onPick: (date: string) => void
+  selectedDate?: string | null
+}) {
   const byDate = new Map(daily.map((d) => [d.date, d]))
   const months = [...new Set(daily.map((d) => d.date.slice(0, 7)))].sort().reverse()
   return (
@@ -32,6 +42,7 @@ export function PnlCalendar({ daily, format, onPick }: { daily: CalendarDay[]; f
                 const d = byDate.get(date)
                 const dVal = d ? (d.value ?? d.pnl ?? 0) : 0
                 const formattedVal = isNaN(dVal) ? "₹0" : format(dVal)
+                const isSelected = Boolean(selectedDate && selectedDate === date)
                 return (
                   <button
                     key={date}
@@ -40,11 +51,12 @@ export function PnlCalendar({ daily, format, onPick }: { daily: CalendarDay[]; f
                     onClick={() => onPick(date)}
                     title={d ? `${date}: ${d.trades} trade(s), ${formattedVal}` : undefined}
                     className={cn(
-                      "flex h-11 flex-col items-start rounded-md border p-1 text-left text-[11px] transition-colors",
-                      !d && "border-transparent text-muted-foreground/40",
+                      "flex h-11 flex-col items-start rounded-md border p-1 text-left text-[11px] transition-all cursor-pointer",
+                      !d && "border-transparent text-muted-foreground/40 cursor-default",
                       d && d.trades === 0 && "bg-muted/50 hover:bg-muted",
                       d && dVal > 0 && "border-emerald-500/40 bg-emerald-500/15 hover:bg-emerald-500/25",
                       d && dVal < 0 && "border-red-500/40 bg-red-500/15 hover:bg-red-500/25",
+                      isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background border-primary shadow-sm font-bold scale-[1.03] z-10",
                     )}
                   >
                     <span className="font-medium">{i + 1}</span>

@@ -21,6 +21,7 @@ export function DayDetail({
   chartOnly = false,
   allowTimeframeSwitch = false,
   headerLeading,
+  simpleChart = false,
 }: {
   date: string | null
   mode?: DayMode
@@ -29,6 +30,7 @@ export function DayDetail({
   chartOnly?: boolean
   allowTimeframeSwitch?: boolean
   headerLeading?: ReactNode
+  simpleChart?: boolean
 }) {
   const isSensexStrategy = Boolean(strategy && (strategy === "sensex_runner" || strategy.includes("sensex")))
   const isNiftyStrategy = Boolean(strategy && (strategy === "trend_runner" || strategy.includes("nifty")))
@@ -236,12 +238,13 @@ export function DayDetail({
                 candles={chartCandles}
                 forming={useFiveMinute ? keyLevelDay.data?.forming ?? undefined : day.data?.forming}
                 currentPrice={useFiveMinute ? keyLevelDay.data?.current_price ?? undefined : day.data?.forming?.close}
-                setup={useFiveMinute || (isStrategyFiltered && strategy !== "midpoint") ? undefined : s}
+                setup={simpleChart || useFiveMinute || (isStrategyFiltered && strategy !== "midpoint") ? undefined : s}
                 trades={chartTrades}
-                boxes={day.data?.boxes ?? []}
-                keyLevelZone={useFiveMinute ? (keyLevelDay.data?.key_level_zone ?? s?.key_level_zone) : null}
-                showKeyLevels={true}
-                showTradeLevels={true}
+                boxes={simpleChart ? [] : (day.data?.boxes ?? [])}
+                keyLevelZone={simpleChart ? null : (useFiveMinute ? (keyLevelDay.data?.key_level_zone ?? s?.key_level_zone) : null)}
+                showKeyLevels={!simpleChart}
+                showTradeLevels={!simpleChart}
+                simpleChart={simpleChart}
                 className={cn("w-full", chartHeightClass)}
                 zoomable
                 fullDay={true}
@@ -329,11 +332,12 @@ export function DayDetail({
                 candles={secondaryCandles}
                 forming={secondaryDay.data?.forming}
                 currentPrice={secondaryPrice}
-                setup={secondarySetup}
+                setup={simpleChart ? undefined : secondarySetup}
                 trades={[]}
-                keyLevelZone={secondarySetup?.key_level_zone ?? null}
-                showKeyLevels={true}
+                keyLevelZone={simpleChart ? null : (secondarySetup?.key_level_zone ?? null)}
+                showKeyLevels={!simpleChart}
                 showTradeLevels={false}
+                simpleChart={simpleChart}
                 className={cn("w-full", chartHeightClass)}
                 zoomable
                 fullDay={true}
