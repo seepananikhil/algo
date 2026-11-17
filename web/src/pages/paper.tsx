@@ -1,63 +1,20 @@
-import { useEffect, useRef, useState } from "react"
-import { GitCommit, RefreshCw, X } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { GitCommit, RefreshCw, Search, X } from "lucide-react"
 import { toast } from "sonner"
-import { DayDetail, FillsTable } from "@/components/day-detail"
+import { DayDetail } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { StatCard } from "@/components/common"
 import { PnlCalendar } from "@/components/pnl-calendar"
 import { StrategyStreakSummary } from "@/components/strategy-streak-summary"
-import { fmtNum, fmtRs, optionPaperTradeToFill, pnlClass, postJSON, usePoll, type CapitalReport, type KeyLevelReport, type OptionPaperTrade, type OptionTrade, type PaperReport } from "@/lib/api"
+import { fmtNum, fmtRs, pnlClass, postJSON, usePoll, type CapitalReport, type OptionTrade, type PaperReport } from "@/lib/api"
 import { cn } from "@/lib/utils"
-
-const axis = { stroke: "var(--muted-foreground)", fontSize: 11, tickLine: false, axisLine: false }
-const tooltip = {
-  contentStyle: { background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 },
-  labelStyle: { color: "var(--muted-foreground)" },
-}
-
-
-export function _CapitalCurve({ report }: { report: CapitalReport }) {
-  return (
-    <Card>
-      <CardHeader>
-        <CardTitle>Equity curve (net ₹)</CardTitle>
-        <CardDescription>Account balance from {fmtRs(report.summary.starting_capital)}; lower curve shows drawdown.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={260}>
-          <AreaChart data={report.curve} syncId="paper">
-            <defs>
-              <linearGradient id="peq" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stopColor="#10b981" stopOpacity={0.35} />
-                <stop offset="100%" stopColor="#10b981" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="label" hide />
-            <YAxis {...axis} width={82} domain={["dataMin - 500", "dataMax + 500"]} tickFormatter={(value) => fmtRs(Number(value))} />
-            <Tooltip {...tooltip} formatter={(value) => [fmtRs(Number(value)), "Equity"]} />
-            <Area type="linear" dataKey="equity" stroke="#10b981" strokeWidth={2} fill="url(#peq)" />
-          </AreaChart>
-        </ResponsiveContainer>
-        <ResponsiveContainer width="100%" height={140}>
-          <AreaChart data={report.curve} syncId="paper">
-            <CartesianGrid stroke="var(--border)" vertical={false} />
-            <XAxis dataKey="label" {...axis} tickFormatter={(label: string) => label === "Start" ? label : label.slice(5)} />
-            <YAxis {...axis} width={82} tickFormatter={(value) => fmtRs(Number(value))} />
-            <Tooltip {...tooltip} formatter={(value) => [fmtRs(Number(value)), "Drawdown"]} />
-            <Area type="stepAfter" dataKey="drawdown" stroke="#ef4444" fill="#ef4444" fillOpacity={0.25} />
-          </AreaChart>
-        </ResponsiveContainer>
-      </CardContent>
-    </Card>
-  )
-}
 
 function CapitalDayPanel({
   date,
@@ -93,19 +50,17 @@ function CapitalDayPanel({
               <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-base sm:text-lg">
                   {strategy === "trend_runner"
-                    ? "NIFTY 50 Intraday Chart & Option Trades"
+                    ? "NIFTY 50 Intraday Terminal & Option Execution"
                     : strategy === "sensex_runner"
-                    ? "BSE SENSEX Intraday Chart & Option Trades"
-                    : strategy === "nifty_key_levels"
-                    ? "Nifty Key Levels S&R Trades & Chart"
-                    : "Intraday Chart & Option Trades"}
+                    ? "BSE SENSEX Intraday Terminal & Option Execution"
+                    : "Intraday Terminal & Option Execution"}
                 </CardTitle>
                 <Badge variant="outline" className="font-mono text-xs font-bold border-primary/40 bg-primary/10 text-primary">
                   {date} {isDefaultSession ? "(Latest Session)" : "(Selected Date)"}
                 </Badge>
               </div>
               <CardDescription className="text-xs mt-0.5">
-                Intraday candlestick chart on left, active option strike executions and trade logs on right.
+                Intraday candlestick chart on left, active option strike executions and quick switcher on right.
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
@@ -136,14 +91,14 @@ function CapitalDayPanel({
               />
             </div>
 
-            {/* RIGHT SIDE: OPTION TRADES & QUICK LOG */}
+            {/* RIGHT SIDE: OPTION TRADES & QUICK SWITCHER */}
             <div className="lg:col-span-4 flex flex-col gap-3.5 min-w-0">
               {/* Active Session Trade Cards */}
               <div className="rounded-xl border border-border/80 bg-card/90 shadow-2xs overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between px-3.5 py-2.5 bg-muted/20 border-b border-border/40">
                   <div className="flex items-center gap-2">
                     <span className="text-xs font-bold tracking-tight text-foreground">
-                      Session Option Trades
+                      Session Option Execution
                     </span>
                     <Badge variant="outline" className="text-[10px] font-mono border-primary/40 text-primary">
                       {date} ({trades.length} trade{trades.length === 1 ? "" : "s"})
@@ -184,7 +139,7 @@ function CapitalDayPanel({
                             </div>
                           </div>
 
-                          {/* Quick Info */}
+                          {/* Quick Info Bar */}
                           <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono bg-muted/40 px-2 py-1 rounded">
                             <span>{t.qty} qty ({lots} lot{lots > 1 ? "s" : ""}) · {t.mode || "PAPER"}</span>
                             <span>{t.entry} → {t.exit || "Active"}</span>
@@ -319,46 +274,123 @@ function CapitalDayPanel({
   )
 }
 
-function StrategyTradesTable({ title, trades, onPick, activeDate }: {
+function StrategyTradesTable({
+  title,
+  trades,
+  onPick,
+  activeDate,
+}: {
   title: string
   trades: (OptionTrade & { charges_rs: number; net_rs: number })[]
   onPick?: (date: string) => void
   activeDate?: string | null
 }) {
+  const [search, setSearch] = useState("")
+  const [sideFilter, setSideFilter] = useState<"ALL" | "CALL" | "PUT">("ALL")
+
+  const filteredTrades = useMemo(() => {
+    return trades.filter((t) => {
+      const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
+      if (sideFilter === "CALL" && !isCall) return false
+      if (sideFilter === "PUT" && isCall) return false
+      if (search.trim()) {
+        const q = search.toLowerCase()
+        const match =
+          t.date.toLowerCase().includes(q) ||
+          t.option.toLowerCase().includes(q) ||
+          (t.exit_reason || "").toLowerCase().includes(q)
+        if (!match) return false
+      }
+      return true
+    })
+  }, [trades, search, sideFilter])
+
   const totalNet = trades.reduce((acc, t) => acc + (t.net_rs || 0), 0)
   const wins = trades.filter((t) => (t.net_rs || 0) > 0).length
   const winRate = trades.length ? Math.round((wins / trades.length) * 100) : 0
 
   const handleRowClick = (d: string) => {
     onPick?.(d)
-    window.scrollTo({ top: 320, behavior: "smooth" })
+    window.scrollTo({ top: 120, behavior: "smooth" })
   }
 
   return (
     <Card>
       <CardHeader className="pb-3 border-b border-border/40">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
-            <CardTitle>{title}</CardTitle>
-            <CardDescription>
-              {trades.length} paper trade(s) recorded · Click any row to load the interactive intraday chart on left and trade execution on right.
+            <div className="flex items-center gap-2">
+              <CardTitle>{title}</CardTitle>
+              <Badge variant="outline" className="font-mono text-xs font-semibold">
+                {trades.length} recorded
+              </Badge>
+            </div>
+            <CardDescription className="mt-0.5">
+              Click any row or "Inspect Chart ↗" to view the intraday candlestick chart on left and execution on right.
             </CardDescription>
           </div>
-          <div className="flex items-center gap-3">
-            <Badge variant="outline" className="font-mono text-xs">
-              {wins}W / {trades.length - wins}L ({winRate}% Win Rate)
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <Badge variant="outline" className="font-mono text-xs bg-emerald-500/10 text-emerald-400 border-emerald-500/20">
+              {wins}W / {trades.length - wins}L ({winRate}% WR)
             </Badge>
             <div className="text-right">
-              <span className="text-[10px] text-muted-foreground block font-medium">Net P&amp;L</span>
+              <span className="text-[10px] text-muted-foreground block font-medium">Cumulative Net</span>
               <span className={cn("text-base font-bold tabular-nums font-mono", pnlClass(totalNet))}>
                 {totalNet >= 0 ? "+" : ""}{fmtRs(totalNet)}
               </span>
             </div>
           </div>
         </div>
+
+        {/* Filter & Search Bar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-2">
+          <div className="relative w-full sm:w-64">
+            <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search date, strike, exit..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="h-8 pl-8 text-xs bg-muted/30"
+            />
+          </div>
+          <div className="inline-flex rounded-lg border border-border/60 bg-muted/30 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => setSideFilter("ALL")}
+              className={cn(
+                "rounded px-2.5 py-1 text-[11px] font-medium transition-colors",
+                sideFilter === "ALL" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              All ({trades.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => setSideFilter("CALL")}
+              className={cn(
+                "rounded px-2.5 py-1 text-[11px] font-medium transition-colors",
+                sideFilter === "CALL" ? "bg-emerald-500/20 text-emerald-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Calls
+            </button>
+            <button
+              type="button"
+              onClick={() => setSideFilter("PUT")}
+              className={cn(
+                "rounded px-2.5 py-1 text-[11px] font-medium transition-colors",
+                sideFilter === "PUT" ? "bg-rose-500/20 text-rose-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              Puts
+            </button>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent className="pt-3">
-        {trades.length ? (
+
+      <CardContent className="pt-2">
+        {filteredTrades.length ? (
           <Table>
             <TableHeader><TableRow>
               <TableHead>Date &amp; Action</TableHead>
@@ -369,7 +401,7 @@ function StrategyTradesTable({ title, trades, onPick, activeDate }: {
               <TableHead>Exit Reason</TableHead>
               <TableHead className="text-right">Net P&amp;L</TableHead>
             </TableRow></TableHeader>
-            <TableBody>{trades.map((trade, index) => {
+            <TableBody>{filteredTrades.map((trade, index) => {
               const optPts = trade.sell_price > 0 ? trade.sell_price - trade.buy_price : 0
               const optPct = trade.buy_price > 0 && trade.sell_price > 0 ? ((trade.sell_price - trade.buy_price) / trade.buy_price) * 100 : 0
               const isSelected = activeDate === trade.date
@@ -386,7 +418,7 @@ function StrategyTradesTable({ title, trades, onPick, activeDate }: {
                     <div className="flex items-center gap-1.5">
                       <span className="font-bold text-foreground font-mono">{trade.date}</span>
                       <span className="text-[10px] font-semibold text-primary underline underline-offset-2 flex items-center">
-                        Chart ↗
+                        Inspect ↗
                       </span>
                     </div>
                   </TableCell>
@@ -433,78 +465,10 @@ function StrategyTradesTable({ title, trades, onPick, activeDate }: {
             })}</TableBody>
           </Table>
         ) : (
-          <p className="py-6 text-center text-sm text-muted-foreground">No paper trades recorded yet.</p>
+          <p className="py-8 text-center text-sm text-muted-foreground">No paper trades match the filter.</p>
         )}
       </CardContent>
     </Card>
-  )
-}
-
-function PaperTradeLog({ title, trades }: { title: string; trades: OptionPaperTrade[] }) {
-  const fills = trades.map(optionPaperTradeToFill)
-  return (
-    <Card>
-      <CardHeader><CardTitle>{title}</CardTitle><CardDescription>{trades.length} option paper trade(s) · net rupee P&amp;L after estimated charges · strategy and source are shown per trade.</CardDescription></CardHeader>
-      <CardContent><FillsTable fills={fills} empty="No paper trades recorded yet." /></CardContent>
-    </Card>
-  )
-}
-
-export function _KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
-  const [picked, setPicked] = useState<string | null>(null)
-  const trades = report.option_paper.trades
-  const closed = trades.filter((trade: any) => trade.status === "closed")
-  const dailyMap = new Map<string, { date: string; trades: number; value: number }>()
-  for (const trade of closed) {
-    const day = dailyMap.get(trade.date) ?? { date: trade.date, trades: 0, value: 0 }
-    day.trades += 1
-    day.value += trade.net_pnl_rs ?? trade.pnl_rs
-    dailyMap.set(trade.date, day)
-  }
-  const daily = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date))
-  const selected = picked ? trades.filter((trade: any) => trade.date === picked) : []
-  const summary = report.option_paper.summary
-
-  return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <h1 className="text-xl font-semibold">Key Levels paper P&amp;L</h1>
-        <p className="text-sm text-muted-foreground">10-point zone · close-through, two 5-minute holds with a zone retest · next-bar entry · stop at the far zone edge and allow a reverse after stop. Paper option exits use +50 NIFTY points or +30% premium return, then session-close exit.</p>
-      </div>
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard label="Net P&amp;L" value={fmtRs(summary.net_pnl_rs)} className={pnlClass(summary.net_pnl_rs)} hint={`gross ${fmtRs(summary.gross_pnl_rs)} · charges ${fmtRs(summary.estimated_charges_rs)}`} />
-        <StatCard label="Trades" value={summary.trades} hint={`${summary.wins} W · ${summary.losses} L · ${summary.open_trades} open`} />
-        <StatCard label="Win rate" value={`${summary.win_rate_pct}%`} />
-        <StatCard label="Average net return" value={`${fmtNum(summary.avg_return_pct)}%`} />
-        <StatCard label="Max drawdown" value={fmtRs(summary.max_drawdown_rs)} className="text-red-500" />
-        <StatCard label="Today" value={report.today_option_paper.summary.trades} hint={report.capture_running ? "capture running" : "capture stopped"} />
-      </div>
-      <StrategyStreakSummary
-        title="Key Levels Paper Streaks & Recovery"
-        description="Consecutive winning/losing days, drawdown recovery duration, and daily performance metrics for Key Levels paper trading."
-        daily={daily}
-        unit="rs"
-      />
-      <Card>
-        <CardHeader><CardTitle>Calendar (daily net P&amp;L)</CardTitle><CardDescription>Historical option replays and captured paper quotes are included and source-labeled.</CardDescription></CardHeader>
-        <CardContent><PnlCalendar daily={daily} format={fmtRs} onPick={setPicked} /></CardContent>
-      </Card>
-      {picked && (
-        <Card>
-          <CardHeader>
-            <CardTitle>NIFTY intraday chart · {picked}</CardTitle>
-            <CardDescription>Full saved session with Key Levels paper entries and exits marked; switch between 1-minute and 5-minute candles.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <DayDetail key={picked} date={picked} mode="paper" compact chartOnly allowTimeframeSwitch />
-          </CardContent>
-        </Card>
-      )}
-      <PaperTradeLog
-        title={picked ? `Paper trades · ${picked}` : "Paper trade log"}
-        trades={picked ? selected : trades}
-      />
-    </div>
   )
 }
 
@@ -535,13 +499,13 @@ export function PaperPage() {
     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
       <div>
         <div className="flex items-center gap-2">
-          <h1 className="text-xl font-bold tracking-tight">Trades & Performance</h1>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary border border-primary/20">
-            Ledger
-          </span>
+          <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground">Paper Trading &amp; Forward Test</h1>
+          <Badge className="bg-emerald-600 text-white font-mono text-[10px] font-bold">
+            Automated
+          </Badge>
         </div>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Consolidated execution ledger · Real-time broker orders & paper forward testing.
+        <p className="text-xs sm:text-sm text-muted-foreground mt-0.5">
+          Real-time broker order simulation · Interactive intraday chart on left and execution on right.
         </p>
       </div>
       <div className="flex items-center gap-2">
@@ -559,6 +523,7 @@ export function PaperPage() {
       </div>
     </div>
   )
+
   const trendRunner = usePoll<PaperReport>(strategy === "trend_runner" ? "/api/paper-report?strategy=trend_runner" : null, 30000)
   const sensexRunner = usePoll<PaperReport>(strategy === "sensex_runner" ? "/api/paper-report?strategy=sensex_runner" : null, 30000)
   const capital = usePoll<CapitalReport>(strategy === "all" ? "/api/capital-report" : null, 30000)
@@ -572,19 +537,18 @@ export function PaperPage() {
       }}
     >
       <TabsList className="bg-muted/60 p-1 rounded-lg">
-        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
+        <TabsTrigger value="trend_runner" className="font-semibold text-xs sm:text-sm">
           NIFTY 50
         </TabsTrigger>
-        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
+        <TabsTrigger value="sensex_runner" className="font-semibold text-xs sm:text-sm">
           SENSEX
         </TabsTrigger>
-        <TabsTrigger value="all" className="font-medium text-xs sm:text-sm">
+        <TabsTrigger value="all" className="font-semibold text-xs sm:text-sm">
           Combined Portfolio
         </TabsTrigger>
       </TabsList>
     </Tabs>
   )
-
 
   if (strategy === "all") {
     if (capital.error) return <p className="text-sm text-red-500">Capital report failed: {capital.error}</p>
@@ -594,54 +558,25 @@ export function PaperPage() {
     const selectedTrades = selectedDay
       ? capital.data.trades.filter((trade) => trade.date === selectedDay.date)
       : []
+
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-5">
         {pageHeader}
-        {paperTabs}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {paperTabs}
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground font-medium">Net P&amp;L:</span>
+            <span className={cn("font-bold font-mono", pnlClass(summary.net_rs))}>
+              {summary.net_rs >= 0 ? "+" : ""}{fmtRs(summary.net_rs)}
+            </span>
+          </div>
+        </div>
+
         <div className="grid max-w-lg grid-cols-2 gap-3">
           <StatCard label="Starting capital" value={fmtRs(summary.starting_capital)} />
           <StatCard label="Ending capital" value={fmtRs(summary.ending_capital)} className={pnlClass(summary.net_rs)} />
         </div>
-        <StrategyStreakSummary
-          title="Combined Portfolio Streaks & Recovery"
-          description="Aggregated consecutive winning/losing day streaks and drawdown recovery time across funded Midpoint and Trend Runner trades."
-          daily={capital.data.daily.map((day) => ({ date: day.date, value: day.net_rs, trades: day.trades }))}
-          unit="rs"
-        />
-        <div className="grid gap-4 xl:grid-cols-3">
-          <Card className="xl:col-span-2">
-            <CardHeader>
-              <CardTitle>Daily capital P&amp;L</CardTitle>
-              <CardDescription>Daily net P&amp;L across strategies</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="h-70">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={capital.data.daily}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                    <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-                    <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
-                    <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(value: any) => [`${fmtRs(Number(value))}`, "Daily Net"]} />
-                    <Bar dataKey="net_rs" radius={[4, 4, 0, 0]}>
-                      {capital.data.daily.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.net_rs >= 0 ? "#10b981" : "#ef4444"} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader>
-              <CardTitle>Calendar</CardTitle>
-              <CardDescription>Click a day to view executed trades</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <PnlCalendar daily={capital.data.daily.map((day) => ({ ...day, value: day.net_rs }))} format={fmtRs} onPick={setPicked} />
-            </CardContent>
-          </Card>
-        </div>
+
         {selectedDay && (
           <CapitalDayPanel
             date={selectedDay.date}
@@ -652,6 +587,52 @@ export function PaperPage() {
             strategy="all"
           />
         )}
+
+        <div className="grid gap-4 xl:grid-cols-12 items-start">
+          <div className="xl:col-span-8">
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-bold">Daily Capital Net P&amp;L</CardTitle>
+                <CardDescription className="text-xs">Consolidated returns across all strategies</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={capital.data.daily}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                      <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+                      <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(value) => `${value}`} />
+                      <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(value: any) => [`${fmtRs(Number(value))}`, "Daily Net"]} />
+                      <Bar dataKey="net_rs" radius={[4, 4, 0, 0]}>
+                        {capital.data.daily.map((entry, index) => (
+                          <Cell key={`cell-${index}`} fill={entry.net_rs >= 0 ? "#10b981" : "#ef4444"} />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+          <div className="xl:col-span-4">
+            <StrategyStreakSummary
+              title="Combined Portfolio Streaks"
+              description="Aggregated consecutive winning/losing day streaks and recovery time."
+              daily={capital.data.daily.map((day) => ({ date: day.date, value: day.net_rs, trades: day.trades }))}
+              unit="rs"
+            />
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-bold">Session Calendar</CardTitle>
+            <CardDescription className="text-xs">Click any day to load executed trades</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <PnlCalendar daily={capital.data.daily.map((day) => ({ ...day, value: day.net_rs }))} format={fmtRs} onPick={setPicked} />
+          </CardContent>
+        </Card>
       </div>
     )
   }
@@ -665,53 +646,50 @@ export function PaperPage() {
   if (loading || !data) return <Skeleton className="h-150 w-full" />
 
   const s = data.summary
-    const curve = [
+  const curve = [
     { label: "start", equity: 0, drawdown: 0 },
     ...data.trades.map((trade) => ({ label: `${trade.date} ${trade.entry} ${trade.side}`, equity: trade.equity, drawdown: trade.drawdown })),
   ]
+  const latestTradeDate = data?.trades?.length ? data.trades[data.trades.length - 1].date : "2026-11-17"
+  const activeDate = picked || latestTradeDate
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-5">
+      {/* 1. Header Hub */}
       {pageHeader}
-      {paperTabs}
 
-      {!s.trades ? (
-        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
-          {strategy === "sensex_runner"
-            ? "No Sensex Trend Runner paper trades recorded yet for today."
-            : "No Nifty Trend Runner paper trades recorded yet for today."}
-        </CardContent></Card>
-      ) : <>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
-        <StatCard label="Net P&L" value={fmtRs(s.net_rs)} className={pnlClass(s.net_rs)} hint={`gross ${fmtRs(s.gross_rs)} · estimated charges ${fmtRs(s.charges_rs)}`} />
-        <StatCard label="Trades" value={s.trades} hint={`${s.wins} W · ${s.losses} L · ${s.winning_days}/${s.days} green days`} />
-        <StatCard label="Win rate (net)" value={`${s.win_rate_pct}%`} />
-        <StatCard label="Avg win / loss" value={<span className="text-lg">{fmtRs(s.avg_win_rs)} / {fmtRs(s.avg_loss_rs)}</span>} />
-        <StatCard label="Max drawdown" value={fmtRs(s.max_drawdown_rs)} className="text-red-500" />
-        <StatCard label="Avg net / trade" value={fmtRs(s.net_rs / s.trades)} className={pnlClass(s.net_rs)} />
+      {/* Strategy Switcher with Live Session Summary Chips */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        {paperTabs}
+        {s.trades > 0 && (
+          <div className="flex items-center gap-2 flex-wrap text-xs bg-muted/40 px-3 py-1.5 rounded-lg border border-border/50">
+            <span className="text-muted-foreground font-semibold">Active Session:</span>
+            <Badge variant="outline" className="font-mono font-bold border-primary/40 text-primary bg-primary/10">
+              {activeDate}
+            </Badge>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="text-muted-foreground font-semibold">Cumulative Net:</span>
+            <span className={cn("font-bold font-mono text-sm", pnlClass(s.net_rs))}>
+              {s.net_rs >= 0 ? "+" : ""}{fmtRs(s.net_rs)}
+            </span>
+            <span className="text-muted-foreground/30">·</span>
+            <span className="text-muted-foreground font-semibold">Win Rate:</span>
+            <span className="font-bold font-mono text-emerald-400">{s.win_rate_pct}%</span>
+          </div>
+        )}
       </div>
 
-      <StrategyStreakSummary
-        title={
-          strategy === "sensex_runner"
-            ? "Sensex Trend Runner Paper Streaks & Recovery"
-            : "Nifty Trend Runner Paper Streaks & Recovery"
-        }
-        description={
-          strategy === "sensex_runner"
-            ? "Consecutive winning/losing days, recovery time in days, and daily expectancy for Sensex Trend Runner paper trading."
-            : "Consecutive winning/losing days, recovery time in days, and daily expectancy for Nifty Trend Runner paper trading."
-        }
-        daily={data.daily.map((d) => ({ date: d.date, value: d.net_rs, trades: d.trades }))}
-        unit="rs"
-      />
-
-      {/* Active Session Intraday Chart & Option Values Panel */}
-      {(() => {
-        const latestTradeDate = data?.trades?.length ? data.trades[data.trades.length - 1].date : "2026-11-17"
-        const activeDate = picked || latestTradeDate
-        return activeDate ? (
+      {!s.trades ? (
+        <Card>
+          <CardContent className="py-16 text-center text-sm text-muted-foreground">
+            {strategy === "sensex_runner"
+              ? "No Sensex Trend Runner paper trades recorded yet for today."
+              : "No Nifty Trend Runner paper trades recorded yet for today."}
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* 2. PRIMARY WORKSPACE: INTRADAY TERMINAL (CHART ON LEFT, TRADES ON RIGHT) */}
           <CapitalDayPanel
             date={activeDate}
             trades={data.trades.filter((t) => t.date === activeDate)}
@@ -721,87 +699,122 @@ export function PaperPage() {
             strategy={strategy}
             isDefaultSession={!picked}
           />
-        ) : null
-      })()}
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <Card className="xl:col-span-2">
-          <CardHeader>
-            <CardTitle>Equity curve</CardTitle>
-            <CardDescription>Cumulative net P&L (₹) and drawdown</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-70">
-              <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={curve}>
-                  <defs>
-                    <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
-                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                    </linearGradient>
-                    <linearGradient id="dd" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                      <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="label" hide />
-                  <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}`} />
-                  <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: any, name: any) => [`${fmtRs(Number(v))}`, name === "equity" ? "Equity" : "Drawdown"]} />
-                  <Area type="monotone" dataKey="equity" stroke="#10b981" strokeWidth={2} fill="url(#eq)" />
-                  <Area type="monotone" dataKey="drawdown" stroke="#ef4444" strokeWidth={1} fill="url(#dd)" />
-                </AreaChart>
-              </ResponsiveContainer>
+          {/* 3. PERFORMANCE KPIS */}
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-6">
+            <StatCard label="Net P&L" value={fmtRs(s.net_rs)} className={pnlClass(s.net_rs)} hint={`gross ${fmtRs(s.gross_rs)} · charges ${fmtRs(s.charges_rs)}`} />
+            <StatCard label="Trades" value={s.trades} hint={`${s.wins} W · ${s.losses} L · ${s.winning_days}/${s.days} green days`} />
+            <StatCard label="Win rate (net)" value={`${s.win_rate_pct}%`} />
+            <StatCard label="Avg win / loss" value={<span className="text-lg">{fmtRs(s.avg_win_rs)} / {fmtRs(s.avg_loss_rs)}</span>} />
+            <StatCard label="Max drawdown" value={fmtRs(s.max_drawdown_rs)} className="text-red-500" />
+            <StatCard label="Avg net / trade" value={fmtRs(s.net_rs / s.trades)} className={pnlClass(s.net_rs)} />
+          </div>
+
+          {/* 4. EQUITY GROWTH & STREAKS */}
+          <div className="grid gap-4 xl:grid-cols-12 items-start">
+            <div className="xl:col-span-8 flex flex-col gap-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold">Equity Curve</CardTitle>
+                    <CardDescription className="text-xs">Cumulative Net P&L (₹) & Drawdown</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-60">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={curve}>
+                          <defs>
+                            <linearGradient id="eq" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.4} />
+                              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                            </linearGradient>
+                            <linearGradient id="dd" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
+                            </linearGradient>
+                          </defs>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                          <XAxis dataKey="label" hide />
+                          <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}`} />
+                          <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: any, name: any) => [`${fmtRs(Number(v))}`, name === "equity" ? "Equity" : "Drawdown"]} />
+                          <Area type="monotone" dataKey="equity" stroke="#10b981" strokeWidth={2} fill="url(#eq)" />
+                          <Area type="monotone" dataKey="drawdown" stroke="#ef4444" strokeWidth={1} fill="url(#dd)" />
+                        </AreaChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm font-bold">Daily Distribution</CardTitle>
+                    <CardDescription className="text-xs">Per-session Net Rupee P&L</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="h-60">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={data.daily}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
+                          <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
+                          <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}`} />
+                          <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: any) => [`${fmtRs(Number(v))}`, "Net"]} />
+                          <Bar dataKey="net_rs" radius={[4, 4, 0, 0]}>
+                            {data.daily.map((m, i) => (
+                              <Cell key={i} fill={m.net_rs >= 0 ? "#10b981" : "#ef4444"} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Daily P&L</CardTitle>
-            <CardDescription>Session net results</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="h-70">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={data.daily}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
-                  <XAxis dataKey="date" stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} />
-                  <YAxis stroke="var(--muted-foreground)" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `${v}`} />
-                  <Tooltip contentStyle={{ background: "var(--popover)", color: "var(--popover-foreground)", border: "1px solid var(--border)", borderRadius: 8, fontSize: 12 }} formatter={(v: any) => [`${fmtRs(Number(v))}`, "Net"]} />
-                  <Bar dataKey="net_rs" radius={[4, 4, 0, 0]}>
-                    {data.daily.map((m, i) => (
-                      <Cell key={i} fill={m.net_rs >= 0 ? "#10b981" : "#ef4444"} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            <div className="xl:col-span-4">
+              <StrategyStreakSummary
+                title={
+                  strategy === "sensex_runner"
+                    ? "Sensex Streaks & Recovery"
+                    : "Nifty Streaks & Recovery"
+                }
+                description={
+                  strategy === "sensex_runner"
+                    ? "Consecutive winning/losing days, recovery time in days, and daily expectancy."
+                    : "Consecutive winning/losing days, recovery time in days, and daily expectancy."
+                }
+                daily={data.daily.map((d) => ({ date: d.date, value: d.net_rs, trades: d.trades }))}
+                unit="rs"
+              />
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Calendar</CardTitle>
-          <CardDescription>Daily net P&L. Click any day to update the chart &amp; option values above.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <PnlCalendar daily={data.daily.map((d) => ({ ...d, value: d.net_rs }))} format={fmtRs} onPick={setPicked} />
-        </CardContent>
-      </Card>
+          {/* 5. PNL CALENDAR */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-bold">Session Calendar</CardTitle>
+              <CardDescription className="text-xs">
+                Click any day to load that session into the terminal chart on left and trade execution on right.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <PnlCalendar daily={data.daily.map((d) => ({ ...d, value: d.net_rs }))} format={fmtRs} onPick={setPicked} />
+            </CardContent>
+          </Card>
 
-      <StrategyTradesTable
-        title={
-          strategy === "sensex_runner"
-            ? (picked ? `Sensex Trend Runner paper trades · ${picked}` : "Sensex Trend Runner paper trade log")
-            : (picked ? `Nifty Trend Runner paper trades · ${picked}` : "Nifty Trend Runner paper trade log")
-        }
-        trades={data.trades}
-        onPick={setPicked}
-        activeDate={picked || (data?.trades?.length ? data.trades[data.trades.length - 1].date : "2026-11-17")}
-      />
-      </>}
+          {/* 6. COMPREHENSIVE HISTORICAL TRADE LEDGER */}
+          <StrategyTradesTable
+            title={
+              strategy === "sensex_runner"
+                ? "Sensex Trend Runner Paper Trade Ledger"
+                : "Nifty Trend Runner Paper Trade Ledger"
+            }
+            trades={data.trades}
+            onPick={setPicked}
+            activeDate={activeDate}
+          />
+        </>
+      )}
     </div>
   )
 }
