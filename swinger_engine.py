@@ -40,45 +40,28 @@ DEFAULT_CONFIG = {
     "enabled": True,
     "mode": "paper",
     "blacklist": ["V2RETAIL"],
-    "strategy": "Elite RSI Cooldown Pullback · 12% Close SL · Momentum Runner (+30%) · 50 EMA Vol Breakdown + 25% Close Trail",
+    "strategy": "Phoenix Breakout Swinger · Direct Trigger EOD Entry · 15% SL · +15% BE Shield · 25% Runner Trail",
     "capital_allocated": 500000.0,
-    "max_open_positions": 12,
+    "max_open_positions": 20,
     "base_position_size": 25000.0,
-    "min_slots_recommended": 10,
-    "optimal_slots": 12,
-    "max_slots_cap": 25,
     "min_stock_price": 20.0,
+    "min_market_cap_cr": 2000.0,
+    "max_direct_entry_gain_pct": 10.0,
     "min_star_rating": 4,
     "require_below_ema200": True,
     "min_volume_surge_mult": 1.5,
     "min_candle_gain_pct": 5.0,
-    "candle_wick_rejection": True,
-    "initial_sl_type": "FIXED_12PCT_CLOSE",
-    "initial_sl_pct": -12.0,
-    "leg2_initial_sl_pct": -12.0,
-    "be_shield_enabled": False,
-    "catastrophe_floor_pct": 15.0,
+    "initial_sl_pct": -15.0,
+    "leg2_initial_sl_pct": -8.0,
+    "be_shield_enabled": True,
     "be_shield_trigger_pct": 15.0,
-    "tp_target_pct": 20.0,
-    "runner_trail_pct": 25.0,
-    "profit_vault_trigger_pct": 50.0,
-    "profit_vault_floor_pct": 25.0,
-    "partial_profit_take_fraction": 0.0,
-    "pyramid_enabled": True,
-    "pyramid_trigger_pct": 20.0,
     "runner_trailing_stop_pct": 25.0,
-    "vol_loss_exit_enabled": True,
-    "vol_loss_min_gain_pct": 20.0,
-    "vol_loss_vol_mult": 1.2,
-    "vol_loss_ema": 50,
-    "vol_loss_require_expanding": False,
-    "max_hold_days": None,
-    "market_regime_index": None,
-    "market_regime_ema": None,
-    "chartink_slug": "swingernew",
-    "cooldown_radar_enabled": True,
-    "cooldown_max_rsi": 65.0,
-    "scan_clause": "( {cash} (\n    daily close <= daily max( 1000 , daily high ) * 0.40 and\n    daily close < daily ema( daily close , 200 ) and\n    daily close >= daily ema( daily close , 20 ) and\n    market cap > 2000 and\n    daily close > daily open and\n    daily close >= 1 day ago close * 1.05 and\n    daily volume >= daily sma( daily volume , 60 ) * 1.5 and\n    daily rsi( 14 ) > 54 and\n    daily rsi( 14 ) <= 68 and\n    1 day ago rsi( 14 ) <= 60 and\n    daily close - daily low >= ( daily high - daily low ) * 0.65\n) )"
+    "leg2_enabled": True,
+    "leg2_be_trigger_pct": 10.0,
+    "leg2_trail_sl_pct": 20.0,
+    "leg2_breakout_vol_mult": 1.4,
+    "scan_clause": "( {cash} ( daily close <= daily max( 1000 , daily high ) * 0.40 and daily close < daily ema( daily close , 200 ) and market cap > 2000 and daily close >= 20 and daily close > daily open and daily close > daily ema( daily close , 20 ) and daily close >= 1 day ago close * 1.05 and daily volume >= daily sma( daily volume , 60 ) * 1.5 and daily rsi( 14 ) > 54 and 1 day ago rsi( 14 ) <= 65 and daily close - daily low >= ( daily high - daily low ) * 0.65 ) )",
+    "leg2_clause": "( {cash} ( daily close > 20 and market cap > 2000 and daily close > daily open and daily close >= 20 days ago max( 40 , daily high ) and daily volume >= daily sma( daily volume , 50 ) * 1.4 and daily close > daily ema( daily close , 50 ) and daily rsi( 14 ) >= 55 ) )"
 }
 
 def load_config():
@@ -573,6 +556,42 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
             pass
     return candles
 
+_mcap_cache = {}
+
+def get_stock_market_cap_cr(symbol: str) -> float | None:
+    """Returns stock market capitalization in Crores, cached locally."""
+    global _mcap_cache
+    sym = symbol.strip().upper()
+    if not sym:
+        return None
+    cache_file = DATA_DIR / "mcap_cache.json"
+    if not _mcap_cache and cache_file.exists():
+        try:
+            with open(cache_file, "r", encoding="utf-8") as f:
+                _mcap_cache = json.load(f)
+        except Exception:
+            _mcap_cache = {}
+    if sym in _mcap_cache:
+        return _mcap_cache[sym]
+    try:
+        ticker_sym = f"{sym}.NS" if not sym.endswith(".NS") and not sym.endswith(".BO") else sym
+        t = yf.Ticker(ticker_sym)
+        mc = getattr(t.fast_info, 'market_cap', None)
+        if not mc and hasattr(t, 'info'):
+            mc = t.info.get('marketCap')
+        if mc and mc > 0:
+            cr = round(float(mc) / 1e7, 1)
+            _mcap_cache[sym] = cr
+            try:
+                with open(cache_file, "w", encoding="utf-8") as f:
+                    json.dump(_mcap_cache, f)
+            except Exception:
+                pass
+            return cr
+    except Exception:
+        pass
+    return None
+
 def get_stock_trade_context(symbol: str):
     """
     Returns full trading and radar lifecycle for a symbol:
@@ -598,26 +617,51 @@ def get_stock_trade_context(symbol: str):
     
     # Closed trades
     for t in trade_matches:
-        e = t.get("entry_date", "")[:10]
-        x = t.get("exit_date", "")[:10] or "9999-12-31"
-        if e:
-            active_intervals.append((e, x))
-            all_symbol_trades.append({
-                "symbol": symbol,
-                "name": t.get("name", symbol),
-                "type": "CLOSED",
-                "entry_date": e,
-                "entry_price": float(t.get("entry_price") or t.get("avg_price") or 0.0),
-                "avg_price": float(t.get("avg_price") or t.get("entry_price") or 0.0),
-                "exit_date": x if x != "9999-12-31" else None,
-                "exit_price": float(t.get("exit_price") or 0.0),
-                "pnl": float(t.get("pnl") or 0.0),
-                "pnl_pct": float(t.get("pnl_pct") or t.get("pct_return") or 0.0),
-                "pct_return": float(t.get("pnl_pct") or t.get("pct_return") or 0.0),
-                "status": "CLOSED",
-                "reason": t.get("reason") or t.get("exit_reason") or "Closed",
-                "days_held": t.get("days_held", 0)
-            })
+        if t.get("all_historical_trades"):
+            for ht in t["all_historical_trades"]:
+                he = str(ht.get("entry_date", ""))[:10]
+                hx = str(ht.get("exit_date", ""))[:10] or "9999-12-31"
+                if he:
+                    active_intervals.append((he, hx))
+                    all_symbol_trades.append({
+                        "trade_id": ht.get("trade_id") or t.get("trade_id"),
+                        "symbol": symbol,
+                        "name": t.get("name", symbol),
+                        "type": "CLOSED",
+                        "entry_date": he,
+                        "entry_price": float(ht.get("entry_price") or 0.0),
+                        "avg_price": float(ht.get("entry_price") or 0.0),
+                        "exit_date": hx if hx != "9999-12-31" else None,
+                        "exit_price": float(ht.get("exit_price") or 0.0),
+                        "pnl": float(ht.get("pnl") or 0.0),
+                        "pnl_pct": float(ht.get("pnl_pct") or 0.0),
+                        "pct_return": float(ht.get("pnl_pct") or 0.0),
+                        "status": "CLOSED",
+                        "reason": ht.get("reason") or "Closed",
+                        "days_held": ht.get("days_held", 0)
+                    })
+        else:
+            e = t.get("entry_date", "")[:10]
+            x = t.get("exit_date", "")[:10] or "9999-12-31"
+            if e:
+                active_intervals.append((e, x))
+                all_symbol_trades.append({
+                    "trade_id": t.get("trade_id"),
+                    "symbol": symbol,
+                    "name": t.get("name", symbol),
+                    "type": "CLOSED",
+                    "entry_date": e,
+                    "entry_price": float(t.get("entry_price") or t.get("avg_price") or 0.0),
+                    "avg_price": float(t.get("avg_price") or t.get("entry_price") or 0.0),
+                    "exit_date": x if x != "9999-12-31" else None,
+                    "exit_price": float(t.get("exit_price") or 0.0),
+                    "pnl": float(t.get("pnl") or 0.0),
+                    "pnl_pct": float(t.get("pnl_pct") or t.get("pct_return") or 0.0),
+                    "pct_return": float(t.get("pnl_pct") or t.get("pct_return") or 0.0),
+                    "status": "CLOSED",
+                    "reason": t.get("reason") or t.get("exit_reason") or "Closed",
+                    "days_held": t.get("days_held", 0)
+                })
             
     # Open positions
     for p in pos_matches:
@@ -652,17 +696,18 @@ def get_stock_trade_context(symbol: str):
 
     # 2. Raw triggers from CSV & Watchlist
     triggers = set()
-    csv_p = ROOT / "scratch" / "chartink_swingernew_triggers.csv"
-    if csv_p.exists():
-        try:
-            with open(csv_p, "r", encoding="utf-8") as f:
-                reader = csv.DictReader(f)
-                for row in reader:
-                    if row.get("symbol", "").strip().upper() == symbol:
-                        dt = row.get("date", "").strip()
-                        if dt: triggers.add(dt[:10])
-        except Exception:
-            pass
+    for csv_name in ["chartink_pure_triggers.csv", "chartink_swingernew_triggers.csv"]:
+        csv_p = ROOT / "scratch" / csv_name
+        if csv_p.exists():
+            try:
+                with open(csv_p, "r", encoding="utf-8") as f:
+                    reader = csv.DictReader(f)
+                    for row in reader:
+                        if row.get("symbol", "").strip().upper() == symbol:
+                            dt = row.get("date", "").strip()
+                            if dt: triggers.add(dt[:10])
+            except Exception:
+                pass
             
     for item in wl:
         if item.get("symbol", "").strip().upper() == symbol:
@@ -686,16 +731,21 @@ def get_stock_trade_context(symbol: str):
     sorted_raw_trigs = sorted(list(triggers))
     first_radar = sorted_raw_trigs[0] if sorted_raw_trigs else None
     
-    # 3. Filter triggers: NEVER track or show multiple triggers if we ALREADY have an active position
+    # 3. Filter triggers: NEVER track or show triggers if we ALREADY have an active position or trade entry
     filtered_triggers = []
+    seen_trigs = set()
     for trig in sorted_raw_trigs:
+        clean_trig = trig[:10]
+        if clean_trig in seen_trigs:
+            continue
         in_active = False
         for (e, x) in active_intervals:
-            if e < trig <= x:
+            if e <= clean_trig <= x:
                 in_active = True
                 break
         if not in_active:
-            filtered_triggers.append(trig)
+            seen_trigs.add(clean_trig)
+            filtered_triggers.append(clean_trig)
             
     is_on_radar = (len(wl_matches) > 0 and len(pos_matches) == 0)
     radar_info = wl_matches[0] if len(wl_matches) > 0 else None
@@ -705,7 +755,8 @@ def get_stock_trade_context(symbol: str):
         "first_radar_date": first_radar,
         "trades": all_symbol_trades,
         "is_on_radar": is_on_radar,
-        "radar_info": radar_info
+        "radar_info": radar_info,
+        "market_cap_cr": get_stock_market_cap_cr(symbol)
     }
 
 def get_stock_triggers(symbol: str):
@@ -773,7 +824,7 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
         base_h = np.max(h[base_window_start:n-1]) if n - 1 > base_window_start else h[-2]
         base_l = np.min(l[base_window_start:n-1]) if n - 1 > base_window_start else l[-2]
         
-        if base_l < surge_orig * 0.95:
+        if base_l < surge_orig * 0.90 and cur_c < ema200:
             continue
             
         cur_c = c[-1]; cur_v = v[-1]; cur_vr = vol_ratio[-1]; cur_o = o[-1]
@@ -1157,7 +1208,7 @@ def update_positions_and_scan():
                 continue
                 
         # --- 2. CHECK BREAK-EVEN SHIELD ACTIVATION (+15% GAIN) ---
-        be_shield_enabled = cfg.get("be_shield_enabled", False)
+        be_shield_enabled = cfg.get("be_shield_enabled", True)
         if be_shield_enabled:
             be_trigger = round(avg_price * (1.0 + be_shield_trigger_pct / 100.0), 2)
             pos["be_trigger_price"] = be_trigger
@@ -1314,11 +1365,98 @@ def update_positions_and_scan():
     print(f"[Swinger Paper] Chartink returned {len(raw_signals)} trigger candidates.")
     
     # --- FILL AVAILABLE SLOTS IN PAPER MODE ---
-    max_slots = cfg.get("max_open_positions", 12)
+    max_slots = cfg.get("max_open_positions", 20)
     available_slots = max_slots - len(updated_positions)
     blacklist = set(cfg.get("blacklist", ["V2RETAIL"]))
     held_symbols = {p["symbol"] for p in updated_positions} | blacklist
     min_stars = cfg.get("min_star_rating", 4)
+
+    # --- EVALUATE COOLDOWN RADAR (WATCHLIST) FOR RETRACEMENT ENTRIES ---
+    cur_wl_data = load_watchlist()
+    cur_wl = cur_wl_data.get("watchlist", [])
+    remaining_wl = []
+
+    if available_slots > 0 and cfg.get("enabled", True):
+        for item in cur_wl:
+            w_sym = item.get("symbol")
+            if not w_sym or w_sym in held_symbols:
+                continue
+
+            w_df = get_market_data(w_sym)
+            if w_df is None or len(w_df) < 5:
+                remaining_wl.append(item)
+                continue
+
+            w_close = float(w_df["Close"].iloc[-1])
+            w_low = float(w_df["Low"].iloc[-1])
+            w_ema20 = float(w_df["EMA20"].iloc[-1]) if "EMA20" in w_df else w_close
+            target_pb = float(item.get("target_pb_price", item.get("alert_price", w_close) * 0.95))
+            blast_low = float(item.get("blast_low", item.get("alert_price", w_close) * 0.88))
+
+            # 1. Invalidation Check: Did it break down below blast low?
+            if w_close < blast_low:
+                print(f"[Swinger Paper] Radar stock {w_sym} broke below blast low (Rs.{blast_low:.2f}). Dropping from radar.")
+                continue
+
+            # 2. Retracement Check: Did it reach pullback zone (target_pb or 20 EMA) while holding blast low?
+            retrace_hit = (w_low <= target_pb or (w_ema20 > 0 and w_low <= w_ema20 * 1.01)) and (w_close >= blast_low)
+
+            if retrace_hit and available_slots > 0:
+                stars, star_details = calculate_setup_star_rating(w_df, w_sym)
+                alloc_per_slot = cfg.get("base_position_size", 25000.0)
+                qty = int(alloc_per_slot // w_close)
+                if qty > 0:
+                    initial_sl = round(w_close * (1.0 + initial_sl_pct / 100.0), 2)
+                    be_trigger = round(w_close * (1.0 + be_shield_trigger_pct / 100.0), 2)
+                    tp_target = round(w_close * (1.0 + tp_target_pct / 100.0), 2)
+                    cur_c_dt = (w_df.index[-1].strftime("%Y-%m-%d") if hasattr(w_df.index[-1], "strftime") else str(w_df.index[-1])[:10])
+
+                    new_pos = {
+                        "symbol": w_sym,
+                        "name": item.get("name", w_sym),
+                        "entry_date": cur_c_dt,
+                        "entry_price": round(w_close, 2),
+                        "avg_price": round(w_close, 2),
+                        "cmp": round(w_close, 2),
+                        "initial_qty": qty,
+                        "current_qty": qty,
+                        "shares": qty,
+                        "invested": round(qty * w_close, 2),
+                        "initial_sl_pct": round((initial_sl / w_close - 1.0) * 100.0, 1),
+                        "sl_price": initial_sl,
+                        "trigger_sl": blast_low,
+                        "be_active": False,
+                        "be_trigger_price": be_trigger,
+                        "tp_hit": False,
+                        "tp_50_hit": False,
+                        "tp_target_price": tp_target,
+                        "runner_mode": False,
+                        "runner_peak_price": round(w_close, 2),
+                        "runner_trail_sl": None,
+                        "days_held": 0,
+                        "booked_pnl": 0.0,
+                        "unrealized_pnl": 0.0,
+                        "unrealized_pnl_pct": 0.0,
+                        "unrealized_pct": 0.0,
+                        "leg": 1,
+                        "strategy_leg": "LEG1_RETRACEMENT",
+                        "status": f"ACTIVE ({stars}-Star Retracement)",
+                        "stars": stars,
+                        "star_details": star_details,
+                        "exit_rule": f"Initial SL {initial_sl_pct:.0f}% - BE Shield @ +{be_shield_trigger_pct:.0f}% - Pyramid @ +20% - 50 EMA Vol Breakdown + {trail_pct:.0f}% Close Trail",
+                        "ema20": round(w_ema20, 2),
+                        "peak_price": round(w_close, 2)
+                    }
+                    print(f"[Swinger Paper] NEW RADAR RETRACEMENT BUY (LEG 1): {w_sym} @ Rs.{w_close} (Retraced from Rs.{item.get('alert_price')}) | Qty: {qty}")
+                    updated_positions.append(new_pos)
+                    held_symbols.add(w_sym)
+                    available_slots -= 1
+                    continue
+
+            remaining_wl.append(item)
+
+        cur_wl_data["watchlist"] = remaining_wl
+        save_watchlist(cur_wl_data)
     
     if available_slots > 0 and cfg.get("enabled", True):
         for cand in raw_signals:
@@ -1333,7 +1471,39 @@ def update_positions_and_scan():
                 continue
                 
             last_close = float(df["Close"].iloc[-1])
-            if last_close < cfg.get("min_stock_price", 50.0):
+            min_price = float(cfg.get("min_stock_price", 20.0))
+            if last_close < min_price:
+                continue
+                
+            # Check single-day blast gain: If > 10%, DO NOT enter immediately at close!
+            # Route directly to Cooldown Radar to wait for retracement/20 EMA retest instead of chasing high.
+            prev_close = float(df["Close"].iloc[-2]) if len(df) >= 2 else last_close
+            candle_gain_pct = round(((last_close / prev_close) - 1.0) * 100.0, 2)
+            max_direct_gain = float(cfg.get("max_direct_entry_gain_pct", 10.0))
+            
+            if candle_gain_pct > max_direct_gain:
+                print(f"[Swinger Paper] OVEREXTENDED BLAST (+{candle_gain_pct:.1f}% > {max_direct_gain:.0f}%): {sym} routed to Cooldown Radar (waiting for retracement / 20 EMA retest instead of buying at top).")
+                cur_wl = load_watchlist().get("watchlist", [])
+                if not any(w.get("symbol") == sym for w in cur_wl):
+                    cur_c_dt = (df.index[-1].strftime("%Y-%m-%d") if hasattr(df.index[-1], "strftime") else str(df.index[-1])[:10]) if not df.empty else datetime.now(IST).strftime("%Y-%m-%d")
+                    b_open = float(df["Open"].iloc[-1]) if "Open" in df else last_close
+                    b_low = float(df["Low"].iloc[-1]) if "Low" in df else round(last_close * 0.90, 2)
+                    target_pb = round(last_close - 0.40 * (last_close - b_open), 2)
+                    cur_wl.append({
+                        "symbol": sym,
+                        "name": cand.get("name", sym),
+                        "alert_date": cur_c_dt,
+                        "alert_price": round(last_close, 2),
+                        "alert_gain_pct": candle_gain_pct,
+                        "current_price": round(last_close, 2),
+                        "target_pb_price": target_pb,
+                        "blast_low": b_low,
+                        "ema20": round(float(df["EMA20"].iloc[-1]), 2) if "EMA20" in df else None,
+                        "cooldown_ready": False,
+                        "status": "WAITING_RETRACEMENT",
+                        "notes": f"Overextended blast (+{candle_gain_pct:.1f}%). On radar waiting for retracement to ~Rs.{target_pb} (or 20 EMA) instead of buying at top."
+                    })
+                    save_watchlist({"watchlist": cur_wl})
                 continue
                 
             stars, star_details = calculate_setup_star_rating(df, sym)
@@ -1501,6 +1671,321 @@ def update_positions_and_scan():
         "portfolio": portfolio,
         "daily_signals": saved_sig,
         "closed_today": closed_this_cycle
+    }
+
+def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_pct: float = None, runner_trail_pct: float = None):
+    """
+    Simulates the exact calibrated Phoenix Swinger strategy for any individual stock symbol.
+    Uses local 4-year universe prices cache, with fallback to yfinance for unindexed NSE/BSE stocks.
+    Returns:
+      - summary (total trades, win rate, profit factor, net PnL, avg win, avg loss)
+      - trades (chronological list of all closed & open simulated trades)
+      - radar_triggers (dates where the stock met Chartink breakout criteria)
+      - candles (full OHLCV bar history formatted for lightweight-charts)
+    """
+    import pickle
+    cfg = load_config()
+    if initial_sl_pct is None:
+        initial_sl_pct = float(cfg.get("initial_sl_pct", -15.0))
+    if be_trigger_pct is None:
+        be_trigger_pct = float(cfg.get("be_shield_trigger_pct", 15.0)) / 100.0
+    if runner_trail_pct is None:
+        runner_trail_pct = float(cfg.get("runner_trailing_stop_pct", 25.0)) / 100.0
+    vol_loss_min_gain = float(cfg.get("vol_loss_min_gain_pct", 20.0)) / 100.0
+    vol_loss_vol_mult = float(cfg.get("vol_loss_vol_mult", 1.2))
+
+    symbol = symbol.strip().upper()
+    df = None
+    
+    cache_path = ROOT / "scratch" / "universe_4y_prices.pkl"
+    if cache_path.exists():
+        try:
+            with open(cache_path, "rb") as f:
+                cache = pickle.load(f)
+                if symbol in cache:
+                    df = cache[symbol]
+        except Exception:
+            pass
+
+    # Ensure full 5-year data for accurate 1000-candle ATH (falling back to yfinance if cache is short)
+    if df is None or len(df) < 700:
+        try:
+            ticker_ns = f"{symbol}.NS" if not symbol.endswith(".NS") and not symbol.endswith(".BO") else symbol
+            yf_df = yf.download(ticker_ns, period="5y", progress=False, auto_adjust=False)
+            if yf_df.empty and not symbol.endswith(".BO"):
+                yf_df = yf.download(f"{symbol}.BO", period="5y", progress=False, auto_adjust=False)
+            if not yf_df.empty:
+                if isinstance(yf_df.columns, pd.MultiIndex):
+                    yf_df.columns = [c[0] for c in yf_df.columns]
+                if not isinstance(yf_df.index, pd.DatetimeIndex):
+                    yf_df.index = pd.to_datetime(yf_df.index)
+                yf_df.index = yf_df.index.tz_localize(None)
+                df = yf_df
+        except Exception:
+            pass
+
+    if df is None or len(df) < 50:
+        return {"ok": False, "error": f"Insufficient price data available for {symbol} (at least 50 trading days required)"}
+
+    df = df.copy()
+    if not isinstance(df.index, pd.DatetimeIndex):
+        df.index = pd.to_datetime(df.index)
+    df.index = df.index.tz_localize(None)
+    df.sort_index(inplace=True)
+
+    c = df['Close']
+    h = df['High']
+    l = df['Low']
+    o = df['Open']
+    v = df['Volume']
+
+    vol_sma60 = v.rolling(60, min_periods=20).mean()
+    vol_sma50 = v.rolling(50, min_periods=20).mean()
+    ema20 = c.ewm(span=20, adjust=False).mean()
+    ema50 = c.ewm(span=50, adjust=False).mean()
+    ema200 = c.ewm(span=200, adjust=False).mean()
+
+    delta = c.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+    avg_gain = gain.ewm(com=13, min_periods=14).mean()
+    avg_loss = loss.ewm(com=13, min_periods=14).mean()
+    rsi = 100 - (100 / (1 + avg_gain / (avg_loss + 1e-9)))
+
+    prev_c = c.shift(1)
+    prev_rsi = rsi.shift(1)
+    range_hl = (h - l).replace(0, np.nan)
+    close_in_upper_35 = (c - l) >= (range_hl * 0.65)
+
+    cond_price_20 = c >= 20.0
+    cond_green = c > o
+
+    # Phoenix Turnaround Requirement: Down at least 60% from previous peak high (up to 1000 candles) & below 200 EMA
+    # Chartink scan: daily close <= daily max( 1000 , daily high ) * 0.40 and daily close < daily ema( daily close , 200 )
+    peak_high = h.rolling(1000, min_periods=30).max()
+    cond_down_60 = c <= (peak_high * 0.40)
+    cond_below_ema200 = c < ema200
+
+    branch_a = (c >= prev_c * 1.10) & (v > vol_sma60 * 3.5) & (rsi > 54)
+    branch_b = (
+        (c >= prev_c * 1.05) &
+        (v >= vol_sma60 * 1.5) &
+        (rsi > 54) &
+        (rsi <= 72) &
+        (prev_rsi <= 60) &
+        (c > ema20) &
+        close_in_upper_35
+    )
+
+    triggers = df.index[cond_price_20 & cond_green & cond_down_60 & cond_below_ema200 & (branch_a | branch_b)]
+    trig_set = set(triggers)
+
+    closed_trades = []
+    in_trade = False
+    cur = None
+
+    for i in range(len(df)):
+        dt = df.index[i]
+        dt_str = dt.strftime('%Y-%m-%d')
+        row_o = o.iloc[i]
+        row_h = h.iloc[i]
+        row_l = l.iloc[i]
+        row_c = c.iloc[i]
+        row_v = v.iloc[i]
+        row_ema50 = ema50.iloc[i]
+        row_vol50 = vol_sma50.iloc[i]
+
+        # 1. Manage Active Trade
+        if in_trade and cur is not None:
+            cur['days_held'] += 1
+            entry_p = cur['entry_price']
+
+            # Update highest price milestones
+            if row_c > cur['highest_close']:
+                cur['highest_close'] = round(float(row_c), 2)
+            if row_h > cur['highest_price']:
+                cur['highest_price'] = round(float(row_h), 2)
+
+            gain_from_entry = (cur['highest_close'] - entry_p) / entry_p
+            peak_gain = (cur['highest_price'] - entry_p) / entry_p
+
+            # BE Shield @ +15% (or configured be_shield_trigger_pct)
+            if (gain_from_entry >= be_trigger_pct or peak_gain >= be_trigger_pct) and not cur['be_active']:
+                cur['be_active'] = True
+                cur['status'] = 'SHIELDED'
+                be_p = round(float(entry_p * 1.005), 2)
+                if be_p > cur['sl_price']:
+                    cur['sl_price'] = be_p
+                    cur['sl_label'] = "BE Shield (+0.5%)"
+
+            # Runner Trailing Stop: 25% below peak close once BE Shield is active
+            if cur['be_active']:
+                raw_trail = round(float(cur['highest_close'] * (1.0 - runner_trail_pct)), 2)
+                prot_trail = max(round(float(entry_p * 1.005), 2), raw_trail)
+                if prot_trail > cur['sl_price']:
+                    cur['sl_price'] = prot_trail
+                    cur['status'] = 'RUNNER'
+                    cur['sl_label'] = "Runner Trail SL"
+
+            sl = cur['sl_price']
+            exited = False
+            exit_p = 0.0
+            exit_reason = ""
+
+            # Check SL Hit (Evaluated on Daily Candle Close to avoid intraday wick shakeouts, exactly matching live trading)
+            if row_c <= sl:
+                exited = True
+                exit_p = row_c
+                exit_reason = cur['sl_label']
+            # Volume breakdown exit: only protects winners (profit >= 20%) when closing below 50 EMA on heavy volume
+            elif (gain_from_entry >= vol_loss_min_gain or peak_gain >= vol_loss_min_gain) and row_c < row_ema50 and row_v > vol_loss_vol_mult * row_vol50 and cur['days_held'] > 5:
+                exited = True
+                exit_p = row_c
+                exit_reason = "50 EMA Vol Breakdown"
+
+            if exited:
+                cur['exit_date'] = dt_str
+                cur['exit_price'] = round(float(exit_p), 2)
+                cur['exit_reason'] = exit_reason
+                cur['reason'] = exit_reason
+                pnl_pct = (exit_p - cur['entry_price']) / cur['entry_price'] * 100.0
+                invested = 25000.0
+                shares = int(invested / cur['entry_price']) if cur['entry_price'] > 0 else 0
+                cur['shares'] = shares
+                cur['qty'] = shares
+                cur['pnl'] = round(float((exit_p - cur['entry_price']) * shares), 2)
+                cur['pnl_pct'] = round(float(pnl_pct), 2)
+                cur['pct_return'] = round(float(pnl_pct), 2)
+                cur['status'] = "CLOSED"
+                closed_trades.append(cur)
+                in_trade = False
+                cur = None
+
+        # 2. Check Trigger for New Entry
+        if not in_trade:
+            if dt in trig_set:
+                candle_gain_val = (row_c / c.iloc[i-1] - 1.0) * 100.0 if i >= 1 else 5.0
+                max_direct_gain = float(cfg.get("max_direct_entry_gain_pct", 10.0))
+
+                if candle_gain_val <= max_direct_gain:
+                    # Clean Breakout (<= 10% gain): Enter next day open / EOD close
+                    if i + 1 < len(df):
+                        next_dt = df.index[i + 1]
+                        next_o = o.iloc[i + 1]
+                        in_trade = True
+                        cur = {
+                            'symbol': symbol,
+                            'name': symbol,
+                            'entry_date': next_dt.strftime('%Y-%m-%d'),
+                            'entry_price': round(float(next_o), 2),
+                            'avg_price': round(float(next_o), 2),
+                            'highest_close': round(float(next_o), 2),
+                            'highest_price': round(float(next_o), 2),
+                            'sl_price': round(float(next_o * (1.0 + initial_sl_pct / 100.0)), 2),
+                            'sl_label': f'Initial SL ({initial_sl_pct:.0f}%)',
+                            'be_active': False,
+                            'status': 'ACTIVE',
+                            'days_held': 0
+                        }
+                else:
+                    # Extended Blast (> 10% gain, e.g. BATA +16.4%):
+                    # Route to Pullback Radar: Wait for 38%-50% candle retrace or 20 EMA touch within 8 bars holding above blast low
+                    target_pb_level = row_c - (0.40 * (row_c - row_o))
+                    blast_low = row_l
+                    for look_k in range(i + 1, min(len(df), i + 9)):
+                        cand_l = l.iloc[look_k]
+                        cand_c = c.iloc[look_k]
+                        cand_ema20 = ema20.iloc[look_k]
+                        if (cand_l <= target_pb_level or cand_l <= cand_ema20 * 1.02):
+                            if cand_c >= blast_low:
+                                pb_entry_p = min(cand_c, target_pb_level)
+                                entry_dt = df.index[look_k]
+                                in_trade = True
+                                cur = {
+                                    'symbol': symbol,
+                                    'name': symbol,
+                                    'entry_date': entry_dt.strftime('%Y-%m-%d'),
+                                    'entry_price': round(float(pb_entry_p), 2),
+                                    'avg_price': round(float(pb_entry_p), 2),
+                                    'highest_close': round(float(pb_entry_p), 2),
+                                    'highest_price': round(float(pb_entry_p), 2),
+                                    'sl_price': round(float(pb_entry_p * (1.0 + initial_sl_pct / 100.0)), 2),
+                                    'sl_label': f'Pullback SL ({initial_sl_pct:.0f}%)',
+                                    'be_active': False,
+                                    'status': 'ACTIVE (Radar Retracement)',
+                                    'days_held': 0
+                                }
+                                break
+                            else:
+                                # Crushed blast low - failed breakout trap!
+                                break
+
+    open_pos = None
+    if in_trade and cur is not None:
+        last_c = round(float(c.iloc[-1]), 2)
+        invested = 25000.0
+        shares = int(invested / cur['entry_price']) if cur['entry_price'] > 0 else 0
+        cur['cmp'] = last_c
+        cur['shares'] = shares
+        cur['qty'] = shares
+        cur['unrealized_pnl'] = round(float((last_c - cur['entry_price']) * shares), 2)
+        cur['unrealized_pct'] = round(float((last_c - cur['entry_price']) / cur['entry_price'] * 100.0), 2)
+        cur['pnl'] = cur['unrealized_pnl']
+        cur['pnl_pct'] = cur['unrealized_pct']
+        open_pos = cur
+
+    # Summary Metrics
+    df_closed = pd.DataFrame(closed_trades)
+    if not df_closed.empty:
+        wins = df_closed[df_closed['pnl'] > 0]
+        losses = df_closed[df_closed['pnl'] <= 0]
+        total_pnl = round(float(df_closed['pnl'].sum()), 2)
+        win_rate = round(float(len(wins) / len(df_closed) * 100.0), 1)
+        tot_win = float(wins['pnl'].sum())
+        tot_loss = abs(float(losses['pnl'].sum()))
+        pf = round(float(tot_win / tot_loss), 2) if tot_loss > 0 else 999.0
+        avg_w = round(float(wins['pnl'].mean()), 2) if len(wins) > 0 else 0.0
+        avg_l = round(abs(float(losses['pnl'].mean())), 2) if len(losses) > 0 else 0.0
+    else:
+        wins, losses = pd.DataFrame(), pd.DataFrame()
+        total_pnl, win_rate, pf, avg_w, avg_l = 0.0, 0.0, 0.0, 0.0, 0.0
+
+    candles_payload = []
+    for idx, r in df.iterrows():
+        candles_payload.append({
+            "time": idx.strftime('%Y-%m-%d'),
+            "open": round(float(r['Open']), 2),
+            "high": round(float(r['High']), 2),
+            "low": round(float(r['Low']), 2),
+            "close": round(float(r['Close']), 2),
+            "volume": int(r['Volume'])
+        })
+
+    radar_triggers = [t.strftime('%Y-%m-%d') for t in triggers]
+    all_trades = closed_trades + ([open_pos] if open_pos else [])
+
+    return {
+        "ok": True,
+        "symbol": symbol,
+        "summary": {
+            "total_trades": len(closed_trades) + (1 if open_pos else 0),
+            "closed_trades": len(closed_trades),
+            "open_positions": 1 if open_pos else 0,
+            "wins": len(wins),
+            "losses": len(losses),
+            "win_rate": win_rate,
+            "profit_factor": pf,
+            "realized_pnl": total_pnl,
+            "unrealized_pnl": open_pos['unrealized_pnl'] if open_pos else 0.0,
+            "total_combined_pnl": round(total_pnl + (open_pos['unrealized_pnl'] if open_pos else 0.0), 2),
+            "avg_win": avg_w,
+            "avg_loss": avg_l
+        },
+        "trades": all_trades,
+        "open_position": open_pos,
+        "radar_triggers": radar_triggers,
+        "candles": candles_payload,
+        "market_cap_cr": get_stock_market_cap_cr(symbol)
     }
 
 if __name__ == "__main__":

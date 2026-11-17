@@ -15,6 +15,9 @@ import {
   Zap,
   ShieldCheck,
   ShieldAlert,
+  TrendingUp,
+  Sparkles,
+  Lock,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -22,6 +25,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
+import { Switch } from "@/components/ui/switch"
 import { cn } from "@/lib/utils"
 import { getJSON, postJSON, usePoll, type FundsStatus, type Settings } from "@/lib/api"
 import { useStatus } from "@/lib/status"
@@ -34,10 +38,13 @@ type KotakForm = {
   totp_secret: string
 }
 
+type TabType = "broker" | "strategy" | "swinger"
+
 export function SettingsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
-  const currentTab = searchParams.get("tab") === "strategy" ? "strategy" : "broker"
-  const handleTabChange = (t: "broker" | "strategy") => {
+  const rawTab = searchParams.get("tab")
+  const currentTab: TabType = rawTab === "strategy" ? "strategy" : rawTab === "swinger" ? "swinger" : "broker"
+  const handleTabChange = (t: TabType) => {
     setSearchParams({ tab: t })
   }
   const { data, reload } = usePoll<Settings>("/api/settings")
@@ -210,7 +217,7 @@ export function SettingsPage() {
           </p>
         </div>
 
-        {/* Tab Switcher: Broker vs Strategy */}
+        {/* Tab Switcher: Broker vs Strategy vs Swinger */}
         <div className="flex items-center p-1 bg-muted/80 rounded-xl border border-border/60 shrink-0 shadow-2xs">
           <button
             type="button"
@@ -234,13 +241,27 @@ export function SettingsPage() {
             }`}
           >
             <Sliders className="size-4 text-sky-400" />
-            <span>Strategy Setups (Sensex &amp; Nifty)</span>
+            <span>Sensex &amp; Nifty</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => handleTabChange("swinger")}
+            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+              currentTab === "swinger"
+                ? "bg-background text-foreground shadow-xs font-bold"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <TrendingUp className="size-4 text-amber-500" />
+            <span>Swinger &amp; Leg 2</span>
           </button>
         </div>
       </div>
 
       {currentTab === "strategy" ? (
         <ConfigPage embedded />
+      ) : currentTab === "swinger" ? (
+        <SwingerSettingsSection />
       ) : (
         <>
         {restart && (
@@ -566,6 +587,357 @@ export function SettingsPage() {
       </Card>
         </>
       )}
+    </div>
+  )
+}
+
+function SwingerSettingsSection() {
+  const [cfg, setCfg] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+
+  const loadConfig = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch("/api/swinger/config")
+      const d = await res.json()
+      setCfg(d)
+    } catch (e: any) {
+      toast.error("Failed to load Swinger configuration: " + e.message)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadConfig()
+  }, [])
+
+  const handleSave = async () => {
+    if (!cfg) return
+    setSaving(true)
+    try {
+      const res = await fetch("/api/swinger/config", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(cfg),
+      })
+      const d = await res.json()
+      if (d.ok) {
+        toast.success("Swinger & Leg 2 settings saved successfully!")
+      } else {
+        toast.error("Save failed: " + (d.error || "Unknown error"))
+      }
+    } catch (e: any) {
+      toast.error("Save error: " + e.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (loading || !cfg) {
+    return (
+      <div className="p-8 text-center text-xs text-muted-foreground flex items-center justify-center gap-2">
+        <RefreshCw className="size-4 animate-spin text-amber-500" />
+        <span>Loading Swinger &amp; Leg 2 settings...</span>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-6 max-w-6xl pb-12">
+      {/* Top Controls Bar */}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-4 rounded-2xl bg-card border shadow-xs">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-lg font-bold text-foreground">Phoenix Swinger Strategy Configuration</h2>
+            <Badge variant="outline" className="bg-amber-500/10 text-amber-600 border-amber-500/30 font-bold">
+              Paper Mode
+            </Badge>
+            <Badge variant="outline" className={cfg.leg2_enabled ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/30 font-bold" : "bg-muted text-muted-foreground"}>
+              {cfg.leg2_enabled ? "Leg 1 + Leg 2 Active" : "Leg 1 Only"}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Backtest-calibrated parameters (4-Year Sim: 40%–60% WR, 1.8–2.3 PF). Strategy rules are pre-locked for maximum profitability.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={loadConfig}
+            disabled={saving}
+            className="text-xs gap-1.5 cursor-pointer"
+          >
+            <RefreshCw className="size-3.5" />
+            Reload
+          </Button>
+          <Button
+            size="sm"
+            onClick={handleSave}
+            disabled={saving}
+            className="text-xs gap-1.5 bg-amber-600 hover:bg-amber-700 text-white font-bold cursor-pointer shadow-xs"
+          >
+            <Save className="size-3.5" />
+            {saving ? "Saving..." : "Save Settings"}
+          </Button>
+        </div>
+      </div>
+
+      {/* 1. Portfolio & Risk Allocation */}
+      <Card className="border-border/60 shadow-xs">
+        <CardHeader className="pb-3 border-b">
+          <div className="flex items-center gap-2">
+            <Sliders className="size-4 text-amber-500" />
+            <CardTitle className="text-base font-bold">Portfolio &amp; Capital Allocation</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Manage capital sizing and slot distribution. The strategy automatically caps allocation per stock to protect total capital.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/20">
+            <Label className="text-xs font-bold">Total Capital Allocated (₹)</Label>
+            <Input
+              type="number"
+              step="10000"
+              value={cfg.capital_allocated ?? 500000.0}
+              onChange={(e) => setCfg({ ...cfg, capital_allocated: parseFloat(e.target.value) || 500000.0 })}
+              className="h-8 text-xs font-mono font-bold"
+            />
+            <p className="text-[10px] text-muted-foreground">Total strategy budget</p>
+          </div>
+
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/20">
+            <Label className="text-xs font-bold">Base Slot Size (₹)</Label>
+            <Input
+              type="number"
+              step="5000"
+              value={cfg.base_position_size ?? 25000.0}
+              onChange={(e) => setCfg({ ...cfg, base_position_size: parseFloat(e.target.value) || 25000.0 })}
+              className="h-8 text-xs font-mono font-bold"
+            />
+            <p className="text-[10px] text-muted-foreground">Capital per trade slot</p>
+          </div>
+
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/20">
+            <Label className="text-xs font-bold">Max Open Positions</Label>
+            <Input
+              type="number"
+              value={cfg.max_open_positions ?? 20}
+              onChange={(e) => setCfg({ ...cfg, max_open_positions: parseInt(e.target.value) || 20 })}
+              className="h-8 text-xs font-mono font-bold"
+            />
+            <p className="text-[10px] text-muted-foreground">
+              {Math.floor((cfg.capital_allocated || 500000) / (cfg.base_position_size || 25000))} slots mathematically available
+            </p>
+          </div>
+
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/20">
+            <Label className="text-xs font-bold">Min Market Cap (₹ Cr)</Label>
+            <Input
+              type="number"
+              step="500"
+              value={cfg.min_market_cap_cr ?? 2000.0}
+              onChange={(e) => setCfg({ ...cfg, min_market_cap_cr: parseFloat(e.target.value) || 2000.0 })}
+              className="h-8 text-xs font-mono font-bold"
+            />
+            <p className="text-[10px] text-muted-foreground">Filters out microcaps &amp; illiquid stocks</p>
+          </div>
+
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/20">
+            <Label className="text-xs font-bold">Min Stock Price (₹)</Label>
+            <Input
+              type="number"
+              step="5"
+              value={cfg.min_stock_price ?? 20.0}
+              onChange={(e) => setCfg({ ...cfg, min_stock_price: parseFloat(e.target.value) || 20.0 })}
+              className="h-8 text-xs font-mono font-bold"
+            />
+            <p className="text-[10px] text-muted-foreground">Prevents sub-₹20 penny stocks</p>
+          </div>
+
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/20">
+            <Label className="text-xs font-bold">Max Direct Entry Gain (%)</Label>
+            <Input
+              type="number"
+              step="1"
+              value={cfg.max_direct_entry_gain_pct ?? 10.0}
+              onChange={(e) => setCfg({ ...cfg, max_direct_entry_gain_pct: parseFloat(e.target.value) || 10.0 })}
+              className="h-8 text-xs font-mono font-bold"
+            />
+            <p className="text-[10px] text-muted-foreground">&gt;10% blasts route to Radar for retracement</p>
+          </div>
+
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/20">
+            <Label className="text-xs font-bold">Blacklisted Symbols</Label>
+            <Input
+              type="text"
+              value={Array.isArray(cfg.blacklist) ? cfg.blacklist.join(", ") : (cfg.blacklist || "")}
+              onChange={(e) => setCfg({
+                ...cfg,
+                blacklist: e.target.value.split(",").map((s: string) => s.trim().toUpperCase()).filter(Boolean)
+              })}
+              placeholder="e.g. V2RETAIL, YESBANK"
+              className="h-8 text-xs font-mono font-bold"
+            />
+            <p className="text-[10px] text-muted-foreground">Comma-separated excluded tickers</p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 2. Backtest Calibrated Strategy Blueprint (Locked Proven Rules) */}
+      <Card className="border-border/60 shadow-xs">
+        <CardHeader className="pb-3 border-b">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <ShieldCheck className="size-4 text-emerald-500" />
+              <CardTitle className="text-base font-bold">Strategy Blueprint (Backtest Calibrated &amp; Locked)</CardTitle>
+            </div>
+            <Badge variant="secondary" className="text-[11px] font-mono gap-1 text-emerald-600 bg-emerald-500/10 border-emerald-500/30">
+              <Lock className="size-3" />
+              Proven 4-Year Sim Rules
+            </Badge>
+          </div>
+          <CardDescription className="text-xs">
+            These core parameters were rigorously optimized across the entire NSE universe over 4 years. Daily candle close evaluation prevents intraday wick shakeouts.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          {/* Leg 1 Column */}
+          <div className="p-4 rounded-xl border bg-emerald-500/[0.03] border-emerald-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-foreground">
+                <TrendingUp className="size-4 text-emerald-500" />
+                <span>Leg 1: Phoenix Turnaround</span>
+              </div>
+              <Badge className="bg-emerald-600 text-white text-[10px]">Deep Value Reversal</Badge>
+            </div>
+            
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Setup Filter:</span>
+                <span className="font-mono font-bold text-foreground">≥60% Crash from ATH + Below 200 EMA</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Entry Trigger:</span>
+                <span className="font-mono font-bold text-foreground">Close &gt; 20 EMA (≤10% Direct · &gt;10% Retrace Radar)</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Initial Stop Loss:</span>
+                <span className="font-mono font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">
+                  {cfg.initial_sl_pct ?? -15.0}% (Daily Close)
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Break-Even Shield:</span>
+                <span className="font-mono font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                  +{cfg.be_shield_trigger_pct ?? 15.0}% (Moves SL to Cost + 0.5%)
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Runner Trailing Stop:</span>
+                <span className="font-mono font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                  {cfg.runner_trailing_stop_pct ?? 25.0}% from Peak Close
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Backtest demonstrated 25% trailing stop captures massive multibaggers (e.g. Manyavar, Sanghvimov) while -15% close SL cuts false starts cleanly.
+            </p>
+          </div>
+
+          {/* Leg 2 Column */}
+          <div className="p-4 rounded-xl border bg-amber-500/[0.03] border-amber-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-foreground">
+                <Sparkles className="size-4 text-amber-500" />
+                <span>Leg 2: Stage-2 High-Base Breakout</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold">Enable:</span>
+                <Switch
+                  checked={Boolean(cfg.leg2_enabled)}
+                  onCheckedChange={(val) => setCfg({ ...cfg, leg2_enabled: val })}
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2 text-xs">
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Setup Filter:</span>
+                <span className="font-mono font-bold text-foreground">12–150 Days Coiled Base above 20/50 EMA</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Entry Trigger:</span>
+                <span className="font-mono font-bold text-foreground">Base Breakout + ≥1.4x Volume Surge</span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Initial Stop Loss:</span>
+                <span className="font-mono font-bold text-rose-500 bg-rose-500/10 px-1.5 py-0.5 rounded">
+                  {cfg.leg2_initial_sl_pct ?? -8.0}% (Tight Base Risk)
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Break-Even Shield:</span>
+                <span className="font-mono font-bold text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                  +{cfg.leg2_be_trigger_pct ?? 10.0}% (Quick De-risk)
+                </span>
+              </div>
+              <div className="flex items-center justify-between p-2 rounded-lg bg-background/80 border">
+                <span className="text-muted-foreground font-medium">Runner Trailing Stop:</span>
+                <span className="font-mono font-bold text-emerald-500 bg-emerald-500/10 px-1.5 py-0.5 rounded">
+                  {cfg.leg2_trail_sl_pct ?? 20.0}% from Peak Close
+                </span>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground leading-relaxed">
+              Enters stocks that already established a Phoenix bottom and are now coiling in a high-and-tight consolidation (e.g. SPARC at 20 EMA).
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 3. Automated Scanner Queries */}
+      <Card className="border-border/60 shadow-xs">
+        <CardHeader className="pb-3 border-b">
+          <div className="flex items-center gap-2">
+            <Zap className="size-4 text-amber-500" />
+            <CardTitle className="text-base font-bold">Chartink Scanner Queries (Automated EOD Execution)</CardTitle>
+          </div>
+          <CardDescription className="text-xs">
+            Direct screener clauses sent to Chartink API. Only edit if you wish to adjust technical indicator syntax.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4 grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/10">
+            <Label className="text-xs font-bold flex items-center justify-between">
+              <span>Unified Turnaround Scanner Clause</span>
+              <span className="text-[10px] font-mono text-muted-foreground">Auto-sorts: Direct Buy (≤10%) vs Radar (&gt;10%)</span>
+            </Label>
+            <textarea
+              rows={4}
+              value={cfg.scan_clause ?? ""}
+              onChange={(e) => setCfg({ ...cfg, scan_clause: e.target.value })}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-[11px] font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+
+          <div className="space-y-1.5 p-3 rounded-xl border bg-muted/10">
+            <Label className="text-xs font-bold flex items-center justify-between">
+              <span>Leg 2 Base Breakout Clause</span>
+              <span className="text-[10px] font-mono text-muted-foreground">Stage-2 High Base + 1.4x Vol</span>
+            </Label>
+            <textarea
+              rows={4}
+              value={cfg.leg2_clause ?? ""}
+              onChange={(e) => setCfg({ ...cfg, leg2_clause: e.target.value })}
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-[11px] font-mono shadow-xs focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+            />
+          </div>
+        </CardContent>
+      </Card>
     </div>
   )
 }

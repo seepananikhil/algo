@@ -16,6 +16,7 @@ import {
   Activity,
   Award,
   Layers,
+  ExternalLink,
   X
 } from "lucide-react"
 import {
@@ -175,6 +176,48 @@ export function SwingerPage() {
   const [distinctFilter, setDistinctFilter] = useState<"ALL" | "PORTFOLIO" | "WINNERS" | "MULTIBAGGER" | "LOSSES" | "MULTITRADE">("ALL")
   const [distinctSort, setDistinctSort] = useState<"pnl" | "trades" | "winrate" | "alpha">("pnl")
   const [selectedMonthlyYear, setSelectedMonthlyYear] = useState<string>("2026")
+
+  // On-demand Stock Strategy Backtest State
+  const [backtestSymbol, setBacktestSymbol] = useState("")
+  const [backtestLoading, setBacktestLoading] = useState(false)
+
+  const handleRunBacktest = async (symToTest?: string) => {
+    const target = (symToTest || backtestSymbol || "").trim().toUpperCase()
+    if (!target) {
+      toast.error("Please enter a stock symbol (e.g. PARAS, BEL, TATASTEEL)")
+      return
+    }
+    setBacktestSymbol(target)
+    setBacktestLoading(true)
+    const toastId = toast.loading(`Simulating Swinger Strategy on ${target}...`)
+    try {
+      const res = await fetch(`/api/swinger/backtest-stock?symbol=${encodeURIComponent(target)}`)
+      const data = await res.json()
+      if (data.ok && Array.isArray(data.candles) && data.candles.length > 0) {
+        toast.success(
+          `${target}: ${data.summary.total_trades} Trades · ${data.summary.win_rate}% Win Rate · PF ${data.summary.profit_factor}`,
+          { id: toastId }
+        )
+        const firstTrade = (data.trades && data.trades.length > 0) ? data.trades[0] : null
+        setSelectedTradeForChart({
+          ...(firstTrade || {}),
+          symbol: data.symbol,
+          name: data.symbol,
+          candles: data.candles,
+          radar_triggers: data.radar_triggers,
+          stockTrades: data.trades,
+          isBacktest: true,
+          backtestSummary: data.summary
+        })
+      } else {
+        toast.error(data.error || `Could not run backtest for ${target}`, { id: toastId })
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Backtest request failed", { id: toastId })
+    } finally {
+      setBacktestLoading(false)
+    }
+  }
 
   // Dynamic Annual Breakdown by Cohort vs Realized Exit
   const dynamicYearly = useMemo(() => {
@@ -410,8 +453,15 @@ export function SwingerPage() {
       })
     })
 
-    // 4. Radar Watchlist
+    // 4. Radar Watchlist (Exclude active holdings and duplicate symbols)
+    const heldSymbolsSet = new Set(positions.map((p) => p.symbol))
+    const seenRadarSymbols = new Set<string>()
+
     watchlist.forEach((w) => {
+      if (heldSymbolsSet.has(w.symbol) || seenRadarSymbols.has(w.symbol)) {
+        return // Skip radar when an active position is already open or symbol is duplicated
+      }
+      seenRadarSymbols.add(w.symbol)
       list.push({
         id: `radar-${w.symbol}`,
         type: "RADAR",
@@ -856,22 +906,45 @@ export function SwingerPage() {
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Enforces institutional quality: Market Cap >= Rs.2,000 Cr and High-Velocity Swing ATR >= 3.2%">
               Mcap ≥ ₹2k Cr · ATR ≥ 3.2%
             </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Protects profits by moving stop to Cost+1% once gain reaches +15%">
-              BE Shield @ +15%
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Protects profits by moving stop to Cost+0.5% once gain reaches +25%">
+              BE Shield @ +25%
             </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="Requires >=8% room to 200 EMA ceiling and prioritizes Stage-2 bases">
-              200 EMA Clearance (≥8%) · Leg 2 Priority
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="15% Initial Protective Stop Loss with 25% Runner Trailing Stop">
+              15% SL · 25% Runner Trail
             </span>
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200" title="Excluding outlier V2RETAIL to reflect true strategy edge">
               Blacklist: V2RETAIL
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Turnaround Momentum Engine · 12% Close SL · BE Shield @ +15% · Pure 25% Peak Trail @ +20% · 1000d Trough Memory · Mcap ≥ ₹2k Cr · ATR ≥ 3.2% · 200 EMA Clearance · Leg 2 Priority · Excl. Blacklist
+            Phoenix Breakout Swinger · Direct Trigger EOD Entry · 15% SL · BE Shield @ +25% · 25% Runner Trail · 1000d Trough Memory · Mcap ≥ ₹2k Cr · ATR ≥ 3.2% · Excl. Blacklist
           </p>
         </div>
 
         <div className="flex items-center gap-2 self-stretch md:self-auto justify-end flex-wrap">
+          {/* Quick Stock Backtester Input Bar */}
+          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 gap-1.5 focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500 transition shadow-2xs">
+            <Zap className="size-3.5 text-amber-500 shrink-0" />
+            <input
+              type="text"
+              placeholder="Test stock (e.g. PARAS)..."
+              value={backtestSymbol}
+              onChange={(e) => setBacktestSymbol(e.target.value.toUpperCase())}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") handleRunBacktest(backtestSymbol)
+              }}
+              className="bg-transparent text-xs font-mono font-bold outline-none text-slate-800 placeholder:text-slate-400 placeholder:font-sans w-36 sm:w-44"
+            />
+            <Button
+              size="sm"
+              onClick={() => handleRunBacktest(backtestSymbol)}
+              disabled={backtestLoading || !backtestSymbol.trim()}
+              className="h-6 px-2.5 text-[11px] font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-white shadow-2xs cursor-pointer"
+            >
+              {backtestLoading ? <RefreshCw className="size-3 animate-spin" /> : "Backtest"}
+            </Button>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
@@ -1684,6 +1757,16 @@ export function SwingerPage() {
                                     <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition flex items-center gap-1.5">
                                       <span className="hover:underline font-mono">{item.symbol}</span>
                                       <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
+                                      <a
+                                        href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(item.symbol)}`}
+                                        target="_blank"
+                                        rel="noopener noreferrer"
+                                        onClick={(e) => e.stopPropagation()}
+                                        className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                                        title={`Open ${item.symbol} on TradingView`}
+                                      >
+                                        <ExternalLink className="size-3" />
+                                      </a>
                                     </div>
                                     <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
                                       {item.name}
@@ -1866,6 +1949,16 @@ export function SwingerPage() {
                             <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono">
                               <span className="hover:underline">{p.symbol}</span>
                               <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
+                              <a
+                                href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(p.symbol)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                                title={`Open ${p.symbol} on TradingView`}
+                              >
+                                <ExternalLink className="size-3" />
+                              </a>
                             </div>
                             <div className="text-[11px] text-slate-500 font-medium truncate max-w-[130px]">
                               {p.name || p.symbol}
@@ -2116,6 +2209,16 @@ export function SwingerPage() {
                               <td className="p-3 font-bold text-slate-900 group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono">
                                 <span className="hover:underline">{t.symbol}</span>
                                 <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
+                              <a
+                                href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(t.symbol)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                                title={`Open ${t.symbol} on TradingView`}
+                              >
+                                <ExternalLink className="size-3" />
+                              </a>
                               </td>
                               <td className="p-3 text-slate-600 font-mono">{t.entry_date}</td>
                               <td className="p-3 text-slate-600 font-mono">{t.exit_date}</td>
@@ -2498,6 +2601,16 @@ export function SwingerPage() {
                                 </span>
                               )}
                               <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
+                              <a
+                                href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(t.symbol)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
+                                title={`Open ${t.symbol} on TradingView`}
+                              >
+                                <ExternalLink className="size-3" />
+                              </a>
                             </div>
                             <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
                               {t.name || t.symbol}

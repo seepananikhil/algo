@@ -5,6 +5,7 @@ import {
   HistogramSeries,
   LineSeries,
   LineStyle,
+  PriceScaleMode,
   createSeriesMarkers,
   type IChartApi,
   type ISeriesApi,
@@ -13,17 +14,21 @@ import {
 } from "lightweight-charts"
 import {
   X,
-  RefreshCw,
   Maximize2,
   Minimize2,
   BarChart2,
   ChevronLeft,
   ChevronRight,
-  Layers
+  Layers,
+  ExternalLink,
+  Ruler,
+  Zap,
+  Table
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
 export interface SwingerTradeTarget {
+  trade_id?: string
   symbol: string
   name?: string
   entry_date?: string
@@ -174,25 +179,61 @@ export function SwingerTradeChartModal({
   const [firstRadarDate, setFirstRadarDate] = useState<string | null>(null)
   const [serverTrades, setServerTrades] = useState<SwingerTradeTarget[]>([])
   const [isOnRadar, setIsOnRadar] = useState(false)
-  const [radarInfo, setRadarInfo] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
 
-  // Chart feature toggles (Cleaner defaults: 1 Year view, EMA on, Levels on)
+  // Chart feature toggles (Clean defaults: 50 EMA on, 200 EMA on, Levels on, Volume on)
   const [showVolume, setShowVolume] = useState(true)
   const [showEMA50, setShowEMA50] = useState(true)
   const [showEMA200, setShowEMA200] = useState(true)
   const [showLevels, setShowLevels] = useState(true)
-  const [activeRange, setActiveRange] = useState<"3m" | "6m" | "1y" | "2y" | "all">("1y")
   const [activeTradeIndex, setActiveTradeIndex] = useState<number>(0)
 
   // Live Crosshair Hover Information
   const [hovered, setHovered] = useState<HoveredInfo | null>(null)
 
-  // Reset active trade index when trade symbol changes
+  // Measure / Scale Tool State
+  const [isMeasureActive, setIsMeasureActive] = useState(false)
+  const [isShiftPressed, setIsShiftPressed] = useState(false)
+  const [isLogScale, setIsLogScale] = useState(false)
+  const [measureData, setMeasureData] = useState<{
+    x1: number
+    y1: number
+    x2: number
+    y2: number
+    price1: number
+    price2: number
+    time1: string
+    time2: string
+    bars: number
+    isLocked: boolean
+  } | null>(null)
+
+  const isDrawingMeasureRef = useRef(false)
+  const measureStartPointRef = useRef<{
+    x: number
+    y: number
+    price: number
+    time: string
+    logical: number
+  } | null>(null)
+
+  const [currentSymbol, setCurrentSymbol] = useState(trade?.symbol || "")
+  const [backtestSummary, setBacktestSummary] = useState<any | null>((trade as any)?.backtestSummary || null)
+  const [isBacktestMode, setIsBacktestMode] = useState(Boolean((trade as any)?.isBacktest))
+  const [showLedger, setShowLedger] = useState(false)
+  const [marketCapCr, setMarketCapCr] = useState<number | null>((trade as any)?.market_cap_cr || null)
+
+  // Sync state when trade prop changes
   useEffect(() => {
-    setActiveTradeIndex(0)
-  }, [trade?.symbol])
+    if (trade?.symbol) {
+      setCurrentSymbol(trade.symbol)
+      setBacktestSummary((trade as any)?.backtestSummary || null)
+      setIsBacktestMode(Boolean((trade as any)?.isBacktest))
+      setMarketCapCr((trade as any)?.market_cap_cr || null)
+      setActiveTradeIndex(0)
+    }
+  }, [trade?.symbol, (trade as any)?.isBacktest])
 
   // Derive all trades for this stock (authoritative from server, or fallback to props)
   const symbolTrades: SwingerTradeTarget[] = useMemo(() => {
@@ -232,10 +273,20 @@ export function SwingerTradeChartModal({
     return Array.from(new Set(list)).sort()
   }, [radarTriggers, firstRadarDate, trade])
 
-  // Keyboard navigation & ESC
+  // Keyboard navigation, ESC & Shift measure shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose()
+      if (e.key === "Escape") {
+        if (measureData) {
+          setMeasureData(null)
+          setIsMeasureActive(false)
+          return
+        }
+        onClose()
+      }
+      if (e.key === "Shift") {
+        setIsShiftPressed(true)
+      }
       if (allTrades && onSelectTrade && trade) {
         const curIdx = allTrades.findIndex((t) => t.symbol === trade.symbol)
         if (e.key === "ArrowLeft" && curIdx > 0) {
@@ -245,9 +296,18 @@ export function SwingerTradeChartModal({
         }
       }
     }
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Shift") {
+        setIsShiftPressed(false)
+      }
+    }
     window.addEventListener("keydown", handleKeyDown)
-    return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [onClose, allTrades, onSelectTrade, trade])
+    window.addEventListener("keyup", handleKeyUp)
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown)
+      window.removeEventListener("keyup", handleKeyUp)
+    }
+  }, [onClose, allTrades, onSelectTrade, trade, measureData])
 
   // Fetch Full Candlestick History and Trade Context for Symbol
   useEffect(() => {
@@ -257,8 +317,29 @@ export function SwingerTradeChartModal({
     setError(null)
     setHovered(null)
 
+    const isBacktest = Boolean((trade as any)?.isBacktest)
+
+    // If pre-loaded backtest candles and trades were passed, hydrate instantly!
+    if (isBacktest && (trade as any)?.candles && (trade as any).candles.length > 0) {
+      const sorted = [...(trade as any).candles].sort((a: any, b: any) => a.time.localeCompare(b.time))
+      setCandles(sorted)
+      setRadarTriggers((trade as any).radar_triggers || [])
+      setFirstRadarDate(null)
+      setServerTrades((trade as any).stockTrades || (trade as any).trades || [])
+      setIsOnRadar(false)
+      if ((trade as any)?.market_cap_cr) {
+        setMarketCapCr((trade as any).market_cap_cr)
+      }
+      setLoading(false)
+      return
+    }
+
+    const endpoint = isBacktest
+      ? `/api/swinger/backtest-stock?symbol=${encodeURIComponent(trade.symbol)}`
+      : `/api/swinger/candles?symbol=${encodeURIComponent(trade.symbol)}`
+
     // Request full historical candles with live fresh delta and trade context
-    fetch(`/api/swinger/candles?symbol=${encodeURIComponent(trade.symbol)}`)
+    fetch(endpoint)
       .then((r) => r.json())
       .then((d) => {
         if (!active) return
@@ -270,9 +351,11 @@ export function SwingerTradeChartModal({
           setFirstRadarDate(d.first_radar_date || null)
           setServerTrades(Array.isArray(d.trades) ? d.trades : [])
           setIsOnRadar(Boolean(d.is_on_radar))
-          setRadarInfo(d.radar_info || null)
+          if (d.market_cap_cr) {
+            setMarketCapCr(d.market_cap_cr)
+          }
         } else {
-          setError(`No candlestick data available for ${trade.symbol}`)
+          setError(d.error || `No candlestick data available for ${trade.symbol}`)
         }
       })
       .catch((err) => {
@@ -286,7 +369,7 @@ export function SwingerTradeChartModal({
     return () => {
       active = false
     }
-  }, [trade?.symbol])
+  }, [trade?.symbol, (trade as any)?.isBacktest])
 
   // Key Technical Stats Derived from Full Candle Data
   const stats = useMemo(() => {
@@ -379,6 +462,7 @@ export function SwingerTradeChartModal({
       },
       rightPriceScale: {
         borderColor: "#e2e8f0",
+        mode: isLogScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal,
         scaleMargins: {
           top: 0.08,
           bottom: showVolume ? 0.20 : 0.05
@@ -464,16 +548,17 @@ export function SwingerTradeChartModal({
       emaSeriesRef.current = emaSeries
     }
 
-    // 4. Clean Milestone Price Lines (Only for active/historical trades)
-    // NOTE: Removed PEAK HIGH and CRASH FLOOR from price series to prevent squishing candles vertically!
+    // 4. Clean Milestone Price Lines (Only for active/historical trades of Swinger strategy)
     if (showLevels && symbolTrades.length > 0) {
       const activeTargetTrade = currentTrade || symbolTrades[symbolTrades.length - 1]
       const entryPrice = activeTargetTrade?.avg_price ?? activeTargetTrade?.entry_price
       if (entryPrice && entryPrice > 0) {
-        const isLeg2 = (activeTargetTrade as any).leg === 2 || (activeTargetTrade as any).strategy_leg === "LEG2_BREAKOUT"
-        const slPrice = entryPrice * (isLeg2 ? 0.92 : 0.75) // Leg 2: -8%, Leg 1: -25%
-        const bePrice = entryPrice * (isLeg2 ? 1.10 : 1.15) // BE Shield
-        const tpPrice = entryPrice * 1.30 // +30% TP1
+        // Strategy Rules: Initial SL -15%, Break-Even Shield @ +15%
+        const initialSlPrice = entryPrice * 0.85
+        const currentSl = (activeTargetTrade as any).sl && (activeTargetTrade as any).sl > 0
+          ? (activeTargetTrade as any).sl
+          : initialSlPrice
+        const bePrice = entryPrice * 1.25
 
         // Entry Line (Clean Emerald Dashed)
         mainSeries.createPriceLine({
@@ -485,34 +570,26 @@ export function SwingerTradeChartModal({
           title: `BUY ₹${entryPrice.toFixed(1)}`
         })
 
-        // Stop Loss Line (Clean, thin slate-rose dotted)
+        // Stop Loss Line (Clean Rose Dotted: shows active trail SL if raised, else initial -15% SL)
         mainSeries.createPriceLine({
-          price: slPrice,
+          price: currentSl,
           color: "#f43f5e",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: `${isLeg2 ? "SL -8% (Leg 2)" : "SL -25% (Leg 1)"} ₹${slPrice.toFixed(1)}`
+          title: currentSl > entryPrice
+            ? `TRAIL SL ₹${currentSl.toFixed(1)}`
+            : `SL -15% ₹${currentSl.toFixed(1)}`
         })
 
-        // Break-Even Shield Line (Sky Blue Dotted)
+        // Break-Even Shield Target Line (+25% milestone)
         mainSeries.createPriceLine({
           price: bePrice,
           color: "#0284c7",
           lineWidth: 1,
           lineStyle: LineStyle.Dotted,
           axisLabelVisible: true,
-          title: `BE ₹${bePrice.toFixed(1)}`
-        })
-
-        // Runner Trigger Line (Purple/Emerald Dashed)
-        mainSeries.createPriceLine({
-          price: tpPrice,
-          color: "#9333ea",
-          lineWidth: 1,
-          lineStyle: LineStyle.Dashed,
-          axisLabelVisible: true,
-          title: `RUNNER TRIGGER ₹${tpPrice.toFixed(1)} (+30%)`
+          title: `BE +25% ₹${bePrice.toFixed(1)}`
         })
 
         // Exit Line (ONLY if truly closed - NOT active/open)
@@ -538,21 +615,37 @@ export function SwingerTradeChartModal({
       }
     }
 
-    // 5. Series Markers (Radar Trigger Flags, Buy & Exit Arrows)
+    // 5. Crisp, Non-Cluttered Series Markers (Radar Trigger Flags, Buy & Exit Arrows)
     const markers: SeriesMarker<Time>[] = []
 
-    // A. Add Radar / Screener Trigger Flags (excluding duplicate triggers during active holdings)
-    effectiveRadarTriggers.forEach((rtDate, idx) => {
+    // Collect all entry dates and intervals of actual trades to avoid duplicate/redundant radar markers
+    const tradeEntryDates = new Set(symbolTrades.map((st) => (st.entry_date || "").slice(0, 10)))
+    const activeTradeIntervals = symbolTrades.map((st) => [
+      (st.entry_date || "").slice(0, 10),
+      (st.exit_date || "9999-12-31").slice(0, 10)
+    ])
+
+    // A. Add Radar / Screener Trigger Flags (excluding duplicate triggers and triggers when active position already exists)
+    const seenRadarTimes = new Set<string>()
+    effectiveRadarTriggers.forEach((rtDate) => {
+      const cleanDate = rtDate.slice(0, 10)
+      if (tradeEntryDates.has(cleanDate)) return
+      const isDuringActive = activeTradeIntervals.some(
+        ([start, end]) => cleanDate >= start && cleanDate <= end
+      )
+      if (isDuringActive) return
+
       const validRtTime = sanitizeDateToCandleTime(rtDate, candles)
-      if (validRtTime) {
-        const isFirst = idx === 0
+      const timeKey = String(validRtTime)
+      if (validRtTime && !seenRadarTimes.has(timeKey)) {
+        seenRadarTimes.add(timeKey)
         markers.push({
           time: validRtTime as any,
           position: "aboveBar",
-          color: isFirst ? "#9333ea" : "#a855f7",
+          color: "#9333ea",
           shape: "arrowDown",
-          text: isFirst ? `⚡ FIRST RADAR: ${rtDate}` : `⚡ RADAR: ${rtDate}`,
-          size: isFirst ? 2 : 1.5
+          text: "⚡ Trigger",
+          size: 1.5
         })
       }
     })
@@ -568,7 +661,7 @@ export function SwingerTradeChartModal({
           position: "belowBar",
           color: "#10b981",
           shape: "arrowUp",
-          text: symbolTrades.length > 1 ? `BUY #${tradeNum} @ ₹${stEntryPrice.toFixed(1)}` : `BUY @ ₹${stEntryPrice.toFixed(1)}`,
+          text: symbolTrades.length > 1 ? `BUY #${tradeNum} ₹${stEntryPrice.toFixed(0)}` : `BUY ₹${stEntryPrice.toFixed(0)}`,
           size: 2
         })
       }
@@ -591,7 +684,7 @@ export function SwingerTradeChartModal({
           position: "aboveBar",
           color: isWin ? "#10b981" : "#ef4444",
           shape: "arrowDown",
-          text: symbolTrades.length > 1 ? `EXIT #${tradeNum} (${isWin ? "+" : ""}${ret.toFixed(1)}%)` : `EXIT (${isWin ? "+" : ""}${ret.toFixed(1)}%)`,
+          text: symbolTrades.length > 1 ? `EXIT #${tradeNum} (${isWin ? "+" : ""}${ret.toFixed(0)}%)` : `EXIT (${isWin ? "+" : ""}${ret.toFixed(0)}%)`,
           size: 2
         })
       }
@@ -648,31 +741,50 @@ export function SwingerTradeChartModal({
       }
     })
 
-    // 7. Viewport Range (Defaulting to 1Y for breathable, non-squished candles)
-    if (activeRange === "3m") {
-      const fromIdx = Math.max(0, candles.length - 63)
-      chart.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
-    } else if (activeRange === "6m") {
-      const fromIdx = Math.max(0, candles.length - 126)
-      chart.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
-    } else if (activeRange === "1y") {
-      const fromIdx = Math.max(0, candles.length - 252)
-      chart.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
-    } else if (activeRange === "2y") {
-      const fromIdx = Math.max(0, candles.length - 504)
-      chart.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
+    // 7. Viewport Range: Auto-center on selected trade (or recent 1Y if no specific trade)
+    if (candles.length > 0) {
+      let fromTime: string | null = null
+      let toTime: string | null = null
+
+      if (currentTrade?.entry_date) {
+        const eDate = currentTrade.entry_date.slice(0, 10)
+        const xDate = currentTrade.exit_date ? currentTrade.exit_date.slice(0, 10) : candles[candles.length - 1].time
+
+        const eIdx = candles.findIndex((c) => c.time >= eDate)
+        const xIdx = candles.findIndex((c) => c.time >= xDate)
+
+        if (eIdx !== -1) {
+          const startIdx = Math.max(0, eIdx - 25)
+          const endIdx = xIdx !== -1
+            ? Math.min(candles.length - 1, xIdx + 30)
+            : Math.min(candles.length - 1, eIdx + 60)
+
+          const minBars = 65
+          const barSpan = endIdx - startIdx
+          let adjustedStart = startIdx
+          let adjustedEnd = endIdx
+          if (barSpan < minBars) {
+            const extra = minBars - barSpan
+            adjustedStart = Math.max(0, startIdx - Math.floor(extra / 2))
+            adjustedEnd = Math.min(candles.length - 1, endIdx + Math.ceil(extra / 2))
+          }
+          fromTime = candles[adjustedStart]?.time || null
+          toTime = candles[adjustedEnd]?.time || null
+        }
+      }
+
+      if (fromTime && toTime) {
+        chart.timeScale().setVisibleRange({
+          from: fromTime as any,
+          to: toTime as any
+        })
+      } else {
+        const fromIdx = Math.max(0, candles.length - 252)
+        chart.timeScale().setVisibleRange({
+          from: candles[fromIdx].time as any,
+          to: candles[candles.length - 1].time as any
+        })
+      }
     } else {
       chart.timeScale().fitContent()
     }
@@ -708,44 +820,148 @@ export function SwingerTradeChartModal({
     showEMA50,
     showEMA200,
     showLevels,
-    activeRange,
     isMaximized,
     stats
   ])
 
-  // Range switch handlers
-  const handleRangeChange = (range: "3m" | "6m" | "1y" | "2y" | "all") => {
-    setActiveRange(range)
-    if (!chartRef.current || candles.length === 0) return
+  // Update Price Scale Mode when user toggles Log / Linear scale
+  useEffect(() => {
+    if (chartRef.current) {
+      chartRef.current.priceScale("right").applyOptions({
+        mode: isLogScale ? PriceScaleMode.Logarithmic : PriceScaleMode.Normal
+      })
+    }
+  }, [isLogScale])
 
-    if (range === "3m") {
-      const fromIdx = Math.max(0, candles.length - 63)
-      chartRef.current.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
-    } else if (range === "6m") {
-      const fromIdx = Math.max(0, candles.length - 126)
-      chartRef.current.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
-    } else if (range === "1y") {
-      const fromIdx = Math.max(0, candles.length - 252)
-      chartRef.current.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
-    } else if (range === "2y") {
-      const fromIdx = Math.max(0, candles.length - 504)
-      chartRef.current.timeScale().setVisibleRange({
-        from: candles[fromIdx].time as any,
-        to: candles[candles.length - 1].time as any
-      })
-    } else {
+  const handleFitContent = () => {
+    if (chartRef.current) {
       chartRef.current.timeScale().fitContent()
     }
   }
+
+  // Handle Pointer Events for Measure Scale Tool
+  const handleMeasurePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.button !== 0) return
+    const chart = chartRef.current
+    const series = mainSeriesRef.current
+    if (!chart || !series) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    const price = series.coordinateToPrice(y)
+    const time = chart.timeScale().coordinateToTime(x)
+    const logical = chart.timeScale().coordinateToLogical(x)
+    if (price === null) return
+
+    const timeStr = time
+      ? typeof time === "string"
+        ? time
+        : typeof time === "object" && "year" in time
+        ? `${time.year}-${String(time.month).padStart(2, "0")}-${String(time.day).padStart(2, "0")}`
+        : String(time)
+      : ""
+
+    isDrawingMeasureRef.current = true
+    measureStartPointRef.current = { x, y, price, time: timeStr, logical: logical ?? 0 }
+
+    setMeasureData({
+      x1: x,
+      y1: y,
+      x2: x,
+      y2: y,
+      price1: price,
+      price2: price,
+      time1: timeStr,
+      time2: timeStr,
+      bars: 0,
+      isLocked: false
+    })
+  }
+
+  const handleMeasurePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (!isDrawingMeasureRef.current || !measureStartPointRef.current) return
+    const chart = chartRef.current
+    const series = mainSeriesRef.current
+    if (!chart || !series) return
+
+    const rect = e.currentTarget.getBoundingClientRect()
+    const x = e.clientX - rect.left
+    const y = e.clientY - rect.top
+
+    const price = series.coordinateToPrice(y)
+    const time = chart.timeScale().coordinateToTime(x)
+    const logical = chart.timeScale().coordinateToLogical(x)
+    if (price === null) return
+
+    const timeStr = time
+      ? typeof time === "string"
+        ? time
+        : typeof time === "object" && "year" in time
+        ? `${time.year}-${String(time.month).padStart(2, "0")}-${String(time.day).padStart(2, "0")}`
+        : String(time)
+      : ""
+
+    const sp = measureStartPointRef.current
+    const bars = Math.abs(Math.round((logical ?? 0) - sp.logical))
+
+    setMeasureData({
+      x1: sp.x,
+      y1: sp.y,
+      x2: x,
+      y2: y,
+      price1: sp.price,
+      price2: price,
+      time1: sp.time,
+      time2: timeStr,
+      bars,
+      isLocked: false
+    })
+  }
+
+  const handleMeasurePointerUp = () => {
+    if (isDrawingMeasureRef.current && measureData) {
+      isDrawingMeasureRef.current = false
+      const dist = Math.hypot(measureData.x2 - measureData.x1, measureData.y2 - measureData.y1)
+      if (dist < 4) {
+        setMeasureData(null)
+      } else {
+        setMeasureData((prev) => (prev ? { ...prev, isLocked: true } : null))
+      }
+    }
+  }
+
+  // Precompute clean measurement metrics
+  const measureStats = useMemo(() => {
+    if (!measureData) return null
+    const priceDiff = measureData.price2 - measureData.price1
+    const pctDiff = measureData.price1 !== 0 ? (priceDiff / measureData.price1) * 100 : 0
+    let days = 0
+    if (measureData.time1 && measureData.time2) {
+      const d1 = new Date(measureData.time1).getTime()
+      const d2 = new Date(measureData.time2).getTime()
+      if (!isNaN(d1) && !isNaN(d2)) {
+        days = Math.abs(Math.round((d2 - d1) / (1000 * 60 * 60 * 24)))
+      }
+    }
+    const isPositive = priceDiff >= 0
+    const left = Math.min(measureData.x1, measureData.x2)
+    const top = Math.min(measureData.y1, measureData.y2)
+    const width = Math.max(Math.abs(measureData.x2 - measureData.x1), 2)
+    const height = Math.max(Math.abs(measureData.y2 - measureData.y1), 2)
+
+    return {
+      priceDiff,
+      pctDiff,
+      days,
+      isPositive,
+      left,
+      top,
+      width,
+      height
+    }
+  }, [measureData])
 
   if (!trade) return null
 
@@ -779,276 +995,187 @@ export function SwingerTradeChartModal({
         }`}
       >
         {/* ================= 1. CLEAN EXECUTIVE TITLE BAR ================= */}
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-white gap-3">
-          {/* Symbol, Name & Live Price */}
-          <div className="flex items-center gap-3.5">
-            <div className="size-10 rounded-xl bg-slate-900 flex items-center justify-center font-bold text-white text-sm font-mono shadow-xs">
-              {trade.symbol.slice(0, 3)}
-            </div>
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-white gap-4">
+          {/* Left: Symbol (shown once), Company Name, Status Pill & Market Price in ONE clean row */}
+          <div className="flex items-center gap-3 flex-wrap">
+            <h2 className="text-xl font-black text-slate-900 tracking-tight font-mono">
+              {currentSymbol || trade.symbol}
+            </h2>
 
-            <div>
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <h2 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight font-mono">
-                  {trade.symbol}
-                </h2>
-                <span className="text-xs text-slate-500 font-medium hidden sm:inline">
-                  {trade.name || trade.symbol}
+            {/* Show company name ONLY if present and different from ticker */}
+            {trade.name && trade.name.trim().toUpperCase() !== (currentSymbol || trade.symbol).trim().toUpperCase() && (
+              <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+                {trade.name}
+              </span>
+            )}
+
+            {/* Direct TradingView Link (Icon only) */}
+            <a
+              href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(currentSymbol || trade.symbol)}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="size-6 inline-flex items-center justify-center rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/80 transition shadow-2xs shrink-0"
+              title={`Open ${currentSymbol || trade.symbol} on TradingView (NSE)`}
+            >
+              <ExternalLink className="size-3.5" />
+            </a>
+
+            {/* Single Unified Status / Backtest Badge */}
+            {isBacktestMode ? (
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-amber-50 text-amber-900 border-amber-200 font-mono shadow-2xs">
+                <span className="font-black text-amber-700">⚡ Backtest Sim:</span>
+                {backtestSummary ? (
+                  <span>
+                    {backtestSummary.total_trades} Trades · {backtestSummary.win_rate}% WR · PF {backtestSummary.profit_factor} · {backtestSummary.realized_pnl >= 0 ? "+" : ""}₹{Math.round(backtestSummary.realized_pnl).toLocaleString("en-IN")}
+                  </span>
+                ) : (
+                  <span>Simulating...</span>
+                )}
+              </span>
+            ) : hasTradeDetails ? (
+              <span
+                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
+                  isOpen
+                    ? "bg-sky-50 text-sky-700 border-sky-200"
+                    : isWin
+                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                    : "bg-rose-50 text-rose-700 border-rose-200"
+                }`}
+              >
+                {isOpen && <span className="size-1.5 rounded-full bg-sky-500 animate-pulse" />}
+                <span>
+                  {targetTradeForHeader.trade_id ? (
+                    <strong className="font-mono mr-1 text-[10px] opacity-75">{targetTradeForHeader.trade_id} ·</strong>
+                  ) : null}
+                  {isOpen
+                    ? targetTradeForHeader.status === "RUNNER"
+                      ? "Active · Runner"
+                      : targetTradeForHeader.status === "SHIELDED"
+                      ? "Active · BE Shielded"
+                      : "Active Position"
+                    : isWin
+                    ? "Closed Winner"
+                    : "Stopped Out"}
                 </span>
+                <span className="font-mono font-black">
+                  ({isWin ? "+" : ""}{pnlPct.toFixed(1)}% · {isWin ? "+" : ""}₹{Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })})
+                </span>
+              </span>
+            ) : null}
 
-                {(targetTradeForHeader as any).leg === 2 || (targetTradeForHeader as any).strategy_leg === "LEG2_BREAKOUT" ? (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-purple-50 text-purple-700 border-purple-300 flex items-center gap-1">
-                    <span className="size-1.5 rounded-full bg-purple-600 animate-pulse" />
-                    LEG 2 · Base Breakout (-8% SL)
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-black border bg-blue-50 text-blue-700 border-blue-300">
-                    LEG 1 · Deep Value (-25% SL)
-                  </span>
-                )}
-
-                {hasTradeDetails ? (
-                  <span
-                    className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
-                      isOpen
-                        ? "bg-sky-50 text-sky-700 border-sky-200"
-                        : isWin
-                        ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                        : "bg-slate-100 text-slate-700 border-slate-200"
-                    }`}
-                  >
-                    {isOpen ? "Active Position" : isWin ? "Winner" : "Stopped Out"}
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200">
-                    Screener Trigger
-                  </span>
-                )}
-
-                {firstRadarDate && (
-                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1" title="Date when this stock first came on our Radar">
-                    <span className="size-1.5 rounded-full bg-purple-600 animate-pulse" />
-                    First on Radar: {firstRadarDate}
-                  </span>
-                )}
-
-                {(isOnRadar || trade.status === "RADAR") && !hasTradeDetails && (
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
-                    <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
-                    {radarInfo?.status || "Waiting for 20 EMA Cooldown"}
-                  </span>
-                )}
-
-                {/* Prev / Next Trade Flipper */}
-                {allTrades && onSelectTrade && (
-                  <div className="flex items-center gap-1 ml-1">
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      disabled={!prevTrade}
-                      onClick={() => prevTrade && onSelectTrade(prevTrade)}
-                      title={prevTrade ? `Previous: ${prevTrade.symbol}` : "No previous"}
-                      className="size-6 rounded-md text-slate-500 hover:text-slate-900"
-                    >
-                      <ChevronLeft className="size-3.5" />
-                    </Button>
-                    <span className="text-[10px] font-mono text-slate-400 px-0.5">
-                      {curIdx + 1}/{allTrades.length}
-                    </span>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      disabled={!nextTrade}
-                      onClick={() => nextTrade && onSelectTrade(nextTrade)}
-                      title={nextTrade ? `Next: ${nextTrade.symbol}` : "No next"}
-                      className="size-6 rounded-md text-slate-500 hover:text-slate-900"
-                    >
-                      <ChevronRight className="size-3.5" />
-                    </Button>
-                  </div>
-                )}
-              </div>
-
-              {/* Price & Day's Gain */}
-              <div className="flex items-center gap-2.5 mt-0.5 text-xs">
-                {stats && (
+            {/* Market CMP, Day Gain, 52W, Market Cap & Volume inline */}
+            {stats && (
+              <div className="flex items-center gap-2 text-xs pl-2 border-l border-slate-200 hidden md:flex">
+                <span className="font-extrabold font-mono text-slate-900">
+                  ₹{fmtNum(stats.cmp)}
+                </span>
+                <span
+                  className={`font-mono font-bold text-[11px] ${
+                    stats.dayChangePts >= 0 ? "text-emerald-600" : "text-rose-600"
+                  }`}
+                >
+                  {stats.dayChangePts >= 0 ? "+" : ""}
+                  {fmtNum(stats.dayChangePts)} ({stats.dayChangePct >= 0 ? "+" : ""}{stats.dayChangePct.toFixed(2)}%)
+                </span>
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-500 text-[11px]">
+                  52W: ₹{fmtNum(stats.low52, 0)} - ₹{fmtNum(stats.high52, 0)}
+                </span>
+                {marketCapCr != null && marketCapCr > 0 && (
                   <>
-                    <span className="text-base font-extrabold font-mono text-slate-900">
-                      ₹{fmtNum(stats.cmp)}
-                    </span>
-                    <span
-                      className={`font-mono font-bold px-1.5 py-0.5 rounded text-[11px] ${
-                        stats.dayChangePts >= 0
-                          ? "bg-emerald-50 text-emerald-700"
-                          : "bg-rose-50 text-rose-700"
-                      }`}
-                    >
-                      {stats.dayChangePts >= 0 ? "+" : ""}
-                      {fmtNum(stats.dayChangePts)} ({stats.dayChangePct >= 0 ? "+" : ""}
-                      {stats.dayChangePct.toFixed(2)}%)
-                    </span>
                     <span className="text-slate-300">·</span>
                     <span className="text-slate-500 text-[11px]">
-                      52W: ₹{fmtNum(stats.low52, 0)} - ₹{fmtNum(stats.high52, 0)}
-                    </span>
-                    <span className="text-slate-300">·</span>
-                    <span className="text-slate-500 text-[11px]">
-                      Crash Depth: <strong className="text-amber-600 font-mono">{stats.depthPct.toFixed(1)}%</strong>
+                      MCap: <strong className="font-mono text-slate-700">₹{marketCapCr >= 100000 ? (marketCapCr / 100000).toFixed(2) + " L Cr" : Math.round(marketCapCr).toLocaleString("en-IN") + " Cr"}</strong>
                     </span>
                   </>
                 )}
+                <span className="text-slate-300">·</span>
+                <span className="text-slate-500 text-[11px]">
+                  Vol: <strong className="font-mono text-slate-700">{fmtVol(stats.latestVol)}</strong>
+                </span>
               </div>
-            </div>
+            )}
           </div>
 
-          {/* Right Header: Trade Performance & Modal Buttons */}
-          <div className="flex items-center gap-3">
-            {hasTradeDetails && (
-              <div className="text-right hidden sm:block">
-                <div
-                  className={`text-xl font-black font-mono tracking-tight ${
-                    isWin ? "text-emerald-600" : "text-rose-600"
-                  }`}
+          {/* Right: Pagination Flipper & Window Actions */}
+          <div className="flex items-center gap-2 shrink-0">
+            {!isBacktestMode && allTrades && onSelectTrade && (
+              <div className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded-lg border border-slate-200">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={!prevTrade}
+                  onClick={() => prevTrade && onSelectTrade(prevTrade)}
+                  title={prevTrade ? `Previous: ${prevTrade.symbol}` : "No previous"}
+                  className="size-5 rounded text-slate-500 hover:text-slate-900"
                 >
-                  {isWin ? "+" : ""}₹{pnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                </div>
-                <div className={`text-[11px] font-bold font-mono ${isWin ? "text-emerald-700" : "text-rose-700"}`}>
-                  {isWin ? "+" : ""}
-                  {pnlPct.toFixed(2)}% Return{symbolTrades.length > 1 ? ` (Trade #${symbolTrades.length - activeTradeIndex})` : ""}
-                </div>
+                  <ChevronLeft className="size-3.5" />
+                </Button>
+                <span className="text-[11px] font-mono text-slate-500 px-1 font-semibold">
+                  {curIdx + 1}/{allTrades.length}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  disabled={!nextTrade}
+                  onClick={() => nextTrade && onSelectTrade(nextTrade)}
+                  title={nextTrade ? `Next: ${nextTrade.symbol}` : "No next"}
+                  className="size-5 rounded text-slate-500 hover:text-slate-900"
+                >
+                  <ChevronRight className="size-3.5" />
+                </Button>
               </div>
             )}
 
-            <div className="flex items-center gap-1 border-l border-slate-100 pl-2.5">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsMaximized(!isMaximized)}
-                title={isMaximized ? "Restore" : "Fullscreen"}
-                className="size-8 rounded-lg text-slate-400 hover:text-slate-800"
-              >
-                {isMaximized ? <Minimize2 className="size-4" /> : <Maximize2 className="size-4" />}
-              </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsMaximized(!isMaximized)}
+              title={isMaximized ? "Restore" : "Fullscreen"}
+              className="size-7 rounded-lg text-slate-400 hover:text-slate-800"
+            >
+              {isMaximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+            </Button>
 
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={onClose}
-                title="Close (Esc)"
-                className="size-8 rounded-lg text-slate-400 hover:text-slate-800"
-              >
-                <X className="size-4.5" />
-              </Button>
-            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={onClose}
+              title="Close (Esc)"
+              className="size-7 rounded-lg text-slate-400 hover:text-slate-800"
+            >
+              <X className="size-4" />
+            </Button>
           </div>
         </div>
 
-        {/* ================= 2. FIXED STABLE CONTROLS TOOLBAR (ZERO FLUCTUATION) ================= */}
-        <div className="px-5 py-2.5 bg-slate-50/80 border-b border-slate-100 flex items-center justify-between gap-3 text-xs">
-          {/* Left: Range Switcher (Clean minimalist buttons) */}
+        {/* ================= 2. FIXED SLIM CONTROLS TOOLBAR ================= */}
+        <div className="px-5 py-1.5 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between gap-3 text-xs">
+          {/* Left: Ledger Toggle */}
+          <div className="flex items-center gap-1.5">
+            {symbolTrades.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowLedger(!showLedger)}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 border ${
+                  showLedger
+                    ? "bg-slate-900 text-white border-slate-950 shadow-2xs"
+                    : "bg-white text-slate-600 hover:text-slate-900 border-slate-200"
+                }`}
+                title="Toggle Trades Ledger table"
+              >
+                <Table className="size-3" />
+                <span>Ledger ({symbolTrades.length})</span>
+              </button>
+            )}
+          </div>
+
+          {/* Right: Technical Layer Toggles */}
           <div className="flex items-center gap-1">
             <button
               type="button"
-              onClick={() => handleRangeChange("3m")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                activeRange === "3m"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-              }`}
-            >
-              3M
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRangeChange("6m")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                activeRange === "6m"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-              }`}
-            >
-              6M
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRangeChange("1y")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                activeRange === "1y"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-              }`}
-            >
-              1Y
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRangeChange("2y")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                activeRange === "2y"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-              }`}
-            >
-              2Y
-            </button>
-            <button
-              type="button"
-              onClick={() => handleRangeChange("all")}
-              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
-                activeRange === "all"
-                  ? "bg-slate-900 text-white shadow-xs"
-                  : "bg-white text-slate-600 hover:bg-slate-100 border border-slate-200"
-              }`}
-            >
-              All Data
-            </button>
-          </div>
-
-          {/* Center: Multi-Trade Flipper Pills (if this stock has taken multiple trades) */}
-          {symbolTrades.length > 1 && (
-            <div className="flex items-center gap-1 bg-white p-1 rounded-xl border border-slate-200 shadow-2xs">
-              <span className="text-[10px] font-bold text-slate-500 uppercase px-1.5 font-mono">
-                Trades ({symbolTrades.length}):
-              </span>
-              {symbolTrades.map((st, i) => {
-                const isSel = i === activeTradeIndex
-                const ret = st.pnl_pct ?? st.pct_return ?? 0
-                const isOpenTrade = !st.exit_date || st.status === "ACTIVE" || st.status === "RUNNER"
-                const tradeNum = symbolTrades.length - i
-                return (
-                  <button
-                    key={i}
-                    type="button"
-                    onClick={() => setActiveTradeIndex(i)}
-                    className={`px-2.5 py-0.5 rounded-lg text-[10px] font-mono font-bold transition flex items-center gap-1.5 ${
-                      isSel
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-                    }`}
-                  >
-                    <span>#{tradeNum}</span>
-                    <span
-                      className={
-                        isOpenTrade
-                          ? isSel ? "text-sky-300" : "text-sky-600 font-black"
-                          : ret >= 0
-                          ? isSel ? "text-emerald-300" : "text-emerald-600"
-                          : isSel ? "text-rose-300" : "text-rose-600"
-                      }
-                    >
-                      {isOpenTrade ? "Active" : `${ret >= 0 ? "+" : ""}${ret.toFixed(0)}%`}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          )}
-
-          {/* Right: Technical Layer Toggles */}
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
               onClick={() => setShowEMA50(!showEMA50)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
+              className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 border ${
                 showEMA50
                   ? "bg-cyan-50 text-cyan-800 border-cyan-300"
                   : "bg-white text-slate-400 border-slate-200"
@@ -1061,7 +1188,7 @@ export function SwingerTradeChartModal({
             <button
               type="button"
               onClick={() => setShowEMA200(!showEMA200)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
+              className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 border ${
                 showEMA200
                   ? "bg-amber-50 text-amber-800 border-amber-300"
                   : "bg-white text-slate-400 border-slate-200"
@@ -1074,7 +1201,7 @@ export function SwingerTradeChartModal({
             <button
               type="button"
               onClick={() => setShowVolume(!showVolume)}
-              className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
+              className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 border ${
                 showVolume
                   ? "bg-emerald-50 text-emerald-800 border-emerald-300"
                   : "bg-white text-slate-400 border-slate-200"
@@ -1088,7 +1215,7 @@ export function SwingerTradeChartModal({
               <button
                 type="button"
                 onClick={() => setShowLevels(!showLevels)}
-                className={`px-2.5 py-1 rounded-md text-[11px] font-bold border transition flex items-center gap-1.5 ${
+                className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 border ${
                   showLevels
                     ? "bg-sky-50 text-sky-800 border-sky-300"
                     : "bg-white text-slate-400 border-slate-200"
@@ -1098,38 +1225,193 @@ export function SwingerTradeChartModal({
                 Levels
               </button>
             )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setIsMeasureActive(!isMeasureActive)
+                if (isMeasureActive) setMeasureData(null)
+              }}
+              className={`px-2 py-0.5 rounded text-[11px] font-bold transition flex items-center gap-1 border ${
+                isMeasureActive
+                  ? "bg-purple-600 text-white border-purple-700 shadow-2xs"
+                  : "bg-white text-slate-600 hover:text-slate-900 border-slate-200"
+              }`}
+              title="Measure Tool (or hold Shift on chart)"
+            >
+              <Ruler className="size-3" />
+              Measure
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setIsLogScale(!isLogScale)}
+              className={`px-1.5 py-0.5 rounded text-[11px] font-bold font-mono transition border ${
+                isLogScale
+                  ? "bg-indigo-50 text-indigo-700 border-indigo-300"
+                  : "bg-white text-slate-400 border-slate-200 hover:text-slate-700"
+              }`}
+              title="Toggle Log / Linear Price Scale"
+            >
+              {isLogScale ? "Log" : "Lin"}
+            </button>
+
+            <button
+              type="button"
+              onClick={handleFitContent}
+              className="px-2 py-0.5 rounded text-[11px] font-bold border bg-white text-slate-600 hover:text-slate-900 border-slate-200 transition flex items-center gap-1"
+              title="Fit all candles"
+            >
+              <Maximize2 className="size-3" />
+              Fit
+            </button>
           </div>
         </div>
 
         {/* ================= 3. CHART CANVAS ================= */}
         <div className="p-3 sm:p-5 flex-1 relative bg-white min-h-[420px] overflow-hidden">
-          {/* Floating In-Chart Price HUD: Fixed Top-Left Position on canvas - ZERO Header Fluctuation */}
+          {/* Floating In-Chart OHLCV Legend: Clean, sleek, non-intrusive */}
           {hovered && (
-            <div className="absolute top-4 left-6 z-10 pointer-events-none flex items-center gap-2 font-mono text-xs bg-white/95 backdrop-blur-xs px-3 py-1.5 rounded-lg border border-slate-200 shadow-xs">
-              <span className="font-extrabold text-slate-900">{hovered.time}</span>
+            <div className="absolute top-3 left-4 z-10 pointer-events-none flex items-center gap-2 font-mono text-[11px] bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-slate-200/80 shadow-2xs">
+              <span className="font-bold text-slate-700">{hovered.time}</span>
               <span className="text-slate-300">·</span>
-              <span className="font-bold text-slate-800">₹{fmtNum(hovered.close)}</span>
+              <span className="text-slate-500">O <strong className="text-slate-800">₹{fmtNum(hovered.open)}</strong></span>
+              <span className="text-slate-500">H <strong className="text-slate-800">₹{fmtNum(hovered.high)}</strong></span>
+              <span className="text-slate-500">L <strong className="text-slate-800">₹{fmtNum(hovered.low)}</strong></span>
+              <span className="text-slate-500">C <strong className="text-slate-900">₹{fmtNum(hovered.close)}</strong></span>
               <span
                 className={`font-black ${
                   hovered.changePct >= 0 ? "text-emerald-600" : "text-rose-600"
                 }`}
               >
-                {hovered.changePct >= 0 ? "+" : ""}
-                {hovered.changePct.toFixed(2)}%
+                ({hovered.changePct >= 0 ? "+" : ""}{hovered.changePct.toFixed(2)}%)
               </span>
               {hovered.volume ? (
                 <>
                   <span className="text-slate-300">·</span>
-                  <span className="text-slate-500 font-medium">Vol: {fmtVol(hovered.volume)}</span>
+                  <span className="text-slate-500">Vol <strong className="text-slate-700">{fmtVol(hovered.volume)}</strong></span>
                 </>
               ) : null}
             </div>
           )}
 
+          {/* Measure / Scale Tool Interactive Canvas Overlay */}
+          {(isMeasureActive || isShiftPressed) && (
+            <div
+              className="absolute inset-0 z-20 cursor-crosshair select-none"
+              onPointerDown={handleMeasurePointerDown}
+              onPointerMove={handleMeasurePointerMove}
+              onPointerUp={handleMeasurePointerUp}
+            >
+              {!measureData && (
+                <div className="absolute top-4 right-6 z-20 bg-slate-900/90 text-white text-[11px] px-3 py-1.5 rounded-lg shadow-lg font-sans flex items-center gap-2 pointer-events-none">
+                  <Ruler className="size-3.5 text-purple-400" />
+                  <span>Click and drag across candles to measure % return & bars</span>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Render Active Measure Box & Floating Badge Card */}
+          {measureData && measureStats && (
+            <>
+              <svg className="absolute inset-0 pointer-events-none w-full h-full z-20">
+                {/* Shaded box */}
+                <rect
+                  x={measureStats.left}
+                  y={measureStats.top}
+                  width={measureStats.width}
+                  height={measureStats.height}
+                  fill={measureStats.isPositive ? "rgba(16, 185, 129, 0.16)" : "rgba(244, 63, 94, 0.16)"}
+                  stroke={measureStats.isPositive ? "#10b981" : "#f43f5e"}
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  rx={4}
+                />
+                {/* Diagonal connection line */}
+                <line
+                  x1={measureData.x1}
+                  y1={measureData.y1}
+                  x2={measureData.x2}
+                  y2={measureData.y2}
+                  stroke={measureStats.isPositive ? "#059669" : "#e11d48"}
+                  strokeWidth={2}
+                />
+                <circle cx={measureData.x1} cy={measureData.y1} r={3.5} fill={measureStats.isPositive ? "#059669" : "#e11d48"} />
+                <circle cx={measureData.x2} cy={measureData.y2} r={3.5} fill={measureStats.isPositive ? "#059669" : "#e11d48"} />
+              </svg>
+
+              {/* Floating Pill / Tooltip Card */}
+              <div
+                className={`absolute z-30 pointer-events-auto rounded-xl p-2.5 shadow-xl border text-xs font-mono select-none flex flex-col gap-1 transition-all ${
+                  measureStats.isPositive
+                    ? "bg-slate-900 text-white border-emerald-500/60 shadow-emerald-950/20"
+                    : "bg-slate-900 text-white border-rose-500/60 shadow-rose-950/20"
+                }`}
+                style={{
+                  left: `${Math.min(Math.max(measureData.x2 + 10, 20), (containerRef.current?.clientWidth ?? 800) - 200)}px`,
+                  top: `${Math.min(Math.max(measureData.y2 - 60, 20), (containerRef.current?.clientHeight ?? 450) - 90)}px`
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-1.5 font-bold text-sm">
+                    <span className={measureStats.isPositive ? "text-emerald-400" : "text-rose-400"}>
+                      {measureStats.isPositive ? "▲" : "▼"}
+                    </span>
+                    <span>{measureStats.isPositive ? "+" : ""}₹{fmtNum(measureStats.priceDiff)}</span>
+                    <span
+                      className={`font-black ${
+                        measureStats.isPositive ? "text-emerald-400" : "text-rose-400"
+                      }`}
+                    >
+                      ({measureStats.isPositive ? "+" : ""}{measureStats.pctDiff.toFixed(2)}%)
+                    </span>
+                  </div>
+                  {measureData.isLocked && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        setMeasureData(null)
+                        setIsMeasureActive(false)
+                      }}
+                      className="size-5 rounded hover:bg-white/20 flex items-center justify-center text-white/70 hover:text-white transition"
+                      title="Clear measurement"
+                    >
+                      <X className="size-3.5" />
+                    </button>
+                  )}
+                </div>
+                <div className="text-[11px] text-slate-300 flex items-center gap-1.5">
+                  <span className="font-semibold">{measureData.bars} bars</span>
+                  {measureStats.days > 0 && <span>· {measureStats.days} days</span>}
+                </div>
+                <div className="text-[10px] text-slate-400 pt-1 border-t border-slate-700/60 flex items-center justify-between gap-2">
+                  <span>₹{fmtNum(measureData.price1)}</span>
+                  <span>→</span>
+                  <span>₹{fmtNum(measureData.price2)}</span>
+                </div>
+              </div>
+            </>
+          )}
+
           {loading && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/85 backdrop-blur-xs gap-2">
-              <RefreshCw className="size-6 text-slate-600 animate-spin" />
-              <span className="text-xs font-bold text-slate-700">Loading {trade.symbol} chart data...</span>
+            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-white/90 backdrop-blur-xs gap-3 animate-in fade-in duration-100">
+              <div className="size-12 rounded-2xl bg-amber-500/10 border border-amber-300 flex items-center justify-center text-amber-600 shadow-sm animate-pulse">
+                <Zap className="size-6 text-amber-500" />
+              </div>
+              <div className="text-center">
+                <span className="text-sm font-black text-slate-800 tracking-tight">
+                  {isBacktestMode
+                    ? `Simulating Swinger Strategy on ${currentSymbol || trade.symbol}...`
+                    : `Loading Trade Details & Chart for ${currentSymbol || trade.symbol}...`}
+                </span>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {isBacktestMode
+                    ? "Analyzing 5Y historical bars, breakouts, SL, BE lock & runner trail"
+                    : "Retrieving trade log entry, execution levels & candlestick history"}
+                </p>
+              </div>
             </div>
           )}
 
@@ -1143,62 +1425,92 @@ export function SwingerTradeChartModal({
           )}
 
           <div ref={containerRef} className="w-full h-full" />
-        </div>
 
-        {/* ================= 4. SLIM FOOTER ================= */}
-        <div className="px-5 py-2.5 border-t border-slate-100 bg-white flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 text-xs text-slate-400">
-          <div className="flex items-center gap-4 text-[11px]">
-            <span className="flex items-center gap-1.5 font-medium text-slate-600">
-              <span className="size-2 rounded-full bg-emerald-500" />
-              Green: Up Day
-            </span>
-            <span className="flex items-center gap-1.5 font-medium text-slate-600">
-              <span className="size-2 rounded-full bg-rose-500" />
-              Red: Down Day
-            </span>
-            <span className="flex items-center gap-1.5 font-medium text-slate-600">
-              <span className="w-3 h-0.5 bg-cyan-500 inline-block" />
-              50 EMA
-            </span>
-            <span className="flex items-center gap-1.5 font-medium text-slate-600">
-              <span className="w-3 h-0.5 bg-amber-500 inline-block" />
-              200 EMA
-            </span>
-            {hasTradeDetails && (
-              <span className="flex items-center gap-1.5 font-medium text-slate-600">
-                <span className="w-3 h-0.5 bg-emerald-600 border-b border-dashed border-emerald-600 inline-block" />
-                Entry / Target
-              </span>
-            )}
-            {effectiveRadarTriggers.length > 0 && (
-              <span className="flex items-center gap-1.5 font-medium text-purple-700">
-                <span className="size-2 rounded-full bg-purple-600" />
-                ⚡ Radar Trigger
-              </span>
-            )}
-            {symbolTrades.length > 0 && (
-              <span className="flex items-center gap-1.5 font-medium text-emerald-700">
-                <span className="size-2 rounded-full bg-emerald-500" />
-                BUY Signal
-              </span>
-            )}
-            {symbolTrades.some((s) => s.status === "CLOSED" || s.exit_date) && (
-              <span className="flex items-center gap-1.5 font-medium text-rose-700">
-                <span className="size-2 rounded-full bg-rose-500" />
-                EXIT Signal
-              </span>
-            )}
-          </div>
-
-          <div className="text-[11px] text-slate-400 font-mono flex items-center gap-3">
-            <span>Scroll wheel to Zoom · Drag to Pan</span>
-            <span>
-              <kbd className="px-1.5 py-0.5 bg-slate-100 border border-slate-200 rounded text-slate-600 font-semibold shadow-2xs">
-                ESC
-              </kbd>{" "}
-              to close
-            </span>
-          </div>
+          {/* Collapsible Trade Ledger Drawer at Bottom of Chart */}
+          {showLedger && symbolTrades.length > 0 && (
+            <div className="border-t border-slate-200 bg-white/95 backdrop-blur-md max-h-56 overflow-y-auto animate-in slide-in-from-bottom-2 duration-150 z-20 shrink-0">
+              <div className="px-4 py-2 bg-slate-50 border-b border-slate-200 flex items-center justify-between sticky top-0 z-10 text-xs">
+                <span className="font-bold text-slate-700 flex items-center gap-1.5 font-mono">
+                  <Table className="size-3.5 text-slate-500" />
+                  <span>
+                    {isBacktestMode ? "Simulated Trades Ledger" : "Trade Execution Ledger"} ({symbolTrades.length} {symbolTrades.length === 1 ? "Trade" : "Trades"})
+                  </span>
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  Click any trade row to zoom chart directly to that entry & exit
+                </span>
+              </div>
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="bg-white border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px] sticky top-8">
+                    <th className="p-2 pl-4">#</th>
+                    <th className="p-2">Entry Date</th>
+                    <th className="p-2 font-mono text-right">Entry Price</th>
+                    <th className="p-2">Exit Date</th>
+                    <th className="p-2 font-mono text-right">Exit Price</th>
+                    <th className="p-2 font-mono text-center">Days</th>
+                    <th className="p-2">Exit Reason</th>
+                    <th className="p-2 pr-4 font-mono text-right">Return & P&L</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {symbolTrades.map((st, i) => {
+                    const isSel = i === activeTradeIndex
+                    const isTradeWin = (st.pnl ?? 0) >= 0
+                    const isOpenTrade = !st.exit_date || st.status === "ACTIVE" || st.status === "SHIELDED" || st.status === "RUNNER"
+                    const tradeNum = symbolTrades.length - i
+                    return (
+                      <tr
+                        key={i}
+                        onClick={() => setActiveTradeIndex(i)}
+                        className={`cursor-pointer transition group ${
+                          isSel
+                            ? "bg-amber-100/70 font-semibold text-amber-950"
+                            : "hover:bg-slate-50/80 text-slate-700"
+                        }`}
+                      >
+                        <td className="p-2 pl-4 font-mono font-bold">
+                          <span className={isSel ? "text-amber-800" : "text-slate-400"}>
+                            #{tradeNum}
+                          </span>
+                        </td>
+                        <td className="p-2 font-mono text-slate-600">{st.entry_date}</td>
+                        <td className="p-2 font-mono text-right font-bold text-slate-800">
+                          ₹{st.entry_price?.toFixed(2)}
+                        </td>
+                        <td className="p-2 font-mono text-slate-600">
+                          {isOpenTrade ? (
+                            <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800">
+                              Holding
+                            </span>
+                          ) : (
+                            st.exit_date
+                          )}
+                        </td>
+                        <td className="p-2 font-mono text-right font-bold text-slate-800">
+                          ₹{isOpenTrade ? st.cmp?.toFixed(2) : st.exit_price?.toFixed(2)}
+                        </td>
+                        <td className="p-2 font-mono text-center text-slate-500">
+                          {st.days_held}d
+                        </td>
+                        <td className="p-2 text-slate-500 text-[11px]">
+                          {isOpenTrade ? st.status : st.exit_reason || st.reason}
+                        </td>
+                        <td className="p-2 pr-4 font-mono text-right font-black">
+                          <span className={isTradeWin ? "text-emerald-600" : "text-rose-600"}>
+                            {isTradeWin ? "+" : ""}
+                            {(st.pnl_pct ?? st.pct_return ?? 0).toFixed(1)}% (
+                            {isTradeWin ? "+" : ""}₹
+                            {Math.abs(st.pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })})
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </div>
     </div>
