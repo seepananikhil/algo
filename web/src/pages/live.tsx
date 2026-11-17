@@ -330,6 +330,153 @@ function ActiveTradeCard({
   )
 }
 
+function ActiveStrategyPositionCard({
+  symbol,
+  state,
+  onSelectSymbol,
+  isLiveMode,
+}: {
+  symbol: "SENSEX" | "NIFTY"
+  state: any
+  onSelectSymbol: () => void
+  isLiveMode?: boolean
+}) {
+  if (!state?.in_position || !state?.active_position) return null
+  const pos = state.active_position
+  const spot = state.spot || pos.entry_price
+  const isLong = pos.side === "LONG" || pos.side === "CALL"
+  const ptsDiff = isLong ? (spot - pos.entry_price) : (pos.entry_price - spot)
+  const isProfit = ptsDiff >= 0
+  const lotSize = symbol === "SENSEX" ? 20 : 65
+  const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
+  const estOptPnl = ptsDiff * 0.65 * (lots * lotSize)
+  const isLockingProfit = pos.current_sl && (isLong ? pos.current_sl > pos.entry_price : pos.current_sl < pos.entry_price)
+  const lockedPts = isLockingProfit ? Math.abs(pos.current_sl - pos.entry_price) : 0
+
+  return (
+    <div
+      onClick={onSelectSymbol}
+      className="p-3 rounded-lg border border-emerald-500/40 bg-linear-to-br from-emerald-500/10 via-card to-card shadow-xs hover:border-emerald-500/70 transition-all cursor-pointer space-y-2.5"
+    >
+      {/* Header: Pulsing Live Beacon, Symbol, Mode, Side */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="relative flex h-2.5 w-2.5 shrink-0">
+            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+          </span>
+          <span className="font-extrabold text-xs text-foreground truncate font-sans">
+            {symbol} Trend Runner
+          </span>
+          <span className={`px-1.5 py-0.2 rounded text-[9px] font-extrabold tracking-wide uppercase shrink-0 ${
+            isLiveMode
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : "bg-sky-500/20 text-sky-400 border border-sky-500/30"
+          }`}>
+            {isLiveMode ? "LIVE" : "PAPER"}
+          </span>
+          <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase shrink-0 ${
+            isLong
+              ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"
+              : "bg-rose-500/20 text-rose-400 border border-rose-500/30"
+          }`}>
+            {pos.side}
+          </span>
+        </div>
+
+        {/* Real-time Index Points & Est Option P&L */}
+        <div className="text-right shrink-0">
+          <div className={`text-xs font-bold font-mono ${isProfit ? "text-emerald-500" : "text-rose-500"}`}>
+            {isProfit ? "+" : ""}{ptsDiff.toFixed(1)} pt
+          </div>
+          <div className="text-[10px] text-muted-foreground font-mono">
+            {isProfit ? "+" : ""}{fmtRs(estOptPnl)} est
+          </div>
+        </div>
+      </div>
+
+      {/* Contract & Lots Info */}
+      <div className="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/40 border border-border/60">
+        <div className="flex items-center gap-1.5 min-w-0">
+          <span className="font-bold text-foreground text-[11px] truncate">{pos.option}</span>
+          <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+            ({lots}L · {lots * lotSize} qty)
+          </span>
+        </div>
+        <div className="text-[10px] text-muted-foreground font-mono shrink-0">
+          Entry: <strong className="text-foreground">{pos.entry_time}</strong>
+        </div>
+      </div>
+
+      {/* 4-Stat Metric Grid */}
+      <div className="grid grid-cols-2 gap-2 text-[11px]">
+        {/* Entry Spot */}
+        <div className="p-1.5 rounded bg-background/60 border border-border/50">
+          <div className="text-[10px] text-muted-foreground font-medium">Entry Spot</div>
+          <div className="font-mono font-bold text-foreground text-xs">
+            {Number(pos.entry_price).toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+          </div>
+          <div className="text-[9px] text-muted-foreground">OR High: {state.or_high ? Number(state.or_high).toFixed(1) : "-"}</div>
+        </div>
+
+        {/* Current Spot */}
+        <div className="p-1.5 rounded bg-background/60 border border-border/50">
+          <div className="text-[10px] text-muted-foreground font-medium">Current Spot</div>
+          <div className="font-mono font-bold text-foreground text-xs">
+            {Number(spot).toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+          </div>
+          <div className="text-[9px] text-muted-foreground">Peak: {pos.peak_high ? Number(pos.peak_high).toFixed(1) : "-"}</div>
+        </div>
+
+        {/* Trailing Stop Loss */}
+        <div className="p-1.5 rounded bg-amber-500/5 border border-amber-500/30">
+          <div className="text-[10px] text-amber-600 dark:text-amber-400 font-bold flex items-center justify-between">
+            <span>Trailing SL</span>
+            {isLockingProfit && (
+              <span className="text-[9px] font-mono text-emerald-500 font-bold">
+                +{lockedPts.toFixed(0)}pt Lock
+              </span>
+            )}
+          </div>
+          <div className="font-mono font-bold text-amber-600 dark:text-amber-400 text-xs">
+            {Number(pos.current_sl).toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+          </div>
+          <div className="text-[9px] text-muted-foreground font-mono">
+            Init: {Number(pos.initial_sl).toFixed(1)}
+          </div>
+        </div>
+
+        {/* Max Favorable Excursion */}
+        <div className="p-1.5 rounded bg-background/60 border border-border/50">
+          <div className="text-[10px] text-muted-foreground font-medium">Max Fav Excursion</div>
+          <div className="font-mono font-bold text-emerald-500 text-xs">
+            +{pos.max_fav ? Number(pos.max_fav).toFixed(1) : "0.0"} pts
+          </div>
+          <div className="text-[9px] text-muted-foreground">
+            Stage: {pos.stage ? String(pos.stage).replace("STAGE1_", "") : "TREND"}
+          </div>
+        </div>
+      </div>
+
+      {/* Protection / Status Pill Footer */}
+      <div className="flex items-center justify-between pt-0.5 text-[10px]">
+        {isLockingProfit ? (
+          <span className="inline-flex items-center gap-1 text-emerald-500 font-semibold">
+            <ShieldCheck className="size-3" /> Profit Locked (+{lockedPts.toFixed(1)} pts)
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 text-amber-500 font-semibold">
+            <ShieldAlert className="size-3" /> Initial SL Active ({pos.sl_pts} pts)
+          </span>
+        )}
+        <span className="text-muted-foreground hover:text-foreground text-[10px] font-semibold underline underline-offset-2">
+          View on Chart &rarr;
+        </span>
+      </div>
+    </div>
+  )
+}
+
 
 
 export function LivePage() {
@@ -595,6 +742,50 @@ export function LivePage() {
       return sym.includes(scalpSpot)
     })
   }, [openTrades, scalpSpot])
+
+  // Active Strategy Positions (Apex Duo Trend Runner SENSEX & NIFTY)
+  const activeSensexStrategy = strategyTelemetry.data?.state?.sensex?.in_position ? strategyTelemetry.data.state.sensex : null
+  const activeNiftyStrategy = strategyTelemetry.data?.state?.nifty?.in_position ? strategyTelemetry.data.state.nifty : null
+  const strategyActiveCount = (activeSensexStrategy ? 1 : 0) + (activeNiftyStrategy ? 1 : 0)
+
+  // Running strategy index points
+  const strategyLivePts = useMemo(() => {
+    let pts = 0
+    if (activeSensexStrategy?.active_position) {
+      const pos = activeSensexStrategy.active_position
+      const spot = activeSensexStrategy.spot || pos.entry_price
+      pts += (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
+    }
+    if (activeNiftyStrategy?.active_position) {
+      const pos = activeNiftyStrategy.active_position
+      const spot = activeNiftyStrategy.spot || pos.entry_price
+      pts += (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
+    }
+    return pts
+  }, [activeSensexStrategy, activeNiftyStrategy])
+
+  // Running strategy estimated option P&L (₹)
+  const strategyLiveEstPnl = useMemo(() => {
+    let pnl = 0
+    if (activeSensexStrategy?.active_position) {
+      const pos = activeSensexStrategy.active_position
+      const spot = activeSensexStrategy.spot || pos.entry_price
+      const pts = (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
+      const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
+      pnl += pts * 0.65 * (lots * 20)
+    }
+    if (activeNiftyStrategy?.active_position) {
+      const pos = activeNiftyStrategy.active_position
+      const spot = activeNiftyStrategy.spot || pos.entry_price
+      const pts = (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
+      const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
+      pnl += pts * 0.65 * (lots * 65)
+    }
+    return pnl
+  }, [activeSensexStrategy, activeNiftyStrategy])
+
+  // Aggregate active count (manual scalp trades + running automated strategy trades)
+  const totalActiveCount = openTrades.length + strategyActiveCount
 
 
 
@@ -906,25 +1097,32 @@ export function LivePage() {
             onClick={() => {
               setTradeModeFilter("PAPER")
               setIsSidePanelOpen(true)
-              setSideTab(paperMetrics.openCount > 0 ? "ACTIVE" : "SUMMARY")
+              setSideTab(totalActiveCount > 0 ? "ACTIVE" : "SUMMARY")
             }}
             className={`flex items-center space-x-1 px-2 py-1 rounded-md border text-xs font-mono font-bold shadow-xs transition-all cursor-pointer select-none ${
-              paperMetrics.totalPnl > 0
+              (paperMetrics.totalPnl + strategyLiveEstPnl) > 0
                 ? "bg-sky-500/10 border-sky-500/30 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20"
-                : paperMetrics.totalPnl < 0
+                : (paperMetrics.totalPnl + strategyLiveEstPnl) < 0
                 ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
                 : "bg-muted/60 border-border text-foreground hover:bg-muted"
             } ${isSidePanelOpen && tradeModeFilter === "PAPER" ? "ring-2 ring-sky-500/40" : ""}`}
             title="Apex Duo Paper P&L (Click to view Paper trades)"
           >
-            <span className="inline-flex size-2 rounded-full bg-sky-400" />
+            {strategyActiveCount > 0 ? (
+              <span className="relative flex h-2 w-2 shrink-0">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-sky-400 opacity-75" />
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-sky-400" />
+              </span>
+            ) : (
+              <span className="inline-flex size-2 rounded-full bg-sky-400" />
+            )}
             <span className="text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">Paper:</span>
             <span>
-              {paperMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(paperMetrics.totalPnl)}
+              {(paperMetrics.totalPnl + strategyLiveEstPnl) >= 0 ? "+" : ""}{fmtRs(paperMetrics.totalPnl + strategyLiveEstPnl)}
             </span>
-            {paperMetrics.points !== 0 && (
+            {(paperMetrics.points !== 0 || strategyLivePts !== 0) && (
               <span className="text-[10px] text-muted-foreground font-normal">
-                ({paperMetrics.points > 0 ? "+" : ""}{paperMetrics.points.toFixed(0)}pt)
+                ({(paperMetrics.points + strategyLivePts) > 0 ? "+" : ""}{(paperMetrics.points + strategyLivePts).toFixed(0)}pt)
               </span>
             )}
             <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform duration-200 ${isSidePanelOpen ? "rotate-180" : ""}`} />
@@ -1658,7 +1856,7 @@ export function LivePage() {
                       title={isSidePanelOpen ? "Collapse Trades Side Panel" : "Open Trades & Positions Panel"}
                     >
                       <PanelRightClose className={`w-3.5 h-3.5 transition-transform ${!isSidePanelOpen ? "rotate-180" : ""}`} />
-                      <span>Trades ({openTrades.length})</span>
+                      <span>Trades ({totalActiveCount})</span>
                     </button>
                   )}
                 </div>
@@ -1756,7 +1954,7 @@ export function LivePage() {
                       title={isSidePanelOpen ? "Collapse Trades Side Panel" : "Open Trades & Positions Panel"}
                     >
                       <PanelRightClose className={`w-3.5 h-3.5 transition-transform ${!isSidePanelOpen ? "rotate-180" : ""}`} />
-                      <span>Trades ({openTrades.length})</span>
+                      <span>Trades ({totalActiveCount})</span>
                     </button>
                   )}
                 </div>
@@ -1795,12 +1993,12 @@ export function LivePage() {
                       : "text-muted-foreground hover:text-foreground"
                   }`}
                 >
-                  <Radio className={`w-2.5 h-2.5 ${openTrades.length > 0 ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
+                  <Radio className={`w-2.5 h-2.5 ${totalActiveCount > 0 ? "text-emerald-500 animate-pulse" : "text-muted-foreground"}`} />
                   <span>Active</span>
                   <span className={`px-1 py-0.2 rounded text-[9px] font-mono font-bold leading-none ${
-                    openTrades.length > 0 ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
+                    totalActiveCount > 0 ? "bg-emerald-500 text-white" : "bg-muted text-muted-foreground"
                   }`}>
-                    {openTrades.length}
+                    {totalActiveCount}
                   </span>
                 </button>
                 <button
@@ -1877,7 +2075,7 @@ export function LivePage() {
                 >
                   <span className="size-2 rounded-full bg-sky-400" />
                   <span>Apex Duo (Paper)</span>
-                  <span className="text-[10px] font-mono opacity-80">({paperMetrics.openCount + paperMetrics.closedCount})</span>
+                  <span className="text-[10px] font-mono opacity-80">({paperMetrics.openCount + strategyActiveCount + paperMetrics.closedCount})</span>
                 </button>
               </div>
             </div>
@@ -1887,23 +2085,49 @@ export function LivePage() {
               {/* TAB 1: ACTIVE */}
               {sideTab === "ACTIVE" && (
                 <div className="p-3 space-y-2.5">
-                                    {openTrades.length === 0 ? (
+                  {/* Automated Strategy Active Positions (Apex Duo Trend Runner) */}
+                  {activeSensexStrategy && (
+                    <ActiveStrategyPositionCard
+                      symbol="SENSEX"
+                      state={activeSensexStrategy}
+                      onSelectSymbol={() => {
+                        setActiveChart("SENSEX")
+                        setScalpSpot("SENSEX")
+                      }}
+                      isLiveMode={tradeModeFilter === "LIVE"}
+                    />
+                  )}
+                  {activeNiftyStrategy && (
+                    <ActiveStrategyPositionCard
+                      symbol="NIFTY"
+                      state={activeNiftyStrategy}
+                      onSelectSymbol={() => {
+                        setActiveChart("NIFTY")
+                        setScalpSpot("NIFTY")
+                      }}
+                      isLiveMode={tradeModeFilter === "LIVE"}
+                    />
+                  )}
+
+                  {/* Manual / Scalp Open Positions */}
+                  {openTrades.map((trade, idx) => (
+                    <ActiveTradeCard
+                      key={`active-trade-${idx}-${trade.option || trade.symbol}`}
+                      trade={trade}
+                      onUpdateTpTl={async (t: OptionTrade, tp: number, tl: number) => {
+                        await handleUpdateActiveTpTl(t, tp, tl)
+                      }}
+                      onSquareOff={(t: OptionTrade) => setExitTarget(t)}
+                    />
+                  ))}
+
+                  {/* Empty state when neither strategy nor manual trades are open */}
+                  {!activeSensexStrategy && !activeNiftyStrategy && openTrades.length === 0 && (
                     <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground px-4">
                       <ShieldCheck className="w-9 h-9 mb-2 text-muted-foreground/50" />
                       <div className="text-xs font-semibold text-foreground">No Active Positions</div>
-                      <div className="text-[11px] mt-1 text-muted-foreground">Use the Fast Scalper or automated triggers</div>
+                      <div className="text-[11px] mt-1 text-muted-foreground">Automated strategy and manual positions will appear here live</div>
                     </div>
-                  ) : (
-                    openTrades.map((trade, idx) => (
-                      <ActiveTradeCard
-                        key={`active-trade-${idx}-${trade.option || trade.symbol}`}
-                        trade={trade}
-                        onUpdateTpTl={async (t: OptionTrade, tp: number, tl: number) => {
-                          await handleUpdateActiveTpTl(t, tp, tl)
-                        }}
-                        onSquareOff={(t: OptionTrade) => setExitTarget(t)}
-                      />
-                    ))
                   )}
                 </div>
               )}
