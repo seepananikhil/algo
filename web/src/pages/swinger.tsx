@@ -1836,9 +1836,7 @@ export function SwingerPage() {
                     <th className="p-3.5 font-mono">CMP (₹)</th>
                     <th className="p-3.5 font-mono">Qty</th>
                     <th className="p-3.5">Stop Loss (₹)</th>
-                    <th className="p-3.5">Break-Even Shield</th>
-                    <th className="p-3.5">Runner Trigger (+30%)</th>
-                    <th className="p-3.5">20% Peak Trail</th>
+                    <th className="p-3.5">Protection Status</th>
                     <th className="p-3.5 font-mono">Held</th>
                     <th className="p-3.5 text-right font-mono">Open P&L</th>
                     <th className="p-3.5 text-center">Chart</th>
@@ -1847,7 +1845,7 @@ export function SwingerPage() {
                 <tbody className="divide-y divide-slate-100">
                   {positions.length === 0 ? (
                     <tr>
-                      <td colSpan={12} className="p-8 text-center text-slate-400 font-medium">
+                      <td colSpan={10} className="p-8 text-center text-slate-400 font-medium">
                         No active positions currently. Scanner runs daily at 15:25 IST.
                       </td>
                     </tr>
@@ -1856,9 +1854,8 @@ export function SwingerPage() {
                       const avgCost = p.avg_price ?? p.entry_price
                       const isPositive = (p.unrealized_pnl || 0) >= 0
                       const isLeg2 = p.leg === 2 || (p as any).strategy_leg === "LEG2_BREAKOUT"
-                      const slDisplay = p.sl_price ?? (isLeg2 ? avgCost * 0.92 : avgCost * 0.75)
-                      const beTarget = p.be_trigger_price ?? avgCost * 1.2
-                      const tpTarget = p.tp_target_price ?? avgCost * 1.3
+                      const slDisplay = p.sl_price ?? (isLeg2 ? avgCost * 0.92 : avgCost * 0.85)
+                      const beTarget = p.be_trigger_price ?? avgCost * 1.15
 
                       return (
                         <tr
@@ -1891,15 +1888,19 @@ export function SwingerPage() {
                           <td className="p-3.5 font-mono font-bold text-emerald-700">₹{(p.cmp || avgCost).toFixed(2)}</td>
                           <td className="p-3.5 font-mono font-medium">{p.current_qty}</td>
                           <td className="p-3.5 font-mono font-bold">
-                            <span className={p.be_active ? "text-sky-700" : "text-rose-600"}>
+                            <span className={p.runner_mode ? "text-purple-700" : p.be_active ? "text-sky-700" : "text-rose-600"}>
                               ₹{slDisplay.toFixed(2)}
                             </span>
                             <span className="block text-[10px] text-slate-400 font-normal">
-                              {p.runner_mode ? "25% Trail" : p.be_active ? "Cost Shield" : isLeg2 ? "Initial -8%" : "Initial -25%"}
+                              {p.runner_mode ? "25% Trail" : p.be_active ? "Cost Shield" : isLeg2 ? "Initial -8%" : "Initial -15%"}
                             </span>
                           </td>
                           <td className="p-3.5 font-mono">
-                            {p.be_active ? (
+                            {p.runner_mode ? (
+                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
+                                Runner Active
+                              </span>
+                            ) : p.be_active ? (
                               <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
                                 Shield Active
                               </span>
@@ -1908,30 +1909,6 @@ export function SwingerPage() {
                                 ₹{beTarget.toFixed(2)}
                                 <span className="text-[10px] text-slate-400 block font-normal">Pending (+15%)</span>
                               </span>
-                            )}
-                          </td>
-                          <td className="p-3.5 font-mono">
-                            {p.tp_hit || p.tp_50_hit ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                                100% Runner Active
-                              </span>
-                            ) : (
-                              <span className="text-emerald-700 font-bold">
-                                ₹{tpTarget.toFixed(2)}
-                                <span className="text-[10px] text-slate-400 block font-normal">+30% Target</span>
-                              </span>
-                            )}
-                          </td>
-                          <td className="p-3.5 font-mono">
-                            {p.runner_mode && p.runner_trail_sl ? (
-                              <span className="text-purple-700 font-bold">
-                                ₹{p.runner_trail_sl.toFixed(2)}
-                                <span className="text-[10px] text-slate-400 block font-normal">
-                                  Peak: ₹{p.runner_peak_price}
-                                </span>
-                              </span>
-                            ) : (
-                              <span className="text-slate-400 font-medium text-[11px]">Unlocks @ +30%</span>
                             )}
                           </td>
                           <td className="p-3.5 text-slate-600 font-medium font-mono">{p.days_held}d</td>
