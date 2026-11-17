@@ -137,7 +137,7 @@ export function DayDetail({
   const renderCharts = (_isCompactView?: boolean) => {
     const isDual = !simpleChart && chartLayout === "both" && hasSecondary
     const chartHeightClass = simpleChart
-      ? "h-[500px] min-h-[460px] max-h-[540px]"
+      ? "h-[680px] min-h-[640px]"
       : isDual
       ? chartHeightMode === "normal"
         ? "h-[clamp(480px,56vh,620px)] min-h-[480px]"
@@ -148,7 +148,7 @@ export function DayDetail({
       ? "h-[clamp(540px,62vh,680px)] min-h-[520px]"
       : chartHeightMode === "xl"
       ? "h-[clamp(820px,88vh,1050px)] min-h-[800px]"
-      : "h-[clamp(660px,76vh,860px)] min-h-[640px]"
+      : "h-[clamp(680px,78vh,880px)] min-h-[640px]"
 
     return (
     <div className={cn(
@@ -248,13 +248,13 @@ export function DayDetail({
                 candles={chartCandles}
                 forming={useFiveMinute ? keyLevelDay.data?.forming ?? undefined : day.data?.forming}
                 currentPrice={useFiveMinute ? keyLevelDay.data?.current_price ?? undefined : day.data?.forming?.close}
-                setup={simpleChart || useFiveMinute || (isStrategyFiltered && strategy !== "midpoint") ? undefined : s}
+                setup={useFiveMinute || (isStrategyFiltered && strategy !== "midpoint") ? undefined : s}
                 trades={chartTrades}
-                boxes={simpleChart ? [] : (day.data?.boxes ?? [])}
-                keyLevelZone={simpleChart ? null : (useFiveMinute ? (keyLevelDay.data?.key_level_zone ?? s?.key_level_zone) : null)}
-                showKeyLevels={!simpleChart}
-                showTradeLevels={!simpleChart}
-                simpleChart={simpleChart}
+                boxes={day.data?.boxes ?? []}
+                keyLevelZone={useFiveMinute ? (keyLevelDay.data?.key_level_zone ?? s?.key_level_zone) : (s?.key_level_zone ?? null)}
+                showKeyLevels={true}
+                showTradeLevels={true}
+                hideHoverHUD={true}
                 className={cn("w-full", chartHeightClass)}
                 zoomable
                 fullDay={true}
@@ -342,12 +342,12 @@ export function DayDetail({
                 candles={secondaryCandles}
                 forming={secondaryDay.data?.forming}
                 currentPrice={secondaryPrice}
-                setup={simpleChart ? undefined : secondarySetup}
+                setup={secondarySetup}
                 trades={[]}
-                keyLevelZone={simpleChart ? null : (secondarySetup?.key_level_zone ?? null)}
-                showKeyLevels={!simpleChart}
+                keyLevelZone={secondarySetup?.key_level_zone ?? null}
+                showKeyLevels={true}
                 showTradeLevels={false}
-                simpleChart={simpleChart}
+                hideHoverHUD={true}
                 className={cn("w-full", chartHeightClass)}
                 zoomable
                 fullDay={true}

@@ -165,8 +165,8 @@ type Props = {
   fullDay?: boolean
   /** Changing this (e.g. the timeframe) drops any manual zoom and refits the session. */
   resetKey?: string
-  /** When true, hides all level lines, bands, and boxes, keeping only clean candles and entry/exit markers. */
-  simpleChart?: boolean
+  /** When true, disables the floating on-hover candle info / OHLC tooltip. */
+  hideHoverHUD?: boolean
 }
 
 export function CandleChart({
@@ -178,16 +178,16 @@ export function CandleChart({
   setup,
   trades = [],
   keyLevelZone,
-  showKeyLevels = false,
-  showTradeLevels = false,
+  showKeyLevels = true,
+  showTradeLevels = true,
   boxes = [],
-  className = "h-[clamp(420px,56vh,580px)]",
+  className = "h-[clamp(560px,72vh,750px)]",
   overlay,
   zoomable = false,
   hideToolbar = false,
   fullDay = false,
   resetKey = "",
-  simpleChart = false,
+  hideHoverHUD = true,
 }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
@@ -205,12 +205,9 @@ export function CandleChart({
   const viewKey = useRef("")
   const { resolvedTheme } = useTheme()
 
-  // Feature toggles: Levels, Volume, 50 EMA, 200 EMA, Fullscreen, and Prominent Hover HUD
+  // Feature toggles: Levels, Volume, 50 EMA, 200 EMA, Fullscreen
   const [showVolume, setShowVolume] = useState<boolean>(true)
-  const [showLevelsState, setShowLevelsState] = useState<boolean>(() => {
-    if (simpleChart) return false
-    return Boolean(showKeyLevels || showTradeLevels || true)
-  })
+  const [showLevelsState, setShowLevelsState] = useState<boolean>(true)
   const [showEMA50, setShowEMA50] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem("chart_show_ema50")
@@ -844,7 +841,7 @@ export function CandleChart({
 
     const bands: Band[] = []
 
-    if (showLevelsState && !simpleChart) {
+    if (showLevelsState) {
       // Subtle reference lines
       if (currentPrice != null) {
         add(currentPrice, "rgba(249, 115, 22, 0.7)", LineStyle.Dotted, false, "", 1)
@@ -1010,7 +1007,7 @@ export function CandleChart({
       })
     }
 
-    if (boxes && boxes.length > 0 && showLevelsState && !simpleChart) {
+    if (boxes && boxes.length > 0 && showLevelsState) {
       for (const b of boxes) {
         if (b.touch_times) {
           addTouches(b.touch_times, b.status !== "breakout_down")
@@ -1047,7 +1044,7 @@ export function CandleChart({
       console.warn("CandleChart: failed to set markers", e)
     }
 
-    if (boxes && boxes.length > 0 && showLevelsState && !simpleChart) {
+    if (boxes && boxes.length > 0 && showLevelsState) {
       const bBoxes: TimeBoundedBox[] = boxes.map((b, idx) => {
         const sTime = toTime(date, b.start_time)
         const eTime = toTime(date, b.end_time || b.break_time || "15:25")
@@ -1564,7 +1561,9 @@ export function CandleChart({
   )
 
   // Floating In-Chart Live Crosshair HUD (Clean, prominent price + gain + volume, no raw OHLC clutter)
-  const renderFloatingHUD = () => (
+  const renderFloatingHUD = () => {
+    if (hideHoverHUD) return null
+    return (
     <>
       {hovered ? (
         <div className="absolute top-3 left-3 sm:top-4 sm:left-4 z-20 pointer-events-none flex items-center gap-2.5 font-mono bg-background/95 dark:bg-slate-900/95 backdrop-blur-md px-3.5 py-2 rounded-xl border border-border shadow-lg animate-in fade-in duration-100">
@@ -1604,7 +1603,8 @@ export function CandleChart({
         </div>
       ) : null}
     </>
-  )
+    )
+  }
 
   // Slim interactive footer with legend & shortcuts
   const renderFooter = () => (
@@ -1939,7 +1939,7 @@ export function CandleChart({
   return (
     <div className={cn("relative w-full flex-1 flex flex-col rounded-lg overflow-hidden border border-border/40 bg-card shadow-2xs", className)}>
       {/* Chart Canvas */}
-      <div className="flex-1 relative w-full h-full min-h-[280px]">
+      <div className="flex-1 relative w-full h-full min-h-[400px]">
         {/* Floating Controls Toolbar */}
         {!hideToolbar && renderToolbar(false)}
 
@@ -1950,7 +1950,7 @@ export function CandleChart({
         {renderSvgOverlay()}
 
         {/* Lightweight Charts Canvas */}
-        <div ref={el} className="w-full h-full min-h-[280px]" />
+        <div ref={el} className="absolute inset-0 w-full h-full" />
 
         {overlay && <div className="pointer-events-none absolute left-3 top-3 z-10">{overlay}</div>}
       </div>
