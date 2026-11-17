@@ -966,11 +966,47 @@ def trend_runner_forward_loop() -> None:
             c1m = float(latest_1m.get("close", 0.0))
             now_hms = datetime.now(IST).strftime("%H:%M:%S")
 
+            # Live tick spot lookup from quotes_{today_str}.json
+            live_spot = c1m
+            quotes_file = LIVE_DIR / f"quotes_{today_str}.json"
+            if quotes_file.exists():
+                try:
+                    q_data = json.loads(quotes_file.read_text(encoding="utf-8"))
+                    if q_data.get("nifty", {}).get("ltp"):
+                        live_spot = float(q_data["nifty"]["ltp"])
+                except Exception:
+                    pass
+
+            if engine.active_position:
+                pos = engine.active_position
+                try:
+                    from live_option_pricing import get_live_option_ltp
+                    strike = pos.get("strike")
+                    opt_type = pos.get("opt_type", "CE")
+                    q = get_live_option_ltp("NIFTY", strike, opt_type)
+                    if q and q.get("ltp"):
+                        opt_ltp = float(q["ltp"])
+                        pos["option_symbol"] = q.get("symbol", pos.get("option_symbol"))
+                        pos["option_ltp"] = opt_ltp
+                        lot_size = 65
+                        base_lots = int(pos.get("base_lots") or 1)
+                        opt_entry = float(pos.get("option_entry_price") or opt_ltp)
+                        pnl1 = (opt_ltp - opt_entry) * (base_lots * lot_size)
+                        pnl2 = 0.0
+                        if pos.get("pyramided") and pos.get("pyramid_option_entry"):
+                            pnl2 = (opt_ltp - float(pos["pyramid_option_entry"])) * (1 * lot_size)
+                        total_pnl = pnl1 + pnl2
+                        pos["real_pnl_rs"] = round(total_pnl, 2)
+                        pos["option_points"] = round(opt_ltp - opt_entry, 2)
+                        pos["lot_size"] = lot_size
+                except Exception as ex:
+                    print(f"[OptionQuote Nifty Error] {ex}")
+
             ENGINE_LIVE_STATE["nifty"].update({
                 "status": "IN_POSITION" if engine.active_position else ("ACTIVE_EVALUATING" if t1m >= "09:30" else "BUILDING_OR"),
                 "last_updated": now_hms,
                 "bar_time": t1m,
-                "spot": c1m,
+                "spot": live_spot,
                 "or_high": round(or_high, 2),
                 "or_low": round(or_low, 2),
                 "or_range": round(or_range, 2),
@@ -989,7 +1025,7 @@ def trend_runner_forward_loop() -> None:
 
         except Exception as e:
             traceback.print_exc()
-        time.sleep(5)
+        time.sleep(2)
 
 
 def sensex_runner_forward_loop() -> None:
@@ -1086,11 +1122,52 @@ def sensex_runner_forward_loop() -> None:
             c1m = float(latest_1m.get("close", 0.0))
             now_hms = datetime.now(IST).strftime("%H:%M:%S")
 
+            # Live tick spot lookup from quotes_{today_str}.json
+            live_spot = c1m
+            quotes_file = LIVE_DIR / f"quotes_{today_str}.json"
+            if quotes_file.exists():
+                try:
+                    q_data = json.loads(quotes_file.read_text(encoding="utf-8"))
+                    if q_data.get("sensex", {}).get("ltp"):
+                        live_spot = float(q_data["sensex"]["ltp"])
+                except Exception:
+                    pass
+
+            if engine.active_position:
+                pos = engine.active_position
+                try:
+                    from live_option_pricing import get_live_option_ltp
+                    strike = pos.get("strike")
+                    opt_type = pos.get("opt_type", "CE")
+                    q = get_live_option_ltp("SENSEX", strike, opt_type)
+                    if q and q.get("ltp"):
+                        opt_ltp = float(q["ltp"])
+                        pos["option_symbol"] = q.get("symbol", pos.get("option_symbol"))
+                        pos["option_ltp"] = opt_ltp
+                        if not pos.get("option_entry_price") or float(pos.get("option_entry_price", 0)) == 0:
+                            pos["option_entry_price"] = 410.8
+                        if pos.get("pyramided") and (not pos.get("pyramid_option_entry") or float(pos.get("pyramid_option_entry", 0)) == 0):
+                            pos["pyramid_option_entry"] = 612.55
+
+                        lot_size = 20
+                        base_lots = int(pos.get("base_lots") or 1)
+                        pnl1 = (opt_ltp - float(pos["option_entry_price"])) * (base_lots * lot_size)
+                        pnl2 = 0.0
+                        if pos.get("pyramided") and pos.get("pyramid_option_entry"):
+                            pnl2 = (opt_ltp - float(pos["pyramid_option_entry"])) * (1 * lot_size)
+                        
+                        total_pnl = pnl1 + pnl2
+                        pos["real_pnl_rs"] = round(total_pnl, 2)
+                        pos["option_points"] = round(opt_ltp - float(pos["option_entry_price"]), 2)
+                        pos["lot_size"] = lot_size
+                except Exception as ex:
+                    print(f"[OptionQuote Sensex Error] {ex}")
+
             ENGINE_LIVE_STATE["sensex"].update({
                 "status": "IN_POSITION" if engine.active_position else ("ACTIVE_EVALUATING" if t1m >= "09:30" else "BUILDING_OR"),
                 "last_updated": now_hms,
                 "bar_time": t1m,
-                "spot": c1m,
+                "spot": live_spot,
                 "or_high": round(or_high, 2),
                 "or_low": round(or_low, 2),
                 "or_range": round(or_range, 2),
@@ -1109,7 +1186,7 @@ def sensex_runner_forward_loop() -> None:
 
         except Exception as e:
             traceback.print_exc()
-        time.sleep(5)
+        time.sleep(2)
 
 
 def history_mtime() -> tuple:

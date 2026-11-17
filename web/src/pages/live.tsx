@@ -333,23 +333,35 @@ function ActiveTradeCard({
 function ActiveStrategyPositionCard({
   symbol,
   state,
+  currentLtp,
   onSelectSymbol,
   isLiveMode,
 }: {
   symbol: "SENSEX" | "NIFTY"
   state: any
+  currentLtp?: number
   onSelectSymbol: () => void
   isLiveMode?: boolean
 }) {
   if (!state?.in_position || !state?.active_position) return null
   const pos = state.active_position
-  const spot = state.spot || pos.entry_price
+  const spot = (currentLtp && currentLtp > 0) ? currentLtp : (state.spot || pos.entry_price)
   const isLong = pos.side === "LONG" || pos.side === "CALL"
   const ptsDiff = isLong ? (spot - pos.entry_price) : (pos.entry_price - spot)
   const isProfit = ptsDiff >= 0
-  const lotSize = symbol === "SENSEX" ? 20 : 65
+  const lotSize = pos.lot_size || (symbol === "SENSEX" ? 20 : 65)
   const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
-  const estOptPnl = ptsDiff * 0.65 * (lots * lotSize)
+
+  // Real option P&L from live broker option quote
+  const hasRealOpt = pos.option_ltp != null && pos.option_entry_price != null && Number(pos.option_entry_price) > 0
+  const realPnl = pos.real_pnl_rs != null 
+    ? Number(pos.real_pnl_rs)
+    : (hasRealOpt 
+      ? ((Number(pos.option_ltp) - Number(pos.option_entry_price)) * (pos.base_lots || 1) * lotSize + (pos.pyramided && pos.pyramid_option_entry ? (Number(pos.option_ltp) - Number(pos.pyramid_option_entry)) * lotSize : 0)) 
+      : (ptsDiff * 0.65 * (lots * lotSize)))
+  const displayPnl = realPnl
+  const isPnlPositive = displayPnl >= 0
+
   const isLockingProfit = pos.current_sl && (isLong ? pos.current_sl > pos.entry_price : pos.current_sl < pos.entry_price)
   const lockedPts = isLockingProfit ? Math.abs(pos.current_sl - pos.entry_price) : 0
 
@@ -358,7 +370,7 @@ function ActiveStrategyPositionCard({
       onClick={onSelectSymbol}
       className="p-3 rounded-lg border border-emerald-500/40 bg-linear-to-br from-emerald-500/10 via-card to-card shadow-xs hover:border-emerald-500/70 transition-all cursor-pointer space-y-2.5"
     >
-      {/* Header: Pulsing Live Beacon, Symbol, Mode, Side */}
+      {/* Header: Pulsing Live Beacon, Symbol, Mode, Side, and Live Money P&L */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-1.5 min-w-0">
           <span className="relative flex h-2.5 w-2.5 shrink-0">
@@ -384,28 +396,52 @@ function ActiveStrategyPositionCard({
           </span>
         </div>
 
-        {/* Real-time Index Points & Est Option P&L */}
+        {/* Real-time Money P&L & Index Points */}
         <div className="text-right shrink-0">
-          <div className={`text-xs font-bold font-mono ${isProfit ? "text-emerald-500" : "text-rose-500"}`}>
-            {isProfit ? "+" : ""}{ptsDiff.toFixed(1)} pt
+          <div className={`text-sm font-extrabold font-mono ${isPnlPositive ? "text-emerald-500" : "text-rose-500"}`}>
+            {isPnlPositive ? "+" : ""}{fmtRs(displayPnl)}
           </div>
           <div className="text-[10px] text-muted-foreground font-mono">
-            {isProfit ? "+" : ""}{fmtRs(estOptPnl)} est
+            {isProfit ? "+" : ""}{ptsDiff.toFixed(1)} pt spot
           </div>
         </div>
       </div>
 
-      {/* Contract & Lots Info */}
-      <div className="flex items-center justify-between text-xs px-2 py-1 rounded bg-muted/40 border border-border/60">
-        <div className="flex items-center gap-1.5 min-w-0">
-          <span className="font-bold text-foreground text-[11px] truncate">{pos.option}</span>
-          <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-            ({lots}L · {lots * lotSize} qty)
-          </span>
+      {/* Contract & Live Option Premium Box */}
+      <div className="p-2 rounded bg-muted/50 border border-border/70 space-y-1">
+        <div className="flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="font-mono font-bold text-foreground text-xs truncate">
+              {pos.option_symbol || pos.option}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+              ({lots}L · {lots * lotSize}Q)
+            </span>
+          </div>
+          <div className="text-[10px] text-muted-foreground font-mono shrink-0">
+            Entry: <strong className="text-foreground">{pos.entry_time}</strong>
+          </div>
         </div>
-        <div className="text-[10px] text-muted-foreground font-mono shrink-0">
-          Entry: <strong className="text-foreground">{pos.entry_time}</strong>
-        </div>
+
+        {/* Real Option Premium Row */}
+        {hasRealOpt && (
+          <div className="flex items-center justify-between pt-1 border-t border-border/50 text-[11px] font-mono">
+            <div>
+              <span className="text-muted-foreground text-[10px]">Opt Entry: </span>
+              <span className="font-bold text-foreground">₹{Number(pos.option_entry_price).toFixed(1)}</span>
+              {pos.pyramided && pos.pyramid_option_entry && (
+                <span className="text-[9px] text-muted-foreground ml-1">(L2: ₹{Number(pos.pyramid_option_entry).toFixed(1)})</span>
+              )}
+            </div>
+            <div>
+              <span className="text-muted-foreground text-[10px]">Opt LTP: </span>
+              <span className="font-bold text-emerald-500">₹{Number(pos.option_ltp).toFixed(1)}</span>
+              <span className="text-[10px] text-emerald-500 font-bold ml-1">
+                ({pos.option_points >= 0 ? "+" : ""}{Number(pos.option_points).toFixed(1)}pt)
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 4-Stat Metric Grid */}
@@ -612,7 +648,7 @@ export function LivePage() {
     now: string
     state: Record<string, any>
     logs: Array<{ time: string; symbol: string; engine: string; level: string; message: string }>
-  }>("/api/strategy-telemetry", 2000)
+  }>("/api/strategy-telemetry", 1000)
 
   // Polling feeds: Day candle data
   const niftyDay = usePoll<DayData>(today ? `/api/day?date=${today}&symbol=NIFTY&full=1` : null, 2500)
@@ -764,25 +800,33 @@ export function LivePage() {
     return pts
   }, [activeSensexStrategy, activeNiftyStrategy])
 
-  // Running strategy estimated option P&L (₹)
+  // Running strategy real/estimated option P&L (₹)
   const strategyLiveEstPnl = useMemo(() => {
     let pnl = 0
     if (activeSensexStrategy?.active_position) {
       const pos = activeSensexStrategy.active_position
-      const spot = activeSensexStrategy.spot || pos.entry_price
-      const pts = (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
-      const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
-      pnl += pts * 0.65 * (lots * 20)
+      if (pos.real_pnl_rs != null) {
+        pnl += Number(pos.real_pnl_rs)
+      } else {
+        const spot = (sensexLtp && sensexLtp > 0) ? sensexLtp : (activeSensexStrategy.spot || pos.entry_price)
+        const pts = (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
+        const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
+        pnl += pts * 0.65 * (lots * 20)
+      }
     }
     if (activeNiftyStrategy?.active_position) {
       const pos = activeNiftyStrategy.active_position
-      const spot = activeNiftyStrategy.spot || pos.entry_price
-      const pts = (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
-      const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
-      pnl += pts * 0.65 * (lots * 65)
+      if (pos.real_pnl_rs != null) {
+        pnl += Number(pos.real_pnl_rs)
+      } else {
+        const spot = (niftyLtp && niftyLtp > 0) ? niftyLtp : (activeNiftyStrategy.spot || pos.entry_price)
+        const pts = (pos.side === "LONG" || pos.side === "CALL") ? (spot - pos.entry_price) : (pos.entry_price - spot)
+        const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
+        pnl += pts * 0.65 * (lots * 65)
+      }
     }
     return pnl
-  }, [activeSensexStrategy, activeNiftyStrategy])
+  }, [activeSensexStrategy, activeNiftyStrategy, sensexLtp, niftyLtp])
 
   // Aggregate active count (manual scalp trades + running automated strategy trades)
   const totalActiveCount = openTrades.length + strategyActiveCount
@@ -2090,6 +2134,7 @@ export function LivePage() {
                     <ActiveStrategyPositionCard
                       symbol="SENSEX"
                       state={activeSensexStrategy}
+                      currentLtp={sensexLtp}
                       onSelectSymbol={() => {
                         setActiveChart("SENSEX")
                         setScalpSpot("SENSEX")
@@ -2101,6 +2146,7 @@ export function LivePage() {
                     <ActiveStrategyPositionCard
                       symbol="NIFTY"
                       state={activeNiftyStrategy}
+                      currentLtp={niftyLtp}
                       onSelectSymbol={() => {
                         setActiveChart("NIFTY")
                         setScalpSpot("NIFTY")

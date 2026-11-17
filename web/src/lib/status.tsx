@@ -6,7 +6,7 @@ type Ctx = { status: Status | null; error: string | null; reload: () => Promise<
 const StatusContext = createContext<Ctx>({ status: null, error: null, reload: async () => false })
 
 export function StatusProvider({ children }: { children: ReactNode }) {
-  const { data, error, reload } = usePoll<Status>("/api/status", 3000)
+  const { data, error, reload } = usePoll<Status>("/api/status", 1500)
   return <StatusContext.Provider value={{ status: data, error, reload }}>{children}</StatusContext.Provider>
 }
 
