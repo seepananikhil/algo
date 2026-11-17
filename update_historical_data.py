@@ -149,15 +149,22 @@ def run_backtest_pipeline() -> bool:
             return False
         print("VIX Trap Backtests completed.")
 
-    # 4. Master Portfolio (Apex Duo)
+    # 4. Master Portfolio (Apex Duo) for Nifty and Sensex
     master_script = ROOT / "scripts" / "run_master_portfolio_backtest.py"
     if master_script.exists():
-        print("Executing Master Portfolio (Apex Duo) backtest engine...")
-        res_m = subprocess.run([sys.executable, str(master_script)], capture_output=True, text=True)
+        print("Executing Master Portfolio (Apex Duo - Nifty) backtest engine...")
+        res_m = subprocess.run([sys.executable, str(master_script), "--symbol", "nifty"], capture_output=True, text=True)
         if res_m.returncode != 0:
-            print("Master Portfolio backtest completed with warnings:", res_m.stderr)
+            print("Master Portfolio Nifty backtest completed with warnings:", res_m.stderr)
         else:
-            print("Master Portfolio (Apex Duo) Backtest completed.")
+            print("Master Portfolio (Apex Duo - Nifty) Backtest completed.")
+
+        print("Executing Master Portfolio (Apex Duo - Sensex) backtest engine...")
+        res_ms = subprocess.run([sys.executable, str(master_script), "--symbol", "sensex"], capture_output=True, text=True)
+        if res_ms.returncode != 0:
+            print("Master Portfolio Sensex backtest completed with warnings:", res_ms.stderr)
+        else:
+            print("Master Portfolio (Apex Duo - Sensex) Backtest completed.")
 
     # 5. Midpoint Strategy
     print("Executing 10-year Midpoint backtest engine...")

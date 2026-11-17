@@ -189,7 +189,7 @@ class TrendRunnerPaperEngine:
         symbol: str = "NIFTY",
         sl_points: float = 30.0,
         reentry_sl_points: float = 30.0,
-        sl_mode: str = "swing",
+        sl_mode: str = "fixed",
         lots: int = 1,
         sizing_mode: str = "dynamic",
         pyramid: bool = False,
@@ -277,7 +277,7 @@ class TrendRunnerPaperEngine:
         self.notify_telegram: bool = kwargs.get("notify_telegram", False)
         self.fetch_live_quotes: bool = kwargs.get("fetch_live_quotes", False)
         self.enable_trend_runner: bool = kwargs.get("enable_trend_runner", True)
-        self.enable_vix_trap: bool = kwargs.get("enable_vix_trap", True)
+        self.enable_vix_trap: bool = kwargs.get("enable_vix_trap", False)
 
         if self.symbol == "SENSEX":
             if sl_points == 30.0:

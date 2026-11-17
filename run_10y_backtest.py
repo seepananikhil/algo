@@ -3,6 +3,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent
 sys.path.insert(0, str(ROOT))
 import argparse
+from datetime import datetime
 import pandas as pd
 import numpy as np
 from trend_runner_paper import TrendRunnerPaperEngine
@@ -32,19 +33,38 @@ vix_df['date'] = pd.to_datetime(vix_df['date']).dt.date
 vix_map = dict(zip(vix_df['date'], vix_df['vix_change_pct']))
 vix_lvl_map = dict(zip(vix_df['date'], vix_df['close']))
 
+# Integrate live recorded intraday VIX signals for current dates
+for sf in (ROOT / "performance" / "trend_runner_signals.csv", ROOT / "performance" / "trend_runner_paper_trades.csv"):
+    if sf.exists():
+        try:
+            sdf = pd.read_csv(sf)
+            if not sdf.empty and "date" in sdf.columns and "vix_chg" in sdf.columns:
+                for _, r in sdf.iterrows():
+                    try:
+                        d_val = pd.to_datetime(r["date"]).date()
+                        if pd.notna(r["vix_chg"]):
+                            vix_map[d_val] = float(r["vix_chg"])
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
 # Check existing performance file for incremental delta
 perf_file = ROOT / "performance" / "nifty_10y_backtest_trades.csv"
 latest_date = None
 existing_trades = []
+current_month_start = datetime.now().date().replace(day=1)
 
 if not cli_args.full and perf_file.exists():
     try:
         prev_df = pd.read_csv(perf_file)
         if not prev_df.empty and "date" in prev_df.columns:
             prev_df["date"] = pd.to_datetime(prev_df["date"]).dt.date
-            latest_date = prev_df["date"].max()
-            existing_trades = prev_df.to_dict(orient="records")
-            print(f"Incremental delta mode: existing backtest covers through {latest_date}")
+            # Retain historical trades strictly before current month so this month is always re-computed fresh
+            hist_df = prev_df[prev_df["date"] < current_month_start]
+            existing_trades = hist_df.to_dict(orient="records")
+            latest_date = current_month_start
+            print(f"Incremental mode: cached {len(existing_trades)} historical trades prior to {current_month_start}. Re-evaluating current month {current_month_start.strftime('%Y-%m')}...")
     except Exception as exc:
         print(f"Warning reading existing backtest: {exc}")
 
@@ -52,12 +72,12 @@ base_dir = ROOT / "captured_data" / "technovusin_nifty50" / "1min"
 all_files = sorted(base_dir.rglob("*.csv"))
 
 if latest_date:
-    latest_ym = latest_date.strftime("%Y-%m")
+    latest_ym = current_month_start.strftime("%Y-%m")
     filtered = []
     for f in all_files:
         try:
             f_year = int(f.parent.name)
-            if f_year < latest_date.year:
+            if f_year < current_month_start.year:
                 continue
         except ValueError:
             pass
@@ -74,21 +94,26 @@ print(f"Historical files to process: {len(all_files)}")
 
 # Initialize strategy engine
 engine = TrendRunnerPaperEngine(
+    symbol="NIFTY",
     sl_points=30.0,
     reentry_sl_points=30.0,
+    sl_mode="fixed",
     reentry=True,
     max_trades_per_day=2,
-    r1_trigger=70.0, r1_lock=20.0,
-    r2_trigger=130.0, r2_lock=60.0,
-    r3_trigger=180.0, r3_lock=110.0,
-    r4_trigger=230.0, r4_lock=165.0,
-    r5_trigger=280.0, r5_lock=220.0,
-    r6_trigger=330.0, r6_lock=270.0,
+    r1_trigger=70.0, r1_lock=25.0,
+    r2_trigger=95.0, r2_lock=50.0,
+    r3_trigger=135.0, r3_lock=85.0,
+    r4_trigger=180.0, r4_lock=125.0,
+    r5_trigger=230.0, r5_lock=175.0,
+    r6_trigger=290.0, r6_lock=230.0,
     target_pts=None,
-    call_cutoff_time="10:15",
+    call_cutoff_time="10:45",
     sizing_mode="dynamic",
+    pyramid=False,
     allow_call_reentry=True,
     reentry_cooloff_bars=30,
+    enable_trend_runner=True,
+    enable_vix_trap=False,
     log_trades=False,
 )
 
@@ -125,7 +150,7 @@ for y in years:
     df_y['time_str'] = df_y['timestamp'].dt.strftime('%H:%M')
 
     if latest_date:
-        df_y = df_y[df_y['date'] > latest_date].copy().reset_index(drop=True)
+        df_y = df_y[df_y['date'] >= current_month_start].copy().reset_index(drop=True)
         if df_y.empty:
             continue
 
