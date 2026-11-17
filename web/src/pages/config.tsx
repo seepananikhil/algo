@@ -717,13 +717,14 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-semibold text-foreground">Tier 0A (Retention)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier0a_trigger_pts}
                       onChange={(e) => updateNiftyRatchet("tier0a_trigger_pts", parseFloat(e.target.value) || 35.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
                       title="Trigger Points"
                     />
                     <Input
@@ -731,7 +732,8 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                       step={0.5}
                       value={niftyRatchet.tier0a_lock_pts}
                       onChange={(e) => updateNiftyRatchet("tier0a_lock_pts", parseFloat(e.target.value) || -12.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
                       title="Lock Points (Entry offset)"
                     />
                   </div>
@@ -740,13 +742,14 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
 
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-semibold text-foreground">Tier 0B (Breakeven)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier0b_breakeven_trigger_pts}
                       onChange={(e) => updateNiftyRatchet("tier0b_breakeven_trigger_pts", parseFloat(e.target.value) || 50.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
                       title="Trigger Points"
                     />
                     <Input
@@ -754,7 +757,8 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                       step={0.5}
                       value={niftyRatchet.tier0b_breakeven_lock_pts}
                       onChange={(e) => updateNiftyRatchet("tier0b_breakeven_lock_pts", parseFloat(e.target.value) || 5.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
                       title="Lock Points"
                     />
                   </div>
@@ -767,20 +771,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 1 */}
                 <div className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 space-y-1">
                   <div className="text-[11px] font-bold text-emerald-400">Tier 1 (+Pyramid)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier1_trigger_pts}
                       onChange={(e) => updateNiftyRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 70.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier1_lock_pts}
                       onChange={(e) => updateNiftyRatchet("tier1_lock_pts", parseFloat(e.target.value) || 25.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier1_trigger_pts}pt → Lock +{niftyRatchet.tier1_lock_pts}pt</p>
@@ -789,20 +797,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 2 */}
                 <div className="p-2 rounded-lg border border-sky-500/30 bg-sky-500/5 space-y-1">
                   <div className="text-[11px] font-bold text-sky-400">Tier 2 (Momentum)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier2_trigger_pts}
                       onChange={(e) => updateNiftyRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 95.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier2_lock_pts}
                       onChange={(e) => updateNiftyRatchet("tier2_lock_pts", parseFloat(e.target.value) || 50.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier2_trigger_pts}pt → Lock +{niftyRatchet.tier2_lock_pts}pt</p>
@@ -811,20 +823,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 3 */}
                 <div className="p-2 rounded-lg border border-indigo-500/30 bg-indigo-500/5 space-y-1">
                   <div className="text-[11px] font-bold text-indigo-400">Tier 3 (Super Runner)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier3_trigger_pts}
                       onChange={(e) => updateNiftyRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 135.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier3_lock_pts}
                       onChange={(e) => updateNiftyRatchet("tier3_lock_pts", parseFloat(e.target.value) || 85.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier3_trigger_pts}pt → Lock +{niftyRatchet.tier3_lock_pts}pt</p>
@@ -833,20 +849,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 4 */}
                 <div className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/5 space-y-1">
                   <div className="text-[11px] font-bold text-purple-400">Tier 4 (Exhaustion)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier4_trigger_pts}
                       onChange={(e) => updateNiftyRatchet("tier4_trigger_pts", parseFloat(e.target.value) || 180.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier4_lock_pts}
                       onChange={(e) => updateNiftyRatchet("tier4_lock_pts", parseFloat(e.target.value) || 125.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier4_trigger_pts}pt → Lock +{niftyRatchet.tier4_lock_pts}pt</p>
@@ -855,20 +875,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 5 */}
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-bold text-foreground">Tier 5 (Mega Runner)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier5_trigger_pts ?? 230.0}
                       onChange={(e) => updateNiftyRatchet("tier5_trigger_pts", parseFloat(e.target.value) || 230.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier5_lock_pts ?? 175.0}
                       onChange={(e) => updateNiftyRatchet("tier5_lock_pts", parseFloat(e.target.value) || 175.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier5_trigger_pts ?? 230}pt → Lock +{niftyRatchet.tier5_lock_pts ?? 175}pt</p>
@@ -877,20 +901,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 6 */}
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-bold text-foreground">Tier 6 (Extreme)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier6_trigger_pts ?? 290.0}
                       onChange={(e) => updateNiftyRatchet("tier6_trigger_pts", parseFloat(e.target.value) || 290.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={niftyRatchet.tier6_lock_pts ?? 230.0}
                       onChange={(e) => updateNiftyRatchet("tier6_lock_pts", parseFloat(e.target.value) || 230.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier6_trigger_pts ?? 290}pt → Lock +{niftyRatchet.tier6_lock_pts ?? 230}pt</p>
@@ -988,13 +1016,14 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
               <div className="grid grid-cols-2 gap-2">
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-semibold text-foreground">Tier 0A (Retention)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier0a_trigger_pts}
                       onChange={(e) => updateSensexRatchet("tier0a_trigger_pts", parseFloat(e.target.value) || 115.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
                       title="Trigger Points"
                     />
                     <Input
@@ -1002,7 +1031,8 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                       step={0.5}
                       value={sensexRatchet.tier0a_lock_pts}
                       onChange={(e) => updateSensexRatchet("tier0a_lock_pts", parseFloat(e.target.value) || -40.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
                       title="Lock Points (Entry offset)"
                     />
                   </div>
@@ -1011,13 +1041,14 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
 
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-semibold text-foreground">Tier 0B (Breakeven)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier0b_breakeven_trigger_pts}
                       onChange={(e) => updateSensexRatchet("tier0b_breakeven_trigger_pts", parseFloat(e.target.value) || 180.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
                       title="Trigger Points"
                     />
                     <Input
@@ -1025,7 +1056,8 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                       step={0.5}
                       value={sensexRatchet.tier0b_breakeven_lock_pts}
                       onChange={(e) => updateSensexRatchet("tier0b_breakeven_lock_pts", parseFloat(e.target.value) || 15.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
                       title="Lock Points"
                     />
                   </div>
@@ -1038,20 +1070,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 1 */}
                 <div className="p-2 rounded-lg border border-sky-500/30 bg-sky-500/5 space-y-1">
                   <div className="text-[11px] font-bold text-sky-400">Tier 1 (+Pyramid)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier1_trigger_pts}
                       onChange={(e) => updateSensexRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 240.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier1_lock_pts}
                       onChange={(e) => updateSensexRatchet("tier1_lock_pts", parseFloat(e.target.value) || 80.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier1_trigger_pts}pt → Lock +{sensexRatchet.tier1_lock_pts}pt</p>
@@ -1060,20 +1096,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 2 */}
                 <div className="p-2 rounded-lg border border-indigo-500/30 bg-indigo-500/5 space-y-1">
                   <div className="text-[11px] font-bold text-indigo-400">Tier 2 (Momentum)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier2_trigger_pts}
                       onChange={(e) => updateSensexRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 340.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier2_lock_pts}
                       onChange={(e) => updateSensexRatchet("tier2_lock_pts", parseFloat(e.target.value) || 180.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier2_trigger_pts}pt → Lock +{sensexRatchet.tier2_lock_pts}pt</p>
@@ -1082,20 +1122,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 3 */}
                 <div className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/5 space-y-1">
                   <div className="text-[11px] font-bold text-purple-400">Tier 3 (Super Runner)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier3_trigger_pts}
                       onChange={(e) => updateSensexRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 480.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier3_lock_pts}
                       onChange={(e) => updateSensexRatchet("tier3_lock_pts", parseFloat(e.target.value) || 280.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier3_trigger_pts}pt → Lock +{sensexRatchet.tier3_lock_pts}pt</p>
@@ -1104,20 +1148,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 4 */}
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-bold text-foreground">Tier 4 (Exhaustion)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier4_trigger_pts}
                       onChange={(e) => updateSensexRatchet("tier4_trigger_pts", parseFloat(e.target.value) || 650.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier4_lock_pts}
                       onChange={(e) => updateSensexRatchet("tier4_lock_pts", parseFloat(e.target.value) || 420.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier4_trigger_pts}pt → Lock +{sensexRatchet.tier4_lock_pts}pt</p>
@@ -1126,20 +1174,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 5 */}
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-bold text-foreground">Tier 5 (Mega Runner)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier5_trigger_pts ?? 850.0}
                       onChange={(e) => updateSensexRatchet("tier5_trigger_pts", parseFloat(e.target.value) || 850.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier5_lock_pts ?? 600.0}
                       onChange={(e) => updateSensexRatchet("tier5_lock_pts", parseFloat(e.target.value) || 600.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier5_trigger_pts ?? 850}pt → Lock +{sensexRatchet.tier5_lock_pts ?? 600}pt</p>
@@ -1148,20 +1200,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                 {/* Tier 6 */}
                 <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
                   <div className="text-[11px] font-bold text-foreground">Tier 6 (Extreme)</div>
-                  <div className="flex gap-1">
+                  <div className="grid grid-cols-2 gap-1.5">
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier6_trigger_pts ?? 1100.0}
                       onChange={(e) => updateSensexRatchet("tier6_trigger_pts", parseFloat(e.target.value) || 1100.0)}
-                      className="h-7 text-xs font-mono"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Trigger"
+                      title="Trigger Points"
                     />
                     <Input
                       type="number"
                       step={0.5}
                       value={sensexRatchet.tier6_lock_pts ?? 850.0}
                       onChange={(e) => updateSensexRatchet("tier6_lock_pts", parseFloat(e.target.value) || 850.0)}
-                      className="h-7 text-xs font-mono w-16"
+                      className="h-7 text-xs font-mono w-full"
+                      placeholder="Lock"
+                      title="Lock Points"
                     />
                   </div>
                   <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier6_trigger_pts ?? 1100}pt → Lock +{sensexRatchet.tier6_lock_pts ?? 850}pt</p>
