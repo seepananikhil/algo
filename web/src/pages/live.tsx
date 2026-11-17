@@ -330,67 +330,7 @@ function ActiveTradeCard({
   )
 }
 
-function LiveStrategyPositionBanner({ symbol, state, onSelectSymbol }: { symbol: string; state: any; onSelectSymbol?: () => void }) {
-  if (!state?.in_position || !state?.active_position) return null
-  const pos = state.active_position
-  const spot = state.spot || pos.entry_price
-  const isLong = pos.side === "LONG" || pos.side === "CALL"
-  const ptsDiff = isLong ? (spot - pos.entry_price) : (pos.entry_price - spot)
-  const isProfit = ptsDiff >= 0
-  const lotSize = symbol.toUpperCase() === "SENSEX" ? 20 : 65
-  const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
-  const estOptPnl = ptsDiff * 0.65 * (lots * lotSize)
 
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-linear-to-r from-emerald-500/15 via-background to-background text-xs shadow-xs mb-1.5">
-      <div className="flex items-center gap-2">
-        <span className="relative flex h-2.5 w-2.5">
-          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-        </span>
-        <span className="font-bold text-emerald-500 uppercase tracking-wide text-[11px]">
-          Apex Duo Paper Active:
-        </span>
-        <button
-          type="button"
-          onClick={onSelectSymbol}
-          className="font-bold text-foreground hover:underline flex items-center gap-1 cursor-pointer"
-        >
-          <span>{symbol}</span>
-          <span className="text-muted-foreground font-mono">({pos.option})</span>
-        </button>
-        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${isLong ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}`}>
-          {pos.side}
-        </span>
-        {pos.pyramided && (
-          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30">
-            2x Lots (Pyramided)
-          </span>
-        )}
-      </div>
-      <div className="flex items-center gap-3 font-mono text-[11px]">
-        <span className="text-muted-foreground">
-          Entry: <strong className="text-foreground">{pos.entry_price?.toFixed(1)}</strong>
-        </span>
-        <span className="text-muted-foreground">
-          LTP: <strong className="text-foreground">{spot?.toFixed(1)}</strong>
-        </span>
-        <span className={`font-bold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
-          {isProfit ? "+" : ""}{ptsDiff.toFixed(1)} pt ({estOptPnl >= 0 ? "+" : ""}{fmtRs(estOptPnl)})
-        </span>
-        {pos.last_ratchet ? (
-          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-sans font-semibold text-[10px] border border-emerald-500/30">
-            🔒 {pos.last_ratchet} SL: {pos.current_sl?.toFixed(1)}
-          </span>
-        ) : (
-          <span className="text-amber-400 text-[10px]">
-            SL: {pos.current_sl?.toFixed(1)}
-          </span>
-        )}
-      </div>
-    </div>
-  )
-}
 
 export function LivePage() {
   const { status, reload: reloadStatus } = useStatus()
@@ -658,16 +598,52 @@ export function LivePage() {
 
 
 
-  // Map trades to chart markers
+  // Map trades to chart markers & active levels
   const sensexChartTrades = useMemo(() => {
-    const filtered = tradesList.filter((t) => t.symbol?.toUpperCase().includes("SENSEX") || t.symbol?.includes("BSESN"))
-    return filtered.map(toRuleTrade)
-  }, [tradesList])
+    const list = tradesList
+      .filter((t) => t.symbol?.toUpperCase().includes("SENSEX") || t.symbol?.includes("BSESN"))
+      .map(toRuleTrade)
+
+    const sensexPos = strategyTelemetry.data?.state?.sensex?.active_position
+    if (strategyTelemetry.data?.state?.sensex?.in_position && sensexPos) {
+      list.push({
+        side: (sensexPos.side === "LONG" ? "CALL" : "PUT") as RuleTrade["side"],
+        entry: String(sensexPos.entry_time || "09:45").slice(0, 5),
+        entry_price: Number(sensexPos.entry_price) || 0,
+        sl: Number(sensexPos.current_sl || sensexPos.initial_sl) || Number.NaN,
+        target: Number(sensexPos.target) || Number.NaN,
+        exit: "",
+        exit_price: Number.NaN,
+        reason: "open",
+        pnl_points: Number((strategyTelemetry.data.state.sensex.spot || sensexPos.entry_price) - sensexPos.entry_price),
+        setup: sensexPos.stage || "Trend Runner",
+      })
+    }
+    return list
+  }, [tradesList, strategyTelemetry.data?.state?.sensex])
 
   const niftyChartTrades = useMemo(() => {
-    const filtered = tradesList.filter((t) => !t.symbol || t.symbol?.toUpperCase().includes("NIFTY") || t.symbol?.includes("NSEI"))
-    return filtered.map(toRuleTrade)
-  }, [tradesList])
+    const list = tradesList
+      .filter((t) => !t.symbol || t.symbol?.toUpperCase().includes("NIFTY") || t.symbol?.includes("NSEI"))
+      .map(toRuleTrade)
+
+    const niftyPos = strategyTelemetry.data?.state?.nifty?.active_position
+    if (strategyTelemetry.data?.state?.nifty?.in_position && niftyPos) {
+      list.push({
+        side: (niftyPos.side === "LONG" ? "CALL" : "PUT") as RuleTrade["side"],
+        entry: String(niftyPos.entry_time || "09:45").slice(0, 5),
+        entry_price: Number(niftyPos.entry_price) || 0,
+        sl: Number(niftyPos.current_sl || niftyPos.initial_sl) || Number.NaN,
+        target: Number(niftyPos.target) || Number.NaN,
+        exit: "",
+        exit_price: Number.NaN,
+        reason: "open",
+        pnl_points: Number((strategyTelemetry.data.state.nifty.spot || niftyPos.entry_price) - niftyPos.entry_price),
+        setup: niftyPos.stage || "Trend Runner",
+      })
+    }
+    return list
+  }, [tradesList, strategyTelemetry.data?.state?.nifty])
 
   // Handle clicking a trade card / row -> immediately load respective chart & highlight
   const handleSelectTrade = useCallback((trade: OptionTrade) => {
@@ -958,23 +934,35 @@ export function LivePage() {
           <div className="flex items-center bg-muted/70 p-0.5 rounded-lg border border-border">
             <button
               onClick={() => { setActiveChart("SENSEX"); setScalpSpot("SENSEX"); setSelectedTrade(null) }}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
                 activeChart === "SENSEX"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              SENSEX
+              {strategyTelemetry.data?.state?.sensex?.in_position && (
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+              )}
+              <span>SENSEX</span>
             </button>
             <button
               onClick={() => { setActiveChart("NIFTY"); setScalpSpot("NIFTY"); setSelectedTrade(null) }}
-              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all ${
+              className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-all flex items-center gap-1.5 ${
                 activeChart === "NIFTY"
                   ? "bg-primary text-primary-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
               }`}
             >
-              NIFTY
+              {strategyTelemetry.data?.state?.nifty?.in_position && (
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+              )}
+              <span>NIFTY</span>
             </button>
             <button
               onClick={() => { setActiveChart("DUAL"); setSelectedTrade(null) }}
@@ -1591,17 +1579,6 @@ export function LivePage() {
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
         {/* LEFT / CENTER: FULL-WIDTH / FLEX-1 CANDLESTICK CHART */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-background">
-          {/* Active Strategy Position Banner (Paper / Apex Duo) */}
-          {(strategyTelemetry.data?.state?.sensex?.in_position || strategyTelemetry.data?.state?.nifty?.in_position) && (
-            <div className="p-2 pb-0">
-              {strategyTelemetry.data?.state?.sensex?.in_position && (
-                <LiveStrategyPositionBanner symbol="SENSEX" state={strategyTelemetry.data.state.sensex} onSelectSymbol={() => setActiveChart("SENSEX")} />
-              )}
-              {strategyTelemetry.data?.state?.nifty?.in_position && (
-                <LiveStrategyPositionBanner symbol="NIFTY" state={strategyTelemetry.data.state.nifty} onSelectSymbol={() => setActiveChart("NIFTY")} />
-              )}
-            </div>
-          )}
           {/* CANDLESTICK CHART CANVAS */}
           <main className="flex-1 min-h-0 p-2 grid gap-2 overflow-hidden" style={{
             gridTemplateColumns: activeChart === "DUAL" ? "1fr 1fr" : "1fr"
@@ -1610,8 +1587,8 @@ export function LivePage() {
             {(activeChart === "SENSEX" || activeChart === "DUAL") && (
               <div className="flex flex-col bg-card border border-border rounded-lg overflow-hidden shadow-xs relative">
                 <div className="flex-none px-3 py-1.5 bg-muted/40 border-b border-border flex items-center justify-between text-xs gap-2">
-                  {/* Left: Index Info & Spot */}
-                  <div className="flex items-center space-x-2 min-w-0">
+                  {/* Left: Index Info & Spot & Active Trade Status */}
+                  <div className="flex items-center space-x-2 min-w-0 overflow-x-auto">
                     <span className="font-bold text-foreground tracking-wide shrink-0">BSE SENSEX</span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-mono shrink-0">1m</span>
                     <span className="text-muted-foreground font-mono text-[11px] shrink-0">
@@ -1633,7 +1610,39 @@ export function LivePage() {
                       )
                     })()}
 
-                    
+                    {/* Integrated In-Trade Pill directly on chart header */}
+                    {strategyTelemetry.data?.state?.sensex?.in_position && strategyTelemetry.data.state.sensex.active_position && (() => {
+                      const pos = strategyTelemetry.data.state.sensex.active_position
+                      const spot = strategyTelemetry.data.state.sensex.spot || pos.entry_price
+                      const pts = pos.side === "LONG" ? (spot - pos.entry_price) : (pos.entry_price - spot)
+                      const isProfit = pts >= 0
+                      const estRs = pts * 0.65 * (pos.base_lots || 1) * 20
+                      return (
+                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-xs shadow-xs shrink-0 animate-in fade-in">
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                          </span>
+                          <span className="font-extrabold text-[10px] text-emerald-500 uppercase tracking-wider">
+                            IN TRADE:
+                          </span>
+                          <span className="font-bold text-foreground text-[11px]">
+                            {pos.option || "SENSEX 82400 CE"}
+                          </span>
+                          <span className="font-mono text-muted-foreground text-[10px]">
+                            @ {Number(pos.entry_price).toFixed(1)}
+                          </span>
+                          <span className={`font-mono font-bold text-[11px] ${isProfit ? "text-emerald-500" : "text-rose-500"}`}>
+                            {isProfit ? "+" : ""}{pts.toFixed(1)} pt ({isProfit ? "+" : ""}₹{Math.round(estRs).toLocaleString("en-IN")})
+                          </span>
+                          {pos.current_sl != null && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-500 font-mono font-semibold border border-amber-500/30">
+                              SL: {Number(pos.current_sl).toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Right: Side Panel Toggle Button */}
@@ -1677,7 +1686,7 @@ export function LivePage() {
               <div className="flex flex-col bg-card border border-border rounded-lg overflow-hidden shadow-xs relative">
                 <div className="flex-none px-3 py-1.5 bg-muted/40 border-b border-border flex items-center justify-between text-xs gap-2">
                   {/* Left: Index Info & Spot */}
-                  <div className="flex items-center space-x-2 min-w-0">
+                  <div className="flex items-center space-x-2 min-w-0 overflow-x-auto">
                     <span className="font-bold text-foreground tracking-wide shrink-0">NSE NIFTY 50</span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-mono shrink-0">1m</span>
                     <span className="text-muted-foreground font-mono text-[11px] shrink-0">
@@ -1699,7 +1708,39 @@ export function LivePage() {
                       )
                     })()}
 
-                    
+                    {/* Integrated In-Trade Pill directly on chart header */}
+                    {strategyTelemetry.data?.state?.nifty?.in_position && strategyTelemetry.data.state.nifty.active_position && (() => {
+                      const pos = strategyTelemetry.data.state.nifty.active_position
+                      const spot = strategyTelemetry.data.state.nifty.spot || pos.entry_price
+                      const pts = pos.side === "LONG" ? (spot - pos.entry_price) : (pos.entry_price - spot)
+                      const isProfit = pts >= 0
+                      const estRs = pts * 0.65 * (pos.base_lots || 1) * 25
+                      return (
+                        <div className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/15 border border-emerald-500/40 text-xs shadow-xs shrink-0 animate-in fade-in">
+                          <span className="relative flex h-2 w-2 shrink-0">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                          </span>
+                          <span className="font-extrabold text-[10px] text-emerald-500 uppercase tracking-wider">
+                            IN TRADE:
+                          </span>
+                          <span className="font-bold text-foreground text-[11px]">
+                            {pos.option || "NIFTY CE"}
+                          </span>
+                          <span className="font-mono text-muted-foreground text-[10px]">
+                            @ {Number(pos.entry_price).toFixed(1)}
+                          </span>
+                          <span className={`font-mono font-bold text-[11px] ${isProfit ? "text-emerald-500" : "text-rose-500"}`}>
+                            {isProfit ? "+" : ""}{pts.toFixed(1)} pt ({isProfit ? "+" : ""}₹{Math.round(estRs).toLocaleString("en-IN")})
+                          </span>
+                          {pos.current_sl != null && (
+                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/20 text-amber-500 font-mono font-semibold border border-amber-500/30">
+                              SL: {Number(pos.current_sl).toFixed(1)}
+                            </span>
+                          )}
+                        </div>
+                      )
+                    })()}
                   </div>
 
                   {/* Right: Side Panel Toggle Button */}

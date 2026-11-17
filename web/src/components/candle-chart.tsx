@@ -914,6 +914,9 @@ export function CandleChart({
           if (!trade) continue
           const slNum = Number(trade.sl)
           const tgtNum = Number(trade.target)
+          const entryNum = Number(trade.entry_price)
+          const isOpen = trade.reason === "open" || (trade as any).is_open || !trade.exit
+          const isCall = trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE"
           const ceilNum = Number((trade as any).box_high ?? (trade as any).ceil)
           const floorNum = Number((trade as any).box_low ?? (trade as any).floor)
 
@@ -923,11 +926,42 @@ export function CandleChart({
           if (!Number.isNaN(floorNum) && Number.isFinite(floorNum) && floorNum > 0 && floorNum >= sessionLow * 0.9 && floorNum <= sessionHigh * 1.1) {
             add(floorNum, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
           }
-          if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 && slNum >= sessionLow * 0.9 && slNum <= sessionHigh * 1.1) {
-            add(slNum, "#ef4444", LineStyle.Dashed, true, "SL")
+
+          // 1. Entry Level Line for Active / Open Position
+          if (isOpen && !Number.isNaN(entryNum) && Number.isFinite(entryNum) && entryNum > 0 && entryNum >= sessionLow * 0.9 && entryNum <= sessionHigh * 1.1) {
+            add(
+              entryNum,
+              isCall ? "rgba(16, 185, 129, 0.95)" : "rgba(244, 63, 94, 0.95)",
+              LineStyle.Solid,
+              true,
+              `ENTRY: ${fmtNum(entryNum, 1)} (${trade.side || "BUY"})`,
+              2
+            )
           }
+
+          // 2. Stop Loss / Trailing Stop Loss Line
+          if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 && slNum >= sessionLow * 0.9 && slNum <= sessionHigh * 1.1) {
+            const isProfitLock = isOpen && ((isCall && slNum > entryNum) || (!isCall && slNum < entryNum))
+            add(
+              slNum,
+              isProfitLock ? "#f59e0b" : "#ef4444",
+              LineStyle.Dashed,
+              true,
+              isOpen ? (isProfitLock ? `TRAILING SL: ${fmtNum(slNum, 1)} (LOCK)` : `STOP LOSS: ${fmtNum(slNum, 1)}`) : "SL",
+              isOpen ? 2 : 1
+            )
+          }
+
+          // 3. Target Level Line
           if (!Number.isNaN(tgtNum) && Number.isFinite(tgtNum) && tgtNum > 0 && tgtNum >= sessionLow * 0.9 && tgtNum <= sessionHigh * 1.1) {
-            add(tgtNum, "#10b981", LineStyle.Dashed, true, "TGT")
+            add(
+              tgtNum,
+              "#10b981",
+              LineStyle.Dashed,
+              true,
+              isOpen ? `TARGET: ${fmtNum(tgtNum, 1)}` : "TGT",
+              isOpen ? 2 : 1
+            )
           }
         }
       }
