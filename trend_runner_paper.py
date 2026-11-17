@@ -237,25 +237,16 @@ class TrendRunnerPaperEngine:
         self.allow_call_reentry = allow_call_reentry
         self.symbol = symbol.upper()
         self.lot_size = 20 if self.symbol == "SENSEX" else 25
-        if self.symbol == "SENSEX":
-            if sl_points == 30.0:
-                self.sl_points = 120.0
-                self.reentry_sl_points = 120.0
-            if r1_trigger == 70.0:
-                self.r1_trigger = 280.0
-                self.r1_lock = 80.0
-                self.r2_trigger = 520.0
-                self.r2_lock = 240.0
-                self.r3_trigger = 720.0
-                self.r3_lock = 440.0
-                self.r4_trigger = 920.0
-                self.r4_lock = 660.0
-                self.r5_trigger = 1120.0
-                self.r5_lock = 880.0
-                self.r6_trigger = 1320.0
-                self.r6_lock = 1080.0
-            self.call_cutoff_time = "10:45"
-            self.strike_mode = "atm"
+        self.sl_points = sl_points
+        self.reentry_sl_points = reentry_sl_points
+        self.reentry_be_trigger = reentry_be_trigger
+        self.reentry_be_lock = reentry_be_lock
+        self.reentry_req_color = reentry_req_color
+        self.body_conviction_th = body_conviction_th
+        self.body_standard_th = body_standard_th
+        self.reentry_cooloff_bars = reentry_cooloff_bars
+        self.call_cutoff_time = call_cutoff_time
+        self.allow_call_reentry = allow_call_reentry
         self.sl_mode = sl_mode
         self.lots = lots
         self.sizing_mode = sizing_mode
@@ -287,6 +278,28 @@ class TrendRunnerPaperEngine:
         self.fetch_live_quotes: bool = kwargs.get("fetch_live_quotes", False)
         self.enable_trend_runner: bool = kwargs.get("enable_trend_runner", True)
         self.enable_vix_trap: bool = kwargs.get("enable_vix_trap", True)
+
+        if self.symbol == "SENSEX":
+            if sl_points == 30.0:
+                self.sl_points = 120.0
+                self.reentry_sl_points = 120.0
+            if r1_trigger == 70.0:
+                self.r1_trigger = 280.0
+                self.r1_lock = 80.0
+                self.r2_trigger = 520.0
+                self.r2_lock = 240.0
+                self.r3_trigger = 720.0
+                self.r3_lock = 440.0
+                self.r4_trigger = 920.0
+                self.r4_lock = 660.0
+                self.r5_trigger = 1120.0
+                self.r5_lock = 880.0
+                self.r6_trigger = 1320.0
+                self.r6_lock = 1080.0
+            if call_cutoff_time == "10:45":
+                self.call_cutoff_time = "10:45"
+            if strike_mode == "itm150":
+                self.strike_mode = "atm"
 
         self.active_position: Optional[Dict[str, Any]] = None
         self.trades_today: int = 0
@@ -421,8 +434,8 @@ class TrendRunnerPaperEngine:
                     
                     # Risk-Free Pyramiding: Add Lot 2 with stop offset by locked profit
                     if self.pyramid and not pos.get("pyramided", False):
-                        pyr_e = entry_px + 70.0 if sig == "LONG" else entry_px - 70.0
-                        pyr_sl = pyr_e - 20.0 if sig == "LONG" else pyr_e + 20.0
+                        pyr_e = entry_px + self.r1_trigger if sig == "LONG" else entry_px - self.r1_trigger
+                        pyr_sl = pyr_e - self.r1_lock if sig == "LONG" else pyr_e + self.r1_lock
                         pos["pyramided"] = True
                         pos["pyramid_entry_px"] = pyr_e
                         pos["pyramid_sl"] = pyr_sl
