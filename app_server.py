@@ -886,6 +886,10 @@ def trend_runner_forward_loop() -> None:
         try:
             cfg = read_config()
             port_cfg = load_portfolio_config()
+            active_inst = port_cfg.get("trading_instruments", "BOTH")
+            if active_inst == "SENSEX_ONLY":
+                time.sleep(5)
+                continue
             if not cfg.get("trend_runner_paper_trading", True):
                 time.sleep(5)
                 continue
@@ -1090,6 +1094,11 @@ def sensex_runner_forward_loop() -> None:
     while True:
         try:
             cfg = read_config()
+            port_cfg = load_portfolio_config()
+            active_inst = port_cfg.get("trading_instruments", "BOTH")
+            if active_inst == "NIFTY_ONLY":
+                time.sleep(5)
+                continue
             if not cfg.get("sensex_runner_paper_trading", True):
                 time.sleep(5)
                 continue
@@ -6320,6 +6329,8 @@ class Handler(BaseHTTPRequestHandler):
                         pass
                 if "symbol" in body and body["symbol"] in ("NIFTY", "SENSEX"):
                     curr["symbol"] = body["symbol"]
+                if "trading_instruments" in body and body["trading_instruments"] in ("BOTH", "NIFTY_ONLY", "SENSEX_ONLY"):
+                    curr["trading_instruments"] = body["trading_instruments"]
                 if "mode" in body and body["mode"] in ("priority", "concurrent"):
                     curr["mode"] = body["mode"]
                 if "max_trades_per_day" in body:

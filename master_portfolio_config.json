@@ -1,5 +1,6 @@
 {
   "symbol": "NIFTY",
+  "trading_instruments": "BOTH",
   "mode": "priority",
   "max_trades_per_day": 2,
   "max_concurrent_positions": 1,
