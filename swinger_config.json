@@ -20,7 +20,7 @@
   "min_volume_surge_mult": 1.5,
   "min_candle_gain_pct": 5.0,
   "candle_wick_rejection": true,
-  "initial_sl_pct": -12.0,
+  "initial_sl_pct": -15.0,
   "be_shield_trigger_pct": 15.0,
   "tp_target_pct": 30.0,
   "profit_vault_trigger_pct": 50.0,
