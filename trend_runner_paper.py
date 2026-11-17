@@ -191,8 +191,8 @@ class TrendRunnerPaperEngine:
         reentry_sl_points: float = 30.0,
         sl_mode: str = "swing",
         lots: int = 1,
-        sizing_mode: str = "hybrid",
-        pyramid: bool = True,
+        sizing_mode: str = "fixed",
+        pyramid: bool = False,
         reentry: bool = False,
         max_trades_per_day: int = 2,
         vix_th: float = 1.8,
@@ -1023,6 +1023,7 @@ def run_replay(
     vix_chg_override: Optional[float] = None,
     williams_fallback: bool = True,
     strike_mode: str = "itm150",
+    pyramid: bool = False,
 ) -> None:
     """Replay simulation for any historical day with captured 1m or 5m data."""
     be_desc = "Disabled (Path A: Pure Ride)" if be_trigger is None else f"@{be_trigger} pts"
@@ -1092,6 +1093,7 @@ def run_replay(
         be_trigger=be_trigger,
         williams_fallback=williams_fallback,
         strike_mode=strike_mode,
+        pyramid=pyramid,
         fetch_live_quotes=False,
     )
     engine.current_day_str = target_date
@@ -1139,6 +1141,7 @@ def run_live_monitor(
     vix_chg_override: Optional[float] = None,
     williams_fallback: bool = True,
     strike_mode: str = "itm150",
+    pyramid: bool = False,
 ) -> None:
     """Continuously monitor today's live 1-min stream during market hours."""
     be_desc = "Disabled (Path A: Pure Ride)" if be_trigger is None else f"@{be_trigger} pts"
@@ -1162,6 +1165,7 @@ def run_live_monitor(
         be_trigger=be_trigger,
         williams_fallback=williams_fallback,
         strike_mode=strike_mode,
+        pyramid=pyramid,
         fetch_live_quotes=True,
         notify_telegram=True,
     )
@@ -1245,6 +1249,8 @@ if __name__ == "__main__":
     parser.add_argument("--williams", action="store_true", default=True, help="Enable Williams Afternoon Fallback (12:00-14:15 Seamless) (default: True)")
     parser.add_argument("--no-williams", action="store_false", dest="williams", help="Disable Williams Afternoon Fallback")
     parser.add_argument("--strike-mode", choices=["itm150", "atm"], default="itm150", help="Strike selection mode (default: itm150)")
+    parser.add_argument("--pyramid", action="store_true", default=False, help="Enable pyramiding (adding Lot 2 at +70 pts) (default: False)")
+    parser.add_argument("--no-pyramid", action="store_false", dest="pyramid", help="Disable pyramiding")
     args = parser.parse_args()
 
     if args.replay:
@@ -1260,6 +1266,7 @@ if __name__ == "__main__":
             vix_chg_override=args.vix_chg,
             williams_fallback=args.williams,
             strike_mode=args.strike_mode,
+            pyramid=args.pyramid,
         )
     else:
         run_live_monitor(
@@ -1274,4 +1281,5 @@ if __name__ == "__main__":
             vix_chg_override=args.vix_chg,
             williams_fallback=args.williams,
             strike_mode=args.strike_mode,
+            pyramid=args.pyramid,
         )
