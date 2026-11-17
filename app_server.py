@@ -5673,6 +5673,9 @@ class Handler(BaseHTTPRequestHandler):
         elif url.path == "/api/swinger/watchlist":
             from swinger_engine import load_watchlist
             return self._json(load_watchlist())
+        elif url.path == "/api/swinger/config":
+            from swinger_engine import load_config
+            return self._json(load_config())
         elif url.path == "/api/swinger/candles":
             from swinger_engine import get_stock_candles, get_stock_trade_context
             sym = q.get("symbol", [""])[0]
@@ -5690,7 +5693,8 @@ class Handler(BaseHTTPRequestHandler):
                 "first_radar_date": ctx["first_radar_date"],
                 "trades": ctx["trades"],
                 "is_on_radar": ctx["is_on_radar"],
-                "radar_info": ctx["radar_info"]
+                "radar_info": ctx["radar_info"],
+                "market_cap_cr": ctx.get("market_cap_cr")
             })
         elif url.path == "/api/swinger/backtest-stock":
             from swinger_engine import backtest_single_stock
@@ -6001,10 +6005,13 @@ class Handler(BaseHTTPRequestHandler):
             self._json(today_log(LIVE_DIR / "capture.log", n))
         elif url.path == "/api/days":
             self._json(available_days())
-        elif url.path in ("/api/backtest/sync", "/api/backtest/update"):
+        elif url.path in ("/api/backtest/sync", "/api/backtest/update", "/api/update-backtests"):
             return self._json(trigger_backtest_sync(reason="manual"))
-        elif url.path == "/api/backtest/sync/status":
-            return self._json(_sync_state)
+        elif url.path in ("/api/backtest/sync/status", "/api/update-backtests/status"):
+            st = dict(_sync_state)
+            st["running"] = (st.get("status") == "running")
+            st["success"] = (st.get("status") == "completed")
+            return self._json(st)
         elif url.path in ("/api/sync-status", "/api/trades/sync/status"):
             return self._json(_last_git_sync)
         elif url.path == "/api/backtest":
@@ -6240,6 +6247,18 @@ class Handler(BaseHTTPRequestHandler):
                 import traceback
                 print(f"[Swinger Scan Error]: {traceback.format_exc()}")
                 return self._json({"ok": False, "error": str(e)}, 500)
+        elif url.path == "/api/swinger/config":
+            try:
+                from swinger_engine import load_config, save_config
+                body = self._body()
+                cur = load_config()
+                cur.update(body)
+                save_config(cur)
+                return self._json({"ok": True, "config": cur})
+            except Exception as e:
+                import traceback
+                print(f"[Swinger Config Error]: {traceback.format_exc()}")
+                return self._json({"ok": False, "error": str(e)}, 500)
 
         if self.headers.get("X-Dashboard") != "1":
             return self._json({"error": "forbidden"}, 403)
@@ -6318,6 +6337,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"kill_switch": False})
         elif url.path in ("/api/sync-trades", "/api/trades/sync"):
             self._json(run_git_trades_sync(reason="manual_ui"))
+        elif url.path in ("/api/backtest/sync", "/api/backtest/update", "/api/update-backtests"):
+            self._json(trigger_backtest_sync(reason="manual_ui"))
         elif url.path == "/api/capture/start":
             self._json(start_capture())
         elif url.path == "/api/capture/stop":

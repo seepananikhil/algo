@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { Activity, ArrowDown, ArrowUp, ArrowUpDown, Calendar, Flame, RefreshCw, TrendingUp, X } from "lucide-react"
 import { toast } from "sonner"
-import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, type Backtest } from "@/lib/api"
+import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, postJSON, getJSON, type Backtest } from "@/lib/api"
 
 /** Backtest restricted to one year ("all" = everything), with equity/drawdown restarting at 0. */
 function forYear(data: Backtest, year: string): Backtest {
@@ -133,22 +133,15 @@ export function BacktestPage() {
     try {
       setIsSyncing(true)
       toast.info("Triggering background historical backtest update...")
-      const res = await fetch("/api/update-backtests", { method: "POST" })
-      const data = await res.json()
-      if (!res.ok) {
-        toast.error(data.error || "Failed to start update")
-        setIsSyncing(false)
-        return
-      }
+      const data = await postJSON<{ ok?: boolean; running?: boolean; message?: string }>("/api/backtest/sync", {})
       toast.success(data.message || "Update started. Syncing...")
       const pollTimer = setInterval(async () => {
         try {
-          const statusRes = await fetch("/api/update-backtests/status")
-          const s = await statusRes.json()
-          if (!s.running) {
+          const s = await getJSON<{ status?: string; running?: boolean; success?: boolean; message?: string }>("/api/backtest/sync/status")
+          if (!s.running && s.status !== "running") {
             clearInterval(pollTimer)
             setIsSyncing(false)
-            if (s.success) {
+            if (s.success || s.status === "completed") {
               toast.success("Master backtests successfully regenerated!")
               reload()
             } else {
@@ -159,9 +152,9 @@ export function BacktestPage() {
           // ignore transient poll errors
         }
       }, 3000)
-    } catch {
+    } catch (err: any) {
       setIsSyncing(false)
-      toast.error("Failed to connect to update service.")
+      toast.error(err?.message || "Failed to trigger backtest update")
     }
   }
 
