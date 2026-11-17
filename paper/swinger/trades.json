@@ -667,5 +667,278 @@
     }
   ],
   "last_updated": "2026-11-17T10:03:13.323850+05:30",
-  "count": 35
+  "count": 35,
+  "summary": {
+    "total_trades": 35,
+    "wins": 31,
+    "losses": 4,
+    "win_rate": 88.6,
+    "profit_factor": 15.8,
+    "total_pnl": 202000.58,
+    "avg_win_pct": 28.0,
+    "avg_loss_pct": -13.7,
+    "avg_return_pct": 23.2,
+    "avg_holding_days": 0.0,
+    "base_slot_size": 25000.0,
+    "mode": "PAPER",
+    "strategy": "Pullback Architecture \u00b7 12% Close SL \u00b7 Pure 25% Peak Trail @ +20% (No BE Lock) \u00b7 50 EMA Vol Breakdown",
+    "last_updated": "2026-11-17T10:07:35.661576+05:30"
+  },
+  "yearly_breakdown": [
+    {
+      "year": "2026",
+      "pnl": 202000.58,
+      "pnl_pct": 23.2,
+      "avg_return_pct": 23.2,
+      "trades": 35,
+      "wins": 31,
+      "losses": 4,
+      "win_rate": 88.6,
+      "profit_factor": 15.8
+    }
+  ],
+  "monthly": [
+    {
+      "month": "2026-10",
+      "label": "Oct 2026",
+      "pnl": 92188.17,
+      "pnl_pct": 41.2,
+      "trades": 9,
+      "wins": 7,
+      "losses": 2,
+      "win_rate": 77.8,
+      "profit_factor": 10.41
+    },
+    {
+      "month": "2026-09",
+      "label": "Sep 2026",
+      "pnl": 19235.63,
+      "pnl_pct": 8.6,
+      "trades": 9,
+      "wins": 7,
+      "losses": 2,
+      "win_rate": 77.8,
+      "profit_factor": 5.99
+    },
+    {
+      "month": "2026-08",
+      "label": "Aug 2026",
+      "pnl": 52414.26,
+      "pnl_pct": 35.2,
+      "trades": 6,
+      "wins": 6,
+      "losses": 0,
+      "win_rate": 100.0,
+      "profit_factor": 99.0
+    },
+    {
+      "month": "2026-07",
+      "label": "Jul 2026",
+      "pnl": 35843.04,
+      "pnl_pct": 23.9,
+      "trades": 6,
+      "wins": 6,
+      "losses": 0,
+      "win_rate": 100.0,
+      "profit_factor": 99.0
+    },
+    {
+      "month": "2026-06",
+      "label": "Jun 2026",
+      "pnl": 2195.12,
+      "pnl_pct": 2.2,
+      "trades": 4,
+      "wins": 4,
+      "losses": 0,
+      "win_rate": 100.0,
+      "profit_factor": 99.0
+    },
+    {
+      "month": "2026-05",
+      "label": "May 2026",
+      "pnl": 124.36,
+      "pnl_pct": 0.5,
+      "trades": 1,
+      "wins": 1,
+      "losses": 0,
+      "win_rate": 100.0,
+      "profit_factor": 99.0
+    }
+  ],
+  "daily": [
+    {
+      "date": "2026-05-18",
+      "pnl": 124.36,
+      "value": 124.36,
+      "trades": 1
+    },
+    {
+      "date": "2026-06-01",
+      "pnl": 1822.5,
+      "value": 1822.5,
+      "trades": 1
+    },
+    {
+      "date": "2026-06-02",
+      "pnl": 124.7,
+      "value": 124.7,
+      "trades": 1
+    },
+    {
+      "date": "2026-06-24",
+      "pnl": 124.89,
+      "value": 124.89,
+      "trades": 1
+    },
+    {
+      "date": "2026-06-30",
+      "pnl": 123.03,
+      "value": 123.03,
+      "trades": 1
+    },
+    {
+      "date": "2026-07-17",
+      "pnl": 249.4,
+      "value": 249.4,
+      "trades": 2
+    },
+    {
+      "date": "2026-07-22",
+      "pnl": 1723.96,
+      "value": 1723.96,
+      "trades": 1
+    },
+    {
+      "date": "2026-07-23",
+      "pnl": 12272.85,
+      "value": 12272.85,
+      "trades": 1
+    },
+    {
+      "date": "2026-07-24",
+      "pnl": 124.72,
+      "value": 124.72,
+      "trades": 1
+    },
+    {
+      "date": "2026-07-28",
+      "pnl": 21472.11,
+      "value": 21472.11,
+      "trades": 1
+    },
+    {
+      "date": "2026-08-03",
+      "pnl": 4638.72,
+      "value": 4638.72,
+      "trades": 1
+    },
+    {
+      "date": "2026-08-06",
+      "pnl": 6909.08,
+      "value": 6909.08,
+      "trades": 1
+    },
+    {
+      "date": "2026-08-17",
+      "pnl": 123.48,
+      "value": 123.48,
+      "trades": 1
+    },
+    {
+      "date": "2026-08-19",
+      "pnl": 19007.0,
+      "value": 19007.0,
+      "trades": 2
+    },
+    {
+      "date": "2026-08-28",
+      "pnl": 21735.98,
+      "value": 21735.98,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-01",
+      "pnl": 8901.51,
+      "value": 8901.51,
+      "trades": 2
+    },
+    {
+      "date": "2026-09-09",
+      "pnl": 10710.38,
+      "value": 10710.38,
+      "trades": 2
+    },
+    {
+      "date": "2026-09-10",
+      "pnl": 228.0,
+      "value": 228.0,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-11",
+      "pnl": -3851.61,
+      "value": -3851.61,
+      "trades": 2
+    },
+    {
+      "date": "2026-09-15",
+      "pnl": 1483.35,
+      "value": 1483.35,
+      "trades": 1
+    },
+    {
+      "date": "2026-09-29",
+      "pnl": 1764.0,
+      "value": 1764.0,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-01",
+      "pnl": 18090.0,
+      "value": 18090.0,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-06",
+      "pnl": 4100.69,
+      "value": 4100.69,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-08",
+      "pnl": 28298.34,
+      "value": 28298.34,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-09",
+      "pnl": 124.5,
+      "value": 124.5,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-15",
+      "pnl": 7413.0,
+      "value": 7413.0,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-22",
+      "pnl": 124.82,
+      "value": 124.82,
+      "trades": 1
+    },
+    {
+      "date": "2026-10-23",
+      "pnl": -9794.45,
+      "value": -9794.45,
+      "trades": 2
+    },
+    {
+      "date": "2026-10-26",
+      "pnl": 43831.27,
+      "value": 43831.27,
+      "trades": 1
+    }
+  ]
 }
