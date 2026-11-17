@@ -92,16 +92,16 @@ const DEFAULT_SENSEX_RATCHET: SpotRatchetSettings = {
   tier0b_breakeven_lock_pts: 15.0,
   tier1_trigger_pts: 240.0,
   tier1_lock_pts: 80.0,
-  tier2_trigger_pts: 400.0,
-  tier2_lock_pts: 200.0,
-  tier3_trigger_pts: 600.0,
-  tier3_lock_pts: 360.0,
-  tier4_trigger_pts: 850.0,
-  tier4_lock_pts: 550.0,
-  tier5_trigger_pts: 1200.0,
-  tier5_lock_pts: 850.0,
-  tier6_trigger_pts: 1500.0,
-  tier6_lock_pts: 1100.0,
+  tier2_trigger_pts: 340.0,
+  tier2_lock_pts: 180.0,
+  tier3_trigger_pts: 480.0,
+  tier3_lock_pts: 280.0,
+  tier4_trigger_pts: 650.0,
+  tier4_lock_pts: 420.0,
+  tier5_trigger_pts: 850.0,
+  tier5_lock_pts: 600.0,
+  tier6_trigger_pts: 1100.0,
+  tier6_lock_pts: 850.0,
 }
 
 const DEFAULT_CONFIG: PortfolioConfig = {
@@ -124,6 +124,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [activeTab, setActiveTab] = useState("portfolio")
   const [capitalSettings, setCapitalSettings] = useState({
     lots: 1,
+    sensex_lots: 1,
     daily_loss_limit: 2500,
     per_trade_loss_limit: 650,
     per_trade_loss_pct: 20,
@@ -132,6 +133,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
     sizing_mode: "fixed",
   })
   const [isLiveTrading, setIsLiveTrading] = useState(false)
+  const [isSensexLiveTrading, setIsSensexLiveTrading] = useState(false)
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [typed, setTyped] = useState("")
 
@@ -156,6 +158,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
         const sData = await getJSON<Settings>("/api/settings")
         setCapitalSettings({
           lots: sData.sizing_mode === "fixed" ? 1 : Math.max(1, Number(sData.lots || 1)),
+          sensex_lots: Math.max(1, Number((sData as any).sensex_runner_lots || 1)),
           daily_loss_limit: sData.daily_loss_limit ?? 2500,
           per_trade_loss_limit: sData.per_trade_loss_limit ?? 650,
           per_trade_loss_pct: sData.per_trade_loss_pct ?? 20,
@@ -165,6 +168,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
         })
         const live = Boolean(sData.trend_runner_live_trading || sData.midpoint_live_trading || sData.live_trading)
         setIsLiveTrading(live)
+        setIsSensexLiveTrading(Boolean((sData as any).sensex_runner_live_trading))
       } catch {}
     } catch {
       toast.error("Failed to load portfolio configuration. Using defaults.")
@@ -183,6 +187,8 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
         postJSON("/api/settings", {
           lots: Number(capitalSettings.lots),
           trend_runner_lots: Number(capitalSettings.lots),
+          sensex_runner_lots: Number(capitalSettings.sensex_lots || 1),
+          sensex_runner_live_trading: Boolean(isSensexLiveTrading),
           daily_loss_limit: Number(capitalSettings.daily_loss_limit),
           per_trade_loss_limit: Number(capitalSettings.per_trade_loss_limit),
           per_trade_loss_pct: Number(capitalSettings.per_trade_loss_pct),
@@ -212,30 +218,51 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   }
 
   function toggleLiveMode(enabled: boolean) {
-    if (enabled) {
-      setConfirmOpen(true)
+    if (isSx) {
+      if (enabled) {
+        setConfirmOpen(true)
+      } else {
+        postJSON("/api/settings", { sensex_runner_live_trading: false })
+          .then(() => {
+            setIsSensexLiveTrading(false)
+            toast.success("Sensex switched to PAPER simulation mode")
+          })
+          .catch((err) => toast.error(String(err)))
+      }
     } else {
-      postJSON("/api/settings", { trend_runner_live_trading: false, midpoint_live_trading: false })
-        .then(() => {
-          setIsLiveTrading(false)
-          toast.success("Switched to PAPER simulation mode")
-        })
-        .catch((err) => toast.error(String(err)))
+      if (enabled) {
+        setConfirmOpen(true)
+      } else {
+        postJSON("/api/settings", { trend_runner_live_trading: false, midpoint_live_trading: false })
+          .then(() => {
+            setIsLiveTrading(false)
+            toast.success("Nifty switched to PAPER simulation mode")
+          })
+          .catch((err) => toast.error(String(err)))
+      }
     }
   }
 
   async function confirmLive() {
     if (typed !== "LIVE") return
     try {
-      await postJSON("/api/settings", {
-        trend_runner_live_trading: true,
-        midpoint_live_trading: true,
-        confirm: typed,
-      })
-      setIsLiveTrading(true)
+      if (isSx) {
+        await postJSON("/api/settings", {
+          sensex_runner_live_trading: true,
+          confirm: typed,
+        })
+        setIsSensexLiveTrading(true)
+      } else {
+        await postJSON("/api/settings", {
+          trend_runner_live_trading: true,
+          midpoint_live_trading: true,
+          confirm: typed,
+        })
+        setIsLiveTrading(true)
+      }
       setConfirmOpen(false)
       setTyped("")
-      toast.success("🔥 LIVE TRADING ENABLED - Real orders active on Kotak Neo")
+      toast.success(`🔥 LIVE TRADING ENABLED for ${isSx ? "SENSEX" : "NIFTY"} - Real orders active on Kotak Neo`)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
@@ -332,40 +359,72 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
         </TabsList>
 
         <TabsContent value="portfolio" className="space-y-5">
+          {/* Index Selector Bar: NIFTY 50 vs SENSEX */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-card border border-border/80 shadow-2xs">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Index Setup:</span>
+              <div className="flex items-center gap-1.5 p-1 bg-muted/80 rounded-lg border border-border">
+                <Button
+                  type="button"
+                  variant={!isSx ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setConfig({ ...config, symbol: "NIFTY" })}
+                  className="h-8 text-xs font-bold px-3.5 gap-1.5"
+                >
+                  <span className="size-2 rounded-full bg-emerald-400" />
+                  <span>NSE NIFTY 50</span>
+                </Button>
+                <Button
+                  type="button"
+                  variant={isSx ? "default" : "ghost"}
+                  size="sm"
+                  onClick={() => setConfig({ ...config, symbol: "SENSEX" })}
+                  className="h-8 text-xs font-bold px-3.5 gap-1.5"
+                >
+                  <span className="size-2 rounded-full bg-sky-400" />
+                  <span>BSE SENSEX</span>
+                </Button>
+              </div>
+            </div>
+            <Badge variant="outline" className={isSx ? "border-sky-500/40 text-sky-400 bg-sky-500/10 font-bold text-xs" : "border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-bold text-xs"}>
+              {isSx ? "BSE SENSEX Selected (~82,500 Index · 20 Qty/Lot)" : "NSE NIFTY Selected (~24,500 Index · 65 Qty/Lot)"}
+            </Badge>
+          </div>
+
           {/* Section 0: Execution Mode (Paper vs Live Switch) */}
-          <Card className={isLiveTrading ? "border-red-600/70 bg-red-950/10 shadow-lg" : undefined}>
+          <Card className={(isSx ? isSensexLiveTrading : isLiveTrading) ? "border-red-600/70 bg-red-950/10 shadow-lg" : undefined}>
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-base flex items-center gap-2">
-                    <Zap className={cn("size-4", isLiveTrading ? "text-red-500" : "text-sky-400")} />
-                    Strategy Execution Mode
+                    <Zap className={cn("size-4", (isSx ? isSensexLiveTrading : isLiveTrading) ? "text-red-500" : "text-sky-400")} />
+                    {isSx ? "Sensex Execution Mode" : "Nifty Execution Mode"}
                   </CardTitle>
                   <CardDescription>
-                    Toggle between risk-free Paper Simulation and Real Money Execution on Kotak Neo.
+                    Toggle between risk-free Paper Simulation and Real Money Execution on Kotak Neo for {isSx ? "BSE SENSEX" : "NSE NIFTY"}.
                   </CardDescription>
                 </div>
-                <Badge variant={isLiveTrading ? "destructive" : "secondary"} className="font-mono text-xs">
-                  {isLiveTrading ? "🔥 LIVE TRADING" : "🛡️ PAPER SIMULATION"}
+                <Badge variant={(isSx ? isSensexLiveTrading : isLiveTrading) ? "destructive" : "secondary"} className="font-mono text-xs">
+                  {(isSx ? isSensexLiveTrading : isLiveTrading) ? "🔥 LIVE TRADING" : "🛡️ PAPER SIMULATION"}
                 </Badge>
               </div>
             </CardHeader>
             <CardContent>
               <div className="flex items-center justify-between gap-4 rounded-lg border p-4 bg-card/60">
                 <div className="space-y-0.5">
-                  <div className={isLiveTrading ? "font-bold text-red-500 text-base" : "font-semibold text-foreground text-base"}>
-                    Apex Duo · {isLiveTrading ? "LIVE (Real Money Orders Active)" : "PAPER (Simulated Forward Testing)"}
+                  <div className={(isSx ? isSensexLiveTrading : isLiveTrading) ? "font-bold text-red-500 text-base" : "font-semibold text-foreground text-base"}>
+                    {isSx ? "BSE SENSEX Trend Runner" : "NSE NIFTY Apex Duo"} · {(isSx ? isSensexLiveTrading : isLiveTrading) ? "LIVE (Real Money Orders Active)" : "PAPER (Simulated Forward Testing)"}
                   </div>
                   <p className="text-xs text-muted-foreground">
-                    {isLiveTrading
+                    {(isSx ? isSensexLiveTrading : isLiveTrading)
                       ? "Routes automated trade signals directly to your active Kotak Neo account."
                       : "Simulates orders with zero financial risk. Perfect for forward verification."}
                   </p>
                 </div>
                 <Switch
-                  checked={isLiveTrading}
+                  checked={isSx ? isSensexLiveTrading : isLiveTrading}
                   onCheckedChange={toggleLiveMode}
-                  aria-label="Apex Duo live trading switch"
+                  aria-label="Strategy live trading switch"
                 />
               </div>
             </CardContent>
@@ -505,7 +564,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <div className="space-y-1.5 rounded-lg border p-3">
                   <Label htmlFor="lots" className="text-xs text-muted-foreground font-medium">
                     Nifty Lots (65 Qty/Lot)
@@ -522,7 +581,27 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                     className="h-9 text-sm font-semibold"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Base trade sizing (1 lot = 65 shares)
+                    Nifty trade sizing (65 qty/lot)
+                  </p>
+                </div>
+
+                <div className="space-y-1.5 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+                  <Label htmlFor="sensex-lots" className="text-xs text-sky-400 font-semibold">
+                    Sensex Lots (20 Qty/Lot)
+                  </Label>
+                  <Input
+                    id="sensex-lots"
+                    type="number"
+                    min={1}
+                    max={10}
+                    value={capitalSettings.sensex_lots || 1}
+                    onChange={(e) =>
+                      setCapitalSettings({ ...capitalSettings, sensex_lots: parseInt(e.target.value) || 1 })
+                    }
+                    className="h-9 text-sm font-semibold font-mono"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    Sensex Trend Runner sizing (20 qty/lot)
                   </p>
                 </div>
 
@@ -542,7 +621,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                     className="h-9 text-sm font-semibold"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Circuit breaker: locks trading if day loss reaches ₹{capitalSettings.daily_loss_limit.toLocaleString('en-IN')}
+                    Circuit breaker: locks if day loss reaches ₹{capitalSettings.daily_loss_limit.toLocaleString('en-IN')}
                   </p>
                 </div>
 
@@ -563,7 +642,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
                     className="h-9 text-sm font-semibold"
                   />
                   <p className="text-[11px] text-muted-foreground">
-                    Orders reject if broker cash is below ₹{capitalSettings.minimum_live_funds.toLocaleString('en-IN')}
+                    Rejects if broker cash below ₹{capitalSettings.minimum_live_funds.toLocaleString('en-IN')}
                   </p>
                 </div>
               </div>

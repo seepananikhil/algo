@@ -234,7 +234,7 @@ export function SettingsPage() {
             }`}
           >
             <Sliders className="size-4 text-sky-400" />
-            <span>Strategy Setups</span>
+            <span>Strategy Setups (Sensex &amp; Nifty)</span>
           </button>
         </div>
       </div>

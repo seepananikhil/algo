@@ -284,18 +284,18 @@ class TrendRunnerPaperEngine:
                 self.sl_points = 120.0
                 self.reentry_sl_points = 120.0
             if r1_trigger == 70.0:
-                self.r1_trigger = 280.0
+                self.r1_trigger = 240.0
                 self.r1_lock = 80.0
-                self.r2_trigger = 520.0
-                self.r2_lock = 240.0
-                self.r3_trigger = 720.0
-                self.r3_lock = 440.0
-                self.r4_trigger = 920.0
-                self.r4_lock = 660.0
-                self.r5_trigger = 1120.0
-                self.r5_lock = 880.0
-                self.r6_trigger = 1320.0
-                self.r6_lock = 1080.0
+                self.r2_trigger = 340.0
+                self.r2_lock = 180.0
+                self.r3_trigger = 480.0
+                self.r3_lock = 280.0
+                self.r4_trigger = 650.0
+                self.r4_lock = 420.0
+                self.r5_trigger = 850.0
+                self.r5_lock = 600.0
+                self.r6_trigger = 1100.0
+                self.r6_lock = 850.0
             if call_cutoff_time == "10:45":
                 self.call_cutoff_time = "10:45"
             if strike_mode == "itm150":

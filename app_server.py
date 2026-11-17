@@ -1066,6 +1066,7 @@ def sensex_runner_forward_loop() -> None:
             setups_cfg = port_cfg.get("setups", cfg.get("setups", {}))
             enable_trend = setups_cfg.get("trend_runner", True)
             enable_trap = setups_cfg.get("vix_trap", True)
+            sx_ratchet = port_cfg.get("sensex_spot_ratchet_settings", {})
 
             from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
             if engine is None:
@@ -1073,10 +1074,22 @@ def sensex_runner_forward_loop() -> None:
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
                 engine = TrendRunnerPaperEngine(
                     symbol="SENSEX",
-                    sl_points=120.0,
+                    sl_points=float(sx_ratchet.get("initial_sl_pts", 120.0)),
                     sl_mode="fixed",
                     lots=lots_cfg,
                     sizing_mode=sizing_cfg,
+                    r1_trigger=float(sx_ratchet.get("tier1_trigger_pts", 240.0)),
+                    r1_lock=float(sx_ratchet.get("tier1_lock_pts", 80.0)),
+                    r2_trigger=float(sx_ratchet.get("tier2_trigger_pts", 340.0)),
+                    r2_lock=float(sx_ratchet.get("tier2_lock_pts", 180.0)),
+                    r3_trigger=float(sx_ratchet.get("tier3_trigger_pts", 480.0)),
+                    r3_lock=float(sx_ratchet.get("tier3_lock_pts", 280.0)),
+                    r4_trigger=float(sx_ratchet.get("tier4_trigger_pts", 650.0)),
+                    r4_lock=float(sx_ratchet.get("tier4_lock_pts", 420.0)),
+                    r5_trigger=float(sx_ratchet.get("tier5_trigger_pts", 850.0)),
+                    r5_lock=float(sx_ratchet.get("tier5_lock_pts", 600.0)),
+                    r6_trigger=float(sx_ratchet.get("tier6_trigger_pts", 1100.0)),
+                    r6_lock=float(sx_ratchet.get("tier6_lock_pts", 850.0)),
                     reentry=True,
                     notify_telegram=True,
                     enable_trend_runner=enable_trend,
@@ -1087,6 +1100,13 @@ def sensex_runner_forward_loop() -> None:
             else:
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
+                if sx_ratchet:
+                    engine.r1_trigger = float(sx_ratchet.get("tier1_trigger_pts", 240.0))
+                    engine.r1_lock = float(sx_ratchet.get("tier1_lock_pts", 80.0))
+                    engine.r2_trigger = float(sx_ratchet.get("tier2_trigger_pts", 340.0))
+                    engine.r2_lock = float(sx_ratchet.get("tier2_lock_pts", 180.0))
+                    engine.r3_trigger = float(sx_ratchet.get("tier3_trigger_pts", 480.0))
+                    engine.r3_lock = float(sx_ratchet.get("tier3_lock_pts", 280.0))
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
