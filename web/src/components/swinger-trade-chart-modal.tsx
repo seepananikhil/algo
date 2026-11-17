@@ -48,6 +48,7 @@ export interface SwingerTradeTarget {
   base_low?: number
   surge_date?: string
   alert_date?: string
+  alert_price?: number
   first_radar_date?: string
   radar_triggers?: string[]
   stockTrades?: SwingerTradeTarget[]
@@ -171,6 +172,9 @@ export function SwingerTradeChartModal({
   const [candles, setCandles] = useState<CandleData[]>([])
   const [radarTriggers, setRadarTriggers] = useState<string[]>([])
   const [firstRadarDate, setFirstRadarDate] = useState<string | null>(null)
+  const [serverTrades, setServerTrades] = useState<SwingerTradeTarget[]>([])
+  const [isOnRadar, setIsOnRadar] = useState(false)
+  const [radarInfo, setRadarInfo] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
 
@@ -190,27 +194,43 @@ export function SwingerTradeChartModal({
     setActiveTradeIndex(0)
   }, [trade?.symbol])
 
-  // Derive all trades for this stock (either passed via stockTrades or filtered from allTrades)
+  // Derive all trades for this stock (authoritative from server, or fallback to props)
   const symbolTrades: SwingerTradeTarget[] = useMemo(() => {
+    // 1. Authoritative server-loaded trades for this stock (both closed and open holdings)
+    if (serverTrades && serverTrades.length > 0) {
+      return serverTrades
+    }
+    // 2. If it is purely on cooldown radar (unbought), there are NO trades yet!
+    if (isOnRadar || trade?.status === "RADAR") {
+      return []
+    }
+    // 3. Fallback to passed props
     if (trade?.stockTrades && trade.stockTrades.length > 0) {
       return trade.stockTrades
     }
     if (allTrades && trade) {
-      const matching = allTrades.filter((t) => t.symbol === trade.symbol)
-      if (matching.length > 1) return matching
+      const matching = allTrades.filter((t) => t.symbol === trade.symbol && t.status !== "RADAR" && (t.entry_date || t.avg_price))
+      if (matching.length > 0) return matching
     }
-    return trade ? [trade] : []
-  }, [trade, allTrades])
+    if (trade && trade.entry_date && trade.status !== "RADAR") {
+      return [trade]
+    }
+    return []
+  }, [serverTrades, isOnRadar, trade, allTrades])
 
-  const currentTrade = symbolTrades[activeTradeIndex] || trade
+  const currentTrade = symbolTrades[activeTradeIndex] || symbolTrades[0] || (trade?.status !== "RADAR" ? trade : null)
 
-  // All radar/screener triggers for this symbol
+  // All radar/screener triggers for this symbol (server has already filtered out triggers during active holdings)
   const effectiveRadarTriggers = useMemo(() => {
-    const set = new Set<string>(radarTriggers)
-    if (trade?.alert_date) set.add(trade.alert_date.slice(0, 10))
-    if ((trade as any)?.surge_date) set.add((trade as any).surge_date.slice(0, 10))
-    return Array.from(set).sort()
-  }, [radarTriggers, trade])
+    const list = [...radarTriggers]
+    if (list.length === 0 && firstRadarDate) {
+      list.push(firstRadarDate)
+    }
+    if (list.length === 0 && trade?.alert_date) {
+      list.push(trade.alert_date.slice(0, 10))
+    }
+    return Array.from(new Set(list)).sort()
+  }, [radarTriggers, firstRadarDate, trade])
 
   // Keyboard navigation & ESC
   useEffect(() => {
@@ -229,7 +249,7 @@ export function SwingerTradeChartModal({
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [onClose, allTrades, onSelectTrade, trade])
 
-  // Fetch Full Candlestick History for Symbol
+  // Fetch Full Candlestick History and Trade Context for Symbol
   useEffect(() => {
     if (!trade || !trade.symbol) return
     let active = true
@@ -237,7 +257,7 @@ export function SwingerTradeChartModal({
     setError(null)
     setHovered(null)
 
-    // Request full historical candles with live fresh delta
+    // Request full historical candles with live fresh delta and trade context
     fetch(`/api/swinger/candles?symbol=${encodeURIComponent(trade.symbol)}`)
       .then((r) => r.json())
       .then((d) => {
@@ -248,6 +268,9 @@ export function SwingerTradeChartModal({
           setCandles(sorted)
           setRadarTriggers(Array.isArray(d.radar_triggers) ? d.radar_triggers : [])
           setFirstRadarDate(d.first_radar_date || null)
+          setServerTrades(Array.isArray(d.trades) ? d.trades : [])
+          setIsOnRadar(Boolean(d.is_on_radar))
+          setRadarInfo(d.radar_info || null)
         } else {
           setError(`No candlestick data available for ${trade.symbol}`)
         }
@@ -443,9 +466,9 @@ export function SwingerTradeChartModal({
 
     // 4. Clean Milestone Price Lines (Only for active/historical trades)
     // NOTE: Removed PEAK HIGH and CRASH FLOOR from price series to prevent squishing candles vertically!
-    if (showLevels) {
-      const activeTargetTrade = currentTrade || trade
-      const entryPrice = activeTargetTrade.avg_price ?? activeTargetTrade.entry_price
+    if (showLevels && symbolTrades.length > 0) {
+      const activeTargetTrade = currentTrade || symbolTrades[symbolTrades.length - 1]
+      const entryPrice = activeTargetTrade?.avg_price ?? activeTargetTrade?.entry_price
       if (entryPrice && entryPrice > 0) {
         const isLeg2 = (activeTargetTrade as any).leg === 2 || (activeTargetTrade as any).strategy_leg === "LEG2_BREAKOUT"
         const slPrice = entryPrice * (isLeg2 ? 0.92 : 0.75) // Leg 2: -8%, Leg 1: -25%
@@ -518,7 +541,7 @@ export function SwingerTradeChartModal({
     // 5. Series Markers (Radar Trigger Flags, Buy & Exit Arrows)
     const markers: SeriesMarker<Time>[] = []
 
-    // A. Add Radar / Screener Trigger Flags
+    // A. Add Radar / Screener Trigger Flags (excluding duplicate triggers during active holdings)
     effectiveRadarTriggers.forEach((rtDate, idx) => {
       const validRtTime = sanitizeDateToCandleTime(rtDate, candles)
       if (validRtTime) {
@@ -534,19 +557,19 @@ export function SwingerTradeChartModal({
       }
     })
 
-    // B. Buy & Exit Arrows for ALL trades of this stock
+    // B. Buy & Exit Arrows for ALL actual trades of this stock
     symbolTrades.forEach((st, idx) => {
       const tradeNum = symbolTrades.length - idx
       const stEntryPrice = st.avg_price ?? st.entry_price
       const validEntryTime = sanitizeDateToCandleTime(st.entry_date, candles)
-      if (validEntryTime && stEntryPrice) {
+      if (validEntryTime && stEntryPrice && stEntryPrice > 0) {
         markers.push({
           time: validEntryTime as any,
           position: "belowBar",
           color: "#10b981",
           shape: "arrowUp",
           text: symbolTrades.length > 1 ? `BUY #${tradeNum} @ ₹${stEntryPrice.toFixed(1)}` : `BUY @ ₹${stEntryPrice.toFixed(1)}`,
-          size: 1.5
+          size: 2
         })
       }
 
@@ -560,7 +583,7 @@ export function SwingerTradeChartModal({
         st.reason === "Marked to Market / Active" || 
         !st.exit_date
 
-      if (!isTradeActiveForMarker && validExitTime && st.exit_price) {
+      if (!isTradeActiveForMarker && validExitTime && st.exit_price && st.exit_price > 0) {
         const isWin = (st.pnl ?? 0) >= 0
         const ret = st.pnl_pct ?? st.pct_return ?? 0
         markers.push({
@@ -569,7 +592,7 @@ export function SwingerTradeChartModal({
           color: isWin ? "#10b981" : "#ef4444",
           shape: "arrowDown",
           text: symbolTrades.length > 1 ? `EXIT #${tradeNum} (${isWin ? "+" : ""}${ret.toFixed(1)}%)` : `EXIT (${isWin ? "+" : ""}${ret.toFixed(1)}%)`,
-          size: 1.5
+          size: 2
         })
       }
     })
@@ -805,6 +828,13 @@ export function SwingerTradeChartModal({
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1" title="Date when this stock first came on our Radar">
                     <span className="size-1.5 rounded-full bg-purple-600 animate-pulse" />
                     First on Radar: {firstRadarDate}
+                  </span>
+                )}
+
+                {(isOnRadar || trade.status === "RADAR") && !hasTradeDetails && (
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold border bg-amber-50 text-amber-700 border-amber-200 flex items-center gap-1">
+                    <span className="size-1.5 rounded-full bg-amber-500 animate-pulse" />
+                    {radarInfo?.status || "Waiting for 20 EMA Cooldown"}
                   </span>
                 )}
 
@@ -1144,6 +1174,18 @@ export function SwingerTradeChartModal({
               <span className="flex items-center gap-1.5 font-medium text-purple-700">
                 <span className="size-2 rounded-full bg-purple-600" />
                 ⚡ Radar Trigger
+              </span>
+            )}
+            {symbolTrades.length > 0 && (
+              <span className="flex items-center gap-1.5 font-medium text-emerald-700">
+                <span className="size-2 rounded-full bg-emerald-500" />
+                BUY Signal
+              </span>
+            )}
+            {symbolTrades.some((s) => s.status === "CLOSED" || s.exit_date) && (
+              <span className="flex items-center gap-1.5 font-medium text-rose-700">
+                <span className="size-2 rounded-full bg-rose-500" />
+                EXIT Signal
               </span>
             )}
           </div>

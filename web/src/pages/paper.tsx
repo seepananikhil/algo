@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { GitCommit, RefreshCw, ShieldCheck, X, Zap } from "lucide-react"
+import { GitCommit, RefreshCw, X } from "lucide-react"
 import { toast } from "sonner"
 import { DayDetail, FillsTable } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
@@ -285,115 +285,10 @@ export function _KeyLevelPaperPanel({ report }: { report: KeyLevelReport }) {
   )
 }
 
-function ActivePaperPositionCard({ symbol, state }: { symbol: string; state: any }) {
-  if (!state?.in_position || !state?.active_position) return null
-  const pos = state.active_position
-  const spot = state.spot || pos.entry_price
-  const isLong = pos.side === "LONG" || pos.side === "CALL"
-  const ptsDiff = isLong ? (spot - pos.entry_price) : (pos.entry_price - spot)
-  const isProfit = ptsDiff >= 0
-  const lotSize = symbol.toUpperCase() === "SENSEX" ? 20 : 65
-  const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
-  const estOptPnl = ptsDiff * 0.65 * (lots * lotSize)
-
-  return (
-    <Card className="border-emerald-500/40 bg-linear-to-r from-emerald-500/10 via-background to-background shadow-md">
-      <CardHeader className="pb-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
-            <span className="relative flex h-3 w-3">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
-            </span>
-            <span className="font-bold text-sm text-emerald-500 tracking-wide uppercase">
-              Live Paper Position Active
-            </span>
-            <span className="rounded bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary border border-primary/20">
-              {symbol}
-            </span>
-            <span className="rounded bg-muted px-2 py-0.5 text-xs font-mono text-muted-foreground">
-              {pos.stage || "STAGE1_TREND"}
-            </span>
-            {pos.side && (
-              <span className={`rounded px-2 py-0.5 text-xs font-bold ${isLong ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}`}>
-                {pos.side}
-              </span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Entry: <strong className="text-foreground">{pos.entry_time} IST</strong></span>
-            {pos.last_ratchet && (
-              <span className="inline-flex items-center gap-1 rounded bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 text-xs font-semibold">
-                <ShieldCheck className="size-3" /> {pos.last_ratchet} Locked
-              </span>
-            )}
-            {pos.pyramided && (
-              <span className="inline-flex items-center gap-1 rounded bg-sky-500/15 text-sky-400 border border-sky-500/30 px-2 py-0.5 text-xs font-semibold">
-                <Zap className="size-3" /> Pyramided (2x)
-              </span>
-            )}
-          </div>
-        </div>
-      </CardHeader>
-      <CardContent className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-0">
-        <div>
-          <div className="text-[11px] text-muted-foreground font-medium">Contract</div>
-          <div className="text-sm font-bold text-foreground mt-0.5">{pos.option}</div>
-          <div className="text-[10px] text-muted-foreground">{lots} Lot(s) ({lots * lotSize} qty)</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted-foreground font-medium">Entry Spot</div>
-          <div className="text-sm font-bold font-mono mt-0.5">{pos.entry_price?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
-          <div className="text-[10px] text-muted-foreground">OR High: {state.or_high}</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted-foreground font-medium">Current Spot</div>
-          <div className="text-sm font-bold font-mono mt-0.5">{spot?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
-          <div className="text-[10px] text-muted-foreground">Peak: {pos.peak_high?.toFixed(2)}</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted-foreground font-medium">Running Index Pts</div>
-          <div className={`text-base font-extrabold font-mono mt-0.5 ${isProfit ? "text-emerald-500" : "text-rose-500"}`}>
-            {isProfit ? "+" : ""}{ptsDiff.toFixed(2)} pts
-          </div>
-          <div className="text-[10px] text-muted-foreground">Max Fav: +{pos.max_fav?.toFixed(1)} pts</div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted-foreground font-medium">Trailing Stop Loss</div>
-          <div className="text-sm font-bold font-mono text-amber-500 mt-0.5">{pos.current_sl?.toLocaleString("en-IN", { minimumFractionDigits: 2 })}</div>
-          <div className="text-[10px] text-emerald-400 font-medium">
-            {pos.current_sl > pos.entry_price ? `+${(pos.current_sl - pos.entry_price).toFixed(1)} pt locked` : `-${(pos.entry_price - pos.current_sl).toFixed(1)} pt risk`}
-          </div>
-        </div>
-        <div>
-          <div className="text-[11px] text-muted-foreground font-medium">Est. Paper P&L</div>
-          <div className={`text-base font-extrabold font-mono mt-0.5 ${estOptPnl >= 0 ? "text-emerald-500" : "text-rose-500"}`}>
-            {fmtRs(estOptPnl)}
-          </div>
-          <div className="text-[10px] text-muted-foreground">
-            {pos.pyramided ? "⚡ 2 Lots Active" : "1 Base Lot"}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  )
-}
-
 export function PaperPage() {
   const [strategy, setStrategy] = useState<"trend_runner" | "sensex_runner" | "all">("trend_runner")
   const [picked, setPicked] = useState<string | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const telemetry = usePoll<any>("/api/strategy-telemetry", 2500)
-
-  const hasAutoSwitchedRef = useRef(false)
-  useEffect(() => {
-    if (!hasAutoSwitchedRef.current && telemetry.data?.state) {
-      if (telemetry.data.state.sensex?.in_position && !telemetry.data.state.nifty?.in_position) {
-        setStrategy("sensex_runner")
-        hasAutoSwitchedRef.current = true
-      }
-    }
-  }, [telemetry.data])
 
   const handleSyncToGit = async () => {
     setSyncing(true)
@@ -454,23 +349,11 @@ export function PaperPage() {
       }}
     >
       <TabsList className="bg-muted/60 p-1 rounded-lg">
-        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm flex items-center gap-1.5">
-          <span>NIFTY 50</span>
-          {telemetry.data?.state?.nifty?.in_position && (
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-          )}
+        <TabsTrigger value="trend_runner" className="font-medium text-xs sm:text-sm">
+          NIFTY 50
         </TabsTrigger>
-        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm flex items-center gap-1.5">
-          <span>SENSEX</span>
-          {telemetry.data?.state?.sensex?.in_position && (
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-            </span>
-          )}
+        <TabsTrigger value="sensex_runner" className="font-medium text-xs sm:text-sm">
+          SENSEX
         </TabsTrigger>
         <TabsTrigger value="all" className="font-medium text-xs sm:text-sm">
           Combined Portfolio
@@ -491,12 +374,6 @@ export function PaperPage() {
     return (
       <div className="flex flex-col gap-4">
         {pageHeader}
-        {telemetry.data?.state?.sensex?.in_position && (
-          <ActivePaperPositionCard symbol="SENSEX" state={telemetry.data.state.sensex} />
-        )}
-        {telemetry.data?.state?.nifty?.in_position && (
-          <ActivePaperPositionCard symbol="NIFTY" state={telemetry.data.state.nifty} />
-        )}
         {paperTabs}
         <div className="grid max-w-lg grid-cols-2 gap-3">
           <StatCard label="Starting capital" value={fmtRs(summary.starting_capital)} />
@@ -564,39 +441,13 @@ export function PaperPage() {
   return (
     <div className="flex flex-col gap-4">
       {pageHeader}
-
-      {telemetry.data?.state?.sensex?.in_position && (
-        <ActivePaperPositionCard symbol="SENSEX" state={telemetry.data.state.sensex} />
-      )}
-      {telemetry.data?.state?.nifty?.in_position && (
-        <ActivePaperPositionCard symbol="NIFTY" state={telemetry.data.state.nifty} />
-      )}
-
       {paperTabs}
 
       {!s.trades ? (
-        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground flex flex-col items-center gap-2">
-          {((strategy === "sensex_runner" && telemetry.data?.state?.sensex?.in_position) ||
-            (strategy === "trend_runner" && telemetry.data?.state?.nifty?.in_position)) ? (
-            <>
-              <div className="flex items-center gap-2 text-emerald-500 font-semibold text-base">
-                <span className="relative flex h-2.5 w-2.5">
-                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                  <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
-                </span>
-                Active Paper Trade Running in Live Market
-              </div>
-              <p className="max-w-md text-xs text-muted-foreground">
-                Position is actively managed live via Apex Duo engine (see live tracking card above). Trade details and final net P&amp;L will be permanently recorded in this historical ledger upon position exit.
-              </p>
-            </>
-          ) : (
-            <p>
-              {strategy === "sensex_runner"
-                ? "No Sensex Trend Runner paper trades recorded yet for today."
-                : "No Nifty Trend Runner paper trades recorded yet for today."}
-            </p>
-          )}
+        <Card><CardContent className="py-12 text-center text-sm text-muted-foreground">
+          {strategy === "sensex_runner"
+            ? "No Sensex Trend Runner paper trades recorded yet for today."
+            : "No Nifty Trend Runner paper trades recorded yet for today."}
         </CardContent></Card>
       ) : <>
 

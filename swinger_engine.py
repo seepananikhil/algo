@@ -573,13 +573,85 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
             pass
     return candles
 
-def get_stock_triggers(symbol: str):
-    """Returns list of radar / screener trigger dates for a symbol, sorted chronologically."""
+def get_stock_trade_context(symbol: str):
+    """
+    Returns full trading and radar lifecycle for a symbol:
+    - radar_triggers: screener alerts, FILTERED to exclude repeat triggers while actively holding
+    - first_radar_date: earliest date symbol appeared on screener
+    - trades: all actual open holdings and closed trades with entry/exit dates and prices
+    - is_on_radar: boolean if currently in cooldown watchlist and not owned
+    - radar_info: cooldown status and pullback details if on watchlist
+    """
     import csv
     symbol = symbol.strip().upper()
-    triggers = set()
+    port = load_portfolio().get("positions", [])
+    closed_trades = load_trades().get("trades", [])
+    wl = load_watchlist().get("watchlist", [])
     
-    # 1. From chartink_swingernew_triggers.csv
+    pos_matches = [p for p in port if p.get("symbol", "").upper() == symbol]
+    trade_matches = [t for t in closed_trades if t.get("symbol", "").upper() == symbol]
+    wl_matches = [w for w in wl if w.get("symbol", "").upper() == symbol]
+    
+    # 1. Collect all real trades
+    all_symbol_trades = []
+    active_intervals = []
+    
+    # Closed trades
+    for t in trade_matches:
+        e = t.get("entry_date", "")[:10]
+        x = t.get("exit_date", "")[:10] or "9999-12-31"
+        if e:
+            active_intervals.append((e, x))
+            all_symbol_trades.append({
+                "symbol": symbol,
+                "name": t.get("name", symbol),
+                "type": "CLOSED",
+                "entry_date": e,
+                "entry_price": float(t.get("entry_price") or t.get("avg_price") or 0.0),
+                "avg_price": float(t.get("avg_price") or t.get("entry_price") or 0.0),
+                "exit_date": x if x != "9999-12-31" else None,
+                "exit_price": float(t.get("exit_price") or 0.0),
+                "pnl": float(t.get("pnl") or 0.0),
+                "pnl_pct": float(t.get("pnl_pct") or t.get("pct_return") or 0.0),
+                "pct_return": float(t.get("pnl_pct") or t.get("pct_return") or 0.0),
+                "status": "CLOSED",
+                "reason": t.get("reason") or t.get("exit_reason") or "Closed",
+                "days_held": t.get("days_held", 0)
+            })
+            
+    # Open positions
+    for p in pos_matches:
+        e = p.get("entry_date", "")[:10]
+        if e:
+            active_intervals.append((e, "9999-12-31"))
+            status_str = "RUNNER" if p.get("runner_mode") else ("SHIELDED" if p.get("be_active") else "ACTIVE")
+            all_symbol_trades.append({
+                "symbol": symbol,
+                "name": p.get("name", symbol),
+                "type": "OPEN",
+                "entry_date": e,
+                "entry_price": float(p.get("entry_price") or p.get("avg_price") or 0.0),
+                "avg_price": float(p.get("avg_price") or p.get("entry_price") or 0.0),
+                "exit_date": None,
+                "exit_price": None,
+                "cmp": float(p.get("cmp") or 0.0),
+                "pnl": float(p.get("pnl") or p.get("unrealized_pnl") or 0.0),
+                "pnl_pct": float(p.get("pnl_pct") or p.get("unrealized_pnl_pct") or 0.0),
+                "pct_return": float(p.get("pnl_pct") or p.get("unrealized_pnl_pct") or 0.0),
+                "status": status_str,
+                "shares": p.get("shares") or p.get("current_qty") or 0,
+                "sl_price": p.get("sl_price"),
+                "be_price": p.get("be_trigger_price"),
+                "tp_price": p.get("tp_target_price"),
+                "peak_price": p.get("peak_price"),
+                "peak_gain_pct": p.get("peak_gain_pct")
+            })
+
+    # Sort trades chronologically
+    all_symbol_trades.sort(key=lambda x: x.get("entry_date", ""))
+
+    # 2. Raw triggers from CSV & Watchlist
+    triggers = set()
     csv_p = ROOT / "scratch" / "chartink_swingernew_triggers.csv"
     if csv_p.exists():
         try:
@@ -592,14 +664,11 @@ def get_stock_triggers(symbol: str):
         except Exception:
             pass
             
-    # 2. From watchlist.json (Radar)
-    wl = load_watchlist()
-    for item in wl.get("watchlist", []):
+    for item in wl:
         if item.get("symbol", "").strip().upper() == symbol:
             ad = item.get("alert_date", "").strip()
             if ad: triggers.add(ad[:10])
             
-    # 3. From daily_signals.json
     try:
         ds = load_daily_signals()
         for h in ds.get("history", []):
@@ -614,9 +683,35 @@ def get_stock_triggers(symbol: str):
     except Exception:
         pass
         
-    sorted_trigs = sorted(list(triggers))
-    first_radar = sorted_trigs[0] if sorted_trigs else None
-    return sorted_trigs, first_radar
+    sorted_raw_trigs = sorted(list(triggers))
+    first_radar = sorted_raw_trigs[0] if sorted_raw_trigs else None
+    
+    # 3. Filter triggers: NEVER track or show multiple triggers if we ALREADY have an active position
+    filtered_triggers = []
+    for trig in sorted_raw_trigs:
+        in_active = False
+        for (e, x) in active_intervals:
+            if e < trig <= x:
+                in_active = True
+                break
+        if not in_active:
+            filtered_triggers.append(trig)
+            
+    is_on_radar = (len(wl_matches) > 0 and len(pos_matches) == 0)
+    radar_info = wl_matches[0] if len(wl_matches) > 0 else None
+    
+    return {
+        "radar_triggers": filtered_triggers,
+        "first_radar_date": first_radar,
+        "trades": all_symbol_trades,
+        "is_on_radar": is_on_radar,
+        "radar_info": radar_info
+    }
+
+def get_stock_triggers(symbol: str):
+    """Returns list of radar / screener trigger dates for a symbol, sorted chronologically."""
+    ctx = get_stock_trade_context(symbol)
+    return ctx["radar_triggers"], ctx["first_radar_date"]
 
 def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_consol_days=250, min_vol_ratio=1.5, eligible_symbols=None):
     """
