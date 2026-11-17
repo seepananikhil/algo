@@ -4,8 +4,8 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2,
   CircleDollarSign,
+  ExternalLink,
   GitCommit,
-  LineChart,
   Percent,
   RefreshCw,
   Search,
@@ -53,8 +53,8 @@ export function PaperPage() {
   const [selectedTradeIndex, setSelectedTradeIndex] = useState<number>(0)
   const [syncing, setSyncing] = useState(false)
   const [terminalSymbol, setTerminalSymbol] = useState<"NIFTY" | "SENSEX">("NIFTY")
-  const [ledgerSearch, setLedgerSearch] = useState("")
-  const [ledgerSideFilter, setLedgerSideFilter] = useState<"ALL" | "CALL" | "PUT">("ALL")
+  const [logFilter, setLogFilter] = useState<"ALL" | "NIFTY" | "SENSEX" | "WIN" | "LOSS">("ALL")
+  const [logSearch, setLogSearch] = useState("")
   const terminalRef = useRef<HTMLDivElement>(null)
 
   const handleSyncToGit = async () => {
@@ -86,11 +86,19 @@ export function PaperPage() {
   const niftyTrades = useMemo(() => trendRunner.data?.trades || [], [trendRunner.data])
   const sensexTrades = useMemo(() => sensexRunner.data?.trades || [], [sensexRunner.data])
 
+  // Full trades over all time (Nifty + Sensex combined)
+  const allHistoricalTrades: OptionTrade[] = useMemo(() => {
+    return [...niftyTrades, ...sensexTrades].sort((a, b) => {
+      const ta = `${a.date} ${a.entry}`
+      const tb = `${b.date} ${b.entry}`
+      return tb.localeCompare(ta) // Latest first
+    })
+  }, [niftyTrades, sensexTrades])
+
   // Active trades based on selected strategy
   const activeTrades: OptionTrade[] = useMemo(() => {
     if (strategy === "trend_runner") return niftyTrades
     if (strategy === "sensex_runner") return sensexTrades
-    // Combined
     return [...niftyTrades, ...sensexTrades].sort((a, b) => {
       const ta = `${a.date} ${a.entry}`
       const tb = `${b.date} ${b.entry}`
@@ -222,61 +230,82 @@ export function PaperPage() {
   const effectiveDayStrategy = useMemo(() => {
     if (strategy === "sensex_runner") return "sensex_runner"
     if (strategy === "trend_runner") return "trend_runner"
-    // In "all" mode, use the terminalSymbol toggle or activeTrade symbol
-    if (activeTrade?.symbol === "SENSEX" || terminalSymbol === "SENSEX") return "sensex_runner"
+    // In "all" mode, if activeTrade is SENSEX, load Sensex directly!
+    const isSensex = activeTrade
+      ? (activeTrade.symbol === "SENSEX" || (activeTrade.option && activeTrade.option.includes("SENSEX")) || (activeTrade.mode && activeTrade.mode.includes("SENSEX")))
+      : terminalSymbol === "SENSEX"
+    if (isSensex) return "sensex_runner"
     return "trend_runner"
   }, [strategy, activeTrade, terminalSymbol])
 
   const selectDate = (date: string) => {
     setPicked(date)
     setSelectedTradeIndex(0)
-    // If trade on this day belongs to Sensex, auto-set terminal symbol
     const dayTrade = activeTrades.find((t) => t.date === date)
-    if (dayTrade?.symbol === "SENSEX") {
+    const isSensex = dayTrade && (dayTrade.symbol === "SENSEX" || dayTrade.option?.includes("SENSEX") || dayTrade.mode?.includes("SENSEX"))
+    if (isSensex) {
       setTerminalSymbol("SENSEX")
-    } else if (dayTrade?.symbol === "NIFTY") {
+    } else {
       setTerminalSymbol("NIFTY")
     }
     terminalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
-  // Filtered trades for historical ledger
-  const filteredLedgerTrades = useMemo(() => {
-    return activeTrades.filter((t) => {
-      const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
-      if (ledgerSideFilter === "CALL" && !isCall) return false
-      if (ledgerSideFilter === "PUT" && isCall) return false
-      if (ledgerSearch.trim()) {
-        const q = ledgerSearch.toLowerCase()
+  // Quick trade selector from the log
+  const selectTrade = (trade: OptionTrade) => {
+    setPicked(trade.date)
+    const isSensex = trade.symbol === "SENSEX" || (trade.option && trade.option.includes("SENSEX")) || (trade.mode && trade.mode.includes("SENSEX"))
+    if (isSensex) {
+      setTerminalSymbol("SENSEX")
+      if (strategy === "trend_runner") setStrategy("sensex_runner")
+    } else {
+      setTerminalSymbol("NIFTY")
+      if (strategy === "sensex_runner") setStrategy("trend_runner")
+    }
+    const dayTrades = (isSensex ? sensexTrades : niftyTrades).filter((t) => t.date === trade.date)
+    const idx = dayTrades.findIndex((t) => t.entry === trade.entry && t.option === trade.option)
+    setSelectedTradeIndex(idx >= 0 ? idx : 0)
+    terminalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+  }
+
+  // Filtered trades for historical full log
+  const filteredLogTrades = useMemo(() => {
+    return allHistoricalTrades.filter((t) => {
+      const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX")) || (t.mode && t.mode.includes("SENSEX"))
+      const isWin = (t.net_rs ?? 0) > 0
+      if (logFilter === "NIFTY" && isSensex) return false
+      if (logFilter === "SENSEX" && !isSensex) return false
+      if (logFilter === "WIN" && !isWin) return false
+      if (logFilter === "LOSS" && isWin) return false
+      if (logSearch.trim()) {
+        const q = logSearch.toLowerCase()
         const match =
           t.date.toLowerCase().includes(q) ||
           t.option.toLowerCase().includes(q) ||
-          (t.exit_reason || "").toLowerCase().includes(q)
+          (t.exit_reason || "").toLowerCase().includes(q) ||
+          (t.mode || "").toLowerCase().includes(q)
         if (!match) return false
       }
       return true
     })
-  }, [activeTrades, ledgerSearch, ledgerSideFilter])
+  }, [allHistoricalTrades, logSearch, logFilter])
 
   // Annualized XIRR / ROC estimation
   const xirrEstimate = useMemo(() => {
     if (!summary || (summary.starting_capital ?? 25000) <= 0 || summary.net_rs === 0) return 0
-    // Total return % on deployed capital
     const roc = summary.return_pct
-    // Days elapsed between earliest and latest trade
     if (activeTrades.length < 2) return roc
     const d0 = new Date(activeTrades[0].date).getTime()
     const d1 = new Date(activeTrades[activeTrades.length - 1].date).getTime()
     const days = Math.max(1, Math.round((d1 - d0) / (1000 * 60 * 60 * 24)))
-    // Annualized return (using standard 252 trading days)
     const annualized = Math.round(roc * (252 / Math.max(days, 2)))
     return Math.min(999, Math.max(-100, annualized))
   }, [summary, activeTrades])
 
   return (
-    <div className="flex flex-col gap-5 max-w-[1720px] mx-auto w-full pb-16">
+    <div className="flex flex-col gap-4 max-w-[1720px] mx-auto w-full pb-16">
       {/* 1. TOP EXECUTIVE BAR */}
-      <div className="flex flex-col gap-3 pb-3 border-b border-border/40">
+      <div className="flex flex-col gap-2.5 pb-2 border-b border-border/40">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2.5">
@@ -289,7 +318,7 @@ export function PaperPage() {
               </span>
             </div>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Automated option trend system · Clean price action candlesticks with entry/exit markers &amp; real option executions.
+              Automated option execution engine · Clean price action candlesticks with entry/exit markers &amp; real option executions.
             </p>
           </div>
 
@@ -309,13 +338,16 @@ export function PaperPage() {
         </div>
 
         {/* Strategy Switcher Tabs */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
           <Tabs
             value={strategy}
             onValueChange={(val) => {
               setPicked(null)
               setSelectedTradeIndex(0)
-              setStrategy(val as "trend_runner" | "sensex_runner" | "all")
+              const next = val as "trend_runner" | "sensex_runner" | "all"
+              setStrategy(next)
+              if (next === "sensex_runner") setTerminalSymbol("SENSEX")
+              if (next === "trend_runner") setTerminalSymbol("NIFTY")
             }}
           >
             <TabsList className="bg-muted/60 p-1 rounded-lg">
@@ -342,7 +374,7 @@ export function PaperPage() {
 
       {/* Loading / Error States */}
       {reportLoading && !summary && (
-        <Skeleton className="h-[680px] w-full rounded-2xl" />
+        <Skeleton className="h-[520px] w-full rounded-2xl" />
       )}
       {reportError && (
         <Card className="border-red-500/40 bg-red-500/10">
@@ -356,7 +388,7 @@ export function PaperPage() {
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Card 1: Net P&L */}
-          <Card className="p-3.5 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
+          <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
@@ -374,7 +406,7 @@ export function PaperPage() {
           </Card>
 
           {/* Card 2: Return % on Capital & Annualized XIRR */}
-          <Card className="p-3.5 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
+          <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
@@ -393,7 +425,7 @@ export function PaperPage() {
           </Card>
 
           {/* Card 3: Capital: Starting -> Ending */}
-          <Card className="p-3.5 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
+          <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
@@ -412,7 +444,7 @@ export function PaperPage() {
           </Card>
 
           {/* Card 4: Win Rate & Trades */}
-          <Card className="p-3.5 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
+          <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
@@ -431,7 +463,7 @@ export function PaperPage() {
           </Card>
 
           {/* Card 5: Payoff Ratio */}
-          <Card className="p-3.5 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
+          <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
@@ -450,7 +482,7 @@ export function PaperPage() {
           </Card>
 
           {/* Card 6: Max Drawdown */}
-          <Card className="p-3.5 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
+          <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
@@ -475,7 +507,7 @@ export function PaperPage() {
       {/* 3. PAYOFF CURVE & DAILY RETURN DISTRIBUTION */}
       {equityCurve.length > 0 && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
-          {/* Equity / Payoff Curve */}
+          {/* Cumulative Payoff Curve */}
           <Card className="lg:col-span-8 border-border/70 shadow-2xs flex flex-col">
             <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
               <div>
@@ -483,18 +515,18 @@ export function PaperPage() {
                   Cumulative Payoff Curve
                 </CardTitle>
                 <CardDescription className="text-[11px]">
-                  Cumulative realized portfolio equity growth with drawdown shading
+                  Realized portfolio equity growth with drawdown shading
                 </CardDescription>
               </div>
               <div className="flex items-center gap-2 font-mono text-xs">
-                <span className="text-muted-foreground">Ending Equity:</span>
+                <span className="text-muted-foreground">Realized Net:</span>
                 <span className={cn("font-bold text-sm", pnlClass(summary?.net_rs))}>
                   {summary?.net_rs && summary.net_rs >= 0 ? "+" : ""}{fmtRs(summary?.net_rs ?? 0)}
                 </span>
               </div>
             </CardHeader>
             <CardContent className="p-3 flex-1">
-              <div className="h-56 w-full">
+              <div className="h-52 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
@@ -533,7 +565,7 @@ export function PaperPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="p-3 flex-1 flex flex-col justify-center">
-              <div className="h-56 w-full">
+              <div className="h-52 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={calendarDaily} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -556,17 +588,17 @@ export function PaperPage() {
         </div>
       )}
 
-      {/* 4. INTERACTIVE P&L CALENDAR (PROMINENT FULL MONTH VIEW) */}
+      {/* 4. INTERACTIVE P&L CALENDAR (FULL MONTH VIEW) */}
       <Card className="border-border/80 shadow-xs">
-        <CardHeader className="py-3 px-4 border-b border-border/40 flex flex-row items-center justify-between">
+        <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarIcon className="size-4 text-primary" />
             <div>
-              <CardTitle className="text-sm font-bold font-mono uppercase">
+              <CardTitle className="text-xs font-bold font-mono uppercase">
                 Trading Sessions Calendar
               </CardTitle>
-              <CardDescription className="text-xs">
-                Click any trading day on the calendar below to open its clean chart on left and trades on right
+              <CardDescription className="text-[11px]">
+                Click any trading day to load its candlestick chart and trades in the terminal
               </CardDescription>
             </div>
           </div>
@@ -577,7 +609,7 @@ export function PaperPage() {
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="p-4">
+        <CardContent className="p-3 sm:p-4">
           <PnlCalendar
             daily={calendarDaily}
             format={fmtRs}
@@ -587,10 +619,10 @@ export function PaperPage() {
         </CardContent>
       </Card>
 
-      {/* 5. SESSION TERMINAL: ON DAY CLICK -> SIMPLER CHART (ENTRY/EXIT ONLY) + P&L & TRADES */}
+      {/* 5. SESSION TERMINAL: ON DAY CLICK -> DIRECT CHART (ENTRY/EXIT ONLY) + P&L & TRADES */}
       <div ref={terminalRef} className="scroll-mt-4">
         <Card className="border-border/80 shadow-md overflow-hidden bg-card/95 backdrop-blur-xs">
-          <CardHeader className="py-3 px-4 border-b border-border/40 bg-muted/20">
+          <CardHeader className="py-2.5 px-4 border-b border-border/40 bg-muted/20">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="font-black text-sm sm:text-base font-mono tracking-tight text-foreground">
@@ -606,7 +638,7 @@ export function PaperPage() {
                       onClick={() => setTerminalSymbol("NIFTY")}
                       className={cn(
                         "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
-                        terminalSymbol === "NIFTY" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+                        effectiveDayStrategy === "trend_runner" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       NIFTY
@@ -616,7 +648,7 @@ export function PaperPage() {
                       onClick={() => setTerminalSymbol("SENSEX")}
                       className={cn(
                         "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
-                        terminalSymbol === "SENSEX" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+                        effectiveDayStrategy === "sensex_runner" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
                       )}
                     >
                       SENSEX
@@ -652,18 +684,9 @@ export function PaperPage() {
           </CardHeader>
 
           <CardContent className="p-3 sm:p-4">
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-4 items-start">
-              {/* LEFT PANE (xl: 8 cols = 67%): CLEAN SIMPLIFIED CHART (NO CLUTTER, JUST ENTRY/EXIT) */}
+            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3.5 items-start">
+              {/* LEFT PANE (xl: 8 cols = 67%): CLEAN SENSEX/NIFTY CHART DIRECTLY */}
               <div className="xl:col-span-8 flex flex-col min-w-0">
-                <div className="mb-2 flex items-center justify-between px-1">
-                  <span className="text-xs font-bold font-mono uppercase text-muted-foreground flex items-center gap-1.5">
-                    <LineChart className="size-3.5 text-primary" />
-                    Clean Price Action (Buy Entry &amp; Exit Markers Only)
-                  </span>
-                  <span className="text-[11px] text-muted-foreground font-mono">
-                    Timeframe: 1m / 5m selectable · Zoom &amp; Pan enabled
-                  </span>
-                </div>
                 <DayDetail
                   key={`${activeDate}-${effectiveDayStrategy}`}
                   date={activeDate}
@@ -676,15 +699,15 @@ export function PaperPage() {
                 />
               </div>
 
-              {/* RIGHT PANE (xl: 4 cols = 33%): P&L BREAKDOWN & EXECUTED OPTION TRADES */}
-              <div className="xl:col-span-4 flex flex-col gap-3 min-w-0">
+              {/* RIGHT PANE (xl: 4 cols = 33%): P&L & OPTION TRADES INSPECTOR */}
+              <div className="xl:col-span-4 flex flex-col gap-2.5 min-w-0">
                 {/* 1. SESSION P&L CARD */}
-                <div className="p-3.5 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2.5">
-                  <div className="flex items-center justify-between pb-2 border-b border-border/40">
+                <div className="p-3 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2">
+                  <div className="flex items-center justify-between pb-1.5 border-b border-border/40">
                     <span className="text-xs font-bold font-mono uppercase text-muted-foreground">
                       Session P&amp;L Summary
                     </span>
-                    <Badge variant="outline" className="font-mono text-[11px]">
+                    <Badge variant="outline" className="font-mono text-[10px]">
                       {activeDate}
                     </Badge>
                   </div>
@@ -725,28 +748,28 @@ export function PaperPage() {
 
                 {/* 2. ACTIVE TRADE EXECUTION INSPECTOR */}
                 {activeTrade ? (
-                  <div className="p-3.5 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-3">
+                  <div className="p-3 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2.5">
                     <div className="flex items-start justify-between gap-2 pb-2 border-b border-border/40">
-                      <div className="flex flex-col gap-1 min-w-0">
+                      <div className="flex flex-col gap-0.5 min-w-0">
                         <div className="flex items-center gap-1.5 flex-wrap">
                           <Badge className={cn("text-[10px] font-black px-2 py-0.5", (activeTrade.side === "CALL" || activeTrade.side === "LONG" || activeTrade.side === "CE") ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
                             {activeTrade.side}
                           </Badge>
-                          <span className="font-extrabold text-sm text-foreground font-mono truncate">
+                          <span className="font-extrabold text-xs sm:text-sm text-foreground font-mono truncate">
                             {activeTrade.option}
                           </span>
                         </div>
-                        <span className="text-[11px] font-mono text-muted-foreground">
+                        <span className="text-[10px] font-mono text-muted-foreground">
                           {activeTrade.qty} qty · {activeTrade.entry} → {activeTrade.exit || "Active"}
                         </span>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <span className={cn("text-lg font-black font-mono tracking-tight block", pnlClass(activeTrade.net_rs ?? 0))}>
+                        <span className={cn("text-base sm:text-lg font-black font-mono tracking-tight block", pnlClass(activeTrade.net_rs ?? 0))}>
                           {(activeTrade.net_rs ?? 0) >= 0 ? "+" : ""}{fmtRs(activeTrade.net_rs ?? 0)}
                         </span>
                         {activeTrade.buy_price > 0 && activeTrade.sell_price > 0 && (
-                          <span className={cn("text-[11px] font-mono font-bold block", activeTrade.sell_price >= activeTrade.buy_price ? "text-emerald-400" : "text-red-400")}>
+                          <span className={cn("text-[10px] font-mono font-bold block", activeTrade.sell_price >= activeTrade.buy_price ? "text-emerald-400" : "text-red-400")}>
                             {activeTrade.sell_price >= activeTrade.buy_price ? "+" : ""}
                             {(((activeTrade.sell_price - activeTrade.buy_price) / activeTrade.buy_price) * 100).toFixed(1)}% ROC
                           </span>
@@ -757,15 +780,15 @@ export function PaperPage() {
                     {/* Metric Tiles 2x2 Grid */}
                     <div className="grid grid-cols-2 gap-2 text-xs">
                       {/* Option Premium */}
-                      <div className="p-2.5 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
+                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
                         <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                           Option Premium
                         </span>
-                        <div className="font-mono font-bold text-foreground mt-0.5 text-xs sm:text-sm">
+                        <div className="font-mono font-bold text-foreground mt-0.5 text-xs">
                           ₹{activeTrade.buy_price.toFixed(1)} → {activeTrade.sell_price > 0 ? `₹${activeTrade.sell_price.toFixed(1)}` : "Open"}
                         </div>
                         {activeTrade.sell_price > 0 && (
-                          <span className={cn("text-[11px] font-mono font-bold mt-0.5", activeTrade.sell_price >= activeTrade.buy_price ? "text-emerald-400" : "text-red-400")}>
+                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", activeTrade.sell_price >= activeTrade.buy_price ? "text-emerald-400" : "text-red-400")}>
                             {activeTrade.sell_price >= activeTrade.buy_price ? "+" : ""}
                             {(activeTrade.sell_price - activeTrade.buy_price).toFixed(1)} opt pts
                           </span>
@@ -773,26 +796,26 @@ export function PaperPage() {
                       </div>
 
                       {/* Spot Index */}
-                      <div className="p-2.5 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
+                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
                         <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                           Spot Index
                         </span>
-                        <div className="font-mono font-bold text-foreground mt-0.5 text-xs sm:text-sm">
+                        <div className="font-mono font-bold text-foreground mt-0.5 text-xs">
                           {activeTrade.nifty_in?.toFixed(1) || "—"} → {activeTrade.nifty_out?.toFixed(1) || "—"}
                         </div>
                         {activeTrade.nifty_points != null && (
-                          <span className={cn("text-[11px] font-mono font-bold mt-0.5", activeTrade.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
+                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", activeTrade.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
                             {activeTrade.nifty_points >= 0 ? "+" : ""}{activeTrade.nifty_points.toFixed(1)} spot pts
                           </span>
                         )}
                       </div>
 
                       {/* Trailing Lock & SL */}
-                      <div className="p-2.5 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
+                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
                         <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                           Profit Lock &amp; SL
                         </span>
-                        <div className="font-mono font-bold text-sky-400 mt-0.5 text-xs sm:text-sm">
+                        <div className="font-mono font-bold text-sky-400 mt-0.5 text-xs">
                           {activeTrade.exit_reason === "RATCHET_LOCK" ? "+80.0 pts Lock" : "Trailing Active"}
                         </div>
                         <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
@@ -801,7 +824,7 @@ export function PaperPage() {
                       </div>
 
                       {/* Exit Reason & Fees */}
-                      <div className="p-2.5 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
+                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
                         <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
                           Exit Trigger
                         </span>
@@ -815,7 +838,7 @@ export function PaperPage() {
                     </div>
 
                     {/* Capital & Duration */}
-                    <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground pt-1 px-1 border-t border-border/40">
+                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground pt-1 px-0.5 border-t border-border/40">
                       <span>
                         Capital: ₹{activeTrade.buy_value_rs ? fmtNum(activeTrade.buy_value_rs) : "—"} → ₹{activeTrade.sell_value_rs ? fmtNum(activeTrade.sell_value_rs) : "—"}
                       </span>
@@ -825,25 +848,25 @@ export function PaperPage() {
                     </div>
                   </div>
                 ) : (
-                  <div className="p-6 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl border border-border/50">
+                  <div className="p-5 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl border border-border/50">
                     No trade recorded for this session.
                   </div>
                 )}
 
-                {/* 3. SESSION TRADES SWITCHER LIST (IF MULTIPLE OR RECENT) */}
-                <div className="rounded-xl border border-border/80 bg-card shadow-2xs overflow-hidden flex flex-col">
-                  <div className="flex items-center justify-between px-3 py-2 bg-muted/20 border-b border-border/40">
-                    <span className="text-xs font-bold font-mono tracking-tight text-foreground uppercase">
-                      Session Trades ({activeDayTrades.length})
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground">
-                      Click to inspect
-                    </span>
-                  </div>
+                {/* 3. SESSION TRADES SWITCHER */}
+                {activeDayTrades.length > 1 && (
+                  <div className="rounded-xl border border-border/80 bg-card shadow-2xs overflow-hidden flex flex-col">
+                    <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20 border-b border-border/40">
+                      <span className="text-[11px] font-bold font-mono tracking-tight text-foreground uppercase">
+                        Day Trades ({activeDayTrades.length})
+                      </span>
+                      <span className="text-[10px] font-mono text-muted-foreground">
+                        Click to inspect
+                      </span>
+                    </div>
 
-                  <div className="p-2 flex flex-col gap-1.5 max-h-[220px] overflow-y-auto">
-                    {activeDayTrades.length ? (
-                      activeDayTrades.map((t, idx) => {
+                    <div className="p-1.5 flex flex-col gap-1 max-h-[140px] overflow-y-auto">
+                      {activeDayTrades.map((t, idx) => {
                         const isCurrent = activeTrade === t
                         const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : 0
                         const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
@@ -881,75 +904,94 @@ export function PaperPage() {
                             </div>
                           </div>
                         )
-                      })
-                    ) : (
-                      <p className="py-4 text-center text-xs text-muted-foreground">No trades on this day.</p>
-                    )}
+                      })}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* 6. HISTORICAL TRADE LEDGER */}
+      {/* 6. DEDICATED ALL TRADES OVER TIME (FULL TRADE LISTS FOR LOG) */}
       <Card className="border-border/80 shadow-xs">
         <CardHeader className="py-3 px-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="size-4 text-primary" />
             <div>
               <CardTitle className="text-sm font-bold font-mono uppercase">
-                Historical Paper Ledger ({activeTrades.length} Trades)
+                All Trades Log · Full History ({allHistoricalTrades.length} Trades)
               </CardTitle>
               <CardDescription className="text-xs">
-                Complete audit trail of all executed paper positions
+                Comprehensive audit log across all forward paper trading sessions. Click any trade to load its direct chart above.
               </CardDescription>
             </div>
           </div>
 
-          {/* Filters */}
-          <div className="flex items-center gap-2">
-            <div className="relative w-48 sm:w-64">
+          {/* Quick Filter Buttons & Search */}
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <div className="relative w-full sm:w-56">
               <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
-                placeholder="Search strike, date, exit..."
-                value={ledgerSearch}
-                onChange={(e) => setLedgerSearch(e.target.value)}
+                placeholder="Search contract, date, exit..."
+                value={logSearch}
+                onChange={(e) => setLogSearch(e.target.value)}
                 className="h-8 pl-8 text-xs bg-muted/30"
               />
             </div>
+
             <div className="inline-flex rounded-lg border border-border/60 bg-muted/30 p-0.5 text-xs">
               <button
                 type="button"
-                onClick={() => setLedgerSideFilter("ALL")}
+                onClick={() => setLogFilter("ALL")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  ledgerSideFilter === "ALL" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  logFilter === "ALL" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                All
+                All ({allHistoricalTrades.length})
               </button>
               <button
                 type="button"
-                onClick={() => setLedgerSideFilter("CALL")}
+                onClick={() => setLogFilter("NIFTY")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  ledgerSideFilter === "CALL" ? "bg-emerald-500/20 text-emerald-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  logFilter === "NIFTY" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Calls
+                Nifty ({niftyTrades.length})
               </button>
               <button
                 type="button"
-                onClick={() => setLedgerSideFilter("PUT")}
+                onClick={() => setLogFilter("SENSEX")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  ledgerSideFilter === "PUT" ? "bg-rose-500/20 text-rose-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  logFilter === "SENSEX" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Puts
+                Sensex ({sensexTrades.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilter("WIN")}
+                className={cn(
+                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
+                  logFilter === "WIN" ? "bg-emerald-500/20 text-emerald-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Winners ({allHistoricalTrades.filter((t) => (t.net_rs ?? 0) > 0).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setLogFilter("LOSS")}
+                className={cn(
+                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
+                  logFilter === "LOSS" ? "bg-rose-500/20 text-rose-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+              >
+                Losses ({allHistoricalTrades.filter((t) => (t.net_rs ?? 0) <= 0).length})
               </button>
             </div>
           </div>
@@ -957,44 +999,51 @@ export function PaperPage() {
 
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            {filteredLedgerTrades.length ? (
+            {filteredLogTrades.length ? (
               <Table>
                 <TableHeader className="bg-muted/20">
                   <TableRow>
-                    <TableHead>Date &amp; Action</TableHead>
+                    <TableHead>Date &amp; Time</TableHead>
+                    <TableHead>Instrument</TableHead>
                     <TableHead>Option Contract</TableHead>
                     <TableHead>Option Premium</TableHead>
                     <TableHead>Spot Move</TableHead>
-                    <TableHead>Timing &amp; Mode</TableHead>
                     <TableHead>Exit Reason</TableHead>
+                    <TableHead>Capital Deployed</TableHead>
+                    <TableHead>Fees</TableHead>
                     <TableHead className="text-right">Net P&amp;L</TableHead>
+                    <TableHead className="text-center">Action</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLedgerTrades.map((trade, index) => {
+                  {filteredLogTrades.map((trade, index) => {
                     const optPts = trade.sell_price > 0 ? trade.sell_price - trade.buy_price : 0
                     const optPct = trade.buy_price > 0 && trade.sell_price > 0 ? ((trade.sell_price - trade.buy_price) / trade.buy_price) * 100 : 0
-                    const isSelected = activeDate === trade.date
+                    const isCall = trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE"
+                    const isSensex = trade.symbol === "SENSEX" || (trade.option && trade.option.includes("SENSEX")) || (trade.mode && trade.mode.includes("SENSEX"))
+                    const isSelected = activeDate === trade.date && activeTrade?.option === trade.option
+
                     return (
                       <TableRow
                         key={`${trade.date}-${trade.entry}-${index}`}
                         className={cn(
                           "cursor-pointer transition-colors",
-                          isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                          isSelected ? "bg-primary/10 border-l-4 border-l-primary" : "hover:bg-muted/30"
                         )}
-                        onClick={() => selectDate(trade.date)}
+                        onClick={() => selectTrade(trade)}
                       >
                         <TableCell className="font-medium tabular-nums">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-bold text-foreground font-mono">{trade.date}</span>
-                            <span className="text-[10px] font-semibold text-primary underline underline-offset-2 flex items-center">
-                              Inspect ↗
-                            </span>
-                          </div>
+                          <div className="font-bold text-foreground font-mono">{trade.date}</div>
+                          <div className="text-[10px] text-muted-foreground font-mono">{trade.entry} → {trade.exit || "Open"}</div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={cn("text-[10px] font-bold font-mono", isSensex ? "border-amber-500/40 text-amber-400 bg-amber-500/10" : "border-sky-500/40 text-sky-400 bg-sky-500/10")}>
+                            {isSensex ? "SENSEX" : "NIFTY"}
+                          </Badge>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-bold text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>
+                            <span className={cn("inline-flex h-4 items-center rounded-full px-1.5 text-[9px] font-bold text-white", isCall ? "bg-emerald-600" : "bg-red-600")}>
                               {trade.side}
                             </span>
                             <span className="font-semibold text-xs text-foreground font-mono">{trade.option}</span>
@@ -1017,18 +1066,36 @@ export function PaperPage() {
                             </span>
                           )}
                         </TableCell>
-                        <TableCell className="tabular-nums text-xs font-mono text-muted-foreground">
-                          <div>{trade.entry} → {trade.exit || "—"}</div>
-                          <div className="text-[10px] text-muted-foreground">{trade.mode || "PAPER"}</div>
-                        </TableCell>
                         <TableCell className="text-xs text-muted-foreground font-mono">
                           <span className="px-1.5 py-0.5 rounded bg-muted/60 text-[11px] font-semibold text-foreground">
                             {trade.exit_reason === "RATCHET_LOCK" ? "Ratchet Lock (+80pt)" : (trade.exit_reason || "Open")}
                           </span>
                         </TableCell>
-                        <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs))}>
-                          <div className="font-bold font-mono text-sm">{fmtRs(trade.net_rs)}</div>
-                          <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs)} · fees {fmtRs(trade.charges_rs)}</div>
+                        <TableCell className="tabular-nums text-xs font-mono text-muted-foreground">
+                          <div>₹{trade.buy_value_rs ? fmtNum(trade.buy_value_rs) : "—"}</div>
+                          <div className="text-[10px] text-muted-foreground">→ ₹{trade.sell_value_rs ? fmtNum(trade.sell_value_rs) : "—"}</div>
+                        </TableCell>
+                        <TableCell className="tabular-nums text-xs font-mono text-muted-foreground">
+                          {fmtRs(trade.charges_rs || 0)}
+                        </TableCell>
+                        <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs ?? 0))}>
+                          <div className="font-bold font-mono text-sm">
+                            {(trade.net_rs ?? 0) >= 0 ? "+" : ""}{fmtRs(trade.net_rs ?? 0)}
+                          </div>
+                          <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs ?? 0)}</div>
+                        </TableCell>
+                        <TableCell className="text-center">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              selectTrade(trade)
+                            }}
+                            className="h-7 text-[11px] font-bold text-primary hover:text-primary gap-1"
+                          >
+                            Chart <ExternalLink className="size-3" />
+                          </Button>
                         </TableCell>
                       </TableRow>
                     )

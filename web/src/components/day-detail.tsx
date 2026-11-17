@@ -45,7 +45,7 @@ export function DayDetail({
   const primarySymbol = isSensexStrategy ? "SENSEX" : "NIFTY"
   const secondarySymbol = isSensexStrategy ? "NIFTY" : "SENSEX"
   const day = usePoll<DayData>(date && `/api/day?date=${date}&symbol=${primarySymbol}${strategy ? `&strategy=${strategy}` : ""}${allowTimeframeSwitch ? "&full=1" : ""}`)
-  const secondaryDay = usePoll<DayData>(date && `/api/day?date=${date}&symbol=${secondarySymbol}${allowTimeframeSwitch ? "&full=1" : ""}`)
+  const secondaryDay = usePoll<DayData>(date && !simpleChart && (chartLayout === "both" || chartLayout === "secondary") ? `/api/day?date=${date}&symbol=${secondarySymbol}${allowTimeframeSwitch ? "&full=1" : ""}` : null)
   const currentIstDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Kolkata" }).format(new Date())
   const keyLevelDay = usePoll<KeyLevelDay>(date && useFiveMinute && !isSensexStrategy ? `/api/key-level-day?date=${date}` : null, useFiveMinute && date === currentIstDate ? 1000 : 0)
   const signals = day.data?.signals ?? []
@@ -135,8 +135,10 @@ export function DayDetail({
 
   // Render Charts grid block (reusable in compact and regular view)
   const renderCharts = (_isCompactView?: boolean) => {
-    const isDual = chartLayout === "both" && hasSecondary
-    const chartHeightClass = isDual
+    const isDual = !simpleChart && chartLayout === "both" && hasSecondary
+    const chartHeightClass = simpleChart
+      ? "h-[500px] min-h-[460px] max-h-[540px]"
+      : isDual
       ? chartHeightMode === "normal"
         ? "h-[clamp(480px,56vh,620px)] min-h-[480px]"
         : chartHeightMode === "xl"
@@ -151,7 +153,7 @@ export function DayDetail({
     return (
     <div className={cn(
       "w-full",
-      (chartLayout === "both" && hasSecondary) ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "flex flex-col gap-3"
+      isDual ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "flex flex-col gap-3"
     )}>
       {/* PRIMARY CHART CARD (SENSEX for Sensex strategy, NIFTY 50 otherwise) */}
       {(chartLayout === "both" || chartLayout === "primary" || !hasSecondary) && (
@@ -192,6 +194,14 @@ export function DayDetail({
               )}
             </div>
             <div className="flex items-center gap-2">
+              {allowTimeframeSwitch && (
+                <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as "1m" | "5m")}>
+                  <TabsList className="h-6 p-0.5 bg-muted/60">
+                    <TabsTrigger value="1m" className="text-[10px] h-5 px-2">1m</TabsTrigger>
+                    <TabsTrigger value="5m" className="text-[10px] h-5 px-2">5m</TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              )}
               {(fills.length > 0 || trades.length > 0) && (
                 <span className={cn(
                   "text-[11px] font-mono font-bold px-2 py-0.5 rounded border shadow-2xs whitespace-nowrap",
@@ -200,7 +210,7 @@ export function DayDetail({
                   P&amp;L {pnlText}
                 </span>
               )}
-              {!useFiveMinute && (!isStrategyFiltered || strategy === "midpoint") && s?.mid != null && (
+              {!simpleChart && !useFiveMinute && (!isStrategyFiltered || strategy === "midpoint") && s?.mid != null && (
                 <span className="text-[10px] font-mono text-amber-500 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/25">
                   MID {fmtNum(s.mid)}
                 </span>
@@ -213,7 +223,7 @@ export function DayDetail({
               >
                 <RotateCcw className="h-3.5 w-3.5" />
               </button>
-              {hasSecondary && (
+              {!simpleChart && hasSecondary && (
                 <button
                   type="button"
                   onClick={() => setChartLayout(chartLayout === "primary" ? "both" : "primary")}
@@ -350,6 +360,14 @@ export function DayDetail({
         </div>
       )}
     </div>
+    )
+  }
+
+  if (simpleChart) {
+    return (
+      <div className="w-full flex flex-col">
+        {renderCharts(true)}
+      </div>
     )
   }
 
