@@ -4,7 +4,8 @@ import { toast } from "sonner"
 import { DayDetail, FillsTable } from "@/components/day-detail"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Button } from "@/components/ui/button"
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -58,156 +59,224 @@ export function _CapitalCurve({ report }: { report: CapitalReport }) {
   )
 }
 
-function CapitalDayPanel({ date, trades, onClose, strategy = "all" }: {
+function CapitalDayPanel({ date, trades, onClose, strategy = "all", isDefaultSession = false }: {
   date: string
   trades: PaperReport["trades"]
   onClose: () => void
   strategy?: string
+  isDefaultSession?: boolean
 }) {
   const ref = useRef<HTMLDivElement>(null)
-  useEffect(() => { ref.current?.scrollIntoView({ behavior: "smooth", block: "start" }) }, [date])
+  useEffect(() => {
+    if (!isDefaultSession) {
+      ref.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+    }
+  }, [date, isDefaultSession])
   const total = trades.reduce((sum, trade) => sum + trade.net_rs, 0)
 
   return (
     <div ref={ref} className="scroll-mt-20">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {strategy === "trend_runner"
-              ? "Nifty Trend Runner paper trades"
-              : strategy === "sensex_runner"
-              ? "Sensex Trend Runner paper trades"
-              : strategy === "sensex_key_levels"
-              ? "Sensex Key Levels S&R paper trades"
-              : strategy === "nifty_key_levels"
-              ? "Nifty Key Levels S&R paper trades"
-              : strategy === "compression_scalp"
-              ? "Micro Scalper paper trades"
-              : "Combined paper trades"}
-          </CardTitle>
-          <CardDescription>Funded entries · net after estimated charges</CardDescription>
-          <CardAction className="flex items-center gap-1">
-            <span className="min-w-28 text-center text-sm font-medium tabular-nums">{date}</span>
-            <Button variant="ghost" size="icon-sm" aria-label="Close selected day" onClick={onClose}><X /></Button>
-          </CardAction>
+      <Card className="border-border/80 shadow-xs">
+        <CardHeader className="pb-3 border-b border-border/40">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <CardTitle className="text-base sm:text-lg">
+                  {strategy === "trend_runner"
+                    ? "NIFTY 50 Intraday Chart & Option Values"
+                    : strategy === "sensex_runner"
+                    ? "BSE SENSEX Intraday Chart & Option Values"
+                    : strategy === "nifty_key_levels"
+                    ? "Nifty Key Levels S&R Trades & Chart"
+                    : "Intraday Chart & Option Values"}
+                </CardTitle>
+                <Badge variant="outline" className="font-mono text-xs font-bold border-primary/40 bg-primary/10 text-primary">
+                  {date} {isDefaultSession ? "(Latest Session)" : "(Selected Date)"}
+                </Badge>
+              </div>
+              <CardDescription className="text-xs mt-0.5">
+                Real-time option strike executions, underlying index trajectory, and net rupee returns.
+              </CardDescription>
+            </div>
+            <div className="flex items-center gap-3">
+              <div className="text-right">
+                <span className="text-[10px] text-muted-foreground block font-medium">Session Net</span>
+                <span className={cn("text-base sm:text-lg font-bold tabular-nums font-mono", pnlClass(total))}>
+                  {total >= 0 ? "+" : ""}{fmtRs(total)}
+                </span>
+              </div>
+              {!isDefaultSession && (
+                <Button variant="ghost" size="icon-sm" aria-label="Close selected day" onClick={onClose}><X className="size-4" /></Button>
+              )}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
-          <p className={cn("border-b pb-3 text-lg font-semibold tabular-nums", pnlClass(total))}>Day net: {fmtRs(total)}</p>
+        <CardContent className="flex flex-col gap-4 pt-4">
+          {/* OPTION TRADE VALUE CARDS STRIP */}
+          {trades.length > 0 ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {trades.map((t, idx) => {
+                const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : 0
+                const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
+                return (
+                  <div key={idx} className="p-3.5 rounded-xl border border-border/70 bg-card/80 shadow-2xs space-y-2.5">
+                    {/* Header: Option Contract & Net P&L */}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 flex-wrap min-w-0">
+                        <Badge className={cn("text-[10px] font-bold px-2 py-0.5", isCall ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
+                          {t.side}
+                        </Badge>
+                        <span className="font-bold text-sm text-foreground tracking-tight truncate">{t.option}</span>
+                        <span className="text-[11px] font-mono text-muted-foreground">({t.qty} qty)</span>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className={cn("text-base font-extrabold font-mono", pnlClass(t.net_rs))}>
+                          {t.net_rs >= 0 ? "+" : ""}{fmtRs(t.net_rs)}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Metrics Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-border/40 text-xs">
+                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
+                        <span className="text-[10px] text-muted-foreground font-semibold">Option Premium</span>
+                        <span className="font-mono font-bold text-foreground mt-0.5">
+                          {fmtRs(t.buy_price)} → {t.sell_price > 0 ? fmtRs(t.sell_price) : "Open"}
+                        </span>
+                        {t.sell_price > 0 && (
+                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
+                            {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
+                        <span className="text-[10px] text-muted-foreground font-semibold">Spot Underlying</span>
+                        <span className="font-mono font-bold text-foreground mt-0.5">
+                          {t.nifty_in?.toFixed(1) || "—"} → {t.nifty_out?.toFixed(1) || "—"}
+                        </span>
+                        {t.nifty_points != null && (
+                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", t.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
+                            {t.nifty_points >= 0 ? "+" : ""}{t.nifty_points.toFixed(1)} spot pts
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
+                        <span className="text-[10px] text-muted-foreground font-semibold">Execution Time</span>
+                        <span className="font-mono font-bold text-foreground mt-0.5">
+                          {t.entry} → {t.exit || "Active"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground mt-0.5">
+                          {t.mode || "Paper Trade"}
+                        </span>
+                      </div>
+
+                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
+                        <span className="text-[10px] text-muted-foreground font-semibold">Exit Reason</span>
+                        <span className="font-mono font-bold text-sky-400 truncate mt-0.5" title={t.exit_reason}>
+                          {t.exit_reason || "Holding"}
+                        </span>
+                        <span className="text-[10px] text-muted-foreground mt-0.5">
+                          Fees: {fmtRs(t.charges_rs || 0)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg">
+              No paper trades executed on this date.
+            </div>
+          )}
+
+          {/* CANDLESTICK CHART */}
           <DayDetail key={`${date}-${strategy}`} date={date} mode="paper" strategy={strategy} compact chartOnly allowTimeframeSwitch />
-          <Table>
-            <TableHeader><TableRow>
-              <TableHead>Option</TableHead>
-              <TableHead>In</TableHead>
-              <TableHead>Out</TableHead>
-              <TableHead>Trigger → exit</TableHead>
-              <TableHead className="text-right">Net P&amp;L</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>{trades.map((trade, index) => (
-              <TableRow key={`${trade.mode}-${trade.option}-${trade.entry}-${index}`} className="bg-transparent hover:bg-muted/20">
-                <TableCell>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
-                    <span className="font-semibold">{trade.option}</span>
-                    {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        LIVE
-                      </span>
-                    ) : (
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                        PAPER
-                      </span>
-                    )}
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {(trade.mode || "").includes("SENSEX")
-                      ? "Sensex Trend Runner"
-                      : (trade.mode || "").includes("TREND") || (trade.mode || "").includes("RUNNER")
-                      ? "Nifty Trend Runner"
-                      : (trade.mode || "").includes("HEROZERO")
-                      ? "HeroZero"
-                      : (trade.mode || "").includes("KEYLEVEL")
-                      ? "Key Levels"
-                      : (trade.mode || "").includes("SCALP")
-                      ? "Micro Scalp (Sniper)"
-                      : "Midpoint"} · {trade.qty} qty
-                  </div>
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  <div>{trade.entry}</div>
-                  <div className="text-xs text-muted-foreground">Buy {fmtRs(trade.buy_price)} · {fmtRs(trade.buy_value_rs)}</div>
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  <div>{trade.exit}</div>
-                  <div className="text-xs text-muted-foreground">Sell {fmtRs(trade.sell_price)} · {fmtRs(trade.sell_value_rs)}</div>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{trade.exit_reason}</TableCell>
-                <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs))}>
-                  {fmtRs(trade.net_rs)}
-                  <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs)} · fees {fmtRs(trade.charges_rs)}</div>
-                </TableCell>
-              </TableRow>
-            ))}</TableBody>
-          </Table>
         </CardContent>
       </Card>
     </div>
   )
 }
 
-function StrategyTradesTable({ title, trades, onPick }: { title: string; trades: (OptionTrade & { charges_rs: number; net_rs: number })[]; onPick?: (date: string) => void }) {
+function StrategyTradesTable({ title, trades, onPick, activeDate }: {
+  title: string
+  trades: (OptionTrade & { charges_rs: number; net_rs: number })[]
+  onPick?: (date: string) => void
+  activeDate?: string | null
+}) {
   return (
     <Card>
       <CardHeader>
         <CardTitle>{title}</CardTitle>
-        <CardDescription>{trades.length} paper trade(s) · net rupee P&amp;L after estimated charges · click row to open chart.</CardDescription>
+        <CardDescription>{trades.length} paper trade(s) · net rupee P&amp;L after estimated charges · click any row to view full chart.</CardDescription>
       </CardHeader>
       <CardContent>
         {trades.length ? (
           <Table>
             <TableHeader><TableRow>
               <TableHead>Date</TableHead>
-              <TableHead>Option</TableHead>
-              <TableHead>In</TableHead>
-              <TableHead>Out</TableHead>
+              <TableHead>Option Contract</TableHead>
+              <TableHead>Option Premium</TableHead>
+              <TableHead>Spot Index</TableHead>
+              <TableHead>Timing</TableHead>
               <TableHead>Exit Reason</TableHead>
               <TableHead className="text-right">Net P&amp;L</TableHead>
             </TableRow></TableHeader>
-            <TableBody>{trades.map((trade, index) => (
-              <TableRow key={`${trade.date}-${trade.entry}-${index}`} className={cn("bg-transparent hover:bg-muted/20", onPick && "cursor-pointer")} onClick={() => onPick?.(trade.date)}>
-                <TableCell className={cn("font-medium tabular-nums", onPick && "text-primary underline-offset-4 hover:underline")}>{trade.date}</TableCell>
-                <TableCell>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-medium text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>{trade.side}</span>
-                    <span className="font-semibold">{trade.option}</span>
-                    {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
-                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                        <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                        LIVE
+            <TableBody>{trades.map((trade, index) => {
+              const optPts = trade.sell_price > 0 ? trade.sell_price - trade.buy_price : 0
+              const isSelected = activeDate === trade.date
+              return (
+                <TableRow
+                  key={`${trade.date}-${trade.entry}-${index}`}
+                  className={cn(
+                    "cursor-pointer transition-colors",
+                    isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/30"
+                  )}
+                  onClick={() => onPick?.(trade.date)}
+                >
+                  <TableCell className="font-medium tabular-nums text-primary underline-offset-4 hover:underline">
+                    {trade.date}
+                  </TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-bold text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>
+                        {trade.side}
                       </span>
-                    ) : (
-                      <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-400 border border-amber-500/30">
-                        PAPER
+                      <span className="font-semibold text-xs text-foreground">{trade.option}</span>
+                      <span className="text-[10px] font-mono text-muted-foreground">({trade.qty} qty)</span>
+                    </div>
+                  </TableCell>
+                  <TableCell className="tabular-nums text-xs">
+                    <div className="font-mono font-medium">{fmtRs(trade.buy_price)} → {trade.sell_price > 0 ? fmtRs(trade.sell_price) : "Open"}</div>
+                    {trade.sell_price > 0 && (
+                      <span className={cn("text-[10px] font-mono font-bold", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
+                        {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts
                       </span>
                     )}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{trade.mode} · {trade.qty} qty</div>
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  <div>{trade.entry} @ {trade.nifty_in}</div>
-                  <div className="text-xs text-muted-foreground">Buy {fmtRs(trade.buy_price)}</div>
-                </TableCell>
-                <TableCell className="tabular-nums">
-                  <div>{trade.exit} @ {trade.nifty_out}</div>
-                  <div className="text-xs text-muted-foreground">Sell {fmtRs(trade.sell_price)}</div>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">{trade.exit_reason}</TableCell>
-                <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs))}>
-                  {fmtRs(trade.net_rs)}
-                  <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs)} · fees {fmtRs(trade.charges_rs)}</div>
-                </TableCell>
-              </TableRow>
-            ))}</TableBody>
+                  </TableCell>
+                  <TableCell className="tabular-nums text-xs">
+                    <div className="font-mono font-medium">{trade.nifty_in?.toFixed(1) || "—"} → {trade.nifty_out?.toFixed(1) || "—"}</div>
+                    {trade.nifty_points != null && (
+                      <span className={cn("text-[10px] font-mono font-bold", trade.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
+                        {trade.nifty_points >= 0 ? "+" : ""}{trade.nifty_points.toFixed(1)} spot pts
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="tabular-nums text-xs font-mono text-muted-foreground">
+                    {trade.entry} → {trade.exit || "—"}
+                  </TableCell>
+                  <TableCell className="text-xs text-muted-foreground font-mono">
+                    {trade.exit_reason || "Open"}
+                  </TableCell>
+                  <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs))}>
+                    <div className="font-bold font-mono">{fmtRs(trade.net_rs)}</div>
+                    <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs)} · fees {fmtRs(trade.charges_rs)}</div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}</TableBody>
           </Table>
         ) : (
           <p className="py-6 text-center text-sm text-muted-foreground">No paper trades recorded yet.</p>
@@ -475,6 +544,21 @@ export function PaperPage() {
         unit="rs"
       />
 
+      {/* Active Session Intraday Chart & Option Values Panel */}
+      {(() => {
+        const latestTradeDate = data?.trades?.length ? data.trades[data.trades.length - 1].date : "2026-11-17"
+        const activeDate = picked || latestTradeDate
+        return activeDate ? (
+          <CapitalDayPanel
+            date={activeDate}
+            trades={data.trades.filter((t) => t.date === activeDate)}
+            onClose={() => setPicked(null)}
+            strategy={strategy}
+            isDefaultSession={!picked}
+          />
+        ) : null
+      })()}
+
       <div className="grid gap-4 xl:grid-cols-3">
         <Card className="xl:col-span-2">
           <CardHeader>
@@ -535,16 +619,12 @@ export function PaperPage() {
       <Card>
         <CardHeader>
           <CardTitle>Calendar</CardTitle>
-          <CardDescription>Daily net P&L. Click a day to view trades.</CardDescription>
+          <CardDescription>Daily net P&L. Click any day to update the chart &amp; option values above.</CardDescription>
         </CardHeader>
         <CardContent>
           <PnlCalendar daily={data.daily.map((d) => ({ ...d, value: d.net_rs }))} format={fmtRs} onPick={setPicked} />
         </CardContent>
       </Card>
-
-      {picked ? (
-        <CapitalDayPanel date={picked} trades={data.trades.filter((t) => t.date === picked)} onClose={() => setPicked(null)} strategy={strategy} />
-      ) : null}
 
       <StrategyTradesTable
         title={
@@ -552,8 +632,9 @@ export function PaperPage() {
             ? (picked ? `Sensex Trend Runner paper trades · ${picked}` : "Sensex Trend Runner paper trade log")
             : (picked ? `Nifty Trend Runner paper trades · ${picked}` : "Nifty Trend Runner paper trade log")
         }
-        trades={picked ? data.trades.filter((t) => t.date === picked) : data.trades}
+        trades={data.trades}
         onPick={setPicked}
+        activeDate={picked || (data?.trades?.length ? data.trades[data.trades.length - 1].date : "2026-11-17")}
       />
       </>}
     </div>

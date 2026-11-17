@@ -5692,6 +5692,13 @@ class Handler(BaseHTTPRequestHandler):
                 "is_on_radar": ctx["is_on_radar"],
                 "radar_info": ctx["radar_info"]
             })
+        elif url.path == "/api/swinger/backtest-stock":
+            from swinger_engine import backtest_single_stock
+            sym = q.get("symbol", [""])[0]
+            if not sym:
+                return self._json({"error": "symbol required"}, 400)
+            res = backtest_single_stock(sym)
+            return self._json(res)
 
         if not self._is_authenticated():
             return self._json({"error": "unauthorized", "auth_required": True}, 401)
@@ -5929,7 +5936,8 @@ class Handler(BaseHTTPRequestHandler):
             paper_trades = []
             paper_trades.extend(trend_runner_live_paper_trades(target_date))
             paper_trades.extend(sensex_runner_live_paper_trades(target_date))
-            paper_trades.extend(sensex_key_levels_live_paper_trades(target_date))
+            if read_config().get("sensex_key_levels_paper_trading", False):
+                paper_trades.extend(sensex_key_levels_live_paper_trades(target_date))
             paper_trades.extend(nifty_key_levels_live_paper_trades(target_date))
             if read_config().get("midpoint_paper_trading", False):
                 paper_trades.extend(list(midpoint_option_trades(target_date)))
