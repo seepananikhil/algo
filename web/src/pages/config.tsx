@@ -690,9 +690,17 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
             </div>
 
             {/* Initial Stop Loss */}
-            <div className="p-2.5 rounded-lg border bg-muted/20 flex items-center justify-between text-xs font-mono">
+            <div className="p-2.5 rounded-lg border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-mono">
               <span className="text-muted-foreground">Initial Fixed Stop Loss:</span>
-              <span className="font-bold text-foreground">{niftyRatchet.initial_sl_pts} pts (₹{niftyRatchet.initial_sl_pts * 65 * capitalSettings.lots}/lot)</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-foreground">{niftyRatchet.initial_sl_pts} pts spot</span>
+                <span className="text-emerald-400 font-semibold text-[11px]">
+                  ~₹{Math.round(niftyRatchet.initial_sl_pts * 0.5 * 65 * capitalSettings.lots)}/lot
+                </span>
+                <span className="text-muted-foreground text-[10px]">
+                  (ATM Opt Δ~0.5 · Fut: ₹{niftyRatchet.initial_sl_pts * 65 * capitalSettings.lots})
+                </span>
+              </div>
             </div>
 
             {/* NIFTY Spot Ratchet Ladder */}
@@ -953,9 +961,17 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
             </div>
 
             {/* Initial Stop Loss */}
-            <div className="p-2.5 rounded-lg border bg-muted/20 flex items-center justify-between text-xs font-mono">
+            <div className="p-2.5 rounded-lg border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-mono">
               <span className="text-muted-foreground">Initial Fixed Stop Loss:</span>
-              <span className="font-bold text-foreground">{sensexRatchet.initial_sl_pts} pts (₹{sensexRatchet.initial_sl_pts * 20 * (capitalSettings.sensex_lots || 1)}/lot)</span>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-bold text-foreground">{sensexRatchet.initial_sl_pts} pts spot</span>
+                <span className="text-sky-400 font-semibold text-[11px]">
+                  ~₹{Math.round(sensexRatchet.initial_sl_pts * 0.5 * 20 * (capitalSettings.sensex_lots || 1))}/lot
+                </span>
+                <span className="text-muted-foreground text-[10px]">
+                  (ATM Opt Δ~0.5 · Fut: ₹{sensexRatchet.initial_sl_pts * 20 * (capitalSettings.sensex_lots || 1)})
+                </span>
+              </div>
             </div>
 
             {/* SENSEX Spot Ratchet Ladder */}
