@@ -330,6 +330,68 @@ function ActiveTradeCard({
   )
 }
 
+function LiveStrategyPositionBanner({ symbol, state, onSelectSymbol }: { symbol: string; state: any; onSelectSymbol?: () => void }) {
+  if (!state?.in_position || !state?.active_position) return null
+  const pos = state.active_position
+  const spot = state.spot || pos.entry_price
+  const isLong = pos.side === "LONG" || pos.side === "CALL"
+  const ptsDiff = isLong ? (spot - pos.entry_price) : (pos.entry_price - spot)
+  const isProfit = ptsDiff >= 0
+  const lotSize = symbol.toUpperCase() === "SENSEX" ? 20 : 65
+  const lots = (pos.base_lots || 1) + (pos.pyramided ? 1 : 0)
+  const estOptPnl = ptsDiff * 0.65 * (lots * lotSize)
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg border border-emerald-500/40 bg-linear-to-r from-emerald-500/15 via-background to-background text-xs shadow-xs mb-1.5">
+      <div className="flex items-center gap-2">
+        <span className="relative flex h-2.5 w-2.5">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+        </span>
+        <span className="font-bold text-emerald-500 uppercase tracking-wide text-[11px]">
+          Apex Duo Paper Active:
+        </span>
+        <button
+          type="button"
+          onClick={onSelectSymbol}
+          className="font-bold text-foreground hover:underline flex items-center gap-1 cursor-pointer"
+        >
+          <span>{symbol}</span>
+          <span className="text-muted-foreground font-mono">({pos.option})</span>
+        </button>
+        <span className={`px-1.5 py-0.2 rounded text-[10px] font-bold ${isLong ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400"}`}>
+          {pos.side}
+        </span>
+        {pos.pyramided && (
+          <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-sky-500/20 text-sky-400 border border-sky-500/30">
+            2x Lots (Pyramided)
+          </span>
+        )}
+      </div>
+      <div className="flex items-center gap-3 font-mono text-[11px]">
+        <span className="text-muted-foreground">
+          Entry: <strong className="text-foreground">{pos.entry_price?.toFixed(1)}</strong>
+        </span>
+        <span className="text-muted-foreground">
+          LTP: <strong className="text-foreground">{spot?.toFixed(1)}</strong>
+        </span>
+        <span className={`font-bold ${isProfit ? "text-emerald-400" : "text-rose-400"}`}>
+          {isProfit ? "+" : ""}{ptsDiff.toFixed(1)} pt ({estOptPnl >= 0 ? "+" : ""}{fmtRs(estOptPnl)})
+        </span>
+        {pos.last_ratchet ? (
+          <span className="px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-sans font-semibold text-[10px] border border-emerald-500/30">
+            🔒 {pos.last_ratchet} SL: {pos.current_sl?.toFixed(1)}
+          </span>
+        ) : (
+          <span className="text-amber-400 text-[10px]">
+            SL: {pos.current_sl?.toFixed(1)}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function LivePage() {
   const { status, reload: reloadStatus } = useStatus()
   const today = status?.now?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
@@ -472,29 +534,45 @@ export function LivePage() {
   // Polling feeds: All strategy and broker positions (strictly for today)
   const liveTradesPoll = usePoll<OptionTrade[]>(today ? `/api/trades?date=${today}` : "/api/trades", 2500)
 
+  const [tradeModeFilter, setTradeModeFilter] = useState<"LIVE" | "PAPER">("LIVE")
+
   const lastKnownTradesRef = useRef<OptionTrade[]>([])
   const tradesList = useMemo(() => {
-    if (liveTradesPoll.data && liveTradesPoll.data.length > 0) {
-      lastKnownTradesRef.current = liveTradesPoll.data
-      return liveTradesPoll.data
+    const raw = (liveTradesPoll.data && liveTradesPoll.data.length > 0)
+      ? liveTradesPoll.data
+      : (liveTradesPoll.data ?? lastKnownTradesRef.current)
+    if (raw && raw.length > 0) {
+      lastKnownTradesRef.current = raw
     }
-    return liveTradesPoll.data ?? lastKnownTradesRef.current
+    // Filter out midpoint strategy completely per user requirement
+    return (raw || []).filter((t) => {
+      const strat = (t.strategy || "").toLowerCase()
+      const mode = (t.mode || "").toLowerCase()
+      const trigger = (t.trigger_label || "").toLowerCase()
+      if (strat.includes("midpoint") || mode.includes("midpoint") || trigger.includes("midpoint") || mode === "paper") {
+        return false
+      }
+      return true
+    })
   }, [liveTradesPoll.data])
 
-  // Partition into Active and Closed (strictly for today)
-  const openTrades = useMemo(() => {
-    return tradesList.filter((t) => t.is_open !== false && (!t.exit || t.exit === "" || t.exit_reason === "open"))
-  }, [tradesList])
+  const isLiveTrade = useCallback((t: OptionTrade) => {
+    return Boolean(
+      (t.mode && t.mode.toUpperCase().includes("LIVE")) ||
+      t.strategy === "kotak_live" ||
+      (t.trigger_label && t.trigger_label.toLowerCase().includes("kotak"))
+    )
+  }, [])
 
-  const closedTrades = useMemo(() => {
-    return tradesList.filter((t) => (t.is_open === false || (t.exit && t.exit !== "" && t.exit_reason !== "open")) && (!t.date || t.date === today))
-  }, [tradesList, today])
+  const liveTrades = useMemo(() => tradesList.filter(isLiveTrade), [tradesList, isLiveTrade])
+  const paperTrades = useMemo(() => tradesList.filter((t) => !isLiveTrade(t)), [tradesList, isLiveTrade])
 
-  // Calculate Running Position Summary Metrics
-  const summaryMetrics = useMemo(() => {
+  const computeMetrics = useCallback((trades: OptionTrade[]) => {
+    const open = trades.filter((t) => t.is_open !== false && (!t.exit || t.exit === "" || t.exit_reason === "open"))
+    const closed = trades.filter((t) => (t.is_open === false || (t.exit && t.exit !== "" && t.exit_reason !== "open")) && (!t.date || t.date === today))
     let runningPnl = 0
     let investedCapital = 0
-    openTrades.forEach((t) => {
+    open.forEach((t) => {
       const pnl = Number(t.option_pnl_rs ?? t.pnl_rs ?? (t.futures_pnl_rs ?? 0)) || 0
       runningPnl += pnl
       const buyVal = Number(t.buy_value_rs)
@@ -502,31 +580,42 @@ export function LivePage() {
       const qty = Number(t.qty) || 1
       investedCapital += !Number.isNaN(buyVal) && buyVal > 0 ? buyVal : (!Number.isNaN(buyPx) && buyPx > 0 ? buyPx * qty : 0)
     })
-
     let realizedPnl = 0
+    let points = 0
     let winners = 0
     let losers = 0
-    closedTrades.forEach((t) => {
+    closed.forEach((t) => {
       const pnl = Number(t.net_rs ?? t.pnl_rs ?? 0) || 0
       realizedPnl += pnl
+      points += Number(t.nifty_points ?? t.pnl_points ?? 0) || 0
       if (pnl > 0) winners++
       else if (pnl < 0) losers++
     })
-
     const winRate = (winners + losers) > 0 ? (winners / (winners + losers)) * 100 : 0
-
     return {
+      open,
+      closed,
       totalPnl: runningPnl + realizedPnl,
       runningPnl,
       investedCapital,
       realizedPnl,
-      openCount: openTrades.length,
-      closedCount: closedTrades.length,
+      points,
+      openCount: open.length,
+      closedCount: closed.length,
       winners,
       losers,
       winRate,
     }
-  }, [openTrades, closedTrades])
+  }, [today])
+
+  const liveMetrics = useMemo(() => computeMetrics(liveTrades), [liveTrades, computeMetrics])
+  const paperMetrics = useMemo(() => computeMetrics(paperTrades), [paperTrades, computeMetrics])
+
+  // Active view metrics based on selected tradeModeFilter
+  const activeMetrics = tradeModeFilter === "LIVE" ? liveMetrics : paperMetrics
+  const openTrades = activeMetrics.open
+  const closedTrades = activeMetrics.closed
+  const summaryMetrics = activeMetrics
 
   // Current market LTPs
   const niftyLtp = status?.last_tick?.ltp ?? (niftyDay.data?.candles?.at(-1)?.close ?? 24540)
@@ -811,31 +900,58 @@ export function LivePage() {
             <span>Scalper</span>
           </button>
 
-          {/* Session Net P&L Button -> Toggles Side Panel directly */}
+          {/* Real Live Broker Net P&L Button */}
           <button
             type="button"
             onClick={() => {
-              if (isSidePanelOpen && (sideTab === "SUMMARY" || sideTab === "ACTIVE")) {
-                setIsSidePanelOpen(false)
-              } else {
-                setIsSidePanelOpen(true)
-                setSideTab(openTrades.length > 0 ? "ACTIVE" : "SUMMARY")
-              }
+              setTradeModeFilter("LIVE")
+              setIsSidePanelOpen(true)
+              setSideTab(liveMetrics.openCount > 0 ? "ACTIVE" : "SUMMARY")
             }}
-            className={`flex items-center space-x-1.5 px-2.5 py-1 rounded-md border text-xs font-mono font-bold shadow-xs transition-all cursor-pointer select-none ${
-              summaryMetrics.totalPnl > 0
+            className={`flex items-center space-x-1 px-2 py-1 rounded-md border text-xs font-mono font-bold shadow-xs transition-all cursor-pointer select-none ${
+              liveMetrics.totalPnl > 0
                 ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-500/20"
-                : summaryMetrics.totalPnl < 0
+                : liveMetrics.totalPnl < 0
                 ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
                 : "bg-muted/60 border-border text-foreground hover:bg-muted"
-            } ${isSidePanelOpen && (sideTab === "SUMMARY" || sideTab === "ACTIVE") ? "ring-2 ring-primary/40" : ""}`}
-            title="Click to toggle Trades & Session Summary Panel"
+            } ${isSidePanelOpen && tradeModeFilter === "LIVE" ? "ring-2 ring-primary/40" : ""}`}
+            title="Kotak Neo Real Broker P&L (Click to view Live trades)"
           >
-            <span className="text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">P&L:</span>
+            <span className="inline-flex size-2 rounded-full bg-rose-500 animate-pulse" />
+            <span className="text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">Live:</span>
             <span>
-              {summaryMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.totalPnl)}
+              {liveMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(liveMetrics.totalPnl)}
             </span>
-            <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform duration-200 ${isSidePanelOpen && (sideTab === "SUMMARY" || sideTab === "ACTIVE") ? "rotate-180" : ""}`} />
+          </button>
+
+          {/* Paper Apex Duo Net P&L Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setTradeModeFilter("PAPER")
+              setIsSidePanelOpen(true)
+              setSideTab(paperMetrics.openCount > 0 ? "ACTIVE" : "SUMMARY")
+            }}
+            className={`flex items-center space-x-1 px-2 py-1 rounded-md border text-xs font-mono font-bold shadow-xs transition-all cursor-pointer select-none ${
+              paperMetrics.totalPnl > 0
+                ? "bg-sky-500/10 border-sky-500/30 text-sky-600 dark:text-sky-400 hover:bg-sky-500/20"
+                : paperMetrics.totalPnl < 0
+                ? "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400 hover:bg-rose-500/20"
+                : "bg-muted/60 border-border text-foreground hover:bg-muted"
+            } ${isSidePanelOpen && tradeModeFilter === "PAPER" ? "ring-2 ring-sky-500/40" : ""}`}
+            title="Apex Duo Paper P&L (Click to view Paper trades)"
+          >
+            <span className="inline-flex size-2 rounded-full bg-sky-400" />
+            <span className="text-[10px] font-sans font-semibold text-muted-foreground uppercase tracking-wide">Paper:</span>
+            <span>
+              {paperMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(paperMetrics.totalPnl)}
+            </span>
+            {paperMetrics.points !== 0 && (
+              <span className="text-[10px] text-muted-foreground font-normal">
+                ({paperMetrics.points > 0 ? "+" : ""}{paperMetrics.points.toFixed(0)}pt)
+              </span>
+            )}
+            <ChevronDown className={`w-3 h-3 text-muted-foreground transition-transform duration-200 ${isSidePanelOpen ? "rotate-180" : ""}`} />
           </button>
 
           {/* Chart View Switcher */}
@@ -1475,6 +1591,17 @@ export function LivePage() {
       <div className="flex-1 min-h-0 flex flex-col md:flex-row overflow-hidden relative">
         {/* LEFT / CENTER: FULL-WIDTH / FLEX-1 CANDLESTICK CHART */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden bg-background">
+          {/* Active Strategy Position Banner (Paper / Apex Duo) */}
+          {(strategyTelemetry.data?.state?.sensex?.in_position || strategyTelemetry.data?.state?.nifty?.in_position) && (
+            <div className="p-2 pb-0">
+              {strategyTelemetry.data?.state?.sensex?.in_position && (
+                <LiveStrategyPositionBanner symbol="SENSEX" state={strategyTelemetry.data.state.sensex} onSelectSymbol={() => setActiveChart("SENSEX")} />
+              )}
+              {strategyTelemetry.data?.state?.nifty?.in_position && (
+                <LiveStrategyPositionBanner symbol="NIFTY" state={strategyTelemetry.data.state.nifty} onSelectSymbol={() => setActiveChart("NIFTY")} />
+              )}
+            </div>
+          )}
           {/* CANDLESTICK CHART CANVAS */}
           <main className="flex-1 min-h-0 p-2 grid gap-2 overflow-hidden" style={{
             gridTemplateColumns: activeChart === "DUAL" ? "1fr 1fr" : "1fr"
@@ -1680,6 +1807,38 @@ export function LivePage() {
               >
                 <PanelRightClose className="w-4 h-4" />
               </button>
+            </div>
+
+            {/* MODE SWITCHER: REAL LIVE VS APEX DUO PAPER */}
+            <div className="px-3 pt-2 pb-1.5 border-b border-border/70 bg-muted/20">
+              <div className="grid grid-cols-2 gap-1.5 p-0.5 bg-muted/80 rounded-md border border-border">
+                <button
+                  type="button"
+                  onClick={() => setTradeModeFilter("LIVE")}
+                  className={`py-1 text-xs font-bold rounded flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    tradeModeFilter === "LIVE"
+                      ? "bg-background text-foreground shadow-2xs font-extrabold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="size-2 rounded-full bg-rose-500" />
+                  <span>Real Live (Kotak)</span>
+                  <span className="text-[10px] font-mono opacity-80">({liveMetrics.openCount + liveMetrics.closedCount})</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTradeModeFilter("PAPER")}
+                  className={`py-1 text-xs font-bold rounded flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                    tradeModeFilter === "PAPER"
+                      ? "bg-background text-foreground shadow-2xs font-extrabold"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <span className="size-2 rounded-full bg-sky-400" />
+                  <span>Apex Duo (Paper)</span>
+                  <span className="text-[10px] font-mono opacity-80">({paperMetrics.openCount + paperMetrics.closedCount})</span>
+                </button>
+              </div>
             </div>
 
             {/* TAB CONTENTS */}
@@ -1928,12 +2087,18 @@ export function LivePage() {
                       ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-600 dark:text-emerald-400"
                       : "bg-rose-500/10 border-rose-500/30 text-rose-600 dark:text-rose-400"
                   }`}>
-                    <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-                      Total Session P&L (Net)
+                    <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center justify-center gap-1.5">
+                      <span className={`size-2 rounded-full ${tradeModeFilter === "LIVE" ? "bg-rose-500" : "bg-sky-400"}`} />
+                      <span>{tradeModeFilter === "LIVE" ? "Kotak Neo Real Live P&L (Net)" : "Apex Duo Paper P&L (Net)"}</span>
                     </div>
                     <div className="text-2xl font-black font-mono tracking-tight mt-1">
                       {summaryMetrics.totalPnl >= 0 ? "+" : ""}{fmtRs(summaryMetrics.totalPnl)}
                     </div>
+                    {tradeModeFilter === "PAPER" && summaryMetrics.points !== 0 && (
+                      <div className="text-xs font-mono font-bold text-sky-400 mt-0.5">
+                        {summaryMetrics.points > 0 ? "+" : ""}{summaryMetrics.points.toFixed(1)} Index Points Captured
+                      </div>
+                    )}
                   </div>
 
                   {/* Realized & Unrealized Breakdown */}

@@ -5570,7 +5570,8 @@ class Handler(BaseHTTPRequestHandler):
                 selected_paper_trades = []
             else:
                 # "all", "combined", or unspecified
-                selected_option_trades = midpoint_fills + key_level_fills + live_scalp_fills + live_trend_fills
+                active_mp = midpoint_fills if read_config().get("midpoint_paper_trading", False) else []
+                selected_option_trades = active_mp + key_level_fills + live_scalp_fills + live_trend_fills
                 selected_paper_trades = paper_trades
 
             option_fills = build_paper_report(selected_option_trades)["trades"]
@@ -5746,7 +5747,8 @@ class Handler(BaseHTTPRequestHandler):
             paper_trades.extend(sensex_runner_live_paper_trades(target_date))
             paper_trades.extend(sensex_key_levels_live_paper_trades(target_date))
             paper_trades.extend(nifty_key_levels_live_paper_trades(target_date))
-            paper_trades.extend(list(midpoint_option_trades(target_date)))
+            if read_config().get("midpoint_paper_trading", False):
+                paper_trades.extend(list(midpoint_option_trades(target_date)))
 
             if trade_mode == "LIVE":
                 self._json(kotak_trades)

@@ -298,11 +298,7 @@ class KotakCapture:
         """Refresh 1-minute candles from Kotak/Fyers every 20 seconds."""
         time.sleep(2)
         while not self.stop.is_set():
-            if self.fetch_candles():
-                try:
-                    self.signals.evaluate()
-                except Exception:
-                    pass
+            self.fetch_candles()
             for _ in range(15):
                 if self.stop.is_set():
                     break
