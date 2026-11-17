@@ -691,7 +691,7 @@ export function LivePage() {
   const paperTrades = useMemo(() => tradesList.filter((t) => !isLiveTrade(t)), [tradesList, isLiveTrade])
 
   const computeMetrics = useCallback((trades: OptionTrade[]) => {
-    const open = trades.filter((t) => t.is_open !== false && (!t.exit || t.exit === "" || t.exit_reason === "open"))
+    const open = trades.filter((t) => t.is_open !== false && (!t.exit || t.exit === "" || t.exit_reason === "open") && (!t.date || t.date === today))
     const closed = trades.filter((t) => (t.is_open === false || (t.exit && t.exit !== "" && t.exit_reason !== "open")) && (!t.date || t.date === today))
     let runningPnl = 0
     let investedCapital = 0

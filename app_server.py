@@ -5332,13 +5332,22 @@ def get_spot_at_time(idx_sym: str, hhmm: str) -> float:
 
 _last_completed_orders: list = []
 _last_orders_time: float = 0.0
+_last_orders_date: str = ""
 
 
 def kotak_live_trades() -> list:
     """Return active and closed Kotak Neo positions formatted as OptionTrade dicts with stable, FIFO-paired timestamps."""
-    global _last_completed_orders, _last_orders_time
+    global _last_completed_orders, _last_orders_time, _last_orders_date
     import time
     now = time.time()
+    today_str = today()
+
+    # Automatically purge cached orders when rolling over to a new morning/trading day
+    if _last_orders_date != today_str:
+        _last_completed_orders = []
+        _last_orders_time = 0.0
+        _last_orders_date = today_str
+
     try:
         from broker import get_positions
         from kotak_orders import get_kotak_client
@@ -5357,7 +5366,16 @@ def kotak_live_trades() -> list:
                         fresh_orders = []
                         for o in res.get("data") or []:
                             if str(o.get("ordSt", "")).lower() in ("complete", "trd", "traded", "filled"):
-                                fresh_orders.append(o)
+                                dt_str = str(o.get("ordDtTm", "")).strip()
+                                ord_date = ""
+                                try:
+                                    dt_val = datetime.strptime(dt_str, "%d-%b-%Y %H:%M:%S")
+                                    ord_date = dt_val.strftime("%Y-%m-%d")
+                                except Exception:
+                                    ord_date = today_str
+                                # Strictly include orders executed TODAY
+                                if ord_date == today_str:
+                                    fresh_orders.append(o)
                         if fresh_orders:
                             _last_completed_orders = fresh_orders
                             _last_orders_time = now

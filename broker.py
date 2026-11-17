@@ -141,6 +141,11 @@ def kotak_positions() -> dict:
             b_amt = float(r.get("buyAmt", 0)) + float(r.get("cfBuyAmt", 0))
             s_amt = float(r.get("sellAmt", 0)) + float(r.get("cfSellAmt", 0))
             net_qty = b_qty - s_qty
+
+            # If position is closed (net_qty == 0) and had ZERO trading activity today,
+            # it was closed on a PREVIOUS session! Do NOT count yesterday's realized PnL into today's session.
+            if net_qty == 0 and fl_b == 0 and fl_s == 0:
+                continue
             b_avg = round(b_amt / b_qty, 2) if b_qty > 0 else 0.0
             s_avg = round(s_amt / s_qty, 2) if s_qty > 0 else 0.0
             lot_sz = int(r.get("lotSz", 1)) or 1
