@@ -1,2 +1,2 @@
 date,strategy,side,level,type,entry_time,entry_price,sl,target,exit_time,exit_price,pnl_points,option,qty,option_entry_price,option_exit_price,option_pnl_points,pnl_rupees,exit_reason
-2026-11-16,sensex_key_levels,CALL,82000,TOUCH1_FADE_SUPPORT,10:32,82012.53,81975,82132.53,10:33,81975,-37.53,SENSEX 82000 CE,10,350.0,329.36,-20.64,-206.4,STOP_LOSS
+2026-11-17,sensex_key_levels,CALL,82500,RETEST_BREAKOUT_CALL,10:27,82538.48,82475,82718.48,10:33,82475,-63.48,SENSEX 82500 CE,10,350.0,315.09000000000003,-34.91,-349.1,STOP_LOSS
