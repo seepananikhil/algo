@@ -137,7 +137,7 @@ export function DayDetail({
   const renderCharts = (_isCompactView?: boolean) => {
     const isDual = !simpleChart && chartLayout === "both" && hasSecondary
     const chartHeightClass = simpleChart
-      ? "h-[680px] min-h-[640px]"
+      ? "h-[500px] min-h-[450px]"
       : isDual
       ? chartHeightMode === "normal"
         ? "h-[clamp(480px,56vh,620px)] min-h-[480px]"

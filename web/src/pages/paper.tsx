@@ -3,6 +3,7 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2,
   CircleDollarSign,
+  Filter,
   GitCommit,
   Layers,
   Percent,
@@ -41,7 +42,10 @@ import {
 } from "@/lib/api"
 import { cn } from "@/lib/utils"
 
+export type PortfolioFilter = "ALL" | "NIFTY" | "SENSEX" | "WIN" | "LOSS"
+
 export function PaperPage() {
+  const [portfolioFilter, setPortfolioFilter] = useState<PortfolioFilter>("ALL")
   const [pickedDate, setPickedDate] = useState<string | null>(null)
   const [selectedTradeIndex, setSelectedTradeIndex] = useState<number>(0)
   const [selectedInstrument, setSelectedInstrument] = useState<"NIFTY" | "SENSEX" | null>(null)
@@ -83,24 +87,60 @@ export function PaperPage() {
     })
   }, [niftyTrades, sensexTrades])
 
-  // Summary Metrics (Combined by default)
-  const summary = useMemo(() => {
-    const s = capital.data?.summary
-    const baseCapital = s?.starting_capital ?? 25000
-    const netRs = s?.net_rs ?? 0
-    const endingCapital = s?.ending_capital ?? baseCapital + netRs
-    const returnPct = s?.return_pct ?? (baseCapital > 0 ? (netRs / baseCapital) * 100 : 0)
+  // Filtered trades by active tab (All, Nifty, Sensex, Win, Loss)
+  const filteredTrades: OptionTrade[] = useMemo(() => {
+    return allTrades.filter((t) => {
+      const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX"))
+      const isWin = (t.net_rs ?? 0) > 0
+      if (portfolioFilter === "NIFTY") return !isSensex
+      if (portfolioFilter === "SENSEX") return isSensex
+      if (portfolioFilter === "WIN") return isWin
+      if (portfolioFilter === "LOSS") return !isWin
+      return true
+    })
+  }, [allTrades, portfolioFilter])
 
-    const winTrades = allTrades.filter((t) => (t.net_rs ?? 0) > 0)
-    const lossTrades = allTrades.filter((t) => (t.net_rs ?? 0) <= 0)
+  // Badge count caches
+  const niftyCount = useMemo(() => allTrades.filter((t) => t.symbol === "NIFTY" || !t.option?.includes("SENSEX")).length, [allTrades])
+  const sensexCount = useMemo(() => allTrades.filter((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX")).length, [allTrades])
+  const winCount = useMemo(() => allTrades.filter((t) => (t.net_rs ?? 0) > 0).length, [allTrades])
+  const lossCount = useMemo(() => allTrades.filter((t) => (t.net_rs ?? 0) <= 0).length, [allTrades])
+
+  const handleTabChange = (tab: PortfolioFilter) => {
+    setPortfolioFilter(tab)
+    if (tab === "SENSEX") {
+      setSelectedInstrument("SENSEX")
+    } else if (tab === "NIFTY") {
+      setSelectedInstrument("NIFTY")
+    } else {
+      setSelectedInstrument(null)
+    }
+    setSelectedTradeIndex(0)
+  }
+
+  // Summary Metrics (Recomputed based on active tab)
+  const summary = useMemo(() => {
+    const baseCapital = portfolioFilter === "ALL" ? (capital.data?.summary?.starting_capital ?? 25000) : 25000
+    const netRs = filteredTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0)
+    const endingCapital = baseCapital + netRs
+    const returnPct = baseCapital > 0 ? (netRs / baseCapital) * 100 : 0
+
+    const winTrades = filteredTrades.filter((t) => (t.net_rs ?? 0) > 0)
+    const lossTrades = filteredTrades.filter((t) => (t.net_rs ?? 0) <= 0)
     const winAmounts = winTrades.map((t) => t.net_rs ?? 0)
     const lossAmounts = lossTrades.map((t) => t.net_rs ?? 0)
     const avgWin = winAmounts.length ? winAmounts.reduce((a, b) => a + b, 0) / winAmounts.length : 0
     const avgLoss = lossAmounts.length ? lossAmounts.reduce((a, b) => a + b, 0) / lossAmounts.length : 0
     const payoffRatio = avgLoss !== 0 ? Math.abs(avgWin / avgLoss).toFixed(2) : "—"
 
-    const grossRs = allTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0)
-    const chargesRs = allTrades.reduce((acc, t) => acc + (t.charges_rs ?? 0), 0)
+    const grossRs = filteredTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0)
+    const chargesRs = filteredTrades.reduce((acc, t) => acc + (t.charges_rs ?? 0), 0)
+
+    const dailyMap = new Map<string, number>()
+    for (const t of filteredTrades) {
+      dailyMap.set(t.date, (dailyMap.get(t.date) || 0) + (t.net_rs ?? 0))
+    }
+    const winningDays = Array.from(dailyMap.values()).filter((v) => v > 0).length
 
     return {
       starting_capital: baseCapital,
@@ -109,32 +149,24 @@ export function PaperPage() {
       return_pct: Math.round(returnPct * 100) / 100,
       gross_rs: grossRs,
       charges_rs: chargesRs,
-      trades: allTrades.length,
+      trades: filteredTrades.length,
       wins: winTrades.length,
       losses: lossTrades.length,
-      win_rate_pct: allTrades.length > 0 ? Math.round((winTrades.length / allTrades.length) * 1000) / 10 : 0,
+      win_rate_pct: filteredTrades.length > 0 ? Math.round((winTrades.length / filteredTrades.length) * 1000) / 10 : 0,
       avg_win_rs: Math.round(avgWin * 100) / 100,
       avg_loss_rs: Math.round(avgLoss * 100) / 100,
       payoff_ratio: payoffRatio,
-      max_drawdown_rs: s?.max_drawdown_rs ?? 0,
-      winning_days: s?.winning_days ?? 2,
-      total_days: s?.days ?? 2,
-      peak_deployed_rs: s?.peak_deployed_rs ?? allTrades.reduce((max, t) => Math.max(max, t.buy_value_rs || 0), 0),
+      max_drawdown_rs: capital.data?.summary?.max_drawdown_rs ?? 0,
+      winning_days: winningDays,
+      total_days: dailyMap.size,
+      peak_deployed_rs: filteredTrades.reduce((max, t) => Math.max(max, t.buy_value_rs || 0), 0),
     }
-  }, [capital.data, allTrades])
+  }, [capital.data, filteredTrades, portfolioFilter])
 
   // Calendar Daily Data
   const calendarDaily: CalendarDay[] = useMemo(() => {
-    if (capital.data?.daily?.length) {
-      return capital.data.daily.map((d) => ({
-        date: d.date,
-        value: d.net_rs,
-        pnl: d.net_rs,
-        trades: d.trades,
-      }))
-    }
     const map = new Map<string, { date: string; value: number; pnl: number; trades: number }>()
-    for (const t of allTrades) {
+    for (const t of filteredTrades) {
       const cur = map.get(t.date) || { date: t.date, value: 0, pnl: 0, trades: 0 }
       cur.value += t.net_rs ?? 0
       cur.pnl += t.net_rs ?? 0
@@ -142,15 +174,15 @@ export function PaperPage() {
       map.set(t.date, cur)
     }
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
-  }, [capital.data, allTrades])
+  }, [filteredTrades])
 
   // Payoff / Equity Curve
   const equityCurve = useMemo(() => {
-    if (!allTrades.length) return []
+    if (!filteredTrades.length) return []
     let cum = 0
     let peak = 0
     const curve = [{ label: "Start", equity: 0, drawdown: 0, date: "" }]
-    for (const t of allTrades) {
+    for (const t of filteredTrades) {
       cum += t.net_rs ?? 0
       if (cum > peak) peak = cum
       const dd = cum - peak
@@ -162,16 +194,21 @@ export function PaperPage() {
       })
     }
     return curve
-  }, [allTrades])
+  }, [filteredTrades])
 
-  // Active Date: Selected day or defaults to latest trading day
-  const latestDate = allTrades.length ? allTrades[allTrades.length - 1].date : "2026-11-17"
-  const activeDate = pickedDate || latestDate
+  // Active Date: Selected day or defaults to latest trading day in filtered set
+  const latestDate = filteredTrades.length ? filteredTrades[filteredTrades.length - 1].date : (allTrades.length ? allTrades[allTrades.length - 1].date : "2026-11-17")
+  const activeDate = useMemo(() => {
+    if (pickedDate && filteredTrades.some((t) => t.date === pickedDate)) {
+      return pickedDate
+    }
+    return latestDate
+  }, [pickedDate, filteredTrades, latestDate])
 
   // All trades for active day
   const activeDayTrades = useMemo(() => {
-    return allTrades.filter((t) => t.date === activeDate)
-  }, [allTrades, activeDate])
+    return filteredTrades.filter((t) => t.date === activeDate)
+  }, [filteredTrades, activeDate])
 
   // Active Trade on active day
   const activeTrade: OptionTrade | null = useMemo(() => {
@@ -182,6 +219,8 @@ export function PaperPage() {
 
   // Determine Instrument & Strategy to display in the Left Chart
   const activeInstrument: "NIFTY" | "SENSEX" = useMemo(() => {
+    if (portfolioFilter === "SENSEX") return "SENSEX"
+    if (portfolioFilter === "NIFTY") return "NIFTY"
     if (selectedInstrument) return selectedInstrument
     if (activeTrade) {
       const isSensex = activeTrade.symbol === "SENSEX" || (activeTrade.option && activeTrade.option.includes("SENSEX")) || (activeTrade.mode && activeTrade.mode.includes("SENSEX"))
@@ -189,7 +228,7 @@ export function PaperPage() {
     }
     const hasSensex = activeDayTrades.some((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX"))
     return hasSensex ? "SENSEX" : "NIFTY"
-  }, [selectedInstrument, activeTrade, activeDayTrades])
+  }, [portfolioFilter, selectedInstrument, activeTrade, activeDayTrades])
 
   const chartStrategy = activeInstrument === "SENSEX" ? "sensex_runner" : "trend_runner"
 
@@ -197,13 +236,13 @@ export function PaperPage() {
   const handleDayClick = (date: string) => {
     setPickedDate(date)
     setSelectedTradeIndex(0)
-    const dayTrades = allTrades.filter((t) => t.date === date)
+    const dayTrades = filteredTrades.filter((t) => t.date === date)
     if (dayTrades.length > 0) {
       const first = dayTrades[0]
       const isSensex = first.symbol === "SENSEX" || first.option?.includes("SENSEX")
-      setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
-    } else {
-      setSelectedInstrument(null)
+      if (portfolioFilter !== "NIFTY" && portfolioFilter !== "SENSEX") {
+        setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
+      }
     }
     terminalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
@@ -215,7 +254,7 @@ export function PaperPage() {
         <div>
           <div className="flex items-center gap-2.5">
             <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground font-mono">
-              PAPER TRADING · COMBINED PORTFOLIO
+              PAPER TRADING · {portfolioFilter === "ALL" ? "COMBINED PORTFOLIO" : portfolioFilter === "NIFTY" ? "NIFTY 50" : portfolioFilter === "SENSEX" ? "BSE SENSEX" : portfolioFilter === "WIN" ? "WINNING TRADES" : "LOSS TRADES"}
             </h1>
             <Badge variant="outline" className="font-mono text-[10px] font-bold border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
               LIVE FORWARD ENGINE
@@ -238,6 +277,112 @@ export function PaperPage() {
             {syncing ? <RefreshCw className="size-3.5 animate-spin text-primary" /> : <GitCommit className="size-3.5 text-emerald-500" />}
             {syncing ? "Backing up..." : "Sync to GitHub"}
           </Button>
+        </div>
+      </div>
+
+      {/* 2. FILTER TABS: DEFAULT ALL, NIFTY, SENSEX, LOSS, WIN */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 px-3 rounded-xl border border-border/70 bg-card/80 shadow-2xs backdrop-blur-xs">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-[11px] font-bold font-mono uppercase text-muted-foreground mr-1 flex items-center gap-1">
+            <Filter className="size-3.5 text-primary" /> View:
+          </span>
+
+          {/* ALL (Default) */}
+          <button
+            type="button"
+            onClick={() => handleTabChange("ALL")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+              portfolioFilter === "ALL"
+                ? "bg-primary text-primary-foreground shadow-xs ring-1 ring-primary/40 font-black"
+                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
+            )}
+          >
+            <span>All</span>
+            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "ALL" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-foreground")}>
+              {allTrades.length}
+            </span>
+          </button>
+
+          {/* NIFTY */}
+          <button
+            type="button"
+            onClick={() => handleTabChange("NIFTY")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+              portfolioFilter === "NIFTY"
+                ? "bg-sky-600 text-white shadow-xs ring-1 ring-sky-500/40 font-black"
+                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
+            )}
+          >
+            <span>Nifty</span>
+            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "NIFTY" ? "bg-white/20 text-white" : "bg-sky-500/10 text-sky-400")}>
+              {niftyCount}
+            </span>
+          </button>
+
+          {/* SENSEX */}
+          <button
+            type="button"
+            onClick={() => handleTabChange("SENSEX")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+              portfolioFilter === "SENSEX"
+                ? "bg-amber-600 text-white shadow-xs ring-1 ring-amber-500/40 font-black"
+                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
+            )}
+          >
+            <span>Sensex</span>
+            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "SENSEX" ? "bg-white/20 text-white" : "bg-amber-500/10 text-amber-400")}>
+              {sensexCount}
+            </span>
+          </button>
+
+          {/* WIN */}
+          <button
+            type="button"
+            onClick={() => handleTabChange("WIN")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+              portfolioFilter === "WIN"
+                ? "bg-emerald-600 text-white shadow-xs ring-1 ring-emerald-500/40 font-black"
+                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
+            )}
+          >
+            <span>Winners</span>
+            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "WIN" ? "bg-white/20 text-white" : "bg-emerald-500/10 text-emerald-400")}>
+              {winCount}
+            </span>
+          </button>
+
+          {/* LOSS */}
+          <button
+            type="button"
+            onClick={() => handleTabChange("LOSS")}
+            className={cn(
+              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+              portfolioFilter === "LOSS"
+                ? "bg-rose-600 text-white shadow-xs ring-1 ring-rose-500/40 font-black"
+                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
+            )}
+          >
+            <span>Losses</span>
+            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "LOSS" ? "bg-white/20 text-white" : "bg-rose-500/10 text-rose-400")}>
+              {lossCount}
+            </span>
+          </button>
+        </div>
+
+        {/* Filter status description */}
+        <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
+          <span>Active Filter:</span>
+          <Badge variant="outline" className="font-mono text-[10px] font-bold">
+            {portfolioFilter === "ALL" && "All (Combined Portfolio)"}
+            {portfolioFilter === "NIFTY" && "Nifty 50 Only"}
+            {portfolioFilter === "SENSEX" && "BSE Sensex Only"}
+            {portfolioFilter === "WIN" && "Winners (Positive P&L)"}
+            {portfolioFilter === "LOSS" && "Losses (Negative P&L)"}
+          </Badge>
         </div>
       </div>
 

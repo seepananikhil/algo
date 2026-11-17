@@ -1939,7 +1939,7 @@ export function CandleChart({
   return (
     <div className={cn("relative w-full flex-1 flex flex-col rounded-lg overflow-hidden border border-border/40 bg-card shadow-2xs", className)}>
       {/* Chart Canvas */}
-      <div className="flex-1 relative w-full h-full min-h-[400px]">
+      <div className="flex-1 relative w-full h-full min-h-[340px]">
         {/* Floating Controls Toolbar */}
         {!hideToolbar && renderToolbar(false)}
 
