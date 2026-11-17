@@ -3,13 +3,10 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2,
   CircleDollarSign,
-  ExternalLink,
   GitCommit,
   Layers,
   Percent,
   RefreshCw,
-  Search,
-  SlidersHorizontal,
   TrendingDown,
   TrendingUp,
 } from "lucide-react"
@@ -30,9 +27,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PnlCalendar, type CalendarDay } from "@/components/pnl-calendar"
 import {
   fmtNum,
@@ -51,8 +46,6 @@ export function PaperPage() {
   const [selectedTradeIndex, setSelectedTradeIndex] = useState<number>(0)
   const [selectedInstrument, setSelectedInstrument] = useState<"NIFTY" | "SENSEX" | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [historyFilter, setHistoryFilter] = useState<"ALL" | "NIFTY" | "SENSEX" | "WIN" | "LOSS">("ALL")
-  const [historySearch, setHistorySearch] = useState("")
   const terminalRef = useRef<HTMLDivElement>(null)
 
   const handleSyncToGit = async () => {
@@ -214,39 +207,6 @@ export function PaperPage() {
     }
     terminalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
-
-  // Trade click handler
-  const handleTradeClick = (trade: OptionTrade) => {
-    setPickedDate(trade.date)
-    const isSensex = trade.symbol === "SENSEX" || (trade.option && trade.option.includes("SENSEX")) || (trade.mode && trade.mode.includes("SENSEX"))
-    setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
-    const dayTrades = allTrades.filter((t) => t.date === trade.date)
-    const idx = dayTrades.findIndex((t) => t.entry === trade.entry && t.option === trade.option)
-    setSelectedTradeIndex(idx >= 0 ? idx : 0)
-    terminalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
-  }
-
-  // Filtered trades for history log table
-  const filteredHistoryTrades = useMemo(() => {
-    return allTrades.slice().reverse().filter((t) => {
-      const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX"))
-      const isWin = (t.net_rs ?? 0) > 0
-      if (historyFilter === "NIFTY" && isSensex) return false
-      if (historyFilter === "SENSEX" && !isSensex) return false
-      if (historyFilter === "WIN" && !isWin) return false
-      if (historyFilter === "LOSS" && isWin) return false
-      if (historySearch.trim()) {
-        const q = historySearch.toLowerCase()
-        const match =
-          t.date.toLowerCase().includes(q) ||
-          t.option.toLowerCase().includes(q) ||
-          (t.exit_reason || "").toLowerCase().includes(q) ||
-          (t.mode || "").toLowerCase().includes(q)
-        if (!match) return false
-      }
-      return true
-    })
-  }, [allTrades, historyFilter, historySearch])
 
   return (
     <div className="flex flex-col gap-4 max-w-[1720px] mx-auto w-full pb-16">
@@ -817,201 +777,6 @@ export function PaperPage() {
           </CardContent>
         </Card>
       </div>
-
-      {/* 6. ALL TRADES OVER TIME (FULL TRADE LISTS FOR LOG) */}
-      <Card className="border-border/80 shadow-xs">
-        <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="size-4 text-primary" />
-            <div>
-              <CardTitle className="text-sm font-bold font-mono uppercase">
-                All Trades Log · Full History ({allTrades.length} Trades)
-              </CardTitle>
-              <CardDescription className="text-xs">
-                Complete audit trail of all executed paper trades across Nifty and Sensex. Click any trade to load its chart above.
-              </CardDescription>
-            </div>
-          </div>
-
-          {/* Filters & Search */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <div className="relative w-full sm:w-56">
-              <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                type="text"
-                placeholder="Search contract, date, exit..."
-                value={historySearch}
-                onChange={(e) => setHistorySearch(e.target.value)}
-                className="h-8 pl-8 text-xs bg-muted/30"
-              />
-            </div>
-
-            <div className="inline-flex rounded-lg border border-border/60 bg-muted/30 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("ALL")}
-                className={cn(
-                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  historyFilter === "ALL" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                All ({allTrades.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("NIFTY")}
-                className={cn(
-                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  historyFilter === "NIFTY" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Nifty ({allTrades.filter((t) => t.symbol === "NIFTY" || !t.option?.includes("SENSEX")).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("SENSEX")}
-                className={cn(
-                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  historyFilter === "SENSEX" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Sensex ({allTrades.filter((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX")).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("WIN")}
-                className={cn(
-                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  historyFilter === "WIN" ? "bg-emerald-500/20 text-emerald-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Winners ({allTrades.filter((t) => (t.net_rs ?? 0) > 0).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setHistoryFilter("LOSS")}
-                className={cn(
-                  "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  historyFilter === "LOSS" ? "bg-rose-500/20 text-rose-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                Losses ({allTrades.filter((t) => (t.net_rs ?? 0) <= 0).length})
-              </button>
-            </div>
-          </div>
-        </CardHeader>
-
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            {filteredHistoryTrades.length ? (
-              <Table>
-                <TableHeader className="bg-muted/20">
-                  <TableRow>
-                    <TableHead>Date &amp; Time</TableHead>
-                    <TableHead>Instrument</TableHead>
-                    <TableHead>Option Contract</TableHead>
-                    <TableHead>Option Premium</TableHead>
-                    <TableHead>Spot Move</TableHead>
-                    <TableHead>Exit Reason</TableHead>
-                    <TableHead>Capital Deployed</TableHead>
-                    <TableHead>Fees</TableHead>
-                    <TableHead className="text-right">Net P&amp;L</TableHead>
-                    <TableHead className="text-center">Action</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {filteredHistoryTrades.map((trade, index) => {
-                    const optPts = trade.sell_price > 0 ? trade.sell_price - trade.buy_price : 0
-                    const optPct = trade.buy_price > 0 && trade.sell_price > 0 ? ((trade.sell_price - trade.buy_price) / trade.buy_price) * 100 : 0
-                    const isCall = trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE"
-                    const isSensex = trade.symbol === "SENSEX" || (trade.option && trade.option.includes("SENSEX"))
-                    const isSelected = activeDate === trade.date && activeTrade?.option === trade.option
-
-                    return (
-                      <TableRow
-                        key={`${trade.date}-${trade.entry}-${index}`}
-                        className={cn(
-                          "cursor-pointer transition-colors",
-                          isSelected ? "bg-primary/10 border-l-4 border-l-primary" : "hover:bg-muted/30"
-                        )}
-                        onClick={() => handleTradeClick(trade)}
-                      >
-                        <TableCell className="font-medium tabular-nums">
-                          <div className="font-bold text-foreground font-mono">{trade.date}</div>
-                          <div className="text-[10px] text-muted-foreground font-mono">{trade.entry} → {trade.exit || "Open"}</div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={cn("text-[10px] font-bold font-mono", isSensex ? "border-amber-500/40 text-amber-400 bg-amber-500/10" : "border-sky-500/40 text-sky-400 bg-sky-500/10")}>
-                            {isSensex ? "SENSEX" : "NIFTY"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className={cn("inline-flex h-4 items-center rounded-full px-1.5 text-[9px] font-bold text-white", isCall ? "bg-emerald-600" : "bg-red-600")}>
-                              {trade.side}
-                            </span>
-                            <span className="font-semibold text-xs text-foreground font-mono">{trade.option}</span>
-                            <span className="text-[10px] font-mono text-muted-foreground">({trade.qty} qty)</span>
-                          </div>
-                        </TableCell>
-                        <TableCell className="tabular-nums text-xs">
-                          <div className="font-mono font-medium">{fmtRs(trade.buy_price)} → {trade.sell_price > 0 ? fmtRs(trade.sell_price) : "Open"}</div>
-                          {trade.sell_price > 0 && (
-                            <span className={cn("text-[10px] font-mono font-bold", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
-                              {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts ({optPct >= 0 ? "+" : ""}{optPct.toFixed(1)}%)
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="tabular-nums text-xs">
-                          <div className="font-mono font-medium">{trade.nifty_in?.toFixed(1) || "—"} → {trade.nifty_out?.toFixed(1) || "—"}</div>
-                          {trade.nifty_points != null && (
-                            <span className={cn("text-[10px] font-mono font-bold", trade.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
-                              {trade.nifty_points >= 0 ? "+" : ""}{trade.nifty_points.toFixed(1)} spot pts
-                            </span>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-xs text-muted-foreground font-mono">
-                          <span className="px-1.5 py-0.5 rounded bg-muted/60 text-[11px] font-semibold text-foreground">
-                            {trade.exit_reason === "RATCHET_LOCK" ? "Ratchet Lock (+80pt)" : (trade.exit_reason || "Open")}
-                          </span>
-                        </TableCell>
-                        <TableCell className="tabular-nums text-xs font-mono text-muted-foreground">
-                          <div>₹{trade.buy_value_rs ? fmtNum(trade.buy_value_rs) : "—"}</div>
-                          <div className="text-[10px] text-muted-foreground">→ ₹{trade.sell_value_rs ? fmtNum(trade.sell_value_rs) : "—"}</div>
-                        </TableCell>
-                        <TableCell className="tabular-nums text-xs font-mono text-muted-foreground">
-                          {fmtRs(trade.charges_rs || 0)}
-                        </TableCell>
-                        <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs ?? 0))}>
-                          <div className="font-bold font-mono text-sm">
-                            {(trade.net_rs ?? 0) >= 0 ? "+" : ""}{fmtRs(trade.net_rs ?? 0)}
-                          </div>
-                          <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs ?? 0)}</div>
-                        </TableCell>
-                        <TableCell className="text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleTradeClick(trade)
-                            }}
-                            className="h-7 text-[11px] font-bold text-primary hover:text-primary gap-1"
-                          >
-                            Chart <ExternalLink className="size-3" />
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            ) : (
-              <p className="py-8 text-center text-sm text-muted-foreground">No paper trades match the filter.</p>
-            )}
-          </div>
-        </CardContent>
-      </Card>
     </div>
   )
 }
