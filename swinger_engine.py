@@ -697,6 +697,13 @@ def scan_cooldown_radar(price_data, held_symbols=None):
         c = df['Close'].values; h = df['High'].values; l = df['Low'].values; o = df['Open'].values; v = df['Volume'].values
         dates = [d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d)[:10] for d in df.index]
         n = len(df)
+        cur_c = c[-1]
+        
+        # Phoenix Requirement: Down at least 60% from ATH (1000-candle high)
+        ath = np.max(h[-min(n, 1000):])
+        dd_ath_pct = (cur_c - ath) / ath * 100.0 if ath > 0 else 0.0
+        if dd_ath_pct > -60.0:
+            continue
         
         vol_sma50 = pd.Series(v).rolling(50, min_periods=20).mean().values
         vol_ratio = np.where(vol_sma50 > 0, v / vol_sma50, 0.0)
