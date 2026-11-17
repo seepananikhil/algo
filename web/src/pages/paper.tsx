@@ -1,11 +1,11 @@
 import { useMemo, useRef, useState } from "react"
 import {
-  Activity,
   Calendar as CalendarIcon,
   CheckCircle2,
   CircleDollarSign,
   ExternalLink,
   GitCommit,
+  Layers,
   Percent,
   RefreshCw,
   Search,
@@ -32,7 +32,6 @@ import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PnlCalendar, type CalendarDay } from "@/components/pnl-calendar"
 import {
@@ -48,13 +47,12 @@ import {
 import { cn } from "@/lib/utils"
 
 export function PaperPage() {
-  const [strategy, setStrategy] = useState<"trend_runner" | "sensex_runner" | "all">("trend_runner")
-  const [picked, setPicked] = useState<string | null>(null)
+  const [pickedDate, setPickedDate] = useState<string | null>(null)
   const [selectedTradeIndex, setSelectedTradeIndex] = useState<number>(0)
+  const [selectedInstrument, setSelectedInstrument] = useState<"NIFTY" | "SENSEX" | null>(null)
   const [syncing, setSyncing] = useState(false)
-  const [terminalSymbol, setTerminalSymbol] = useState<"NIFTY" | "SENSEX">("NIFTY")
-  const [logFilter, setLogFilter] = useState<"ALL" | "NIFTY" | "SENSEX" | "WIN" | "LOSS">("ALL")
-  const [logSearch, setLogSearch] = useState("")
+  const [historyFilter, setHistoryFilter] = useState<"ALL" | "NIFTY" | "SENSEX" | "WIN" | "LOSS">("ALL")
+  const [historySearch, setHistorySearch] = useState("")
   const terminalRef = useRef<HTMLDivElement>(null)
 
   const handleSyncToGit = async () => {
@@ -75,105 +73,66 @@ export function PaperPage() {
     }
   }
 
-  // Poll strategy reports and consolidated capital report
+  // Combined Portfolio data and individual strategies
+  const capital = usePoll<CapitalReport>("/api/capital-report", 15000)
   const trendRunner = usePoll<PaperReport>("/api/paper-report?strategy=trend_runner", 15000)
   const sensexRunner = usePoll<PaperReport>("/api/paper-report?strategy=sensex_runner", 15000)
-  const capital = usePoll<CapitalReport>("/api/capital-report", 15000)
-
-  const reportLoading = strategy === "all" ? capital.loading : strategy === "sensex_runner" ? sensexRunner.loading : trendRunner.loading
-  const reportError = strategy === "all" ? capital.error : strategy === "sensex_runner" ? sensexRunner.error : trendRunner.error
 
   const niftyTrades = useMemo(() => trendRunner.data?.trades || [], [trendRunner.data])
   const sensexTrades = useMemo(() => sensexRunner.data?.trades || [], [sensexRunner.data])
 
-  // Full trades over all time (Nifty + Sensex combined)
-  const allHistoricalTrades: OptionTrade[] = useMemo(() => {
-    return [...niftyTrades, ...sensexTrades].sort((a, b) => {
-      const ta = `${a.date} ${a.entry}`
-      const tb = `${b.date} ${b.entry}`
-      return tb.localeCompare(ta) // Latest first
-    })
-  }, [niftyTrades, sensexTrades])
-
-  // Active trades based on selected strategy
-  const activeTrades: OptionTrade[] = useMemo(() => {
-    if (strategy === "trend_runner") return niftyTrades
-    if (strategy === "sensex_runner") return sensexTrades
+  // All trades combined across all strategies
+  const allTrades: OptionTrade[] = useMemo(() => {
     return [...niftyTrades, ...sensexTrades].sort((a, b) => {
       const ta = `${a.date} ${a.entry}`
       const tb = `${b.date} ${b.entry}`
       return ta.localeCompare(tb)
     })
-  }, [strategy, niftyTrades, sensexTrades])
+  }, [niftyTrades, sensexTrades])
 
-  // Summary Metrics
+  // Summary Metrics (Combined by default)
   const summary = useMemo(() => {
-    if (strategy === "all" && capital.data?.summary) {
-      const s = capital.data.summary
-      const winTrades = activeTrades.filter((t) => (t.net_rs ?? 0) > 0).length
-      const lossTrades = activeTrades.filter((t) => (t.net_rs ?? 0) <= 0).length
-      const totalTrades = activeTrades.length
-      const winRatePct = totalTrades > 0 ? (winTrades / totalTrades) * 100 : 0
-      const winAmounts = activeTrades.map((t) => t.net_rs ?? 0).filter((v) => v > 0)
-      const lossAmounts = activeTrades.map((t) => t.net_rs ?? 0).filter((v) => v < 0)
-      const avgWin = winAmounts.length ? winAmounts.reduce((a, b) => a + b, 0) / winAmounts.length : 0
-      const avgLoss = lossAmounts.length ? lossAmounts.reduce((a, b) => a + b, 0) / lossAmounts.length : 0
-      const grossRs = activeTrades.reduce((a, t) => a + (t.pnl_rs ?? 0), 0)
-      const chargesRs = activeTrades.reduce((a, t) => a + (t.charges_rs ?? 0), 0)
-
-      return {
-        starting_capital: s.starting_capital ?? 25000,
-        ending_capital: s.ending_capital ?? 25000 + (s.net_rs ?? 0),
-        net_rs: s.net_rs ?? 0,
-        return_pct: s.return_pct ?? 0,
-        gross_rs: grossRs,
-        charges_rs: chargesRs,
-        trades: totalTrades,
-        wins: winTrades,
-        losses: lossTrades,
-        win_rate_pct: Math.round(winRatePct * 10) / 10,
-        avg_win_rs: Math.round(avgWin * 100) / 100,
-        avg_loss_rs: Math.round(avgLoss * 100) / 100,
-        payoff_ratio: avgLoss !== 0 ? Math.abs(avgWin / avgLoss).toFixed(2) : "—",
-        max_drawdown_rs: s.max_drawdown_rs ?? 0,
-        winning_days: s.winning_days ?? 2,
-        total_days: s.days ?? 2,
-        peak_deployed_rs: s.peak_deployed_rs ?? 0,
-      }
-    }
-
-    const report = strategy === "sensex_runner" ? sensexRunner.data : trendRunner.data
-    const s = report?.summary
-    const baseCapital = 25000
+    const s = capital.data?.summary
+    const baseCapital = s?.starting_capital ?? 25000
     const netRs = s?.net_rs ?? 0
-    const returnPct = baseCapital > 0 ? (netRs / baseCapital) * 100 : 0
-    const avgWin = s?.avg_win_rs ?? 0
-    const avgLoss = s?.avg_loss_rs ?? 0
+    const endingCapital = s?.ending_capital ?? baseCapital + netRs
+    const returnPct = s?.return_pct ?? (baseCapital > 0 ? (netRs / baseCapital) * 100 : 0)
+
+    const winTrades = allTrades.filter((t) => (t.net_rs ?? 0) > 0)
+    const lossTrades = allTrades.filter((t) => (t.net_rs ?? 0) <= 0)
+    const winAmounts = winTrades.map((t) => t.net_rs ?? 0)
+    const lossAmounts = lossTrades.map((t) => t.net_rs ?? 0)
+    const avgWin = winAmounts.length ? winAmounts.reduce((a, b) => a + b, 0) / winAmounts.length : 0
+    const avgLoss = lossAmounts.length ? lossAmounts.reduce((a, b) => a + b, 0) / lossAmounts.length : 0
+    const payoffRatio = avgLoss !== 0 ? Math.abs(avgWin / avgLoss).toFixed(2) : "—"
+
+    const grossRs = allTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0)
+    const chargesRs = allTrades.reduce((acc, t) => acc + (t.charges_rs ?? 0), 0)
 
     return {
       starting_capital: baseCapital,
-      ending_capital: baseCapital + netRs,
+      ending_capital: endingCapital,
       net_rs: netRs,
       return_pct: Math.round(returnPct * 100) / 100,
-      gross_rs: s?.gross_rs ?? 0,
-      charges_rs: s?.charges_rs ?? 0,
-      trades: s?.trades ?? 0,
-      wins: s?.wins ?? 0,
-      losses: s?.losses ?? 0,
-      win_rate_pct: s?.win_rate_pct ?? 0,
-      avg_win_rs: avgWin,
-      avg_loss_rs: avgLoss,
-      payoff_ratio: avgLoss !== 0 ? Math.abs(avgWin / avgLoss).toFixed(2) : "—",
+      gross_rs: grossRs,
+      charges_rs: chargesRs,
+      trades: allTrades.length,
+      wins: winTrades.length,
+      losses: lossTrades.length,
+      win_rate_pct: allTrades.length > 0 ? Math.round((winTrades.length / allTrades.length) * 1000) / 10 : 0,
+      avg_win_rs: Math.round(avgWin * 100) / 100,
+      avg_loss_rs: Math.round(avgLoss * 100) / 100,
+      payoff_ratio: payoffRatio,
       max_drawdown_rs: s?.max_drawdown_rs ?? 0,
-      winning_days: s?.winning_days ?? 0,
-      total_days: s?.days ?? 0,
-      peak_deployed_rs: activeTrades.reduce((max, t) => Math.max(max, t.buy_value_rs || 0), 0),
+      winning_days: s?.winning_days ?? 2,
+      total_days: s?.days ?? 2,
+      peak_deployed_rs: s?.peak_deployed_rs ?? allTrades.reduce((max, t) => Math.max(max, t.buy_value_rs || 0), 0),
     }
-  }, [strategy, capital.data, trendRunner.data, sensexRunner.data, activeTrades])
+  }, [capital.data, allTrades])
 
   // Calendar Daily Data
   const calendarDaily: CalendarDay[] = useMemo(() => {
-    if (strategy === "all" && capital.data?.daily?.length) {
+    if (capital.data?.daily?.length) {
       return capital.data.daily.map((d) => ({
         date: d.date,
         value: d.net_rs,
@@ -182,7 +141,7 @@ export function PaperPage() {
       }))
     }
     const map = new Map<string, { date: string; value: number; pnl: number; trades: number }>()
-    for (const t of activeTrades) {
+    for (const t of allTrades) {
       const cur = map.get(t.date) || { date: t.date, value: 0, pnl: 0, trades: 0 }
       cur.value += t.net_rs ?? 0
       cur.pnl += t.net_rs ?? 0
@@ -190,15 +149,15 @@ export function PaperPage() {
       map.set(t.date, cur)
     }
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
-  }, [strategy, capital.data, activeTrades])
+  }, [capital.data, allTrades])
 
-  // Equity & Payoff Curve
+  // Payoff / Equity Curve
   const equityCurve = useMemo(() => {
-    if (!activeTrades.length) return []
+    if (!allTrades.length) return []
     let cum = 0
     let peak = 0
     const curve = [{ label: "Start", equity: 0, drawdown: 0, date: "" }]
-    for (const t of activeTrades) {
+    for (const t of allTrades) {
       cum += t.net_rs ?? 0
       if (cum > peak) peak = cum
       const dd = cum - peak
@@ -210,75 +169,74 @@ export function PaperPage() {
       })
     }
     return curve
-  }, [activeTrades])
+  }, [allTrades])
 
-  // Active Date Selection
-  const latestDate = activeTrades.length ? activeTrades[activeTrades.length - 1].date : "2026-11-17"
-  const activeDate = picked || latestDate
+  // Active Date: Selected day or defaults to latest trading day
+  const latestDate = allTrades.length ? allTrades[allTrades.length - 1].date : "2026-11-17"
+  const activeDate = pickedDate || latestDate
 
+  // All trades for active day
   const activeDayTrades = useMemo(() => {
-    return activeTrades.filter((t) => t.date === activeDate)
-  }, [activeTrades, activeDate])
+    return allTrades.filter((t) => t.date === activeDate)
+  }, [allTrades, activeDate])
 
+  // Active Trade on active day
   const activeTrade: OptionTrade | null = useMemo(() => {
     if (!activeDayTrades.length) return null
     const safeIdx = Math.min(selectedTradeIndex, activeDayTrades.length - 1)
     return activeDayTrades[Math.max(0, safeIdx)]
   }, [activeDayTrades, selectedTradeIndex])
 
-  // Determine which strategy / symbol to render in DayDetail
-  const effectiveDayStrategy = useMemo(() => {
-    if (strategy === "sensex_runner") return "sensex_runner"
-    if (strategy === "trend_runner") return "trend_runner"
-    // In "all" mode, if activeTrade is SENSEX, load Sensex directly!
-    const isSensex = activeTrade
-      ? (activeTrade.symbol === "SENSEX" || (activeTrade.option && activeTrade.option.includes("SENSEX")) || (activeTrade.mode && activeTrade.mode.includes("SENSEX")))
-      : terminalSymbol === "SENSEX"
-    if (isSensex) return "sensex_runner"
-    return "trend_runner"
-  }, [strategy, activeTrade, terminalSymbol])
+  // Determine Instrument & Strategy to display in the Left Chart
+  const activeInstrument: "NIFTY" | "SENSEX" = useMemo(() => {
+    if (selectedInstrument) return selectedInstrument
+    if (activeTrade) {
+      const isSensex = activeTrade.symbol === "SENSEX" || (activeTrade.option && activeTrade.option.includes("SENSEX")) || (activeTrade.mode && activeTrade.mode.includes("SENSEX"))
+      return isSensex ? "SENSEX" : "NIFTY"
+    }
+    const hasSensex = activeDayTrades.some((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX"))
+    return hasSensex ? "SENSEX" : "NIFTY"
+  }, [selectedInstrument, activeTrade, activeDayTrades])
 
-  const selectDate = (date: string) => {
-    setPicked(date)
+  const chartStrategy = activeInstrument === "SENSEX" ? "sensex_runner" : "trend_runner"
+
+  // Day click handler
+  const handleDayClick = (date: string) => {
+    setPickedDate(date)
     setSelectedTradeIndex(0)
-    const dayTrade = activeTrades.find((t) => t.date === date)
-    const isSensex = dayTrade && (dayTrade.symbol === "SENSEX" || dayTrade.option?.includes("SENSEX") || dayTrade.mode?.includes("SENSEX"))
-    if (isSensex) {
-      setTerminalSymbol("SENSEX")
+    const dayTrades = allTrades.filter((t) => t.date === date)
+    if (dayTrades.length > 0) {
+      const first = dayTrades[0]
+      const isSensex = first.symbol === "SENSEX" || first.option?.includes("SENSEX")
+      setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
     } else {
-      setTerminalSymbol("NIFTY")
+      setSelectedInstrument(null)
     }
     terminalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
-  // Quick trade selector from the log
-  const selectTrade = (trade: OptionTrade) => {
-    setPicked(trade.date)
+  // Trade click handler
+  const handleTradeClick = (trade: OptionTrade) => {
+    setPickedDate(trade.date)
     const isSensex = trade.symbol === "SENSEX" || (trade.option && trade.option.includes("SENSEX")) || (trade.mode && trade.mode.includes("SENSEX"))
-    if (isSensex) {
-      setTerminalSymbol("SENSEX")
-      if (strategy === "trend_runner") setStrategy("sensex_runner")
-    } else {
-      setTerminalSymbol("NIFTY")
-      if (strategy === "sensex_runner") setStrategy("trend_runner")
-    }
-    const dayTrades = (isSensex ? sensexTrades : niftyTrades).filter((t) => t.date === trade.date)
+    setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
+    const dayTrades = allTrades.filter((t) => t.date === trade.date)
     const idx = dayTrades.findIndex((t) => t.entry === trade.entry && t.option === trade.option)
     setSelectedTradeIndex(idx >= 0 ? idx : 0)
     terminalRef.current?.scrollIntoView({ behavior: "smooth", block: "start" })
   }
 
-  // Filtered trades for historical full log
-  const filteredLogTrades = useMemo(() => {
-    return allHistoricalTrades.filter((t) => {
-      const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX")) || (t.mode && t.mode.includes("SENSEX"))
+  // Filtered trades for history log table
+  const filteredHistoryTrades = useMemo(() => {
+    return allTrades.slice().reverse().filter((t) => {
+      const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX"))
       const isWin = (t.net_rs ?? 0) > 0
-      if (logFilter === "NIFTY" && isSensex) return false
-      if (logFilter === "SENSEX" && !isSensex) return false
-      if (logFilter === "WIN" && !isWin) return false
-      if (logFilter === "LOSS" && isWin) return false
-      if (logSearch.trim()) {
-        const q = logSearch.toLowerCase()
+      if (historyFilter === "NIFTY" && isSensex) return false
+      if (historyFilter === "SENSEX" && !isSensex) return false
+      if (historyFilter === "WIN" && !isWin) return false
+      if (historyFilter === "LOSS" && isWin) return false
+      if (historySearch.trim()) {
+        const q = historySearch.toLowerCase()
         const match =
           t.date.toLowerCase().includes(q) ||
           t.option.toLowerCase().includes(q) ||
@@ -288,103 +246,54 @@ export function PaperPage() {
       }
       return true
     })
-  }, [allHistoricalTrades, logSearch, logFilter])
-
-  // Annualized XIRR / ROC estimation
-  const xirrEstimate = useMemo(() => {
-    if (!summary || (summary.starting_capital ?? 25000) <= 0 || summary.net_rs === 0) return 0
-    const roc = summary.return_pct
-    if (activeTrades.length < 2) return roc
-    const d0 = new Date(activeTrades[0].date).getTime()
-    const d1 = new Date(activeTrades[activeTrades.length - 1].date).getTime()
-    const days = Math.max(1, Math.round((d1 - d0) / (1000 * 60 * 60 * 24)))
-    const annualized = Math.round(roc * (252 / Math.max(days, 2)))
-    return Math.min(999, Math.max(-100, annualized))
-  }, [summary, activeTrades])
+  }, [allTrades, historyFilter, historySearch])
 
   return (
     <div className="flex flex-col gap-4 max-w-[1720px] mx-auto w-full pb-16">
-      {/* 1. TOP EXECUTIVE BAR */}
-      <div className="flex flex-col gap-2.5 pb-2 border-b border-border/40">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-          <div>
-            <div className="flex items-center gap-2.5">
-              <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground font-mono">
-                PAPER TRADING PORTFOLIO
-              </h1>
-              <span className="px-2.5 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 shadow-2xs">
-                <span className="size-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                FORWARD TEST ENGINE
-              </span>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Automated option execution engine · Clean price action candlesticks with entry/exit markers &amp; real option executions.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSyncToGit}
-              disabled={syncing}
-              className="text-xs font-semibold gap-1.5 h-8 cursor-pointer shadow-xs hover:bg-muted/60"
-              title="Backup and sync all paper trade records to GitHub origin/master"
-            >
-              {syncing ? <RefreshCw className="size-3.5 animate-spin text-primary" /> : <GitCommit className="size-3.5 text-emerald-500" />}
-              {syncing ? "Backing up..." : "Sync to GitHub"}
-            </Button>
-          </div>
-        </div>
-
-        {/* Strategy Switcher Tabs */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 pt-0.5">
-          <Tabs
-            value={strategy}
-            onValueChange={(val) => {
-              setPicked(null)
-              setSelectedTradeIndex(0)
-              const next = val as "trend_runner" | "sensex_runner" | "all"
-              setStrategy(next)
-              if (next === "sensex_runner") setTerminalSymbol("SENSEX")
-              if (next === "trend_runner") setTerminalSymbol("NIFTY")
-            }}
-          >
-            <TabsList className="bg-muted/60 p-1 rounded-lg">
-              <TabsTrigger value="trend_runner" className="font-bold text-xs sm:text-sm px-4 py-1">
-                NIFTY 50
-              </TabsTrigger>
-              <TabsTrigger value="sensex_runner" className="font-bold text-xs sm:text-sm px-4 py-1">
-                BSE SENSEX
-              </TabsTrigger>
-              <TabsTrigger value="all" className="font-bold text-xs sm:text-sm px-4 py-1">
-                Combined Portfolio
-              </TabsTrigger>
-            </TabsList>
-          </Tabs>
-
-          <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-            <span>Active Session:</span>
-            <Badge variant="outline" className="font-mono text-xs font-bold border-primary/40 bg-primary/10 text-primary">
-              {activeDate} {activeDate === latestDate ? "(Today)" : "(Selected)"}
+      {/* 1. HEADER */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border/40">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground font-mono">
+              PAPER TRADING · COMBINED PORTFOLIO
+            </h1>
+            <Badge variant="outline" className="font-mono text-[10px] font-bold border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
+              LIVE FORWARD ENGINE
             </Badge>
           </div>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Consolidated Nifty &amp; Sensex trend strategies · Interactive calendar with direct charts &amp; executed option logs.
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleSyncToGit}
+            disabled={syncing}
+            className="text-xs font-semibold gap-1.5 h-8 cursor-pointer shadow-xs hover:bg-muted/60"
+            title="Backup and sync trade records to GitHub"
+          >
+            {syncing ? <RefreshCw className="size-3.5 animate-spin text-primary" /> : <GitCommit className="size-3.5 text-emerald-500" />}
+            {syncing ? "Backing up..." : "Sync to GitHub"}
+          </Button>
         </div>
       </div>
 
       {/* Loading / Error States */}
-      {reportLoading && !summary && (
-        <Skeleton className="h-[520px] w-full rounded-2xl" />
+      {capital.loading && !capital.data && (
+        <Skeleton className="h-[480px] w-full rounded-2xl" />
       )}
-      {reportError && (
+      {capital.error && (
         <Card className="border-red-500/40 bg-red-500/10">
           <CardContent className="py-8 text-center text-red-400 font-mono text-sm">
-            Failed to load paper trading data: {reportError}
+            Failed to load capital report: {capital.error}
           </CardContent>
         </Card>
       )}
 
-      {/* 2. OVERALL SUMMARY STRIP: P&L, XIRR, CAPITAL, WIN RATE, PAYOFF RATIO, DRAWDOWN */}
+      {/* 2. OVERALL SUMMARY STRIP (COMBINED PORTFOLIO) */}
       {summary && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           {/* Card 1: Net P&L */}
@@ -392,7 +301,7 @@ export function PaperPage() {
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
-                  Net P&amp;L
+                  Net Realized P&amp;L
                 </span>
                 <CircleDollarSign className="size-3.5 text-muted-foreground" />
               </div>
@@ -405,7 +314,7 @@ export function PaperPage() {
             </div>
           </Card>
 
-          {/* Card 2: Return % on Capital & Annualized XIRR */}
+          {/* Card 2: Return % on Capital */}
           <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
@@ -419,17 +328,17 @@ export function PaperPage() {
               </div>
             </div>
             <div className="text-[10px] text-muted-foreground font-mono mt-1 pt-1 border-t border-border/40 flex items-center justify-between">
-              <span>Ann. Return:</span>
-              <span className="font-bold text-foreground font-mono">+{xirrEstimate}%</span>
+              <span>On ₹{fmtNum(summary.starting_capital)}</span>
+              <span className="text-emerald-400 font-bold font-mono">Realized</span>
             </div>
           </Card>
 
-          {/* Card 3: Capital: Starting -> Ending */}
+          {/* Card 3: Capital Growth */}
           <Card className="p-3 border-border/70 bg-card/90 shadow-2xs flex flex-col justify-between">
             <div>
               <div className="flex items-center justify-between">
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
-                  Capital Growth
+                  Portfolio Capital
                 </span>
                 <TrendingUp className="size-3.5 text-emerald-400" />
               </div>
@@ -438,7 +347,7 @@ export function PaperPage() {
               </div>
             </div>
             <div className="text-[10px] text-muted-foreground font-mono mt-1 pt-1 border-t border-border/40 flex items-center justify-between">
-              <span>Base: {fmtRs(summary.starting_capital)}</span>
+              <span>Start: {fmtRs(summary.starting_capital)}</span>
               <span>Peak: {fmtRs(summary.peak_deployed_rs || 0)}</span>
             </div>
           </Card>
@@ -469,7 +378,7 @@ export function PaperPage() {
                 <span className="text-[11px] text-muted-foreground font-semibold uppercase tracking-wider">
                   Payoff Ratio
                 </span>
-                <Activity className="size-3.5 text-sky-400" />
+                <Layers className="size-3.5 text-sky-400" />
               </div>
               <div className="text-xl font-black font-mono tracking-tight mt-1 text-foreground">
                 {summary.payoff_ratio}:1
@@ -497,36 +406,30 @@ export function PaperPage() {
             <div className="text-[10px] text-muted-foreground font-mono mt-1 pt-1 border-t border-border/40 flex items-center justify-between">
               <span>Peak Decline:</span>
               <span className="font-bold text-red-400 font-mono">
-                {(summary.starting_capital ?? 25000) > 0 ? ((Math.abs(summary.max_drawdown_rs) / (summary.starting_capital ?? 25000)) * 100).toFixed(1) : 0}%
+                {summary.starting_capital > 0 ? ((Math.abs(summary.max_drawdown_rs) / summary.starting_capital) * 100).toFixed(1) : 0}%
               </span>
             </div>
           </Card>
         </div>
       )}
 
-      {/* 3. PAYOFF CURVE & DAILY RETURN DISTRIBUTION */}
+      {/* 3. PAYOFF / EQUITY CURVE & SESSION DISTRIBUTION */}
       {equityCurve.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3.5 items-stretch">
-          {/* Cumulative Payoff Curve */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-3 items-stretch">
           <Card className="lg:col-span-8 border-border/70 shadow-2xs flex flex-col">
-            <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-xs font-bold font-mono uppercase text-foreground">
-                  Cumulative Payoff Curve
-                </CardTitle>
-                <CardDescription className="text-[11px]">
-                  Realized portfolio equity growth with drawdown shading
-                </CardDescription>
-              </div>
+            <CardHeader className="py-2 px-3.5 border-b border-border/40 flex flex-row items-center justify-between">
+              <CardTitle className="text-xs font-bold font-mono uppercase text-foreground">
+                Portfolio Payoff Curve
+              </CardTitle>
               <div className="flex items-center gap-2 font-mono text-xs">
-                <span className="text-muted-foreground">Realized Net:</span>
+                <span className="text-muted-foreground">Ending Net:</span>
                 <span className={cn("font-bold text-sm", pnlClass(summary?.net_rs))}>
                   {summary?.net_rs && summary.net_rs >= 0 ? "+" : ""}{fmtRs(summary?.net_rs ?? 0)}
                 </span>
               </div>
             </CardHeader>
             <CardContent className="p-3 flex-1">
-              <div className="h-52 w-full">
+              <div className="h-44 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={equityCurve} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <defs>
@@ -554,18 +457,14 @@ export function PaperPage() {
             </CardContent>
           </Card>
 
-          {/* Daily Net P&L Bar Chart */}
           <Card className="lg:col-span-4 border-border/70 shadow-2xs flex flex-col">
-            <CardHeader className="py-2.5 px-4 border-b border-border/40">
+            <CardHeader className="py-2 px-3.5 border-b border-border/40">
               <CardTitle className="text-xs font-bold font-mono uppercase text-foreground">
                 Per-Session Net P&amp;L
               </CardTitle>
-              <CardDescription className="text-[11px]">
-                Realized rupee returns by trading session
-              </CardDescription>
             </CardHeader>
             <CardContent className="p-3 flex-1 flex flex-col justify-center">
-              <div className="h-52 w-full">
+              <div className="h-44 w-full">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={calendarDaily} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} />
@@ -588,9 +487,9 @@ export function PaperPage() {
         </div>
       )}
 
-      {/* 4. INTERACTIVE P&L CALENDAR (FULL MONTH VIEW) */}
+      {/* 4. CALENDAR (BELOW SUMMARY & PAYOFF) */}
       <Card className="border-border/80 shadow-xs">
-        <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-row items-center justify-between">
+        <CardHeader className="py-2 px-3.5 border-b border-border/40 flex flex-row items-center justify-between">
           <div className="flex items-center gap-2">
             <CalendarIcon className="size-4 text-primary" />
             <div>
@@ -598,12 +497,12 @@ export function PaperPage() {
                 Trading Sessions Calendar
               </CardTitle>
               <CardDescription className="text-[11px]">
-                Click any trading day to load its candlestick chart and trades in the terminal
+                Click any trading day below to inspect its chart on left and trades on right
               </CardDescription>
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground font-mono">Selected:</span>
+            <span className="text-xs text-muted-foreground font-mono">Active Day:</span>
             <Badge className="font-mono text-xs font-bold bg-primary text-primary-foreground">
               {activeDate}
             </Badge>
@@ -613,48 +512,46 @@ export function PaperPage() {
           <PnlCalendar
             daily={calendarDaily}
             format={fmtRs}
-            onPick={selectDate}
+            onPick={handleDayClick}
             selectedDate={activeDate}
           />
         </CardContent>
       </Card>
 
-      {/* 5. SESSION TERMINAL: ON DAY CLICK -> DIRECT CHART (ENTRY/EXIT ONLY) + P&L & TRADES */}
+      {/* 5. SESSION TERMINAL: ON CLICK ANY TRADE DAY -> LEFT SIDE CHART & RIGHT SIDE TRADES */}
       <div ref={terminalRef} className="scroll-mt-4">
         <Card className="border-border/80 shadow-md overflow-hidden bg-card/95 backdrop-blur-xs">
-          <CardHeader className="py-2.5 px-4 border-b border-border/40 bg-muted/20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+          <CardHeader className="py-2 px-4 border-b border-border/40 bg-muted/20">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2.5 flex-wrap">
                 <span className="font-black text-sm sm:text-base font-mono tracking-tight text-foreground">
                   SESSION TERMINAL · {activeDate}
                 </span>
-                <Badge variant="outline" className="font-mono text-xs font-bold border-primary/40 bg-primary/10 text-primary">
-                  {effectiveDayStrategy === "sensex_runner" ? "BSE SENSEX" : "NIFTY 50"}
-                </Badge>
-                {strategy === "all" && (
-                  <div className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
-                    <button
-                      type="button"
-                      onClick={() => setTerminalSymbol("NIFTY")}
-                      className={cn(
-                        "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
-                        effectiveDayStrategy === "trend_runner" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      NIFTY
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setTerminalSymbol("SENSEX")}
-                      className={cn(
-                        "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
-                        effectiveDayStrategy === "sensex_runner" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      SENSEX
-                    </button>
-                  </div>
-                )}
+
+                {/* Instrument Toggle: SENSEX / NIFTY */}
+                <div className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInstrument("NIFTY")}
+                    className={cn(
+                      "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
+                      activeInstrument === "NIFTY" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    NIFTY 50
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSelectedInstrument("SENSEX")}
+                    className={cn(
+                      "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
+                      activeInstrument === "SENSEX" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    BSE SENSEX
+                  </button>
+                </div>
+
                 <span className="text-xs text-muted-foreground font-mono">
                   · {activeDayTrades.length} trade{activeDayTrades.length === 1 ? "" : "s"}
                 </span>
@@ -668,13 +565,13 @@ export function PaperPage() {
                     {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0))}
                   </span>
                 </div>
-                {picked && picked !== latestDate && (
+                {pickedDate && pickedDate !== latestDate && (
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => selectDate(latestDate)}
+                    onClick={() => handleDayClick(latestDate)}
                     className="text-xs font-semibold gap-1 h-7"
-                    title="Return to latest trading day"
+                    title="Return to latest day"
                   >
                     Today
                   </Button>
@@ -685,13 +582,13 @@ export function PaperPage() {
 
           <CardContent className="p-3 sm:p-4">
             <div className="grid grid-cols-1 xl:grid-cols-12 gap-3.5 items-start">
-              {/* LEFT PANE (xl: 8 cols = 67%): CLEAN SENSEX/NIFTY CHART DIRECTLY */}
+              {/* LEFT SIDE: CLEAN CHART (ENTRY / EXIT ONLY) */}
               <div className="xl:col-span-8 flex flex-col min-w-0">
                 <DayDetail
-                  key={`${activeDate}-${effectiveDayStrategy}`}
+                  key={`${activeDate}-${activeInstrument}`}
                   date={activeDate}
                   mode="paper"
-                  strategy={effectiveDayStrategy}
+                  strategy={chartStrategy}
                   compact
                   chartOnly
                   allowTimeframeSwitch
@@ -699,20 +596,20 @@ export function PaperPage() {
                 />
               </div>
 
-              {/* RIGHT PANE (xl: 4 cols = 33%): P&L & OPTION TRADES INSPECTOR */}
+              {/* RIGHT SIDE: DAY'S TRADES & P&L */}
               <div className="xl:col-span-4 flex flex-col gap-2.5 min-w-0">
-                {/* 1. SESSION P&L CARD */}
-                <div className="p-3 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2">
+                {/* 1. Day's P&L Strip */}
+                <div className="p-2.5 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2">
                   <div className="flex items-center justify-between pb-1.5 border-b border-border/40">
                     <span className="text-xs font-bold font-mono uppercase text-muted-foreground">
-                      Session P&amp;L Summary
+                      Session P&amp;L
                     </span>
                     <Badge variant="outline" className="font-mono text-[10px]">
                       {activeDate}
                     </Badge>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div className="grid grid-cols-2 gap-1.5 text-xs">
                     <div className="p-2 rounded-lg bg-muted/20 border border-border/40">
                       <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Net Return</span>
                       <span className={cn("text-base font-black font-mono block mt-0.5", pnlClass(activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0)))}>
@@ -737,7 +634,7 @@ export function PaperPage() {
                     </div>
 
                     <div className="p-2 rounded-lg bg-muted/20 border border-border/40">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Spot Move</span>
+                      <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Spot Points</span>
                       <span className={cn("text-sm font-bold font-mono block mt-0.5", activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "text-emerald-400" : "text-red-400")}>
                         {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "+" : ""}
                         {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0).toFixed(1)} pts
@@ -746,7 +643,7 @@ export function PaperPage() {
                   </div>
                 </div>
 
-                {/* 2. ACTIVE TRADE EXECUTION INSPECTOR */}
+                {/* 2. Executed Trade Inspector */}
                 {activeTrade ? (
                   <div className="p-3 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2.5">
                     <div className="flex items-start justify-between gap-2 pb-2 border-b border-border/40">
@@ -853,15 +750,15 @@ export function PaperPage() {
                   </div>
                 )}
 
-                {/* 3. SESSION TRADES SWITCHER */}
+                {/* 3. Day's Trades Selector (When multiple trades taken on this day) */}
                 {activeDayTrades.length > 1 && (
                   <div className="rounded-xl border border-border/80 bg-card shadow-2xs overflow-hidden flex flex-col">
                     <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20 border-b border-border/40">
                       <span className="text-[11px] font-bold font-mono tracking-tight text-foreground uppercase">
-                        Day Trades ({activeDayTrades.length})
+                        All Trades On {activeDate} ({activeDayTrades.length})
                       </span>
                       <span className="text-[10px] font-mono text-muted-foreground">
-                        Click to inspect
+                        Click trade to switch chart
                       </span>
                     </div>
 
@@ -870,11 +767,15 @@ export function PaperPage() {
                         const isCurrent = activeTrade === t
                         const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : 0
                         const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
+                        const isSensex = t.symbol === "SENSEX" || t.option?.includes("SENSEX")
 
                         return (
                           <div
                             key={idx}
-                            onClick={() => setSelectedTradeIndex(idx)}
+                            onClick={() => {
+                              setSelectedTradeIndex(idx)
+                              setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
+                            }}
                             className={cn(
                               "p-2 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between gap-2",
                               isCurrent
@@ -886,6 +787,9 @@ export function PaperPage() {
                               <div className="flex items-center gap-1.5 flex-wrap">
                                 <Badge className={cn("text-[9px] font-black px-1.5 py-0", isCall ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
                                   {t.side}
+                                </Badge>
+                                <Badge variant="outline" className="text-[9px] font-mono font-bold">
+                                  {isSensex ? "SENSEX" : "NIFTY"}
                                 </Badge>
                                 <span className="font-bold text-xs text-foreground font-mono">{t.option}</span>
                               </div>
@@ -914,30 +818,30 @@ export function PaperPage() {
         </Card>
       </div>
 
-      {/* 6. DEDICATED ALL TRADES OVER TIME (FULL TRADE LISTS FOR LOG) */}
+      {/* 6. ALL TRADES OVER TIME (FULL TRADE LISTS FOR LOG) */}
       <Card className="border-border/80 shadow-xs">
-        <CardHeader className="py-3 px-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <CardHeader className="py-2.5 px-4 border-b border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
           <div className="flex items-center gap-2">
             <SlidersHorizontal className="size-4 text-primary" />
             <div>
               <CardTitle className="text-sm font-bold font-mono uppercase">
-                All Trades Log · Full History ({allHistoricalTrades.length} Trades)
+                All Trades Log · Full History ({allTrades.length} Trades)
               </CardTitle>
               <CardDescription className="text-xs">
-                Comprehensive audit log across all forward paper trading sessions. Click any trade to load its direct chart above.
+                Complete audit trail of all executed paper trades across Nifty and Sensex. Click any trade to load its chart above.
               </CardDescription>
             </div>
           </div>
 
-          {/* Quick Filter Buttons & Search */}
+          {/* Filters & Search */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <div className="relative w-full sm:w-56">
               <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
                 type="text"
                 placeholder="Search contract, date, exit..."
-                value={logSearch}
-                onChange={(e) => setLogSearch(e.target.value)}
+                value={historySearch}
+                onChange={(e) => setHistorySearch(e.target.value)}
                 className="h-8 pl-8 text-xs bg-muted/30"
               />
             </div>
@@ -945,53 +849,53 @@ export function PaperPage() {
             <div className="inline-flex rounded-lg border border-border/60 bg-muted/30 p-0.5 text-xs">
               <button
                 type="button"
-                onClick={() => setLogFilter("ALL")}
+                onClick={() => setHistoryFilter("ALL")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  logFilter === "ALL" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  historyFilter === "ALL" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                All ({allHistoricalTrades.length})
+                All ({allTrades.length})
               </button>
               <button
                 type="button"
-                onClick={() => setLogFilter("NIFTY")}
+                onClick={() => setHistoryFilter("NIFTY")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  logFilter === "NIFTY" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  historyFilter === "NIFTY" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Nifty ({niftyTrades.length})
+                Nifty ({allTrades.filter((t) => t.symbol === "NIFTY" || !t.option?.includes("SENSEX")).length})
               </button>
               <button
                 type="button"
-                onClick={() => setLogFilter("SENSEX")}
+                onClick={() => setHistoryFilter("SENSEX")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  logFilter === "SENSEX" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  historyFilter === "SENSEX" ? "bg-background text-foreground shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Sensex ({sensexTrades.length})
+                Sensex ({allTrades.filter((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX")).length})
               </button>
               <button
                 type="button"
-                onClick={() => setLogFilter("WIN")}
+                onClick={() => setHistoryFilter("WIN")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  logFilter === "WIN" ? "bg-emerald-500/20 text-emerald-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  historyFilter === "WIN" ? "bg-emerald-500/20 text-emerald-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Winners ({allHistoricalTrades.filter((t) => (t.net_rs ?? 0) > 0).length})
+                Winners ({allTrades.filter((t) => (t.net_rs ?? 0) > 0).length})
               </button>
               <button
                 type="button"
-                onClick={() => setLogFilter("LOSS")}
+                onClick={() => setHistoryFilter("LOSS")}
                 className={cn(
                   "rounded px-2.5 py-1 text-[11px] font-medium transition-colors cursor-pointer",
-                  logFilter === "LOSS" ? "bg-rose-500/20 text-rose-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
+                  historyFilter === "LOSS" ? "bg-rose-500/20 text-rose-400 shadow-2xs font-bold" : "text-muted-foreground hover:text-foreground"
                 )}
               >
-                Losses ({allHistoricalTrades.filter((t) => (t.net_rs ?? 0) <= 0).length})
+                Losses ({allTrades.filter((t) => (t.net_rs ?? 0) <= 0).length})
               </button>
             </div>
           </div>
@@ -999,7 +903,7 @@ export function PaperPage() {
 
         <CardContent className="p-0">
           <div className="overflow-x-auto">
-            {filteredLogTrades.length ? (
+            {filteredHistoryTrades.length ? (
               <Table>
                 <TableHeader className="bg-muted/20">
                   <TableRow>
@@ -1016,11 +920,11 @@ export function PaperPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredLogTrades.map((trade, index) => {
+                  {filteredHistoryTrades.map((trade, index) => {
                     const optPts = trade.sell_price > 0 ? trade.sell_price - trade.buy_price : 0
                     const optPct = trade.buy_price > 0 && trade.sell_price > 0 ? ((trade.sell_price - trade.buy_price) / trade.buy_price) * 100 : 0
                     const isCall = trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE"
-                    const isSensex = trade.symbol === "SENSEX" || (trade.option && trade.option.includes("SENSEX")) || (trade.mode && trade.mode.includes("SENSEX"))
+                    const isSensex = trade.symbol === "SENSEX" || (trade.option && trade.option.includes("SENSEX"))
                     const isSelected = activeDate === trade.date && activeTrade?.option === trade.option
 
                     return (
@@ -1030,7 +934,7 @@ export function PaperPage() {
                           "cursor-pointer transition-colors",
                           isSelected ? "bg-primary/10 border-l-4 border-l-primary" : "hover:bg-muted/30"
                         )}
-                        onClick={() => selectTrade(trade)}
+                        onClick={() => handleTradeClick(trade)}
                       >
                         <TableCell className="font-medium tabular-nums">
                           <div className="font-bold text-foreground font-mono">{trade.date}</div>
@@ -1090,7 +994,7 @@ export function PaperPage() {
                             size="sm"
                             onClick={(e) => {
                               e.stopPropagation()
-                              selectTrade(trade)
+                              handleTradeClick(trade)
                             }}
                             className="h-7 text-[11px] font-bold text-primary hover:text-primary gap-1"
                           >
