@@ -47,6 +47,9 @@ export interface SwingerTradeTarget {
   base_high?: number
   base_low?: number
   surge_date?: string
+  alert_date?: string
+  first_radar_date?: string
+  radar_triggers?: string[]
   stockTrades?: SwingerTradeTarget[]
 }
 
@@ -166,6 +169,8 @@ export function SwingerTradeChartModal({
 
   const [loading, setLoading] = useState(false)
   const [candles, setCandles] = useState<CandleData[]>([])
+  const [radarTriggers, setRadarTriggers] = useState<string[]>([])
+  const [firstRadarDate, setFirstRadarDate] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [isMaximized, setIsMaximized] = useState(false)
 
@@ -198,6 +203,14 @@ export function SwingerTradeChartModal({
   }, [trade, allTrades])
 
   const currentTrade = symbolTrades[activeTradeIndex] || trade
+
+  // All radar/screener triggers for this symbol
+  const effectiveRadarTriggers = useMemo(() => {
+    const set = new Set<string>(radarTriggers)
+    if (trade?.alert_date) set.add(trade.alert_date.slice(0, 10))
+    if ((trade as any)?.surge_date) set.add((trade as any).surge_date.slice(0, 10))
+    return Array.from(set).sort()
+  }, [radarTriggers, trade])
 
   // Keyboard navigation & ESC
   useEffect(() => {
@@ -233,6 +246,8 @@ export function SwingerTradeChartModal({
           // Sort candles chronologically
           const sorted = [...d.candles].sort((a, b) => a.time.localeCompare(b.time))
           setCandles(sorted)
+          setRadarTriggers(Array.isArray(d.radar_triggers) ? d.radar_triggers : [])
+          setFirstRadarDate(d.first_radar_date || null)
         } else {
           setError(`No candlestick data available for ${trade.symbol}`)
         }
@@ -500,8 +515,26 @@ export function SwingerTradeChartModal({
       }
     }
 
-    // 5. Series Markers (Buy & Exit Arrows for ALL trades of this stock)
+    // 5. Series Markers (Radar Trigger Flags, Buy & Exit Arrows)
     const markers: SeriesMarker<Time>[] = []
+
+    // A. Add Radar / Screener Trigger Flags
+    effectiveRadarTriggers.forEach((rtDate, idx) => {
+      const validRtTime = sanitizeDateToCandleTime(rtDate, candles)
+      if (validRtTime) {
+        const isFirst = idx === 0
+        markers.push({
+          time: validRtTime as any,
+          position: "aboveBar",
+          color: isFirst ? "#9333ea" : "#a855f7",
+          shape: "arrowDown",
+          text: isFirst ? `⚡ FIRST RADAR: ${rtDate}` : `⚡ RADAR: ${rtDate}`,
+          size: isFirst ? 2 : 1.5
+        })
+      }
+    })
+
+    // B. Buy & Exit Arrows for ALL trades of this stock
     symbolTrades.forEach((st, idx) => {
       const tradeNum = symbolTrades.length - idx
       const stEntryPrice = st.avg_price ?? st.entry_price
@@ -765,6 +798,13 @@ export function SwingerTradeChartModal({
                 ) : (
                   <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200">
                     Screener Trigger
+                  </span>
+                )}
+
+                {firstRadarDate && (
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold border bg-purple-50 text-purple-700 border-purple-200 flex items-center gap-1" title="Date when this stock first came on our Radar">
+                    <span className="size-1.5 rounded-full bg-purple-600 animate-pulse" />
+                    First on Radar: {firstRadarDate}
                   </span>
                 )}
 
@@ -1098,6 +1138,12 @@ export function SwingerTradeChartModal({
               <span className="flex items-center gap-1.5 font-medium text-slate-600">
                 <span className="w-3 h-0.5 bg-emerald-600 border-b border-dashed border-emerald-600 inline-block" />
                 Entry / Target
+              </span>
+            )}
+            {effectiveRadarTriggers.length > 0 && (
+              <span className="flex items-center gap-1.5 font-medium text-purple-700">
+                <span className="size-2 rounded-full bg-purple-600" />
+                ⚡ Radar Trigger
               </span>
             )}
           </div>

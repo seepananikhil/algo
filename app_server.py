@@ -5500,14 +5500,21 @@ class Handler(BaseHTTPRequestHandler):
             from swinger_engine import load_watchlist
             return self._json(load_watchlist())
         elif url.path == "/api/swinger/candles":
-            from swinger_engine import get_stock_candles
+            from swinger_engine import get_stock_candles, get_stock_triggers
             sym = q.get("symbol", [""])[0]
             if not sym:
                 return self._json({"error": "symbol required"}, 400)
             from_dt = q.get("from", [None])[0]
             to_dt = q.get("to", [None])[0]
             stock_candles = get_stock_candles(sym, from_dt, to_dt)
-            return self._json({"ok": True, "symbol": sym, "candles": stock_candles})
+            trigs, first_radar = get_stock_triggers(sym)
+            return self._json({
+                "ok": True,
+                "symbol": sym,
+                "candles": stock_candles,
+                "radar_triggers": trigs,
+                "first_radar_date": first_radar
+            })
 
         if not self._is_authenticated():
             return self._json({"error": "unauthorized", "auth_required": True}, 401)

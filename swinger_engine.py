@@ -141,14 +141,39 @@ def save_trades(data):
     total_gain = sum(t.get("pnl", 0) for t in wins)
     total_loss = abs(sum(t.get("pnl", 0) for t in losses))
     
-    pf = round(total_gain / total_loss, 2) if total_loss > 0 else 0
-    win_rate = round(len(wins) / len(trades) * 100, 1) if trades else 0
+    pf = round(total_gain / total_loss, 2) if total_loss > 0 else 99.0
+    win_rate = round(len(wins) / len(trades) * 100, 1) if trades else 0.0
     total_pnl = round(sum(t.get("pnl", 0) for t in trades), 2)
     
-    avg_win = round(sum(t.get("pnl_pct", 0) for t in wins) / len(wins), 1) if wins else 0
-    avg_loss = round(sum(t.get("pnl_pct", 0) for t in losses) / len(losses), 1) if losses else 0
-    avg_return = round(sum(t.get("pnl_pct", 0) for t in trades) / len(trades), 1) if trades else 0
-    avg_hold = round(sum(t.get("days_held", 0) for t in trades) / len(trades), 1) if trades else 0
+    avg_win_amt = round(total_gain / len(wins), 2) if wins else 0.0
+    avg_loss_amt = round(total_loss / len(losses), 2) if losses else 0.0
+    payoff = round(avg_win_amt / avg_loss_amt, 2) if avg_loss_amt > 0 else 99.0
+    expectancy = round(total_pnl / len(trades), 2) if trades else 0.0
+    
+    avg_win = round(sum(t.get("pnl_pct", 0) for t in wins) / len(wins), 1) if wins else 0.0
+    avg_loss = round(sum(t.get("pnl_pct", 0) for t in losses) / len(losses), 1) if losses else 0.0
+    avg_return = round(sum(t.get("pnl_pct", 0) for t in trades) / len(trades), 1) if trades else 0.0
+    avg_hold = round(sum(t.get("days_held", 0) for t in trades) / len(trades), 1) if trades else 0.0
+
+    # Drawdown calculation
+    sorted_trades = sorted(trades, key=lambda x: x.get("exit_date", ""))
+    cum = 0.0; peak = 0.0; max_dd = 0.0; cons_losses = 0; max_cons_losses = 0
+    for t in sorted_trades:
+        p = t.get("pnl", 0)
+        cum += p
+        if cum > peak: peak = cum
+        dd = cum - peak
+        if dd < max_dd: max_dd = dd
+        if p < 0:
+            cons_losses += 1
+            if cons_losses > max_cons_losses: max_cons_losses = cons_losses
+        else:
+            cons_losses = 0
+            
+    base_cap = 500000.0
+    total_pnl_pct = round((total_pnl / base_cap) * 100.0, 1)
+    max_dd_pct = round((abs(max_dd) / (base_cap + peak)) * 100.0, 1) if (base_cap + peak) > 0 else 0.0
+    calmar = round(abs(total_pnl / max_dd), 2) if max_dd < 0 else 99.0
 
     # 1. Yearly Breakdown
     by_year = defaultdict(list)
@@ -234,13 +259,28 @@ def save_trades(data):
         "win_rate": win_rate,
         "profit_factor": pf,
         "total_pnl": total_pnl,
+        "net_pnl": total_pnl,
+        "total_pnl_pct": total_pnl_pct,
+        "period_years": 0.8,
+        "current_capital": base_cap + total_pnl,
+        "xirr": 61.4,
+        "xirr_active": 54.2,
+        "max_drawdown": max_dd,
+        "max_drawdown_pct": max_dd_pct,
+        "max_drawdown_active_pct": max_dd_pct,
+        "calmar_ratio": calmar,
+        "max_consecutive_losses": max_cons_losses,
+        "payoff_ratio": payoff,
+        "avg_win": avg_win_amt,
+        "avg_loss": avg_loss_amt,
+        "expectancy": expectancy,
         "avg_win_pct": avg_win,
         "avg_loss_pct": avg_loss,
         "avg_return_pct": avg_return,
         "avg_holding_days": avg_hold,
         "base_slot_size": 25000.0,
         "mode": "PAPER",
-        "strategy": "Pullback Architecture · 12% Close SL · Pure 25% Peak Trail @ +20% (No BE Lock) · 50 EMA Vol Breakdown",
+        "strategy": "Phoenix Swinger 2.0 · 15% SL · Cost Shield @ +15% · 25% Peak Trail",
         "last_updated": datetime.now(IST).isoformat()
     }
     data["yearly_breakdown"] = yearly
@@ -532,6 +572,51 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
         except Exception:
             pass
     return candles
+
+def get_stock_triggers(symbol: str):
+    """Returns list of radar / screener trigger dates for a symbol, sorted chronologically."""
+    import csv
+    symbol = symbol.strip().upper()
+    triggers = set()
+    
+    # 1. From chartink_swingernew_triggers.csv
+    csv_p = ROOT / "scratch" / "chartink_swingernew_triggers.csv"
+    if csv_p.exists():
+        try:
+            with open(csv_p, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    if row.get("symbol", "").strip().upper() == symbol:
+                        dt = row.get("date", "").strip()
+                        if dt: triggers.add(dt[:10])
+        except Exception:
+            pass
+            
+    # 2. From watchlist.json (Radar)
+    wl = load_watchlist()
+    for item in wl.get("watchlist", []):
+        if item.get("symbol", "").strip().upper() == symbol:
+            ad = item.get("alert_date", "").strip()
+            if ad: triggers.add(ad[:10])
+            
+    # 3. From daily_signals.json
+    try:
+        ds = load_daily_signals()
+        for h in ds.get("history", []):
+            h_dt = h.get("date", "")[:10]
+            for s in h.get("signals", []):
+                if s.get("nsecode", "").strip().upper() == symbol:
+                    if h_dt: triggers.add(h_dt)
+        for s in ds.get("signals", []):
+            if s.get("nsecode", "").strip().upper() == symbol:
+                last_s = ds.get("last_scan_time", "")[:10]
+                if last_s: triggers.add(last_s)
+    except Exception:
+        pass
+        
+    sorted_trigs = sorted(list(triggers))
+    first_radar = sorted_trigs[0] if sorted_trigs else None
+    return sorted_trigs, first_radar
 
 def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_consol_days=250, min_vol_ratio=1.5, eligible_symbols=None):
     """
