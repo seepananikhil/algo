@@ -3,7 +3,6 @@ import {
   Calendar as CalendarIcon,
   CheckCircle2,
   CircleDollarSign,
-  Filter,
   GitCommit,
   Layers,
   Percent,
@@ -46,6 +45,7 @@ export type PortfolioFilter = "ALL" | "NIFTY" | "SENSEX" | "WIN" | "LOSS"
 
 export function PaperPage() {
   const [portfolioFilter, setPortfolioFilter] = useState<PortfolioFilter>("ALL")
+  const [sessionInstrumentTab, setSessionInstrumentTab] = useState<"ALL" | "NIFTY" | "SENSEX">("ALL")
   const [pickedDate, setPickedDate] = useState<string | null>(null)
   const [selectedTradeIndex, setSelectedTradeIndex] = useState<number>(0)
   const [selectedInstrument, setSelectedInstrument] = useState<"NIFTY" | "SENSEX" | null>(null)
@@ -210,6 +210,20 @@ export function PaperPage() {
     return filteredTrades.filter((t) => t.date === activeDate)
   }, [filteredTrades, activeDate])
 
+  // Count by instrument for active day
+  const niftyDayCount = useMemo(() => activeDayTrades.filter((t) => t.symbol === "NIFTY" || !t.option?.includes("SENSEX")).length, [activeDayTrades])
+  const sensexDayCount = useMemo(() => activeDayTrades.filter((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX")).length, [activeDayTrades])
+
+  // Filtered trades for active session by sub-tab
+  const sessionDayTrades = useMemo(() => {
+    return activeDayTrades.filter((t) => {
+      const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX"))
+      if (sessionInstrumentTab === "NIFTY") return !isSensex
+      if (sessionInstrumentTab === "SENSEX") return isSensex
+      return true
+    })
+  }, [activeDayTrades, sessionInstrumentTab])
+
   // Active Trade on active day
   const activeTrade: OptionTrade | null = useMemo(() => {
     if (!activeDayTrades.length) return null
@@ -219,6 +233,8 @@ export function PaperPage() {
 
   // Determine Instrument & Strategy to display in the Left Chart
   const activeInstrument: "NIFTY" | "SENSEX" = useMemo(() => {
+    if (sessionInstrumentTab === "SENSEX") return "SENSEX"
+    if (sessionInstrumentTab === "NIFTY") return "NIFTY"
     if (portfolioFilter === "SENSEX") return "SENSEX"
     if (portfolioFilter === "NIFTY") return "NIFTY"
     if (selectedInstrument) return selectedInstrument
@@ -228,13 +244,14 @@ export function PaperPage() {
     }
     const hasSensex = activeDayTrades.some((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX"))
     return hasSensex ? "SENSEX" : "NIFTY"
-  }, [portfolioFilter, selectedInstrument, activeTrade, activeDayTrades])
+  }, [sessionInstrumentTab, portfolioFilter, selectedInstrument, activeTrade, activeDayTrades])
 
   const chartStrategy = activeInstrument === "SENSEX" ? "sensex_runner" : "trend_runner"
 
   // Day click handler
   const handleDayClick = (date: string) => {
     setPickedDate(date)
+    setSessionInstrumentTab("ALL")
     setSelectedTradeIndex(0)
     const dayTrades = filteredTrades.filter((t) => t.date === date)
     if (dayTrades.length > 0) {
@@ -248,141 +265,89 @@ export function PaperPage() {
   }
 
   return (
-    <div className="flex flex-col gap-4 max-w-[1720px] mx-auto w-full pb-16">
-      {/* 1. HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-border/40">
-        <div>
-          <div className="flex items-center gap-2.5">
-            <h1 className="text-xl sm:text-2xl font-black tracking-tight text-foreground font-mono">
-              PAPER TRADING · {portfolioFilter === "ALL" ? "COMBINED PORTFOLIO" : portfolioFilter === "NIFTY" ? "NIFTY 50" : portfolioFilter === "SENSEX" ? "BSE SENSEX" : portfolioFilter === "WIN" ? "WINNING TRADES" : "LOSS TRADES"}
-            </h1>
-            <Badge variant="outline" className="font-mono text-[10px] font-bold border-emerald-500/40 bg-emerald-500/10 text-emerald-400">
-              LIVE FORWARD ENGINE
-            </Badge>
-          </div>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Consolidated Nifty &amp; Sensex trend strategies · Interactive calendar with direct charts &amp; executed option logs.
-          </p>
+    <div className="flex flex-col gap-2.5 sm:gap-3 max-w-[1720px] mx-auto w-full pb-16">
+      {/* 1. COMPACT TOP BAR: TITLE, FILTER TABS & BACKUP */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 pb-2 border-b border-border/40">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          <h1 className="text-lg sm:text-xl font-black tracking-tight text-foreground font-mono">
+            PAPER TRADING · {portfolioFilter === "ALL" ? "COMBINED PORTFOLIO" : portfolioFilter === "NIFTY" ? "NIFTY 50" : portfolioFilter === "SENSEX" ? "BSE SENSEX" : portfolioFilter === "WIN" ? "WINNERS" : "LOSSES"}
+          </h1>
+          <Badge variant="outline" className="font-mono text-[10px] font-bold border-emerald-500/40 bg-emerald-500/10 text-emerald-400 py-0.5">
+            FORWARD ENGINE
+          </Badge>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
+          {/* Main Portfolio Tabs: All, Nifty, Sensex, Win, Loss */}
+          <div className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
+            <button
+              type="button"
+              onClick={() => handleTabChange("ALL")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                portfolioFilter === "ALL" ? "bg-background text-foreground shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>All</span>
+              <span className="text-[10px] font-mono opacity-70">({allTrades.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange("NIFTY")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                portfolioFilter === "NIFTY" ? "bg-sky-500/20 text-sky-400 shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>Nifty</span>
+              <span className="text-[10px] font-mono opacity-70">({niftyCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange("SENSEX")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                portfolioFilter === "SENSEX" ? "bg-amber-500/20 text-amber-400 shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>Sensex</span>
+              <span className="text-[10px] font-mono opacity-70">({sensexCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange("WIN")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                portfolioFilter === "WIN" ? "bg-emerald-500/20 text-emerald-400 shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>Win</span>
+              <span className="text-[10px] font-mono opacity-70">({winCount})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange("LOSS")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                portfolioFilter === "LOSS" ? "bg-rose-500/20 text-rose-400 shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>Loss</span>
+              <span className="text-[10px] font-mono opacity-70">({lossCount})</span>
+            </button>
+          </div>
+
           <Button
             variant="outline"
             size="sm"
             onClick={handleSyncToGit}
             disabled={syncing}
-            className="text-xs font-semibold gap-1.5 h-8 cursor-pointer shadow-xs hover:bg-muted/60"
+            className="text-xs font-semibold gap-1.5 h-7.5 cursor-pointer shadow-xs hover:bg-muted/60"
             title="Backup and sync trade records to GitHub"
           >
-            {syncing ? <RefreshCw className="size-3.5 animate-spin text-primary" /> : <GitCommit className="size-3.5 text-emerald-500" />}
-            {syncing ? "Backing up..." : "Sync to GitHub"}
+            {syncing ? <RefreshCw className="size-3 animate-spin text-primary" /> : <GitCommit className="size-3 text-emerald-500" />}
+            {syncing ? "Backing up..." : "Sync"}
           </Button>
-        </div>
-      </div>
-
-      {/* 2. FILTER TABS: DEFAULT ALL, NIFTY, SENSEX, LOSS, WIN */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 p-2 px-3 rounded-xl border border-border/70 bg-card/80 shadow-2xs backdrop-blur-xs">
-        <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-[11px] font-bold font-mono uppercase text-muted-foreground mr-1 flex items-center gap-1">
-            <Filter className="size-3.5 text-primary" /> View:
-          </span>
-
-          {/* ALL (Default) */}
-          <button
-            type="button"
-            onClick={() => handleTabChange("ALL")}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              portfolioFilter === "ALL"
-                ? "bg-primary text-primary-foreground shadow-xs ring-1 ring-primary/40 font-black"
-                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
-            )}
-          >
-            <span>All</span>
-            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "ALL" ? "bg-primary-foreground/20 text-primary-foreground" : "bg-muted text-foreground")}>
-              {allTrades.length}
-            </span>
-          </button>
-
-          {/* NIFTY */}
-          <button
-            type="button"
-            onClick={() => handleTabChange("NIFTY")}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              portfolioFilter === "NIFTY"
-                ? "bg-sky-600 text-white shadow-xs ring-1 ring-sky-500/40 font-black"
-                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
-            )}
-          >
-            <span>Nifty</span>
-            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "NIFTY" ? "bg-white/20 text-white" : "bg-sky-500/10 text-sky-400")}>
-              {niftyCount}
-            </span>
-          </button>
-
-          {/* SENSEX */}
-          <button
-            type="button"
-            onClick={() => handleTabChange("SENSEX")}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              portfolioFilter === "SENSEX"
-                ? "bg-amber-600 text-white shadow-xs ring-1 ring-amber-500/40 font-black"
-                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
-            )}
-          >
-            <span>Sensex</span>
-            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "SENSEX" ? "bg-white/20 text-white" : "bg-amber-500/10 text-amber-400")}>
-              {sensexCount}
-            </span>
-          </button>
-
-          {/* WIN */}
-          <button
-            type="button"
-            onClick={() => handleTabChange("WIN")}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              portfolioFilter === "WIN"
-                ? "bg-emerald-600 text-white shadow-xs ring-1 ring-emerald-500/40 font-black"
-                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
-            )}
-          >
-            <span>Winners</span>
-            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "WIN" ? "bg-white/20 text-white" : "bg-emerald-500/10 text-emerald-400")}>
-              {winCount}
-            </span>
-          </button>
-
-          {/* LOSS */}
-          <button
-            type="button"
-            onClick={() => handleTabChange("LOSS")}
-            className={cn(
-              "rounded-lg px-3 py-1.5 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
-              portfolioFilter === "LOSS"
-                ? "bg-rose-600 text-white shadow-xs ring-1 ring-rose-500/40 font-black"
-                : "bg-muted/40 hover:bg-muted text-muted-foreground hover:text-foreground border border-border/50"
-            )}
-          >
-            <span>Losses</span>
-            <span className={cn("text-[10px] px-1.5 py-0.2 rounded-full font-mono", portfolioFilter === "LOSS" ? "bg-white/20 text-white" : "bg-rose-500/10 text-rose-400")}>
-              {lossCount}
-            </span>
-          </button>
-        </div>
-
-        {/* Filter status description */}
-        <div className="flex items-center gap-2 text-xs text-muted-foreground font-mono">
-          <span>Active Filter:</span>
-          <Badge variant="outline" className="font-mono text-[10px] font-bold">
-            {portfolioFilter === "ALL" && "All (Combined Portfolio)"}
-            {portfolioFilter === "NIFTY" && "Nifty 50 Only"}
-            {portfolioFilter === "SENSEX" && "BSE Sensex Only"}
-            {portfolioFilter === "WIN" && "Winners (Positive P&L)"}
-            {portfolioFilter === "LOSS" && "Losses (Negative P&L)"}
-          </Badge>
         </div>
       </div>
 
@@ -623,304 +588,192 @@ export function PaperPage() {
         </CardContent>
       </Card>
 
-      {/* 5. SESSION TERMINAL: ON CLICK ANY TRADE DAY -> LEFT SIDE CHART & RIGHT SIDE TRADES */}
+      {/* 5. SESSION TERMINAL: LEFT CHART & RIGHT SCROLLABLE TRADES WITH TABS */}
       <div ref={terminalRef} className="scroll-mt-4">
-        <Card className="border-border/80 shadow-md overflow-hidden bg-card/95 backdrop-blur-xs">
-          <CardHeader className="py-2 px-4 border-b border-border/40 bg-muted/20">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <div className="flex items-center gap-2.5 flex-wrap">
-                <span className="font-black text-sm sm:text-base font-mono tracking-tight text-foreground">
-                  SESSION TERMINAL · {activeDate}
-                </span>
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-2.5 sm:gap-3 items-start">
+          {/* LEFT SIDE: CLEAN CHART (8 COLS) */}
+          <div className="xl:col-span-8 flex flex-col min-w-0">
+            <DayDetail
+              key={`${activeDate}-${activeInstrument}`}
+              date={activeDate}
+              mode="paper"
+              strategy={chartStrategy}
+              compact
+              chartOnly
+              allowTimeframeSwitch
+              simpleChart={true}
+            />
+          </div>
 
-                {/* Instrument Toggle: SENSEX / NIFTY */}
+          {/* RIGHT SIDE: SCROLLABLE TRADES WITH NIFTY / SENSEX TABS (4 COLS) */}
+          <div className="xl:col-span-4 flex flex-col min-w-0 h-[500px]">
+            <Card className="h-full border-border/80 shadow-xs flex flex-col overflow-hidden bg-card/95">
+              {/* Header: Tabs for this day's trades + Session Net P&L */}
+              <div className="p-2 px-3 border-b border-border/40 bg-muted/20 flex items-center justify-between gap-2 shrink-0">
                 <div className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs">
                   <button
                     type="button"
-                    onClick={() => setSelectedInstrument("NIFTY")}
+                    onClick={() => setSessionInstrumentTab("ALL")}
                     className={cn(
                       "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
-                      activeInstrument === "NIFTY" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+                      sessionInstrumentTab === "ALL" ? "bg-background text-foreground shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    NIFTY 50
+                    All ({activeDayTrades.length})
                   </button>
                   <button
                     type="button"
-                    onClick={() => setSelectedInstrument("SENSEX")}
+                    onClick={() => {
+                      setSessionInstrumentTab("NIFTY")
+                      setSelectedInstrument("NIFTY")
+                      const idx = activeDayTrades.findIndex((t) => t.symbol === "NIFTY" || !t.option?.includes("SENSEX"))
+                      if (idx >= 0) setSelectedTradeIndex(idx)
+                    }}
                     className={cn(
                       "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
-                      activeInstrument === "SENSEX" ? "bg-background text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"
+                      sessionInstrumentTab === "NIFTY" ? "bg-background text-foreground shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    BSE SENSEX
+                    Nifty ({niftyDayCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSessionInstrumentTab("SENSEX")
+                      setSelectedInstrument("SENSEX")
+                      const idx = activeDayTrades.findIndex((t) => t.symbol === "SENSEX" || t.option?.includes("SENSEX"))
+                      if (idx >= 0) setSelectedTradeIndex(idx)
+                    }}
+                    className={cn(
+                      "rounded px-2.5 py-0.5 text-[11px] font-bold transition-colors cursor-pointer",
+                      sessionInstrumentTab === "SENSEX" ? "bg-background text-foreground shadow-2xs font-black" : "text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    Sensex ({sensexDayCount})
                   </button>
                 </div>
 
-                <span className="text-xs text-muted-foreground font-mono">
-                  · {activeDayTrades.length} trade{activeDayTrades.length === 1 ? "" : "s"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-3">
-                <div className="text-right">
-                  <span className="text-[10px] text-muted-foreground block font-medium uppercase">Session Realized</span>
-                  <span className={cn("text-base font-black font-mono tabular-nums", pnlClass(activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0)))}>
+                <div className="text-right shrink-0 flex items-center gap-1.5">
+                  <span className="text-[10px] text-muted-foreground font-mono">Net:</span>
+                  <span className={cn("text-xs font-black font-mono tabular-nums px-1.5 py-0.5 rounded", (activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0)) >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
                     {activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0) >= 0 ? "+" : ""}
                     {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0))}
                   </span>
                 </div>
-                {pickedDate && pickedDate !== latestDate && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDayClick(latestDate)}
-                    className="text-xs font-semibold gap-1 h-7"
-                    title="Return to latest day"
-                  >
-                    Today
-                  </Button>
-                )}
-              </div>
-            </div>
-          </CardHeader>
-
-          <CardContent className="p-3 sm:p-4">
-            <div className="grid grid-cols-1 xl:grid-cols-12 gap-3.5 items-start">
-              {/* LEFT SIDE: CLEAN CHART (ENTRY / EXIT ONLY) */}
-              <div className="xl:col-span-8 flex flex-col min-w-0">
-                <DayDetail
-                  key={`${activeDate}-${activeInstrument}`}
-                  date={activeDate}
-                  mode="paper"
-                  strategy={chartStrategy}
-                  compact
-                  chartOnly
-                  allowTimeframeSwitch
-                  simpleChart={true}
-                />
               </div>
 
-              {/* RIGHT SIDE: DAY'S TRADES & P&L */}
-              <div className="xl:col-span-4 flex flex-col gap-2.5 min-w-0">
-                {/* 1. Day's P&L Strip */}
-                <div className="p-2.5 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2">
-                  <div className="flex items-center justify-between pb-1.5 border-b border-border/40">
-                    <span className="text-xs font-bold font-mono uppercase text-muted-foreground">
-                      Session P&amp;L
-                    </span>
-                    <Badge variant="outline" className="font-mono text-[10px]">
-                      {activeDate}
-                    </Badge>
-                  </div>
+              {/* Scrollable Trades List */}
+              <div className="flex-1 overflow-y-auto p-2 flex flex-col gap-1.5">
+                {sessionDayTrades.length > 0 ? (
+                  sessionDayTrades.map((t, idx) => {
+                    const isSelected = activeTrade === t
+                    const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : 0
+                    const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
+                    const isSensex = t.symbol === "SENSEX" || t.option?.includes("SENSEX")
 
-                  <div className="grid grid-cols-2 gap-1.5 text-xs">
-                    <div className="p-2 rounded-lg bg-muted/20 border border-border/40">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Net Return</span>
-                      <span className={cn("text-base font-black font-mono block mt-0.5", pnlClass(activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0)))}>
-                        {activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0) >= 0 ? "+" : ""}
-                        {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.net_rs ?? 0), 0))}
-                      </span>
-                    </div>
-
-                    <div className="p-2 rounded-lg bg-muted/20 border border-border/40">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Gross P&amp;L</span>
-                      <span className={cn("text-base font-black font-mono block mt-0.5", pnlClass(activeDayTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0)))}>
-                        {activeDayTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0) >= 0 ? "+" : ""}
-                        {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0))}
-                      </span>
-                    </div>
-
-                    <div className="p-2 rounded-lg bg-muted/20 border border-border/40">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Broker &amp; Taxes</span>
-                      <span className="text-sm font-bold font-mono text-muted-foreground block mt-0.5">
-                        {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.charges_rs ?? 0), 0))}
-                      </span>
-                    </div>
-
-                    <div className="p-2 rounded-lg bg-muted/20 border border-border/40">
-                      <span className="text-[10px] text-muted-foreground uppercase font-semibold block">Spot Points</span>
-                      <span className={cn("text-sm font-bold font-mono block mt-0.5", activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "text-emerald-400" : "text-red-400")}>
-                        {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "+" : ""}
-                        {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0).toFixed(1)} pts
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Executed Trade Inspector */}
-                {activeTrade ? (
-                  <div className="p-3 rounded-xl border border-border/80 bg-card shadow-2xs flex flex-col gap-2.5">
-                    <div className="flex items-start justify-between gap-2 pb-2 border-b border-border/40">
-                      <div className="flex flex-col gap-0.5 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <Badge className={cn("text-[10px] font-black px-2 py-0.5", (activeTrade.side === "CALL" || activeTrade.side === "LONG" || activeTrade.side === "CE") ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
-                            {activeTrade.side}
-                          </Badge>
-                          <span className="font-extrabold text-xs sm:text-sm text-foreground font-mono truncate">
-                            {activeTrade.option}
-                          </span>
-                        </div>
-                        <span className="text-[10px] font-mono text-muted-foreground">
-                          {activeTrade.qty} qty · {activeTrade.entry} → {activeTrade.exit || "Active"}
-                        </span>
-                      </div>
-
-                      <div className="text-right shrink-0">
-                        <span className={cn("text-base sm:text-lg font-black font-mono tracking-tight block", pnlClass(activeTrade.net_rs ?? 0))}>
-                          {(activeTrade.net_rs ?? 0) >= 0 ? "+" : ""}{fmtRs(activeTrade.net_rs ?? 0)}
-                        </span>
-                        {activeTrade.buy_price > 0 && activeTrade.sell_price > 0 && (
-                          <span className={cn("text-[10px] font-mono font-bold block", activeTrade.sell_price >= activeTrade.buy_price ? "text-emerald-400" : "text-red-400")}>
-                            {activeTrade.sell_price >= activeTrade.buy_price ? "+" : ""}
-                            {(((activeTrade.sell_price - activeTrade.buy_price) / activeTrade.buy_price) * 100).toFixed(1)}% ROC
-                          </span>
+                    return (
+                      <div
+                        key={`${t.date}-${t.entry}-${idx}`}
+                        onClick={() => {
+                          const realIdx = activeDayTrades.indexOf(t)
+                          setSelectedTradeIndex(realIdx >= 0 ? realIdx : idx)
+                          setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
+                        }}
+                        className={cn(
+                          "p-2.5 rounded-xl border text-xs cursor-pointer transition-all flex flex-col gap-1.5",
+                          isSelected
+                            ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/40"
+                            : "bg-muted/20 hover:bg-muted/40 border-border/50"
                         )}
-                      </div>
-                    </div>
+                      >
+                        {/* Header: Side, Instrument, Option contract, Net P&L */}
+                        <div className="flex items-center justify-between gap-1.5">
+                          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                            <Badge className={cn("text-[9px] font-black px-1.5 py-0", isCall ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
+                              {t.side}
+                            </Badge>
+                            <Badge variant="outline" className={cn("text-[9px] font-mono font-bold", isSensex ? "border-amber-500/40 text-amber-400 bg-amber-500/10" : "border-sky-500/40 text-sky-400 bg-sky-500/10")}>
+                              {isSensex ? "SENSEX" : "NIFTY"}
+                            </Badge>
+                            <span className="font-extrabold text-xs text-foreground font-mono truncate">{t.option}</span>
+                            <span className="text-[10px] text-muted-foreground font-mono">({t.qty} qty)</span>
+                          </div>
 
-                    {/* Metric Tiles 2x2 Grid */}
-                    <div className="grid grid-cols-2 gap-2 text-xs">
-                      {/* Option Premium */}
-                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                          Option Premium
-                        </span>
-                        <div className="font-mono font-bold text-foreground mt-0.5 text-xs">
-                          ₹{activeTrade.buy_price.toFixed(1)} → {activeTrade.sell_price > 0 ? `₹${activeTrade.sell_price.toFixed(1)}` : "Open"}
+                          <div className="text-right shrink-0">
+                            <span className={cn("text-xs font-black font-mono block", pnlClass(t.net_rs ?? 0))}>
+                              {(t.net_rs ?? 0) >= 0 ? "+" : ""}{fmtRs(t.net_rs ?? 0)}
+                            </span>
+                          </div>
                         </div>
-                        {activeTrade.sell_price > 0 && (
-                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", activeTrade.sell_price >= activeTrade.buy_price ? "text-emerald-400" : "text-red-400")}>
-                            {activeTrade.sell_price >= activeTrade.buy_price ? "+" : ""}
-                            {(activeTrade.sell_price - activeTrade.buy_price).toFixed(1)} opt pts
-                          </span>
-                        )}
-                      </div>
 
-                      {/* Spot Index */}
-                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                          Spot Index
-                        </span>
-                        <div className="font-mono font-bold text-foreground mt-0.5 text-xs">
-                          {activeTrade.nifty_in?.toFixed(1) || "—"} → {activeTrade.nifty_out?.toFixed(1) || "—"}
-                        </div>
-                        {activeTrade.nifty_points != null && (
-                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", activeTrade.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
-                            {activeTrade.nifty_points >= 0 ? "+" : ""}{activeTrade.nifty_points.toFixed(1)} spot pts
-                          </span>
-                        )}
-                      </div>
+                        {/* Timing, Premium, Points */}
+                        <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground pt-1 border-t border-border/30">
+                          <div className="flex items-center gap-1">
+                            <span>{t.entry} → {t.exit || "Open"}</span>
+                            <span>·</span>
+                            <span className="text-foreground font-medium">₹{t.buy_price.toFixed(1)} → {t.sell_price > 0 ? `₹${t.sell_price.toFixed(1)}` : "Open"}</span>
+                          </div>
 
-                      {/* Trailing Lock & SL */}
-                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                          Profit Lock &amp; SL
-                        </span>
-                        <div className="font-mono font-bold text-sky-400 mt-0.5 text-xs">
-                          {activeTrade.exit_reason === "RATCHET_LOCK" ? "+80.0 pts Lock" : "Trailing Active"}
-                        </div>
-                        <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                          SL: {activeTrade.sl ? fmtNum(activeTrade.sl) : "Fixed"}
-                        </span>
-                      </div>
-
-                      {/* Exit Reason & Fees */}
-                      <div className="p-2 rounded-lg bg-muted/30 border border-border/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-                          Exit Trigger
-                        </span>
-                        <div className="font-mono font-bold text-sky-300 truncate mt-0.5 text-xs" title={activeTrade.exit_reason}>
-                          {activeTrade.exit_reason === "RATCHET_LOCK" ? "Ratchet Lock" : (activeTrade.exit_reason || "Holding")}
-                        </div>
-                        <span className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                          Fees: {fmtRs(activeTrade.charges_rs || 0)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Capital & Duration */}
-                    <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground pt-1 px-0.5 border-t border-border/40">
-                      <span>
-                        Capital: ₹{activeTrade.buy_value_rs ? fmtNum(activeTrade.buy_value_rs) : "—"} → ₹{activeTrade.sell_value_rs ? fmtNum(activeTrade.sell_value_rs) : "—"}
-                      </span>
-                      <span className="font-semibold text-foreground">
-                        {activeTrade.mode || "PAPER"}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="p-5 text-center text-xs text-muted-foreground bg-muted/20 rounded-xl border border-border/50">
-                    No trade recorded for this session.
-                  </div>
-                )}
-
-                {/* 3. Day's Trades Selector (When multiple trades taken on this day) */}
-                {activeDayTrades.length > 1 && (
-                  <div className="rounded-xl border border-border/80 bg-card shadow-2xs overflow-hidden flex flex-col">
-                    <div className="flex items-center justify-between px-3 py-1.5 bg-muted/20 border-b border-border/40">
-                      <span className="text-[11px] font-bold font-mono tracking-tight text-foreground uppercase">
-                        All Trades On {activeDate} ({activeDayTrades.length})
-                      </span>
-                      <span className="text-[10px] font-mono text-muted-foreground">
-                        Click trade to switch chart
-                      </span>
-                    </div>
-
-                    <div className="p-1.5 flex flex-col gap-1 max-h-[140px] overflow-y-auto">
-                      {activeDayTrades.map((t, idx) => {
-                        const isCurrent = activeTrade === t
-                        const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : 0
-                        const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
-                        const isSensex = t.symbol === "SENSEX" || t.option?.includes("SENSEX")
-
-                        return (
-                          <div
-                            key={idx}
-                            onClick={() => {
-                              setSelectedTradeIndex(idx)
-                              setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
-                            }}
-                            className={cn(
-                              "p-2 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between gap-2",
-                              isCurrent
-                                ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
-                                : "bg-card hover:bg-muted/40 border-border/60"
-                            )}
-                          >
-                            <div className="min-w-0 flex flex-col gap-0.5">
-                              <div className="flex items-center gap-1.5 flex-wrap">
-                                <Badge className={cn("text-[9px] font-black px-1.5 py-0", isCall ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
-                                  {t.side}
-                                </Badge>
-                                <Badge variant="outline" className="text-[9px] font-mono font-bold">
-                                  {isSensex ? "SENSEX" : "NIFTY"}
-                                </Badge>
-                                <span className="font-bold text-xs text-foreground font-mono">{t.option}</span>
-                              </div>
-                              <span className="text-[10px] text-muted-foreground font-mono">
-                                {t.entry} → {t.exit || "—"} ({t.qty} qty)
-                              </span>
-                            </div>
-
-                            <div className="text-right shrink-0">
-                              <span className={cn("text-xs font-black font-mono block", pnlClass(t.net_rs ?? 0))}>
-                                {(t.net_rs ?? 0) >= 0 ? "+" : ""}{fmtRs(t.net_rs ?? 0)}
-                              </span>
-                              <span className={cn("text-[10px] font-mono font-bold block", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
+                          <div className="flex items-center gap-1.5">
+                            {t.sell_price > 0 && (
+                              <span className={cn("font-bold", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
                                 {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts
                               </span>
+                            )}
+                            {t.nifty_points != null && (
+                              <span className={cn("font-bold", t.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                ({t.nifty_points >= 0 ? "+" : ""}{t.nifty_points.toFixed(0)} spot)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* Selected Trade Quick Specs */}
+                        {isSelected && (
+                          <div className="grid grid-cols-3 gap-1 pt-1.5 text-[9px] font-mono border-t border-border/30 bg-muted/30 p-1.5 rounded-lg mt-0.5">
+                            <div>
+                              <span className="text-muted-foreground block uppercase text-[8px]">Exit Reason</span>
+                              <span className="font-bold text-sky-400 truncate block" title={t.exit_reason}>
+                                {t.exit_reason === "RATCHET_LOCK" ? "Ratchet Lock (+80pt)" : (t.exit_reason || "Open")}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-muted-foreground block uppercase text-[8px]">Capital / Fees</span>
+                              <span className="font-semibold text-foreground block">₹{fmtNum(t.buy_value_rs || 0)} · {fmtRs(t.charges_rs || 0)}</span>
+                            </div>
+                            <div className="text-right">
+                              <span className="text-muted-foreground block uppercase text-[8px]">Stop Loss</span>
+                              <span className="font-semibold text-muted-foreground block">{t.sl ? fmtNum(t.sl) : "Fixed"}</span>
                             </div>
                           </div>
-                        )
-                      })}
-                    </div>
+                        )}
+                      </div>
+                    )
+                  })
+                ) : (
+                  <div className="py-20 text-center text-xs text-muted-foreground">
+                    No {sessionInstrumentTab === "ALL" ? "" : sessionInstrumentTab.toLowerCase()} trades for this session.
                   </div>
                 )}
               </div>
-            </div>
-          </CardContent>
-        </Card>
+
+              {/* Panel Footer */}
+              {activeDayTrades.length > 0 && (
+                <div className="p-2 px-3 border-t border-border/40 bg-muted/10 flex items-center justify-between text-[10px] font-mono text-muted-foreground shrink-0">
+                  <span>
+                    Gross {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0))} · Fees {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.charges_rs ?? 0), 0))}
+                  </span>
+                  <span>
+                    Spot Move: <strong className={activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "text-emerald-400" : "text-red-400"}>
+                      {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "+" : ""}
+                      {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0).toFixed(1)} pts
+                    </strong>
+                  </span>
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   )
