@@ -191,7 +191,7 @@ class TrendRunnerPaperEngine:
         reentry_sl_points: float = 30.0,
         sl_mode: str = "swing",
         lots: int = 1,
-        sizing_mode: str = "fixed",
+        sizing_mode: str = "dynamic",
         pyramid: bool = False,
         reentry: bool = False,
         max_trades_per_day: int = 2,
@@ -1017,7 +1017,7 @@ def run_replay(
     sl_pts: float = 30.0,
     sl_mode: str = "swing",
     lots: int = 1,
-    sizing_mode: str = "fixed",
+    sizing_mode: str = "dynamic",
     reentry: bool = True,
     be_trigger: Optional[float] = None,
     vix_chg_override: Optional[float] = None,
@@ -1035,7 +1035,7 @@ def run_replay(
     print("=" * 75)
 
     # 1. Search for day's 1m candle file, check completeness
-    csv_1m = LIVE_DIR / f"nifty_1min_{target_date}.csv"
+    csv_1m = LIVE_DIR / f"{symbol.lower()}_1min_{target_date}.csv"
     loaded_1m = False
     if csv_1m.exists():
         df1m = pd.read_csv(csv_1m)
@@ -1135,7 +1135,7 @@ def run_live_monitor(
     sl_pts: float = 30.0,
     sl_mode: str = "swing",
     lots: int = 1,
-    sizing_mode: str = "fixed",
+    sizing_mode: str = "dynamic",
     reentry: bool = True,
     be_trigger: Optional[float] = None,
     vix_chg_override: Optional[float] = None,
@@ -1240,7 +1240,7 @@ if __name__ == "__main__":
     parser.add_argument("--lots", type=int, default=1, help="Number of lots to trade (default: 1)")
     parser.add_argument("--sl", type=float, default=30.0, help="Stop loss in spot points (default: 30.0)")
     parser.add_argument("--sl-mode", choices=["fixed", "adaptive"], default="fixed", help="SL mode (default: fixed)")
-    parser.add_argument("--sizing", choices=["hybrid", "fixed"], default="fixed", help="Position sizing mode (default: fixed)")
+    parser.add_argument("--sizing", choices=["dynamic", "hybrid", "fixed"], default="dynamic", help="Position sizing mode (default: dynamic)")
     parser.add_argument("--vix-chg", type=float, default=None, help="Override India VIX %% change for testing")
     parser.add_argument("--poll", type=int, default=5, help="Live monitor polling interval in seconds (default: 5)")
     parser.add_argument("--reentry", action="store_true", default=True, help="Enable smart re-entry after morning stopout (default: True)")
