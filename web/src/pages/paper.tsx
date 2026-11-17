@@ -59,9 +59,19 @@ export function _CapitalCurve({ report }: { report: CapitalReport }) {
   )
 }
 
-function CapitalDayPanel({ date, trades, onClose, strategy = "all", isDefaultSession = false }: {
+function CapitalDayPanel({
+  date,
+  trades,
+  allTrades = [],
+  onPick,
+  onClose,
+  strategy = "all",
+  isDefaultSession = false,
+}: {
   date: string
   trades: PaperReport["trades"]
+  allTrades?: PaperReport["trades"]
+  onPick?: (date: string) => void
   onClose: () => void
   strategy?: string
   isDefaultSession?: boolean
@@ -83,19 +93,19 @@ function CapitalDayPanel({ date, trades, onClose, strategy = "all", isDefaultSes
               <div className="flex items-center gap-2 flex-wrap">
                 <CardTitle className="text-base sm:text-lg">
                   {strategy === "trend_runner"
-                    ? "NIFTY 50 Intraday Chart & Option Values"
+                    ? "NIFTY 50 Intraday Chart & Option Trades"
                     : strategy === "sensex_runner"
-                    ? "BSE SENSEX Intraday Chart & Option Values"
+                    ? "BSE SENSEX Intraday Chart & Option Trades"
                     : strategy === "nifty_key_levels"
                     ? "Nifty Key Levels S&R Trades & Chart"
-                    : "Intraday Chart & Option Values"}
+                    : "Intraday Chart & Option Trades"}
                 </CardTitle>
                 <Badge variant="outline" className="font-mono text-xs font-bold border-primary/40 bg-primary/10 text-primary">
                   {date} {isDefaultSession ? "(Latest Session)" : "(Selected Date)"}
                 </Badge>
               </div>
               <CardDescription className="text-xs mt-0.5">
-                Real-time option strike executions, underlying index trajectory, and net rupee returns.
+                Intraday candlestick chart on left, active option strike executions and trade logs on right.
               </CardDescription>
             </div>
             <div className="flex items-center gap-3">
@@ -111,89 +121,198 @@ function CapitalDayPanel({ date, trades, onClose, strategy = "all", isDefaultSes
             </div>
           </div>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4 pt-4">
-          {/* OPTION TRADE VALUE CARDS STRIP */}
-          {trades.length > 0 ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              {trades.map((t, idx) => {
-                const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : 0
-                const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
-                return (
-                  <div key={idx} className="p-3.5 rounded-xl border border-border/70 bg-card/80 shadow-2xs space-y-2.5">
-                    {/* Header: Option Contract & Net P&L */}
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 flex-wrap min-w-0">
-                        <Badge className={cn("text-[10px] font-bold px-2 py-0.5", isCall ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
-                          {t.side}
-                        </Badge>
-                        <span className="font-bold text-sm text-foreground tracking-tight truncate">{t.option}</span>
-                        <span className="text-[11px] font-mono text-muted-foreground">({t.qty} qty)</span>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className={cn("text-base font-extrabold font-mono", pnlClass(t.net_rs))}>
-                          {t.net_rs >= 0 ? "+" : ""}{fmtRs(t.net_rs)}
-                        </span>
-                      </div>
-                    </div>
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-start">
+            {/* LEFT SIDE: INTRADAY CANDLESTICK CHART (NIFTY OR SENSEX ONLY) */}
+            <div className="lg:col-span-8 flex flex-col gap-3 min-w-0">
+              <DayDetail
+                key={`${date}-${strategy}`}
+                date={date}
+                mode="paper"
+                strategy={strategy}
+                compact
+                chartOnly
+                allowTimeframeSwitch
+              />
+            </div>
 
-                    {/* Metrics Grid */}
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 border-t border-border/40 text-xs">
-                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold">Option Premium</span>
-                        <span className="font-mono font-bold text-foreground mt-0.5">
-                          {fmtRs(t.buy_price)} → {t.sell_price > 0 ? fmtRs(t.sell_price) : "Open"}
-                        </span>
-                        {t.sell_price > 0 && (
-                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
-                            {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold">Spot Underlying</span>
-                        <span className="font-mono font-bold text-foreground mt-0.5">
-                          {t.nifty_in?.toFixed(1) || "—"} → {t.nifty_out?.toFixed(1) || "—"}
-                        </span>
-                        {t.nifty_points != null && (
-                          <span className={cn("text-[10px] font-mono font-bold mt-0.5", t.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
-                            {t.nifty_points >= 0 ? "+" : ""}{t.nifty_points.toFixed(1)} spot pts
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold">Execution Time</span>
-                        <span className="font-mono font-bold text-foreground mt-0.5">
-                          {t.entry} → {t.exit || "Active"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground mt-0.5">
-                          {t.mode || "Paper Trade"}
-                        </span>
-                      </div>
-
-                      <div className="p-2 rounded-lg bg-muted/40 flex flex-col justify-between">
-                        <span className="text-[10px] text-muted-foreground font-semibold">Exit Reason</span>
-                        <span className="font-mono font-bold text-sky-400 truncate mt-0.5" title={t.exit_reason}>
-                          {t.exit_reason || "Holding"}
-                        </span>
-                        <span className="text-[10px] text-muted-foreground mt-0.5">
-                          Fees: {fmtRs(t.charges_rs || 0)}
-                        </span>
-                      </div>
-                    </div>
+            {/* RIGHT SIDE: OPTION TRADES & QUICK LOG */}
+            <div className="lg:col-span-4 flex flex-col gap-3.5 min-w-0">
+              {/* Active Session Trade Cards */}
+              <div className="rounded-xl border border-border/80 bg-card/90 shadow-2xs overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-3.5 py-2.5 bg-muted/20 border-b border-border/40">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold tracking-tight text-foreground">
+                      Session Option Trades
+                    </span>
+                    <Badge variant="outline" className="text-[10px] font-mono border-primary/40 text-primary">
+                      {date} ({trades.length} trade{trades.length === 1 ? "" : "s"})
+                    </Badge>
                   </div>
-                )
-              })}
-            </div>
-          ) : (
-            <div className="p-3 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg">
-              No paper trades executed on this date.
-            </div>
-          )}
+                  <span className={cn("text-xs font-bold font-mono", pnlClass(total))}>
+                    {total >= 0 ? "+" : ""}{fmtRs(total)}
+                  </span>
+                </div>
 
-          {/* CANDLESTICK CHART */}
-          <DayDetail key={`${date}-${strategy}`} date={date} mode="paper" strategy={strategy} compact chartOnly allowTimeframeSwitch />
+                <div className="p-3 flex flex-col gap-3">
+                  {trades.length > 0 ? (
+                    trades.map((t, idx) => {
+                      const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : 0
+                      const optPct = t.buy_price > 0 && t.sell_price > 0 ? ((t.sell_price - t.buy_price) / t.buy_price) * 100 : 0
+                      const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
+                      const lotSize = strategy === "sensex_runner" ? 20 : 65
+                      const lots = Math.max(1, Math.round(t.qty / lotSize))
+                      return (
+                        <div key={idx} className="p-3 rounded-lg border border-border/70 bg-card space-y-2.5">
+                          {/* Strike & Return */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                              <Badge className={cn("text-[10px] font-black px-2 py-0.5", isCall ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
+                                {t.side}
+                              </Badge>
+                              <span className="font-bold text-xs text-foreground font-mono truncate">{t.option}</span>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <span className={cn("text-sm font-black font-mono", pnlClass(t.net_rs))}>
+                                {t.net_rs >= 0 ? "+" : ""}{fmtRs(t.net_rs)}
+                              </span>
+                              {optPct !== 0 && (
+                                <span className={cn("text-[10px] font-mono block font-bold", optPct >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                  {optPct >= 0 ? "+" : ""}{optPct.toFixed(1)}%
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Quick Info */}
+                          <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono bg-muted/40 px-2 py-1 rounded">
+                            <span>{t.qty} qty ({lots} lot{lots > 1 ? "s" : ""}) · {t.mode || "PAPER"}</span>
+                            <span>{t.entry} → {t.exit || "Active"}</span>
+                          </div>
+
+                          {/* 2x2 Metric Grid */}
+                          <div className="grid grid-cols-2 gap-2 text-xs">
+                            <div className="p-2 rounded bg-muted/30 border border-border/40">
+                              <span className="text-[10px] text-muted-foreground font-semibold uppercase block">Option Premium</span>
+                              <span className="font-mono font-bold text-foreground block mt-0.5">
+                                ₹{t.buy_price.toFixed(1)} → {t.sell_price > 0 ? `₹${t.sell_price.toFixed(1)}` : "Open"}
+                              </span>
+                              {t.sell_price > 0 && (
+                                <span className={cn("text-[10px] font-mono font-bold block mt-0.5", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                  {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="p-2 rounded bg-muted/30 border border-border/40">
+                              <span className="text-[10px] text-muted-foreground font-semibold uppercase block">Spot Index</span>
+                              <span className="font-mono font-bold text-foreground block mt-0.5">
+                                {t.nifty_in?.toFixed(1) || "—"} → {t.nifty_out?.toFixed(1) || "—"}
+                              </span>
+                              {t.nifty_points != null && (
+                                <span className={cn("text-[10px] font-mono font-bold block mt-0.5", t.nifty_points >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                  {t.nifty_points >= 0 ? "+" : ""}{t.nifty_points.toFixed(1)} spot pts
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="p-2 rounded bg-muted/30 border border-border/40">
+                              <span className="text-[10px] text-muted-foreground font-semibold uppercase block">Profit Lock</span>
+                              <span className="font-mono font-bold text-sky-400 block mt-0.5">+80.0 pts Lock</span>
+                              <span className="text-[10px] text-muted-foreground block mt-0.5">
+                                SL: {t.sl ? fmtNum(t.sl) : "—"}
+                              </span>
+                            </div>
+
+                            <div className="p-2 rounded bg-muted/30 border border-border/40">
+                              <span className="text-[10px] text-muted-foreground font-semibold uppercase block">Exit Trigger</span>
+                              <span className="font-mono font-bold text-sky-300 block truncate mt-0.5" title={t.exit_reason}>
+                                {t.exit_reason === "RATCHET_LOCK" ? "Ratchet Lock (+80pt)" : (t.exit_reason || "Holding")}
+                              </span>
+                              <span className="text-[10px] text-muted-foreground block mt-0.5">
+                                Fees: {fmtRs(t.charges_rs || 0)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })
+                  ) : (
+                    <div className="p-4 text-center text-xs text-muted-foreground bg-muted/20 rounded-lg">
+                      No option trades executed on this date.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Paper Trades Quick Switcher on the Right */}
+              {allTrades.length > 0 && (
+                <div className="rounded-xl border border-border/80 bg-card/90 shadow-2xs overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between px-3.5 py-2.5 bg-muted/20 border-b border-border/40">
+                    <span className="text-xs font-bold text-foreground">
+                      Paper Trades Quick Switcher
+                    </span>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {allTrades.length} trades
+                    </span>
+                  </div>
+                  <div className="p-2 flex flex-col gap-1.5 max-h-[380px] overflow-y-auto">
+                    {allTrades.map((at, idx) => {
+                      const isSel = at.date === date
+                      const isCall = at.side === "CALL" || at.side === "LONG" || at.side === "CE"
+                      const optPts = at.sell_price > 0 ? at.sell_price - at.buy_price : 0
+                      return (
+                        <div
+                          key={idx}
+                          onClick={() => {
+                            onPick?.(at.date)
+                            ref.current?.scrollIntoView({ behavior: "smooth", block: "start" })
+                          }}
+                          className={cn(
+                            "p-2.5 rounded-lg border text-xs cursor-pointer transition-all flex items-center justify-between gap-2",
+                            isSel
+                              ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
+                              : "bg-card hover:bg-muted/40 border-border/60"
+                          )}
+                        >
+                          <div className="min-w-0 flex flex-col gap-0.5">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <Badge className={cn("text-[9px] font-bold px-1.5 py-0", isCall ? "bg-emerald-600 text-white" : "bg-red-600 text-white")}>
+                                {at.side}
+                              </Badge>
+                              <span className="font-bold text-xs text-foreground font-mono">{at.date}</span>
+                              <span className="text-[10px] text-muted-foreground font-mono">{at.entry}</span>
+                              {isSel && (
+                                <span className="text-[9px] font-bold bg-primary/20 text-primary px-1.5 py-0 rounded">
+                                  Viewing
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] font-mono text-muted-foreground truncate">
+                              {at.option}
+                            </div>
+                            {at.sell_price > 0 && (
+                              <div className={cn("text-[10px] font-mono font-semibold", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
+                                {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts ({at.nifty_points != null ? `${at.nifty_points >= 0 ? "+" : ""}${at.nifty_points.toFixed(1)} spot` : ""})
+                              </div>
+                            )}
+                          </div>
+                          <div className="text-right shrink-0">
+                            <span className={cn("text-xs font-bold font-mono block", pnlClass(at.net_rs))}>
+                              {at.net_rs >= 0 ? "+" : ""}{fmtRs(at.net_rs)}
+                            </span>
+                            <span className="text-[10px] font-mono text-muted-foreground block truncate max-w-[85px]" title={at.exit_reason}>
+                              {at.exit_reason === "RATCHET_LOCK" ? "Ratchet Lock" : (at.exit_reason || "Exit")}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -206,26 +325,53 @@ function StrategyTradesTable({ title, trades, onPick, activeDate }: {
   onPick?: (date: string) => void
   activeDate?: string | null
 }) {
+  const totalNet = trades.reduce((acc, t) => acc + (t.net_rs || 0), 0)
+  const wins = trades.filter((t) => (t.net_rs || 0) > 0).length
+  const winRate = trades.length ? Math.round((wins / trades.length) * 100) : 0
+
+  const handleRowClick = (d: string) => {
+    onPick?.(d)
+    window.scrollTo({ top: 320, behavior: "smooth" })
+  }
+
   return (
     <Card>
-      <CardHeader>
-        <CardTitle>{title}</CardTitle>
-        <CardDescription>{trades.length} paper trade(s) · net rupee P&amp;L after estimated charges · click any row to view full chart.</CardDescription>
+      <CardHeader className="pb-3 border-b border-border/40">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div>
+            <CardTitle>{title}</CardTitle>
+            <CardDescription>
+              {trades.length} paper trade(s) recorded · Click any row to load the interactive intraday chart on left and trade execution on right.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-3">
+            <Badge variant="outline" className="font-mono text-xs">
+              {wins}W / {trades.length - wins}L ({winRate}% Win Rate)
+            </Badge>
+            <div className="text-right">
+              <span className="text-[10px] text-muted-foreground block font-medium">Net P&amp;L</span>
+              <span className={cn("text-base font-bold tabular-nums font-mono", pnlClass(totalNet))}>
+                {totalNet >= 0 ? "+" : ""}{fmtRs(totalNet)}
+              </span>
+            </div>
+          </div>
+        </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-3">
         {trades.length ? (
           <Table>
             <TableHeader><TableRow>
-              <TableHead>Date</TableHead>
+              <TableHead>Date &amp; Action</TableHead>
               <TableHead>Option Contract</TableHead>
               <TableHead>Option Premium</TableHead>
               <TableHead>Spot Index</TableHead>
-              <TableHead>Timing</TableHead>
+              <TableHead>Timing &amp; Mode</TableHead>
               <TableHead>Exit Reason</TableHead>
               <TableHead className="text-right">Net P&amp;L</TableHead>
             </TableRow></TableHeader>
             <TableBody>{trades.map((trade, index) => {
               const optPts = trade.sell_price > 0 ? trade.sell_price - trade.buy_price : 0
+              const optPct = trade.buy_price > 0 && trade.sell_price > 0 ? ((trade.sell_price - trade.buy_price) / trade.buy_price) * 100 : 0
               const isSelected = activeDate === trade.date
               return (
                 <TableRow
@@ -234,17 +380,22 @@ function StrategyTradesTable({ title, trades, onPick, activeDate }: {
                     "cursor-pointer transition-colors",
                     isSelected ? "bg-primary/5 hover:bg-primary/10 border-l-2 border-l-primary" : "hover:bg-muted/30"
                   )}
-                  onClick={() => onPick?.(trade.date)}
+                  onClick={() => handleRowClick(trade.date)}
                 >
-                  <TableCell className="font-medium tabular-nums text-primary underline-offset-4 hover:underline">
-                    {trade.date}
+                  <TableCell className="font-medium tabular-nums">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-foreground font-mono">{trade.date}</span>
+                      <span className="text-[10px] font-semibold text-primary underline underline-offset-2 flex items-center">
+                        Chart ↗
+                      </span>
+                    </div>
                   </TableCell>
                   <TableCell>
                     <div className="flex items-center gap-1.5 flex-wrap">
                       <span className={cn("inline-flex h-5 items-center rounded-full px-2 text-[10px] font-bold text-white", (trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE") ? "bg-emerald-600" : "bg-red-600")}>
                         {trade.side}
                       </span>
-                      <span className="font-semibold text-xs text-foreground">{trade.option}</span>
+                      <span className="font-semibold text-xs text-foreground font-mono">{trade.option}</span>
                       <span className="text-[10px] font-mono text-muted-foreground">({trade.qty} qty)</span>
                     </div>
                   </TableCell>
@@ -252,7 +403,7 @@ function StrategyTradesTable({ title, trades, onPick, activeDate }: {
                     <div className="font-mono font-medium">{fmtRs(trade.buy_price)} → {trade.sell_price > 0 ? fmtRs(trade.sell_price) : "Open"}</div>
                     {trade.sell_price > 0 && (
                       <span className={cn("text-[10px] font-mono font-bold", optPts >= 0 ? "text-emerald-400" : "text-red-400")}>
-                        {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts
+                        {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} opt pts ({optPct >= 0 ? "+" : ""}{optPct.toFixed(1)}%)
                       </span>
                     )}
                   </TableCell>
@@ -265,13 +416,16 @@ function StrategyTradesTable({ title, trades, onPick, activeDate }: {
                     )}
                   </TableCell>
                   <TableCell className="tabular-nums text-xs font-mono text-muted-foreground">
-                    {trade.entry} → {trade.exit || "—"}
+                    <div>{trade.entry} → {trade.exit || "—"}</div>
+                    <div className="text-[10px] text-muted-foreground">{trade.mode || "PAPER"}</div>
                   </TableCell>
                   <TableCell className="text-xs text-muted-foreground font-mono">
-                    {trade.exit_reason || "Open"}
+                    <span className="px-1.5 py-0.5 rounded bg-muted/60 text-[11px] font-semibold text-foreground">
+                      {trade.exit_reason === "RATCHET_LOCK" ? "Ratchet Lock (+80pt)" : (trade.exit_reason || "Open")}
+                    </span>
                   </TableCell>
                   <TableCell className={cn("text-right font-medium tabular-nums", pnlClass(trade.net_rs))}>
-                    <div className="font-bold font-mono">{fmtRs(trade.net_rs)}</div>
+                    <div className="font-bold font-mono text-sm">{fmtRs(trade.net_rs)}</div>
                     <div className="text-[10px] font-normal text-muted-foreground">gross {fmtRs(trade.pnl_rs)} · fees {fmtRs(trade.charges_rs)}</div>
                   </TableCell>
                 </TableRow>
@@ -488,7 +642,16 @@ export function PaperPage() {
             </CardContent>
           </Card>
         </div>
-        {selectedDay && <CapitalDayPanel date={selectedDay.date} trades={selectedTrades as any} onClose={() => setPicked(null)} strategy="all" />}
+        {selectedDay && (
+          <CapitalDayPanel
+            date={selectedDay.date}
+            trades={selectedTrades as any}
+            allTrades={capital.data.trades as any}
+            onPick={setPicked}
+            onClose={() => setPicked(null)}
+            strategy="all"
+          />
+        )}
       </div>
     )
   }
@@ -552,6 +715,8 @@ export function PaperPage() {
           <CapitalDayPanel
             date={activeDate}
             trades={data.trades.filter((t) => t.date === activeDate)}
+            allTrades={data.trades}
+            onPick={setPicked}
             onClose={() => setPicked(null)}
             strategy={strategy}
             isDefaultSession={!picked}

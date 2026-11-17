@@ -31,8 +31,12 @@ export function DayDetail({
   headerLeading?: ReactNode
 }) {
   const isSensexStrategy = Boolean(strategy && (strategy === "sensex_runner" || strategy.includes("sensex")))
+  const isNiftyStrategy = Boolean(strategy && (strategy === "trend_runner" || strategy.includes("nifty")))
   const [timeframe, setTimeframe] = useState<"1m" | "5m">("1m")
-  const [chartLayout, setChartLayout] = useState<"both" | "primary" | "secondary">(isSensexStrategy ? "primary" : "both")
+  const [chartHeightMode, setChartHeightMode] = useState<"normal" | "tall" | "xl">("tall")
+  const [chartLayout, setChartLayout] = useState<"both" | "primary" | "secondary">(
+    isSensexStrategy || isNiftyStrategy ? "primary" : "both"
+  )
   const [primaryResetKey, setPrimaryResetKey] = useState(0)
   const [secondaryResetKey, setSecondaryResetKey] = useState(0)
   const useFiveMinute = allowTimeframeSwitch && timeframe === "5m"
@@ -128,13 +132,19 @@ export function DayDetail({
 
 
   // Render Charts grid block (reusable in compact and regular view)
-  const renderCharts = (isCompactView: boolean) => {
+  const renderCharts = (_isCompactView?: boolean) => {
     const isDual = chartLayout === "both" && hasSecondary
-    const chartHeightClass = isCompactView
-      ? "h-[clamp(440px,52vh,540px)] min-h-[440px]"
-      : isDual
-      ? "h-[clamp(520px,62vh,680px)] min-h-[500px]"
-      : "h-[clamp(620px,74vh,800px)] min-h-[580px]"
+    const chartHeightClass = isDual
+      ? chartHeightMode === "normal"
+        ? "h-[clamp(480px,56vh,620px)] min-h-[480px]"
+        : chartHeightMode === "xl"
+        ? "h-[clamp(760px,84vh,960px)] min-h-[720px]"
+        : "h-[clamp(620px,72vh,780px)] min-h-[580px]"
+      : chartHeightMode === "normal"
+      ? "h-[clamp(540px,62vh,680px)] min-h-[520px]"
+      : chartHeightMode === "xl"
+      ? "h-[clamp(820px,88vh,1050px)] min-h-[800px]"
+      : "h-[clamp(660px,76vh,860px)] min-h-[640px]"
 
     return (
     <div className={cn(
@@ -342,13 +352,13 @@ export function DayDetail({
   if (compact) {
     return (
       <div className="flex flex-col gap-4">
-        <div className={cn("flex items-center justify-between gap-3 flex-wrap", chartOnly && "mx-auto w-full max-w-6xl")}>
+        <div className="flex items-center justify-between gap-3 flex-wrap w-full">
           <div className="flex items-center gap-2">
-            <span className="text-sm text-muted-foreground">
+            <span className="text-xs sm:text-sm text-muted-foreground font-medium">
               {useFiveMinute ? "5-minute Key Levels view" : "1-minute full-session view"}
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             {hasSecondary && (
               <div className="flex items-center rounded-lg border bg-muted/30 p-0.5 text-xs">
                 <button
@@ -385,9 +395,44 @@ export function DayDetail({
             )}
             {allowTimeframeSwitch && (
               <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as "1m" | "5m")}>
-                <TabsList><TabsTrigger value="1m">1 min</TabsTrigger><TabsTrigger value="5m">5 min</TabsTrigger></TabsList>
+                <TabsList className="h-7 p-0.5"><TabsTrigger value="1m" className="text-xs h-6 px-2.5">1 min</TabsTrigger><TabsTrigger value="5m" className="text-xs h-6 px-2.5">5 min</TabsTrigger></TabsList>
               </Tabs>
             )}
+            <div className="flex items-center rounded-lg border border-border/60 bg-muted/30 p-0.5 text-xs">
+              <button
+                type="button"
+                onClick={() => setChartHeightMode("normal")}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+                  chartHeightMode === "normal" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Standard height (~540px)"
+              >
+                Normal
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartHeightMode("tall")}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+                  chartHeightMode === "tall" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Tall spacious height (~740px)"
+              >
+                Tall
+              </button>
+              <button
+                type="button"
+                onClick={() => setChartHeightMode("xl")}
+                className={cn(
+                  "rounded px-2 py-0.5 text-[11px] font-medium transition-colors",
+                  chartHeightMode === "xl" ? "bg-background text-foreground shadow-xs font-bold" : "text-muted-foreground hover:text-foreground"
+                )}
+                title="Extra large cinema height (~900px)"
+              >
+                XL
+              </button>
+            </div>
           </div>
         </div>
 
