@@ -15,6 +15,7 @@ import {
   Shield,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   fmtRs,
@@ -199,14 +200,6 @@ export function ManualTradingPage() {
     const cur = Number(strike) || atmStrike
     setStrike(String(cur + dir * strikeStep))
   }
-
-  const quickStrikes = [
-    atmStrike - strikeStep * 2,
-    atmStrike - strikeStep,
-    atmStrike,
-    atmStrike + strikeStep,
-    atmStrike + strikeStep * 2,
-  ]
 
   const totalQty = lots * lotSize
   const availableFunds = fundsPoll.data?.ok ? fundsPoll.data.available_equity_funds : null
@@ -408,123 +401,94 @@ export function ManualTradingPage() {
         </button>
       </div>
 
-      {/* 3. STRIKE CONTROLLER (Stepper + Quick Chips) */}
-      <div className="flex flex-col gap-1 py-1 bg-muted/30 rounded-xl p-2 border border-border/40">
-        <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7 rounded-lg bg-background border border-border/60 shadow-2xs"
-            onClick={() => stepStrike(-1)}
-          >
-            <Minus className="size-3.5" />
-          </Button>
+      {/* 3. STRIKE CONTROLLER (Only [-] and [+] Stepper) */}
+      <div className="flex items-center justify-between py-1 bg-muted/30 rounded-xl px-3 border border-border/40">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 rounded-lg bg-background border border-border/60 shadow-2xs hover:bg-muted active:scale-95"
+          onClick={() => stepStrike(-1)}
+        >
+          <Minus className="size-4" />
+        </Button>
 
-          <div className="text-center">
-            <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
-              Strike ({currentExpiry ? currentExpiry.slice(5) : "Weekly"})
-            </span>
-            <div className="text-lg font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
-              {strike || atmStrike}
-              {Number(strike) === atmStrike && (
-                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-bold">
-                  ATM
-                </span>
-              )}
-            </div>
+        <div className="text-center flex flex-col items-center">
+          <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+            Strike ({currentExpiry ? currentExpiry.slice(5) : "Weekly"})
+          </span>
+          <div className="text-xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
+            {strike || atmStrike}
+            {Number(strike) === atmStrike && (
+              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-bold">
+                ATM
+              </span>
+            )}
           </div>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-7 rounded-lg bg-background border border-border/60 shadow-2xs"
-            onClick={() => stepStrike(1)}
-          >
-            <Plus className="size-3.5" />
-          </Button>
         </div>
 
-        {/* 5 Strike Chips */}
-        <div className="grid grid-cols-5 gap-1 pt-0.5">
-          {quickStrikes.map((s) => {
-            const isSelected = String(s) === strike
-            const isAtm = s === atmStrike
-            return (
-              <button
-                key={s}
-                type="button"
-                onClick={() => setStrike(String(s))}
-                className={cn(
-                  "py-0.5 rounded-md text-center font-mono text-[10px] font-bold transition-all border",
-                  isSelected
-                    ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                    : isAtm
-                    ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-                    : "bg-background/80 border-border/50 text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {s}
-              </button>
-            )
-          })}
-        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-8 rounded-lg bg-background border border-border/60 shadow-2xs hover:bg-muted active:scale-95"
+          onClick={() => stepStrike(1)}
+        >
+          <Plus className="size-4" />
+        </Button>
       </div>
 
-      {/* 4. TARGET & STOP LOSS SCALP CONTROLS */}
-      <div className="grid grid-cols-2 gap-1.5 bg-muted/20 p-1.5 rounded-xl border border-border/30">
-        {/* Stop Loss (SL) */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center justify-between text-[10px] font-semibold text-rose-400">
-            <span className="flex items-center gap-0.5">
-              <Shield className="size-2.5" /> Stop Loss
+      {/* 4. TARGET & STOP LOSS INPUT BOXES */}
+      <div className="grid grid-cols-2 gap-2 bg-muted/20 p-2 rounded-xl border border-border/30">
+        {/* Stop Loss (SL) Input */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between text-[10px] font-bold text-rose-400">
+            <span className="flex items-center gap-1">
+              <Shield className="size-3" /> Stop Loss
             </span>
-            <span className="font-mono">{slPts > 0 ? `-${slPts} pt` : "Off"}</span>
+            <span className="font-mono text-[9px] text-muted-foreground">
+              {slPts > 0 ? `-${(slPts * totalQty).toFixed(0)} ₹` : "Off"}
+            </span>
           </div>
-          <div className="grid grid-cols-4 gap-0.5">
-            {[0, 5, 8, 10].map((pts) => (
-              <button
-                key={pts}
-                type="button"
-                onClick={() => setSlPts(pts)}
-                className={cn(
-                  "py-0.5 rounded text-[9px] font-mono font-bold transition-all border",
-                  slPts === pts
-                    ? "bg-rose-500/20 border-rose-500/60 text-rose-400"
-                    : "bg-background/60 border-border/40 text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {pts === 0 ? "Off" : `${pts}p`}
-              </button>
-            ))}
+          <div className="relative flex items-center">
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              placeholder="0 (off)"
+              value={slPts || ""}
+              onChange={(e) => setSlPts(Math.max(0, parseFloat(e.target.value) || 0))}
+              className="h-8 text-xs font-mono font-bold bg-background/80 border-border/60 pl-2.5 pr-8 rounded-lg"
+            />
+            <span className="absolute right-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
+              pts
+            </span>
           </div>
         </div>
 
-        {/* Target (TP) */}
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-center justify-between text-[10px] font-semibold text-emerald-400">
-            <span className="flex items-center gap-0.5">
-              <Target className="size-2.5" /> Target
+        {/* Target (TP) Input */}
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between text-[10px] font-bold text-emerald-400">
+            <span className="flex items-center gap-1">
+              <Target className="size-3" /> Target
             </span>
-            <span className="font-mono">{tpPts > 0 ? `+${tpPts} pt` : "Off"}</span>
+            <span className="font-mono text-[9px] text-muted-foreground">
+              {tpPts > 0 ? `+${(tpPts * totalQty).toFixed(0)} ₹` : "Off"}
+            </span>
           </div>
-          <div className="grid grid-cols-4 gap-0.5">
-            {[0, 10, 15, 25].map((pts) => (
-              <button
-                key={pts}
-                type="button"
-                onClick={() => setTpPts(pts)}
-                className={cn(
-                  "py-0.5 rounded text-[9px] font-mono font-bold transition-all border",
-                  tpPts === pts
-                    ? "bg-emerald-500/20 border-emerald-500/60 text-emerald-400"
-                    : "bg-background/60 border-border/40 text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {pts === 0 ? "Off" : `${pts}p`}
-              </button>
-            ))}
+          <div className="relative flex items-center">
+            <Input
+              type="number"
+              min="0"
+              step="1"
+              placeholder="0 (off)"
+              value={tpPts || ""}
+              onChange={(e) => setTpPts(Math.max(0, parseFloat(e.target.value) || 0))}
+              className="h-8 text-xs font-mono font-bold bg-background/80 border-border/60 pl-2.5 pr-8 rounded-lg"
+            />
+            <span className="absolute right-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
+              pts
+            </span>
           </div>
         </div>
       </div>
