@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback, useRef } from "react"
 import { toast } from "sonner"
 import {
   Plus,
@@ -6,20 +6,19 @@ import {
   Clock,
   Target,
   Shield,
-  Zap,
   ArrowLeft,
-  ArrowRight,
+  ChevronDown,
+  RefreshCw,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   fmtRs,
   pnlClass,
   postJSON,
   usePoll,
   type ManualOptionChoices,
+  type ManualExpiryGroup,
   type FundsStatus,
 } from "@/lib/api"
 import { useStatus } from "@/lib/status"
@@ -44,7 +43,6 @@ interface OpenPosition {
   tl_pts?: number
   target_price?: number
   stop_price?: number
-  is_demo?: boolean
 }
 
 interface ClosedPosition {
@@ -85,6 +83,37 @@ export function ManualTradingPage() {
   // Poll funds/margin every 8 seconds
   const fundsPoll = usePoll<FundsStatus>(isKotakConnected ? "/api/funds" : null, 8000)
 
+  // Track both NIFTY and SENSEX spot prices live
+  const [spotMap, setSpotMap] = useState<Record<"NIFTY" | "SENSEX", number>>({
+    NIFTY: 25228,
+    SENSEX: 82031,
+  })
+
+  // Update active index spot from polling
+  useEffect(() => {
+    const s = optionsPoll.data?.spot
+    if (s && s > 0) {
+      setSpotMap((prev) => ({
+        ...prev,
+        [indexSymbol]: s,
+      }))
+    }
+  }, [optionsPoll.data?.spot, indexSymbol])
+
+  // Also fetch alt index spot in background so both cards always display live spot values
+  useEffect(() => {
+    if (!isKotakConnected) return
+    const altSymbol = indexSymbol === "NIFTY" ? "SENSEX" : "NIFTY"
+    fetch(`/api/manual-options?symbol=${altSymbol}`)
+      .then((r) => r.json())
+      .then((data: ManualOptionChoices) => {
+        if (data?.ok && data?.spot) {
+          setSpotMap((prev) => ({ ...prev, [altSymbol]: data.spot }))
+        }
+      })
+      .catch(() => {})
+  }, [indexSymbol, isKotakConnected])
+
   // Expiry selection
   const [expiry, setExpiry] = useState<string>("")
 
@@ -93,19 +122,65 @@ export function ManualTradingPage() {
   const [lots, setLots] = useState(1)
   const [product] = useState<"NRML" | "MIS">("NRML")
 
-  // Scalper Target & Stop Loss points (for new orders)
-  const [slPts, setSlPts] = useState<number>(10)
-  const [tpPts, setTpPts] = useState<number>(15)
+  // Scalper Target & Stop Loss points (persisted in localStorage)
+  const [slPts, setSlPtsState] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("scalper_sl_pts")
+      if (saved !== null) {
+        const val = parseFloat(saved)
+        if (!isNaN(val) && val >= 0) return val
+      }
+    } catch {}
+    return 10
+  })
+  const [tpPts, setTpPtsState] = useState<number>(() => {
+    try {
+      const saved = localStorage.getItem("scalper_tp_pts")
+      if (saved !== null) {
+        const val = parseFloat(saved)
+        if (!isNaN(val) && val >= 0) return val
+      }
+    } catch {}
+    return 15
+  })
 
-  // Active Trade Live Editable Target & Stop Loss points
-  const [liveSlPts, setLiveSlPts] = useState<number>(10)
-  const [liveTpPts, setLiveTpPts] = useState<number>(15)
+  // Helper setters that automatically persist user edits to localStorage
+  const setSlPts = useCallback((valOrFn: number | ((prev: number) => number)) => {
+    setSlPtsState((prev) => {
+      const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn
+      const safeVal = Math.max(0, next)
+      try {
+        localStorage.setItem("scalper_sl_pts", String(safeVal))
+      } catch {}
+      return safeVal
+    })
+  }, [])
 
-  // Simulation Toggle (Demo Mode to inspect Open Position HUD)
-  const [simulateOpen, setSimulateOpen] = useState(false)
+  const setTpPts = useCallback((valOrFn: number | ((prev: number) => number)) => {
+    setTpPtsState((prev) => {
+      const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn
+      const safeVal = Math.max(0, next)
+      try {
+        localStorage.setItem("scalper_tp_pts", String(safeVal))
+      } catch {}
+      return safeVal
+    })
+  }, [])
 
-  // Screen View Mode: "POSITION" (Focus on active trade) or "ORDER" (Strike & order entry)
-  const [viewMode, setViewMode] = useState<"POSITION" | "ORDER">("POSITION")
+  // Per-position Risk mapping for active trades: symbol -> { sl, tp } (persisted in localStorage)
+  const [riskMap, setRiskMap] = useState<Record<string, { sl: number; tp: number }>>(() => {
+    try {
+      const saved = localStorage.getItem("scalper_risk_map")
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return {}
+  })
+
+  // Multi-position selection tab index
+  const [selectedPosIdx, setSelectedPosIdx] = useState(0)
+
+  // Screen View Mode: "POSITION" (Focus on active trade), "ORDER" (Strike & order entry), or "HISTORY" (Closed trades in same space)
+  const [viewMode, setViewMode] = useState<"POSITION" | "ORDER" | "HISTORY">("POSITION")
 
   // Quotes
   const [cePrice, setCePrice] = useState<number | null>(null)
@@ -116,10 +191,71 @@ export function ManualTradingPage() {
 
   // Action busy states
   const [actionBusy, setActionBusy] = useState(false)
-  const [historyOpen, setHistoryOpen] = useState(false)
 
-  // Expiries from symbol master (chronologically sorted)
-  const expiries = optionsPoll.data?.expiries ?? []
+  // Mobile Pull-to-Refresh
+  const containerRef = useRef<HTMLDivElement>(null)
+  const touchStartY = useRef<number | null>(null)
+  const [pullDistance, setPullDistance] = useState(0)
+  const [isRefreshing, setIsRefreshing] = useState(false)
+
+  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (containerRef.current && containerRef.current.scrollTop <= 0) {
+      touchStartY.current = e.touches[0].clientY
+    } else {
+      touchStartY.current = null
+    }
+  }
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
+    if (touchStartY.current !== null && !isRefreshing) {
+      const currentY = e.touches[0].clientY
+      const diff = currentY - touchStartY.current
+      if (diff > 0 && containerRef.current && containerRef.current.scrollTop <= 0) {
+        // Progressive resistance
+        const resistance = Math.min(diff * 0.45, 80)
+        setPullDistance(resistance)
+      } else {
+        setPullDistance(0)
+      }
+    }
+  }
+
+  const handleTouchEnd = async () => {
+    if (pullDistance > 50 && !isRefreshing) {
+      setIsRefreshing(true)
+      setPullDistance(44)
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        navigator.vibrate(25)
+      }
+      try {
+        await Promise.allSettled([
+          positionsPoll.reload(),
+          optionsPoll.reload(),
+          fundsPoll.reload(),
+        ])
+        toast.success("Live data refreshed", { duration: 1500 })
+      } finally {
+        setTimeout(() => {
+          setIsRefreshing(false)
+          setPullDistance(0)
+          touchStartY.current = null
+        }, 300)
+      }
+    } else {
+      setPullDistance(0)
+      touchStartY.current = null
+    }
+  }
+
+  // Expiries with cache so dropdown never flashes off/on during polling
+  const [cachedExpiries, setCachedExpiries] = useState<ManualExpiryGroup[]>([])
+  useEffect(() => {
+    if (optionsPoll.data?.expiries && optionsPoll.data.expiries.length > 0) {
+      setCachedExpiries(optionsPoll.data.expiries)
+    }
+  }, [optionsPoll.data?.expiries])
+
+  const expiries = optionsPoll.data?.expiries?.length ? optionsPoll.data.expiries : cachedExpiries
 
   // Always default to current week expiry (first item) whenever expiries load or index switches
   useEffect(() => {
@@ -132,10 +268,8 @@ export function ManualTradingPage() {
 
   const selectedExpiryGroup = expiries.find((e) => e.expiry === expiry) || expiries[0]
   const currentExpiry = selectedExpiryGroup?.expiry ?? ""
-  const isCurrentWeek = expiries.length > 0 && expiries[0]?.expiry === currentExpiry
   const lotSize = selectedExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
   const atmStrike = optionsPoll.data?.atm ?? (indexSymbol === "SENSEX" ? 82000 : 25250)
-  const spotPrice = optionsPoll.data?.spot ?? (indexSymbol === "SENSEX" ? 82031.8 : 25227.95)
   const strikeStep = indexSymbol === "SENSEX" ? 100 : 50
 
   // Format expiry label nicely: e.g. "23 Nov", "01 Dec"
@@ -233,34 +367,12 @@ export function ManualTradingPage() {
     closed_count: closedPositions.length,
   }
 
-  // Active positions to display (Real or Simulated)
-  const displayPositions: OpenPosition[] = openPositions.length > 0
-    ? openPositions
-    : simulateOpen
-    ? [
-        {
-          symbol: `${indexSymbol} ${strike || atmStrike} CE`,
-          net_qty: totalQty,
-          buy_avg: cePrice || 142.5,
-          ltp: (cePrice || 142.5) + 13.5,
-          unrealized_pnl: Math.round(13.5 * totalQty),
-          tp_pts: liveTpPts,
-          tl_pts: liveSlPts,
-          is_demo: true,
-        },
-      ]
-    : []
+  // Active positions to display (Real positions only)
+  const displayPositions: OpenPosition[] = openPositions
 
   const hasActivePosition = displayPositions.length > 0
-
-  // Keep live editable SL/TP synced with active position
-  useEffect(() => {
-    if (displayPositions.length > 0) {
-      const pos = displayPositions[0]
-      if (pos.tl_pts && pos.tl_pts > 0) setLiveSlPts(pos.tl_pts)
-      if (pos.tp_pts && pos.tp_pts > 0) setLiveTpPts(pos.tp_pts)
-    }
-  }, [displayPositions.length])
+  const activePos = displayPositions[selectedPosIdx] || displayPositions[0]
+  const totalOpenPnl = displayPositions.reduce((acc, p) => acc + (p.unrealized_pnl ?? p.pnl ?? 0), 0)
 
   // 1-TAP INSTANT BUY ORDER
   async function hitOrder(optionType: "CE" | "PE") {
@@ -300,10 +412,18 @@ export function ManualTradingPage() {
       toast.success(`BOUGHT ${totalQty}x ${strike} ${optionType}`, {
         description: `Filled @ ₹${res.fill_price || targetPrice || 0} · SL: -${slPts}pt · TP: +${tpPts}pt`,
       })
+      const filledSymbol = res.symbol || targetSymbol
+      if (filledSymbol) {
+        setRiskMap((prev) => {
+          const updated = { ...prev, [filledSymbol]: { sl: slPts, tp: tpPts } }
+          try {
+            localStorage.setItem("scalper_risk_map", JSON.stringify(updated))
+          } catch {}
+          return updated
+        })
+      }
       await positionsPoll.reload()
       await fundsPoll.reload()
-      setLiveSlPts(slPts)
-      setLiveTpPts(tpPts)
       setViewMode("POSITION")
     } catch (err: any) {
       toast.error("Order Rejected", { description: String(err?.message || err) })
@@ -312,14 +432,8 @@ export function ManualTradingPage() {
     }
   }
 
-  // 1-TAP INSTANT EXIT
+  // 1-TAP INSTANT EXIT SPECIFIC POSITION
   async function hitExit(pos: OpenPosition) {
-    if (pos.is_demo) {
-      setSimulateOpen(false)
-      toast.success("Demo Position Squared Off!", { description: "Simulation exited at market" })
-      return
-    }
-
     if (actionBusy) return
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate([40, 40])
@@ -344,19 +458,41 @@ export function ManualTradingPage() {
     }
   }
 
-  // LIVE UPDATE SL / TARGET IN ACTIVE TRADE
-  async function updateActiveRisk(newSl: number, newTp: number, pos: OpenPosition) {
+  // 1-TAP EXIT ALL OPEN POSITIONS
+  async function hitExitAll() {
+    if (actionBusy) return
+    if (typeof navigator !== "undefined" && navigator.vibrate) {
+      navigator.vibrate([50, 50, 50])
+    }
+
+    setActionBusy(true)
+    try {
+      await postJSON("/api/exit-all", {})
+      toast.success("All Positions Closed!", { description: "Closed all positions at market" })
+      await positionsPoll.reload()
+      await fundsPoll.reload()
+    } catch (err: any) {
+      toast.error("Exit All Failed", { description: String(err?.message || err) })
+    } finally {
+      setActionBusy(false)
+    }
+  }
+
+  // LIVE UPDATE SL / TARGET IN ACTIVE TRADE PER-SYMBOL
+  async function updateActiveRisk(symbol: string, newSl: number, newTp: number, pos: OpenPosition) {
     const validSl = Math.max(0, newSl)
     const validTp = Math.max(0, newTp)
-    setLiveSlPts(validSl)
-    setLiveTpPts(validTp)
+    setRiskMap((prev) => {
+      const updated = { ...prev, [symbol]: { sl: validSl, tp: validTp } }
+      try {
+        localStorage.setItem("scalper_risk_map", JSON.stringify(updated))
+      } catch {}
+      return updated
+    })
 
-    if (pos.is_demo) {
-      toast.success("Demo Risk Updated", {
-        description: `SL: ${validSl} pt · Target: ${validTp} pt`,
-      })
-      return
-    }
+    // Also carry forward user's live adjusted risk preference for future trades
+    setSlPts(validSl)
+    setTpPts(validTp)
 
     const entry = pos.buy_avg || pos.average_price || 0
     try {
@@ -380,29 +516,45 @@ export function ManualTradingPage() {
   async function moveToBreakeven(pos: OpenPosition) {
     const entry = pos.buy_avg || pos.average_price || 0
     if (entry <= 0) return
-    // SL = 0.5 points below entry (or at entry)
-    await updateActiveRisk(0.5, liveTpPts, pos)
+    const curTp = riskMap[pos.symbol]?.tp ?? pos.tp_pts ?? 15
+    await updateActiveRisk(pos.symbol, 0.5, curTp, pos)
     toast.success("SL Moved to Breakeven!", { description: `Protected entry @ ₹${entry.toFixed(1)}` })
-  }
-
-  // When demo toggled on, show POSITION mode first
-  function handleToggleDemo() {
-    setSimulateOpen((v) => {
-      const next = !v
-      if (next) setViewMode("POSITION")
-      return next
-    })
   }
 
   const isPositionFocused = hasActivePosition && viewMode === "POSITION"
 
   return (
-    <div className="flex flex-col w-full max-w-md mx-auto p-3.5 gap-3 select-none text-foreground bg-background min-h-[92vh] justify-between">
+    <div
+      ref={containerRef}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      style={{
+        paddingTop: "max(env(safe-area-inset-top, 0px), 64px)",
+        paddingBottom: "max(env(safe-area-inset-bottom, 0px), 24px)",
+      }}
+      className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto"
+    >
+      {/* ─── PULL TO REFRESH INDICATOR ─── */}
+      {(pullDistance > 0 || isRefreshing) && (
+        <div
+          style={{ height: `${isRefreshing ? 42 : pullDistance}px` }}
+          className="flex items-center justify-center overflow-hidden transition-all duration-150 shrink-0 mb-1"
+        >
+          <div className="flex items-center gap-1.5 py-1 px-3 rounded-full bg-card border border-border/70 shadow-xs text-xs font-mono font-bold text-muted-foreground">
+            <RefreshCw
+              className={cn("size-3.5 text-primary", isRefreshing ? "animate-spin" : "")}
+              style={{ transform: isRefreshing ? undefined : `rotate(${pullDistance * 4}deg)` }}
+            />
+            <span>{isRefreshing ? "Refreshing live data..." : pullDistance > 50 ? "Release to refresh" : "Pull down to refresh"}</span>
+          </div>
+        </div>
+      )}
       
-      {/* ─── TOP SECTION ─── */}
-      <div className="flex flex-col gap-3">
-        {/* ─── 1. TOPMOST HEADER: DAY P&L + AVAILABLE BALANCE + ACTIONS ─── */}
-        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border/60 shadow-xs">
+      {/* ─── TOP & MIDDLE SECTION ─── */}
+      <div className="flex flex-col gap-2.5">
+        {/* ─── 1. TOPMOST HEADER: DAY P&L + AVAILABLE BALANCE + HISTORY ─── */}
+        <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/60 shadow-2xs">
           {/* Day P&L */}
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
@@ -410,7 +562,7 @@ export function ManualTradingPage() {
             </span>
             <div
               className={cn(
-                "text-2xl font-black font-mono tracking-tight mt-1",
+                "text-2xl font-black font-mono tracking-tight mt-0.5",
                 summary.net_pnl > 0 ? "text-emerald-500" : summary.net_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
               )}
             >
@@ -422,63 +574,147 @@ export function ManualTradingPage() {
           {/* Available Trading Margin */}
           <div className="flex flex-col items-center">
             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
-              AVAIL MARGIN
+              AVAIL BALANCE
             </span>
-            <div className="text-base font-black font-mono text-foreground mt-1">
+            <div className="text-base font-black font-mono text-foreground mt-0.5">
               {availableFunds != null ? fmtRs(availableFunds) : isKotakConnected ? "₹37,258" : "—"}
             </div>
           </div>
 
-          {/* Demo & History Controls */}
-          <div className="flex items-center gap-1.5">
-            <button
-              type="button"
-              onClick={handleToggleDemo}
-              className={cn(
-                "text-xs font-mono px-2.5 py-1.5 rounded-xl border font-bold transition-all cursor-pointer",
-                simulateOpen
-                  ? "bg-amber-500/20 text-amber-500 border-amber-500/50"
-                  : "bg-muted/50 border-border/70 text-muted-foreground hover:text-foreground"
-              )}
-              title="Toggle simulated trade HUD"
-            >
-              {simulateOpen ? "Demo On" : "👁️ Demo"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() => setHistoryOpen(true)}
-              className="text-xs font-mono px-2.5 py-1.5 rounded-xl border border-border/70 bg-muted/50 text-muted-foreground hover:text-foreground font-bold cursor-pointer"
-              title="View today's closed trades"
-            >
-              History
-            </button>
-          </div>
+          {/* History Switcher Button (Shows closed trades in this exact same space) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (viewMode === "HISTORY") {
+                setViewMode(hasActivePosition ? "POSITION" : "ORDER")
+              } else {
+                setViewMode("HISTORY")
+              }
+            }}
+            className={cn(
+              "text-[11px] font-mono px-2.5 py-1.5 rounded-xl border font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1.5",
+              viewMode === "HISTORY"
+                ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                : "border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground"
+            )}
+            title={viewMode === "HISTORY" ? "Return to trading" : "View today's closed trades in this space"}
+          >
+            <Clock className="size-3" />
+            <span>{viewMode === "HISTORY" ? "Close" : `History (${closedPositions.length})`}</span>
+          </button>
         </div>
 
-        {/* ─── SWITCHER BANNER WHEN IN ORDER VIEW WITH AN ACTIVE TRADE ─── */}
+        {/* ─── SWITCHER BANNER WHEN IN ORDER VIEW WITH ACTIVE POSITIONS ─── */}
         {hasActivePosition && viewMode === "ORDER" && (
           <button
             type="button"
             onClick={() => setViewMode("POSITION")}
-            className="flex items-center justify-between p-3 rounded-2xl bg-emerald-500/15 border-2 border-emerald-500/50 text-xs font-mono font-bold text-foreground transition-all active:scale-98 cursor-pointer shadow-sm"
+            className="flex items-center justify-between p-2.5 rounded-2xl bg-emerald-500/15 border border-emerald-500/40 text-xs font-mono font-bold text-foreground transition-all active:scale-98 cursor-pointer shadow-xs"
           >
             <span className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400">
-              <span className="size-2.5 rounded-full bg-emerald-500 animate-ping" />
-              <span className="font-black text-sm">ACTIVE TRADE IN PROGRESS</span>
+              <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
+              <span className="font-bold">
+                {displayPositions.length > 1 ? `${displayPositions.length} Positions Active` : `${activePos.symbol} Active`}
+              </span>
             </span>
-            <span className="text-xs text-muted-foreground flex items-center gap-1 font-bold">
-              View Position <ArrowRight className="size-3.5" />
+            <span className={cn("font-black", totalOpenPnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
+              {totalOpenPnl >= 0 ? "+" : ""}{fmtRs(totalOpenPnl)} ➔
             </span>
           </button>
         )}
 
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        {/* VIEW A: FOCUSED ACTIVE TRADE DETAILS (When in trade)             */}
-        {/* ══════════════════════════════════════════════════════════════════ */}
-        {isPositionFocused ? (
-          <div className="flex flex-col gap-3 animate-in fade-in duration-150">
-            {displayPositions.map((pos) => {
+        {/* ─── MULTI-POSITION SWITCHER TABS (IF 2+ POSITIONS OPEN) ─── */}
+        {isPositionFocused && displayPositions.length > 1 && (
+          <div className="flex flex-col gap-1.5 p-2 rounded-2xl bg-card border border-border/60 shadow-2xs">
+            <div className="flex items-center justify-between text-[11px] font-mono font-bold px-1">
+              <span className="text-muted-foreground uppercase text-[10px]">Active Positions ({displayPositions.length})</span>
+              <span className={cn("font-black text-xs", totalOpenPnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                Total: {totalOpenPnl >= 0 ? "+" : ""}{fmtRs(totalOpenPnl)}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
+              {displayPositions.map((pos, idx) => {
+                const isSelected = idx === selectedPosIdx
+                const pnl = pos.unrealized_pnl ?? pos.pnl ?? 0
+                return (
+                  <button
+                    key={`${pos.symbol}-${idx}`}
+                    type="button"
+                    onClick={() => setSelectedPosIdx(idx)}
+                    className={cn(
+                      "px-2.5 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 shrink-0 transition-all cursor-pointer",
+                      isSelected
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    <span>{idx + 1}. {pos.symbol.replace("NIFTY ", "").replace("SENSEX ", "")}</span>
+                    <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/90" : pnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                      {pnl >= 0 ? "+" : ""}{fmtRs(pnl)}
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ─── CONDITIONAL MAIN CONTENT AREA (Swaps in the exact same space) ─── */}
+        {viewMode === "HISTORY" ? (
+          /* ══════════════════════════════════════════════════════════════════ */
+          /* VIEW C: TODAY'S CLOSED TRADES (Rendered in the exact same space)   */
+          /* ══════════════════════════════════════════════════════════════════ */
+          <div className="flex flex-col gap-2.5 animate-in fade-in duration-150">
+            <div className="flex items-center justify-between p-3 rounded-2xl bg-card border border-border/60 shadow-2xs">
+              <span className="text-xs font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+                <Clock className="size-3.5 text-primary" /> Today's Closed Trades ({closedPositions.length})
+              </span>
+              <span className={cn("text-xs font-black font-mono", pnlClass(summary.realized_pnl))}>
+                {summary.realized_pnl >= 0 ? "+" : ""}{fmtRs(summary.realized_pnl)}
+              </span>
+            </div>
+
+            {closedPositions.length === 0 ? (
+              <div className="text-center text-xs font-mono text-muted-foreground py-10 bg-card rounded-2xl border border-dashed border-border/60">
+                No closed trades yet today
+              </div>
+            ) : (
+              <div className="flex flex-col gap-2 max-h-[58vh] overflow-y-auto pr-0.5">
+                {closedPositions.map((t, idx) => (
+                  <div
+                    key={`${t.symbol}-${idx}`}
+                    className="flex items-center justify-between p-3 rounded-2xl bg-card border border-border/60 shadow-2xs text-xs font-mono"
+                  >
+                    <div>
+                      <div className="font-bold text-foreground text-xs">{t.symbol}</div>
+                      <div className="text-[10px] text-muted-foreground mt-0.5">
+                        {t.qty} Qty · In: ₹{t.buy_avg.toFixed(1)} · Out: ₹{t.sell_avg.toFixed(1)}
+                      </div>
+                    </div>
+                    <div className={cn("font-black text-sm font-mono", t.realized_pnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                      {t.realized_pnl >= 0 ? "+" : ""}{fmtRs(t.realized_pnl)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setViewMode(hasActivePosition ? "POSITION" : "ORDER")}
+              className="w-full py-3.5 mt-1 rounded-2xl border border-primary/40 bg-primary/10 hover:bg-primary/20 text-xs font-mono font-bold text-primary transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs active:scale-98"
+            >
+              <ArrowLeft className="size-4" />
+              <span>Back to Trading Desk</span>
+            </button>
+          </div>
+        ) : isPositionFocused ? (
+          /* ══════════════════════════════════════════════════════════════════ */
+          /* VIEW A: ACTIVE TRADE HUD (Focused on running position)             */
+          /* ══════════════════════════════════════════════════════════════════ */
+          <div className="flex flex-col gap-2.5 animate-in fade-in duration-150">
+            {activePos && (() => {
+              const pos = activePos
               const isLong = pos.net_qty > 0
               const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
               const entryAvg = pos.buy_avg || pos.average_price || 0
@@ -488,134 +724,123 @@ export function ManualTradingPage() {
               const posQty = Math.abs(pos.net_qty)
               const investedCost = Math.round(entryAvg * posQty)
 
-              // Dynamic calculated Stop Loss and Target price based on live inputs
-              const currentSlPrice = entryAvg > 0 && liveSlPts > 0
-                ? isLong ? entryAvg - liveSlPts : entryAvg + liveSlPts
+              const activeSl = riskMap[pos.symbol]?.sl ?? pos.tl_pts ?? 10
+              const activeTp = riskMap[pos.symbol]?.tp ?? pos.tp_pts ?? 15
+              const currentSlPrice = entryAvg > 0 && activeSl > 0
+                ? isLong ? entryAvg - activeSl : entryAvg + activeSl
                 : null
-              const currentTpPrice = entryAvg > 0 && liveTpPts > 0
-                ? isLong ? entryAvg + liveTpPts : entryAvg - liveTpPts
+              const currentTpPrice = entryAvg > 0 && activeTp > 0
+                ? isLong ? entryAvg + activeTp : entryAvg - activeTp
                 : null
-              const slRupeeImpact = Math.round(liveSlPts * posQty)
-              const tpRupeeImpact = Math.round(liveTpPts * posQty)
+              const slRupeeImpact = Math.round(activeSl * posQty)
+              const tpRupeeImpact = Math.round(activeTp * posQty)
 
               return (
-                <div key={pos.symbol} className="flex flex-col gap-3">
+                <div key={pos.symbol} className="flex flex-col gap-2.5">
                   {/* Active Trade Header & Badges */}
-                  <div className="flex items-center justify-between p-3.5 rounded-2xl bg-card border border-border/60 shadow-xs">
-                    <div className="flex items-center gap-2">
-                      <span className={cn("text-xs px-2.5 py-1 rounded-lg font-black tracking-wide", isLong ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/20 text-rose-600 dark:text-rose-400")}>
-                        {isLong ? "LONG CALL" : "SHORT PUT"}
+                  <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/60 shadow-2xs">
+                    <div className="flex items-center gap-1.5">
+                      <span className={cn("text-xs px-2 py-0.5 rounded-lg font-black tracking-wide", isLong ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/20 text-rose-600 dark:text-rose-400")}>
+                        {isLong ? "LONG" : "SHORT"}
                       </span>
-                      <span className="text-base font-black font-mono text-foreground">{pos.symbol}</span>
-                      {pos.is_demo && (
-                        <span className="text-[10px] bg-amber-500/20 text-amber-500 px-2 py-0.5 rounded font-bold">
-                          DEMO
-                        </span>
-                      )}
+                      <span className="text-sm font-black font-mono text-foreground">{pos.symbol}</span>
                     </div>
-                    <span className="text-sm font-mono font-bold text-muted-foreground">
-                      {posQty} Qty ({lots}L)
+                    <span className="text-xs font-mono font-bold text-muted-foreground">
+                      {posQty} Qty
                     </span>
                   </div>
 
-                  {/* GIANT LIVE TRADE P&L CARD */}
+                  {/* RUNNING TRADE P&L CARD */}
                   <div className={cn(
-                    "p-6 rounded-3xl border-2 flex flex-col items-center justify-center text-center shadow-md transition-all",
+                    "p-3.5 rounded-3xl border-2 flex flex-col items-center justify-center text-center shadow-sm transition-all",
                     tradePnl >= 0 ? "bg-emerald-500/10 border-emerald-500/60" : "bg-rose-500/10 border-rose-500/60"
                   )}>
-                    <span className="text-xs uppercase font-bold tracking-widest text-muted-foreground mb-1">
+                    <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-0.5">
                       RUNNING TRADE P&L
                     </span>
                     <div className={cn(
-                      "text-5xl font-black font-mono tracking-tight my-1",
+                      "text-3xl font-black font-mono tracking-tight",
                       tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"
                     )}>
                       {tradePnl >= 0 ? "+" : ""}{fmtRs(tradePnl)}
                     </div>
-                    <div className="flex items-center gap-2.5 mt-1 font-mono text-sm font-bold text-muted-foreground">
+                    <div className="flex items-center gap-2 mt-0.5 font-mono text-xs font-bold text-muted-foreground">
                       <span>{ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt</span>
                       <span>•</span>
                       <span>{pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%</span>
-                      <span className="size-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
                     </div>
                   </div>
 
                   {/* 3-METRICS GRID: ENTRY, LTP, INVESTED */}
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <div className="p-3 rounded-2xl bg-card border border-border/60 text-center shadow-xs">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 rounded-xl bg-card border border-border/60">
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
                         Avg Entry
                       </span>
-                      <span className="text-base font-black font-mono text-foreground mt-1 block">
+                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
                         ₹{entryAvg.toFixed(1)}
                       </span>
                     </div>
 
-                    <div className="p-3 rounded-2xl bg-card border border-border/60 text-center shadow-xs">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                    <div className="p-2 rounded-xl bg-card border border-border/60">
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
                         Live LTP
                       </span>
-                      <span className="text-base font-black font-mono text-foreground mt-1 block">
+                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
                         ₹{ltp.toFixed(1)}
                       </span>
                     </div>
 
-                    <div className="p-3 rounded-2xl bg-card border border-border/60 text-center shadow-xs">
-                      <span className="text-[10px] uppercase font-bold text-muted-foreground block">
+                    <div className="p-2 rounded-xl bg-card border border-border/60">
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
                         Invested
                       </span>
-                      <span className="text-base font-black font-mono text-foreground mt-1 block">
+                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
                         {fmtRs(investedCost)}
                       </span>
                     </div>
                   </div>
 
-                  {/* ════════════════════════════════════════════════════════════ */}
-                  {/* LIVE EDITABLE STOP LOSS & TARGET CARD                      */}
-                  {/* ════════════════════════════════════════════════════════════ */}
-                  <div className="p-4 rounded-3xl bg-card border border-border/60 shadow-xs flex flex-col gap-3">
-                    <div className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center justify-between">
-                      <span>Live Risk & Targets</span>
-                      <span className="text-[11px] font-mono text-primary font-bold">Auto-Syncing</span>
-                    </div>
-
+                  {/* LIVE EDITABLE STOP LOSS & TARGET CARD WITH 5-STEPPERS */}
+                  <div className="p-3 rounded-2xl bg-card border border-border/60 shadow-2xs flex flex-col gap-2">
                     {/* STOP LOSS LIVE EDITOR */}
-                    <div className="p-3 rounded-2xl bg-rose-500/5 border border-rose-500/30 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-rose-500 uppercase flex items-center gap-1.5">
-                          <Shield className="size-3.5" /> Stop Loss
+                    <div className="p-2 rounded-xl bg-rose-500/5 border border-rose-500/25 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-rose-500 uppercase flex items-center gap-1 text-[11px]">
+                          <Shield className="size-3" /> Stop Loss
                         </span>
-                        <div className="text-right">
-                          <span className="text-xs font-mono font-bold text-foreground">
+                        <div className="text-right font-mono text-xs">
+                          <span className="font-bold text-foreground">
                             {currentSlPrice != null ? `₹${currentSlPrice.toFixed(1)}` : "Off"}
                           </span>
-                          <span className="text-[11px] font-mono text-muted-foreground ml-1.5">
-                            {liveSlPts > 0 ? `(-₹${slRupeeImpact})` : ""}
+                          <span className="text-[10px] text-muted-foreground ml-1">
+                            {activeSl > 0 ? `(-₹${slRupeeImpact})` : ""}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 mt-1">
+                      <div className="flex items-center justify-between gap-1.5">
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-10 rounded-xl bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(Math.max(0, liveSlPts - 2), liveTpPts, pos)}
+                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          onClick={() => updateActiveRisk(pos.symbol, Math.max(0, activeSl - 5), activeTp, pos)}
                         >
-                          <Minus className="size-4 text-rose-500" />
+                          <Minus className="size-3.5 text-rose-500" />
                         </Button>
 
                         <div className="relative flex-1">
                           <Input
                             type="number"
                             min="0"
-                            step="1"
-                            value={liveSlPts || ""}
-                            onChange={(e) => updateActiveRisk(parseFloat(e.target.value) || 0, liveTpPts, pos)}
-                            className="h-10 text-center text-sm font-mono font-bold bg-background border border-border/80 rounded-xl pr-9"
+                            step="5"
+                            value={activeSl || ""}
+                            onChange={(e) => updateActiveRisk(pos.symbol, parseFloat(e.target.value) || 0, activeTp, pos)}
+                            className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
                           />
-                          <span className="absolute right-3 top-2.5 text-xs font-mono text-muted-foreground pointer-events-none">
+                          <span className="absolute right-2 top-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
                             pts
                           </span>
                         </div>
@@ -624,77 +849,60 @@ export function ManualTradingPage() {
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-10 rounded-xl bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(liveSlPts + 2, liveTpPts, pos)}
+                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          onClick={() => updateActiveRisk(pos.symbol, activeSl + 5, activeTp, pos)}
                         >
-                          <Plus className="size-4 text-rose-500" />
+                          <Plus className="size-3.5 text-rose-500" />
                         </Button>
-                      </div>
 
-                      {/* Quick SL Chips & Breakeven */}
-                      <div className="grid grid-cols-4 gap-1.5 pt-1">
                         <button
                           type="button"
                           onClick={() => moveToBreakeven(pos)}
-                          className="py-1.5 rounded-xl text-xs font-mono font-bold bg-amber-500/15 border border-amber-500/40 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all text-center cursor-pointer col-span-1"
+                          className="px-2 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-amber-500/15 border border-amber-500/40 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all cursor-pointer shrink-0"
+                          title="Trail SL to Entry"
                         >
                           ⚡ BE
                         </button>
-                        {[5, 10, 15].map((pts) => (
-                          <button
-                            key={pts}
-                            type="button"
-                            onClick={() => updateActiveRisk(pts, liveTpPts, pos)}
-                            className={cn(
-                              "py-1.5 rounded-xl text-xs font-mono font-bold border transition-all text-center cursor-pointer",
-                              liveSlPts === pts
-                                ? "bg-rose-500 text-white border-rose-500 shadow-xs"
-                                : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
-                            )}
-                          >
-                            {pts} pt
-                          </button>
-                        ))}
                       </div>
                     </div>
 
                     {/* TARGET LIVE EDITOR */}
-                    <div className="p-3 rounded-2xl bg-emerald-500/5 border border-emerald-500/30 flex flex-col gap-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-emerald-500 uppercase flex items-center gap-1.5">
-                          <Target className="size-3.5" /> Target Profit
+                    <div className="p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/25 flex flex-col gap-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-emerald-500 uppercase flex items-center gap-1 text-[11px]">
+                          <Target className="size-3" /> Target
                         </span>
-                        <div className="text-right">
-                          <span className="text-xs font-mono font-bold text-foreground">
+                        <div className="text-right font-mono text-xs">
+                          <span className="font-bold text-foreground">
                             {currentTpPrice != null ? `₹${currentTpPrice.toFixed(1)}` : "Off"}
                           </span>
-                          <span className="text-[11px] font-mono text-muted-foreground ml-1.5">
-                            {liveTpPts > 0 ? `(+₹${tpRupeeImpact})` : ""}
+                          <span className="text-[10px] text-muted-foreground ml-1">
+                            {activeTp > 0 ? `(+₹${tpRupeeImpact})` : ""}
                           </span>
                         </div>
                       </div>
 
-                      <div className="flex items-center justify-between gap-2 mt-1">
+                      <div className="flex items-center justify-between gap-1.5">
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-10 rounded-xl bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(liveSlPts, Math.max(0, liveTpPts - 2), pos)}
+                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          onClick={() => updateActiveRisk(pos.symbol, activeSl, Math.max(0, activeTp - 5), pos)}
                         >
-                          <Minus className="size-4 text-emerald-500" />
+                          <Minus className="size-3.5 text-emerald-500" />
                         </Button>
 
                         <div className="relative flex-1">
                           <Input
                             type="number"
                             min="0"
-                            step="1"
-                            value={liveTpPts || ""}
-                            onChange={(e) => updateActiveRisk(liveSlPts, parseFloat(e.target.value) || 0, pos)}
-                            className="h-10 text-center text-sm font-mono font-bold bg-background border border-border/80 rounded-xl pr-9"
+                            step="5"
+                            value={activeTp || ""}
+                            onChange={(e) => updateActiveRisk(pos.symbol, activeSl, parseFloat(e.target.value) || 0, pos)}
+                            className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
                           />
-                          <span className="absolute right-3 top-2.5 text-xs font-mono text-muted-foreground pointer-events-none">
+                          <span className="absolute right-2 top-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
                             pts
                           </span>
                         </div>
@@ -703,158 +911,166 @@ export function ManualTradingPage() {
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-10 rounded-xl bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(liveSlPts, liveTpPts + 2, pos)}
+                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          onClick={() => updateActiveRisk(pos.symbol, activeSl, activeTp + 5, pos)}
                         >
-                          <Plus className="size-4 text-emerald-500" />
+                          <Plus className="size-3.5 text-emerald-500" />
                         </Button>
-                      </div>
-
-                      {/* Quick Target Chips */}
-                      <div className="grid grid-cols-4 gap-1.5 pt-1">
-                        {[10, 15, 20, 30].map((pts) => (
-                          <button
-                            key={pts}
-                            type="button"
-                            onClick={() => updateActiveRisk(liveSlPts, pts, pos)}
-                            className={cn(
-                              "py-1.5 rounded-xl text-xs font-mono font-bold border transition-all text-center cursor-pointer",
-                              liveTpPts === pts
-                                ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                                : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
-                            )}
-                          >
-                            {pts} pt
-                          </button>
-                        ))}
                       </div>
                     </div>
                   </div>
 
-                  {/* ONE-TOUCH FULL-WIDTH EXIT BUTTON */}
-                  <Button
-                    variant="destructive"
-                    disabled={actionBusy}
-                    onClick={() => hitExit(pos)}
-                    className="h-16 w-full rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-lg tracking-wider shadow-lg transition-all cursor-pointer"
-                  >
-                    🚨 ONE-TOUCH EXIT (MARKET)
-                  </Button>
+                  {/* ACTION BUTTONS: EXIT THIS POSITION + EXIT ALL BUTTON */}
+                  <div className="flex flex-col gap-2 mt-1">
+                    <Button
+                      variant="destructive"
+                      size="lg"
+                      disabled={actionBusy}
+                      onClick={() => hitExit(pos)}
+                      className="w-full h-12 text-sm font-black rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md tracking-wider cursor-pointer"
+                    >
+                      SQUARE OFF {pos.symbol}
+                    </Button>
 
-                  {/* SWITCH TO ORDER ENTRY / TRADE AGAIN */}
+                    {displayPositions.length > 1 && (
+                      <button
+                        type="button"
+                        disabled={actionBusy}
+                        onClick={hitExitAll}
+                        className="w-full py-2.5 rounded-xl border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-mono font-bold text-rose-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                      >
+                        <span>🚨 EXIT ALL ({displayPositions.length} POSITIONS)</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* TRADE AGAIN / SWITCH TO ORDER DESK BUTTON */}
                   <button
                     type="button"
                     onClick={() => setViewMode("ORDER")}
-                    className="w-full py-3.5 rounded-2xl border border-border/70 bg-card hover:bg-muted/50 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                    className="w-full py-3 mt-1 rounded-2xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
                   >
-                    <span>Trade Again / Place Another Order</span>
-                    <ArrowRight className="size-4" />
+                    <span>Trade Again / Place Another Order ➔</span>
                   </button>
                 </div>
               )
-            })}
+            })()}
           </div>
         ) : (
           /* ══════════════════════════════════════════════════════════════════ */
           /* VIEW B: ORDER ENTRY DESK (Strike Stepper, Lots, Buy Buttons)      */
           /* ══════════════════════════════════════════════════════════════════ */
-          <div className="flex flex-col gap-3 animate-in fade-in duration-150">
-            {/* 2. INDEX SWITCHER & DEFAULT CURRENT WEEK EXPIRY */}
-            <div className="flex flex-col gap-1.5">
-              <div className="grid grid-cols-2 gap-2.5">
-                {/* NIFTY Button */}
-                <button
-                  type="button"
-                  onClick={() => {
+          <div className="flex flex-col gap-2.5 animate-in fade-in duration-150">
+            
+            {/* ─── 2. INDEX SELECTOR (BIGGER CARDS WITH SPOT VALUE) ─── */}
+            <div className="grid grid-cols-2 gap-2.5">
+              {/* NIFTY Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (indexSymbol !== "NIFTY") {
                     setIndexSymbol("NIFTY")
                     setStrike("")
-                  }}
-                  className={cn(
-                    "p-3 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
-                    indexSymbol === "NIFTY"
-                      ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
-                      : "bg-card border-border/60 hover:bg-muted/30"
-                  )}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-xs font-black font-mono">NIFTY 50</span>
-                    <span className="text-[11px] text-muted-foreground font-mono font-bold">65 Q</span>
-                  </div>
-                  <div className="text-xl font-black font-mono mt-1 text-foreground flex items-baseline gap-1.5">
-                    <span>{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
-                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  </div>
-                </button>
+                  }
+                }}
+                className={cn(
+                  "p-3 rounded-2xl border-2 transition-all flex flex-col justify-between text-left cursor-pointer shadow-2xs active:scale-[0.98]",
+                  indexSymbol === "NIFTY"
+                    ? "bg-primary/10 border-primary shadow-xs ring-2 ring-primary/30"
+                    : "bg-card border-border/60 hover:border-border/90 hover:bg-muted/30"
+                )}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className={cn("text-xs font-black font-mono tracking-wide", indexSymbol === "NIFTY" ? "text-primary" : "text-foreground")}>
+                    NIFTY 50
+                  </span>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-muted/70 text-muted-foreground">
+                    65 Q
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
+                    {spotMap.NIFTY ? Number(spotMap.NIFTY).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "25,228.0"}
+                  </span>
+                </div>
+              </button>
 
-                {/* SENSEX Button */}
-                <button
-                  type="button"
-                  onClick={() => {
+              {/* SENSEX Button */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (indexSymbol !== "SENSEX") {
                     setIndexSymbol("SENSEX")
                     setStrike("")
-                  }}
-                  className={cn(
-                    "p-3 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
-                    indexSymbol === "SENSEX"
-                      ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
-                      : "bg-card border-border/60 hover:bg-muted/30"
-                  )}
-                >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="text-xs font-black font-mono">SENSEX</span>
-                    <span className="text-[11px] text-muted-foreground font-mono font-bold">20 Q</span>
-                  </div>
-                  <div className="text-xl font-black font-mono mt-1 text-foreground flex items-baseline gap-1.5">
-                    <span>{indexSymbol === "SENSEX" ? spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}</span>
-                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                  </div>
-                </button>
-              </div>
-
-              {/* Current Week Expiry: Defaults to current weekly */}
-              <div className="flex items-center justify-between px-1 text-xs font-mono text-muted-foreground pt-0.5">
-                <span className="text-xs font-bold flex items-center gap-1.5">
-                  📅 Expiry:
-                </span>
-                {expiries.length > 0 && (
-                  <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
-                    <SelectTrigger className="h-7 text-xs font-mono font-bold px-3 py-0 border-border/60 bg-card rounded-xl gap-1.5">
-                      <SelectValue placeholder="Expiry">
-                        {formatExpiryLabel(expiry)} {isCurrentWeek ? "(Current Week)" : ""}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      {expiries.map((exp, idx) => (
-                        <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs font-mono font-bold">
-                          {formatExpiryLabel(exp.expiry)} {idx === 0 ? "★ Current Week" : idx === 1 ? "Next Week" : ""}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  }
+                }}
+                className={cn(
+                  "p-3 rounded-2xl border-2 transition-all flex flex-col justify-between text-left cursor-pointer shadow-2xs active:scale-[0.98]",
+                  indexSymbol === "SENSEX"
+                    ? "bg-primary/10 border-primary shadow-xs ring-2 ring-primary/30"
+                    : "bg-card border-border/60 hover:border-border/90 hover:bg-muted/30"
                 )}
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className={cn("text-xs font-black font-mono tracking-wide", indexSymbol === "SENSEX" ? "text-primary" : "text-foreground")}>
+                    SENSEX
+                  </span>
+                  <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md bg-muted/70 text-muted-foreground">
+                    20 Q
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 mt-2">
+                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
+                    {spotMap.SENSEX ? Number(spotMap.SENSEX).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}
+                  </span>
+                </div>
+              </button>
+            </div>
+
+            {/* ─── EXPIRY SELECTOR (FULL-WIDTH, ZERO FLICKER, NO 'EXPIRY' TEXT) ─── */}
+            <div className="relative w-full">
+              <select
+                value={expiry}
+                onChange={(e) => setExpiry(e.target.value)}
+                className="w-full h-11 px-3.5 pr-9 rounded-2xl bg-card border border-border/70 text-xs sm:text-sm font-mono font-bold text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer shadow-2xs transition-all"
+              >
+                {expiries.length === 0 ? (
+                  <option value="">Loading expiries...</option>
+                ) : (
+                  expiries.map((exp, idx) => (
+                    <option key={exp.expiry} value={exp.expiry} className="bg-background text-foreground py-1 font-sans">
+                      {formatExpiryLabel(exp.expiry)} {idx === 0 ? "★ Current Week" : idx === 1 ? "Next Week" : "Monthly"} ({exp.expiry})
+                    </option>
+                  ))
+                )}
+              </select>
+              <div className="absolute right-3.5 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground">
+                <ChevronDown className="size-4" />
               </div>
             </div>
 
-            {/* 3. STRIKE STEPPER */}
-            <div className="flex items-center justify-between p-2.5 px-4 rounded-3xl bg-card border border-border/60 shadow-xs">
+            {/* ─── 3. STRIKE STEPPER (CLEAN & SUBSTANTIAL) ─── */}
+            <div className="flex items-center justify-between py-2 px-3 rounded-2xl bg-card border border-border/60 shadow-xs">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-11 rounded-2xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                className="size-10 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
                 onClick={() => stepStrike(-1)}
               >
-                <Minus className="size-5" />
+                <Minus className="size-4" />
               </Button>
 
               <div className="text-center">
                 <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1">
                   STRIKE PRICE
                 </div>
-                <div className="text-2xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-2">
+                <div className="text-2xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
                   {strike || atmStrike}
                   {Number(strike) === atmStrike && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 font-bold border border-amber-500/40">
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-500 font-bold border border-amber-500/30">
                       ATM
                     </span>
                   )}
@@ -865,30 +1081,29 @@ export function ManualTradingPage() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-11 rounded-2xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                className="size-10 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
                 onClick={() => stepStrike(1)}
               >
-                <Plus className="size-5" />
+                <Plus className="size-4" />
               </Button>
             </div>
 
-            {/* 4. LOTS PICKER & RISK ROW (COMPACT ALL-IN-ONE) */}
-            <div className="flex flex-col gap-2.5 p-3.5 rounded-3xl bg-card border border-border/60 shadow-xs">
-              {/* Lots Stepper & Total Qty */}
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2.5">
+            {/* ─── 4. LOTS PICKER ─── */}
+            <div className="flex flex-col gap-1.5 p-2 rounded-2xl bg-card border border-border/60 shadow-2xs">
+              <div className="flex items-center justify-between px-1">
+                <div className="flex items-center gap-2">
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-9 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                    className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
                     onClick={() => setLots((l) => Math.max(1, l - 1))}
                     disabled={lots <= 1}
                   >
-                    <Minus className="size-4" />
+                    <Minus className="size-3" />
                   </Button>
 
-                  <span className="text-sm font-black font-mono text-foreground">
+                  <span className="text-xs font-black font-mono text-foreground">
                     {lots} {lots === 1 ? "Lot" : "Lots"}
                   </span>
 
@@ -896,216 +1111,192 @@ export function ManualTradingPage() {
                     type="button"
                     variant="ghost"
                     size="icon"
-                    className="size-9 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                    className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
                     onClick={() => setLots((l) => Math.min(20, l + 1))}
                   >
-                    <Plus className="size-4" />
+                    <Plus className="size-3" />
                   </Button>
                 </div>
 
-                <span className="text-xs font-mono font-bold text-muted-foreground">
+                <span className="text-[11px] font-mono font-bold text-muted-foreground">
                   Total: <strong className="text-primary">{totalQty} Qty</strong>
                 </span>
               </div>
 
-              {/* Quick Chips Row */}
-              <div className="grid grid-cols-5 gap-1.5 pt-1 border-t border-border/30">
+              {/* Quick Lots Chips */}
+              <div className="grid grid-cols-5 gap-1 pt-1 border-t border-border/40">
                 {[1, 2, 3, 5, 10].map((l) => (
                   <button
                     key={l}
                     type="button"
                     onClick={() => setLots(l)}
                     className={cn(
-                      "py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer text-center",
+                      "py-1 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer text-center",
                       lots === l
                         ? "bg-foreground text-background border-foreground shadow-xs"
-                        : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
+                        : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {l}L
                   </button>
                 ))}
               </div>
+            </div>
 
-              {/* SL & Target Inputs */}
-              <div className="grid grid-cols-2 gap-2 pt-1 border-t border-border/30">
-                {/* SL */}
-                <div className="flex items-center justify-between bg-muted/30 p-2 rounded-xl border border-border/50">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-rose-500 uppercase flex items-center gap-1 leading-none">
-                      <Shield className="size-3" /> Stop Loss
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                      {slPts > 0 ? `-${(slPts * totalQty).toFixed(0)} ₹` : "Off"}
-                    </span>
-                  </div>
-                  <div className="relative flex items-center w-16">
-                    <Input
-                      type="number"
-                      min="0"
-                      value={slPts || ""}
-                      onChange={(e) => setSlPts(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 p-0 rounded-lg pr-6"
-                    />
-                    <span className="absolute right-1.5 text-[10px] font-mono text-muted-foreground pointer-events-none">pt</span>
-                  </div>
+            {/* ─── 5. STOP LOSS & TARGET CARDS WITH 5-STEPPERS ─── */}
+            <div className="grid grid-cols-2 gap-2">
+              {/* STOP LOSS CARD */}
+              <div className="p-2.5 rounded-2xl bg-card border border-border/60 shadow-2xs flex flex-col justify-between">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[10px] font-bold text-rose-500 uppercase flex items-center gap-1">
+                    <Shield className="size-3" /> Stop Loss
+                  </span>
+                  <span className="text-[10px] font-mono font-bold text-rose-500">
+                    {slPts > 0 ? `-${(slPts * totalQty).toFixed(0)} ₹` : "Off"}
+                  </span>
                 </div>
 
-                {/* Target */}
-                <div className="flex items-center justify-between bg-muted/30 p-2 rounded-xl border border-border/50">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] font-bold text-emerald-500 uppercase flex items-center gap-1 leading-none">
-                      <Target className="size-3" /> Target
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground mt-0.5">
-                      {tpPts > 0 ? `+${(tpPts * totalQty).toFixed(0)} ₹` : "Off"}
-                    </span>
-                  </div>
-                  <div className="relative flex items-center w-16">
+                <div className="flex items-center justify-between gap-1 mt-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                    onClick={() => setSlPts((s) => Math.max(0, s - 5))}
+                    disabled={slPts <= 0}
+                  >
+                    <Minus className="size-3.5 text-rose-500" />
+                  </Button>
+
+                  <div className="relative flex-1">
                     <Input
                       type="number"
                       min="0"
+                      step="5"
+                      value={slPts || ""}
+                      onChange={(e) => setSlPts(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
+                    />
+                    <span className="absolute right-2 top-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
+                      pts
+                    </span>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                    onClick={() => setSlPts((s) => s + 5)}
+                  >
+                    <Plus className="size-3.5 text-rose-500" />
+                  </Button>
+                </div>
+              </div>
+
+              {/* TARGET CARD */}
+              <div className="p-2.5 rounded-2xl bg-card border border-border/60 shadow-2xs flex flex-col justify-between">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase flex items-center gap-1">
+                    <Target className="size-3" /> Target
+                  </span>
+                  <span className="text-[10px] font-mono font-bold text-emerald-500">
+                    {tpPts > 0 ? `+${(tpPts * totalQty).toFixed(0)} ₹` : "Off"}
+                  </span>
+                </div>
+
+                <div className="flex items-center justify-between gap-1 mt-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                    onClick={() => setTpPts((t) => Math.max(0, t - 5))}
+                    disabled={tpPts <= 0}
+                  >
+                    <Minus className="size-3.5 text-emerald-500" />
+                  </Button>
+
+                  <div className="relative flex-1">
+                    <Input
+                      type="number"
+                      min="0"
+                      step="5"
                       value={tpPts || ""}
                       onChange={(e) => setTpPts(Math.max(0, parseFloat(e.target.value) || 0))}
-                      className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 p-0 rounded-lg pr-6"
+                      className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
                     />
-                    <span className="absolute right-1.5 text-[10px] font-mono text-muted-foreground pointer-events-none">pt</span>
+                    <span className="absolute right-2 top-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
+                      pts
+                    </span>
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                    onClick={() => setTpPts((t) => t + 5)}
+                  >
+                    <Plus className="size-3.5 text-emerald-500" />
+                  </Button>
                 </div>
               </div>
             </div>
 
-            {/* 5. BIGGER BUY CALL & BUY PUT BUTTONS WITH EXPECTED COST */}
-            <div className="grid grid-cols-2 gap-2.5 mt-0.5">
-              {/* BUY CALL BUTTON */}
+            {/* ─── 6. EXECUTION ZONE: CALL & PUT BUTTONS ─── */}
+            <div className="grid grid-cols-2 gap-2 mt-1">
+              {/* CALL BUTTON */}
               <button
                 type="button"
                 disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
                 onClick={() => hitOrder("CE")}
-                className="h-24 rounded-3xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-3 shadow-lg transition-all cursor-pointer text-left"
+                className="h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-center items-center gap-0.5 p-2 shadow-md transition-all cursor-pointer text-center"
               >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-black tracking-wide flex items-center gap-1">
-                    <Zap className="size-4 fill-current" /> BUY CALL ↗
-                  </span>
-                  <span className="text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded-lg">
-                    {strike} CE
-                  </span>
-                </div>
-
-                <div className="flex items-baseline justify-between w-full">
-                  <span className="text-xl font-black font-mono">
-                    {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
-                  </span>
-                  <div className="text-right">
-                    <span className="text-xs font-mono text-emerald-100 font-semibold block leading-tight">
-                      Cost: <strong className="text-white">{ceCost != null ? fmtRs(ceCost) : "—"}</strong>
-                    </span>
-                    <span className="text-[10px] text-emerald-200/80 font-mono block">
-                      ({totalQty} Qty)
-                    </span>
-                  </div>
-                </div>
+                <span className="text-lg font-black tracking-wide leading-tight">
+                  CALL ↗
+                </span>
+                <span className="text-[11px] font-mono opacity-90 font-bold leading-tight">
+                  {strike} CE {cePrice != null ? `• ${fmtRs(cePrice)}` : quoteLoading ? "• …" : ""}
+                </span>
+                <span className="text-xs font-semibold font-mono leading-tight">
+                  Cost: {ceCost != null ? fmtRs(ceCost) : "—"}
+                </span>
               </button>
 
-              {/* BUY PUT BUTTON */}
+              {/* PUT BUTTON */}
               <button
                 type="button"
                 disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
                 onClick={() => hitOrder("PE")}
-                className="h-24 rounded-3xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-3 shadow-lg transition-all cursor-pointer text-left"
+                className="h-16 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-center items-center gap-0.5 p-2 shadow-md transition-all cursor-pointer text-center"
               >
-                <div className="flex items-center justify-between w-full">
-                  <span className="text-xs font-black tracking-wide flex items-center gap-1">
-                    <Zap className="size-4 fill-current" /> BUY PUT ↘
-                  </span>
-                  <span className="text-xs font-mono font-bold bg-white/20 px-2 py-0.5 rounded-lg">
-                    {strike} PE
-                  </span>
-                </div>
-
-                <div className="flex items-baseline justify-between w-full">
-                  <span className="text-xl font-black font-mono">
-                    {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
-                  </span>
-                  <div className="text-right">
-                    <span className="text-xs font-mono text-rose-100 font-semibold block leading-tight">
-                      Cost: <strong className="text-white">{peCost != null ? fmtRs(peCost) : "—"}</strong>
-                    </span>
-                    <span className="text-[10px] text-rose-200/80 font-mono block">
-                      ({totalQty} Qty)
-                    </span>
-                  </div>
-                </div>
+                <span className="text-lg font-black tracking-wide leading-tight">
+                  PUT ↘
+                </span>
+                <span className="text-[11px] font-mono opacity-90 font-bold leading-tight">
+                  {strike} PE {pePrice != null ? `• ${fmtRs(pePrice)}` : quoteLoading ? "• …" : ""}
+                </span>
+                <span className="text-xs font-semibold font-mono leading-tight">
+                  Cost: {peCost != null ? fmtRs(peCost) : "—"}
+                </span>
               </button>
             </div>
 
-            {/* BACK TO POSITION BUTTON (If position exists) */}
+            {/* BACK TO POSITION BUTTON (If active positions exist) */}
             {hasActivePosition && (
               <button
                 type="button"
                 onClick={() => setViewMode("POSITION")}
-                className="w-full py-3.5 mt-1 rounded-2xl border border-emerald-500/50 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
+                className="w-full py-2.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 transition-all flex items-center justify-center gap-2 cursor-pointer shadow-xs"
               >
-                <ArrowLeft className="size-4" />
-                <span>Return to Active Trade Position</span>
+                <ArrowLeft className="size-3.5" />
+                <span>Return to Active Position ({totalOpenPnl >= 0 ? "+" : ""}{fmtRs(totalOpenPnl)})</span>
               </button>
             )}
           </div>
         )}
       </div>
-
-      {/* ─── TODAY'S COMPLETED TRADES MODAL ─── */}
-      <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
-        <DialogContent className="max-w-xs rounded-2xl max-h-[80vh] flex flex-col">
-          <DialogHeader>
-            <DialogTitle className="text-sm font-bold flex items-center justify-between">
-              <span className="flex items-center gap-1.5">
-                <Clock className="size-3.5 text-muted-foreground" /> Today's Closed Trades
-              </span>
-              <span className={cn("text-xs font-black font-mono", pnlClass(summary.realized_pnl))}>
-                {summary.realized_pnl > 0 ? "+" : ""}{fmtRs(summary.realized_pnl)}
-              </span>
-            </DialogTitle>
-          </DialogHeader>
-
-          <div className="flex-1 overflow-y-auto flex flex-col gap-1.5 py-1 pr-1">
-            {closedPositions.length === 0 ? (
-              <div className="text-center text-xs text-muted-foreground py-6">
-                No closed trades yet today.
-              </div>
-            ) : (
-              closedPositions.map((t, idx) => (
-                <div
-                  key={`${t.symbol}-${idx}`}
-                  className="flex items-center justify-between p-2 rounded-lg bg-muted/30 border border-border/40 text-xs font-mono"
-                >
-                  <div>
-                    <div className="font-bold text-foreground text-[11px]">{t.symbol}</div>
-                    <div className="text-[9px] text-muted-foreground">
-                      {t.qty}Q · In: ₹{t.buy_avg.toFixed(1)} · Out: ₹{t.sell_avg.toFixed(1)}
-                    </div>
-                  </div>
-                  <div className={cn("font-bold text-xs", t.realized_pnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                    {t.realized_pnl >= 0 ? "+" : ""}{fmtRs(t.realized_pnl)}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          <DialogFooter className="pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="w-full text-xs"
-              onClick={() => setHistoryOpen(false)}
-            >
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
     </div>
   )

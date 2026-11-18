@@ -69,154 +69,158 @@ export function Layout() {
           isFixedViewport ? "h-[100dvh] max-h-[100dvh] overflow-hidden" : "min-h-screen"
         )}
       >
-        {/* 1. Mobile Top Status Bar */}
-        <header className="flex md:hidden h-10 shrink-0 items-center justify-between px-3 border-b bg-background/95 backdrop-blur z-20">
-          <div className="flex items-center gap-2">
-            <div className="grid size-6 place-items-center rounded-md bg-primary text-xs font-black text-primary-foreground shadow-xs">
-              A
-            </div>
-            <NavLink
-              to="/settings?tab=broker"
-              className={cn(
-                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-semibold transition-all select-none",
-                status?.token.valid
-                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                  : "bg-red-500/15 border-red-500/40 text-red-400 animate-pulse"
-              )}
-            >
-              <Dot ok={Boolean(status?.token.valid)} />
-              <span>Kotak: {status?.token.valid ? "Connected" : "Offline"}</span>
-            </NavLink>
-          </div>
-
-          <div className="flex items-center gap-1.5">
-            <Badge
-              className={cn(
-                "py-0 px-1.5 text-[10px] font-bold",
-                status?.mode === "LIVE" ? "bg-red-600 text-white" : "bg-sky-600 text-white"
-              )}
-            >
-              • {status?.mode || "LIVE"}
-            </Badge>
-
-            <button
-              type="button"
-              onClick={async () => {
-                const isStopped = status?.kill_switch
-                const url = isStopped ? "/api/kill-switch/off" : "/api/kill-switch/on"
-                await postJSON(url, {})
-                await reload()
-              }}
-              title={status?.kill_switch ? "Trading Halted - Tap to Resume" : "Emergency Kill Switch"}
-              className={cn(
-                "size-7 rounded-lg border flex items-center justify-center transition-all",
-                status?.kill_switch
-                  ? "bg-rose-500 text-white border-rose-600 animate-pulse"
-                  : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground active:scale-95"
-              )}
-            >
-              <Power className="size-3.5" />
-            </button>
-
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="size-7 text-muted-foreground hover:text-foreground"
-              title="Lock terminal"
-              onClick={() => logout()}
-            >
-              <Lock className="size-3.5" />
-            </Button>
-          </div>
-        </header>
-
-        {/* Desktop Header */}
-        <header className="sticky top-0 z-10 hidden md:flex h-10 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
-          <div className="ml-auto flex items-center gap-2">
-            <span className="text-xs text-muted-foreground tabular-nums">{status?.now.slice(11) ?? "…"} IST</span>
-            {error && <Badge variant="destructive" className="py-0 text-[10px]">Backend offline</Badge>}
-            {status && (
-              <>
-                <NavLink
-                  to="/settings?tab=broker"
-                  title={status.token.valid ? "Kotak Neo session active · Click for account & margin" : "Kotak Neo offline · Click to log in"}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all select-none cursor-pointer",
-                    status.token.valid
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
-                      : "bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/25 animate-pulse"
-                  )}
-                >
-                  <Dot ok={status.token.valid} />
-                  <span>Kotak: {status.token.valid ? (status.token.greeting_name || "Connected") : "Offline"}</span>
-                  {!status.token.valid && (
-                    <span className="text-[9px] underline font-semibold ml-0.5">
-                      (Login)
-                    </span>
-                  )}
-                </NavLink>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    const endpoint = status.capture_running ? "/api/capture/stop" : "/api/capture/start"
-                    await postJSON(endpoint, {})
-                    await reload()
-                  }}
-                  title={status.capture_running ? "Click to stop market capture" : "Click to start market capture"}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all select-none cursor-pointer",
-                    status.capture_running
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 active:scale-95"
-                      : "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 active:scale-95"
-                  )}
-                >
-                  <Dot ok={status.capture_running} />
-                  <span>Capture {status.capture_running ? "running" : "stopped"}</span>
-                  <span className="text-[9px] underline opacity-75 font-normal">
-                    {status.capture_running ? "(stop)" : "(start)"}
-                  </span>
-                </button>
-                <Badge
-                  className={cn(
-                    "py-0 text-[11px]",
-                    status.mode === "LIVE" ? "bg-red-600 text-white" : "bg-sky-600 text-white",
-                  )}
-                >
-                  {status.mode}
-                </Badge>
-                {status.kill_switch && (
-                  <Badge variant="destructive" className="gap-1 py-0 text-[11px]">
-                    <ShieldAlert className="size-3" /> Kill switch ON
-                  </Badge>
+        {/* 1. Mobile Top Status Bar - Hidden on /trade */}
+        {!isTrade && (
+          <header className="flex md:hidden h-10 shrink-0 items-center justify-between px-3 border-b bg-background/95 backdrop-blur z-20">
+            <div className="flex items-center gap-2">
+              <div className="grid size-6 place-items-center rounded-md bg-primary text-xs font-black text-primary-foreground shadow-xs">
+                A
+              </div>
+              <NavLink
+                to="/settings?tab=broker"
+                className={cn(
+                  "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-semibold transition-all select-none",
+                  status?.token.valid
+                    ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                    : "bg-red-500/15 border-red-500/40 text-red-400 animate-pulse"
                 )}
-              </>
-            )}
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="h-7 w-7"
-              aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
-              onClick={() => setTheme(dark ? "light" : "dark")}
-            >
-              {dark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="h-7 w-7 text-muted-foreground hover:text-foreground"
-              title="Lock terminal"
-              aria-label="Lock terminal"
-              onClick={() => logout()}
-            >
-              <Lock className="size-3.5" />
-            </Button>
-          </div>
-        </header>
+              >
+                <Dot ok={Boolean(status?.token.valid)} />
+                <span>Kotak: {status?.token.valid ? "Connected" : "Offline"}</span>
+              </NavLink>
+            </div>
+
+            <div className="flex items-center gap-1.5">
+              <Badge
+                className={cn(
+                  "py-0 px-1.5 text-[10px] font-bold",
+                  status?.mode === "LIVE" ? "bg-red-600 text-white" : "bg-sky-600 text-white"
+                )}
+              >
+                • {status?.mode || "LIVE"}
+              </Badge>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  const isStopped = status?.kill_switch
+                  const url = isStopped ? "/api/kill-switch/off" : "/api/kill-switch/on"
+                  await postJSON(url, {})
+                  await reload()
+                }}
+                title={status?.kill_switch ? "Trading Halted - Tap to Resume" : "Emergency Kill Switch"}
+                className={cn(
+                  "size-7 rounded-lg border flex items-center justify-center transition-all",
+                  status?.kill_switch
+                    ? "bg-rose-500 text-white border-rose-600 animate-pulse"
+                    : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground active:scale-95"
+                )}
+              >
+                <Power className="size-3.5" />
+              </button>
+
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="size-7 text-muted-foreground hover:text-foreground"
+                title="Lock terminal"
+                onClick={() => logout()}
+              >
+                <Lock className="size-3.5" />
+              </Button>
+            </div>
+          </header>
+        )}
+
+        {/* Desktop Header - Hidden on /trade */}
+        {!isTrade && (
+          <header className="sticky top-0 z-10 hidden md:flex h-10 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
+            <div className="ml-auto flex items-center gap-2">
+              <span className="text-xs text-muted-foreground tabular-nums">{status?.now.slice(11) ?? "…"} IST</span>
+              {error && <Badge variant="destructive" className="py-0 text-[10px]">Backend offline</Badge>}
+              {status && (
+                <>
+                  <NavLink
+                    to="/settings?tab=broker"
+                    title={status.token.valid ? "Kotak Neo session active · Click for account & margin" : "Kotak Neo offline · Click to log in"}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all select-none cursor-pointer",
+                      status.token.valid
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20"
+                        : "bg-red-500/15 border-red-500/40 text-red-400 hover:bg-red-500/25 animate-pulse"
+                    )}
+                  >
+                    <Dot ok={status.token.valid} />
+                    <span>Kotak: {status.token.valid ? (status.token.greeting_name || "Connected") : "Offline"}</span>
+                    {!status.token.valid && (
+                      <span className="text-[9px] underline font-semibold ml-0.5">
+                        (Login)
+                      </span>
+                    )}
+                  </NavLink>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const endpoint = status.capture_running ? "/api/capture/stop" : "/api/capture/start"
+                      await postJSON(endpoint, {})
+                      await reload()
+                    }}
+                    title={status.capture_running ? "Click to stop market capture" : "Click to start market capture"}
+                    className={cn(
+                      "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md border text-[11px] font-medium transition-all select-none cursor-pointer",
+                      status.capture_running
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/20 active:scale-95"
+                        : "bg-amber-500/10 border-amber-500/30 text-amber-400 hover:bg-amber-500/20 active:scale-95"
+                    )}
+                  >
+                    <Dot ok={status.capture_running} />
+                    <span>Capture {status.capture_running ? "running" : "stopped"}</span>
+                    <span className="text-[9px] underline opacity-75 font-normal">
+                      {status.capture_running ? "(stop)" : "(start)"}
+                    </span>
+                  </button>
+                  <Badge
+                    className={cn(
+                      "py-0 text-[11px]",
+                      status.mode === "LIVE" ? "bg-red-600 text-white" : "bg-sky-600 text-white",
+                    )}
+                  >
+                    {status.mode}
+                  </Badge>
+                  {status.kill_switch && (
+                    <Badge variant="destructive" className="gap-1 py-0 text-[11px]">
+                      <ShieldAlert className="size-3" /> Kill switch ON
+                    </Badge>
+                  )}
+                </>
+              )}
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="h-7 w-7"
+                aria-label={dark ? "Switch to light theme" : "Switch to dark theme"}
+                onClick={() => setTheme(dark ? "light" : "dark")}
+              >
+                {dark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
+              </Button>
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="h-7 w-7 text-muted-foreground hover:text-foreground"
+                title="Lock terminal"
+                aria-label="Lock terminal"
+                onClick={() => logout()}
+              >
+                <Lock className="size-3.5" />
+              </Button>
+            </div>
+          </header>
+        )}
 
         <main
           className={cn(
             "flex-1 flex flex-col min-h-0",
-            isLive ? "overflow-hidden p-0" : isFixedViewport ? "overflow-hidden p-1 sm:p-2" : "overflow-y-auto p-2 sm:p-2.5"
+            isLive ? "overflow-hidden p-0" : isTrade ? "overflow-y-auto p-0" : isFixedViewport ? "overflow-hidden p-1 sm:p-2" : "overflow-y-auto p-2 sm:p-2.5"
           )}
         >
           <Outlet />
