@@ -7,6 +7,8 @@ import {
   Target,
   Shield,
   Zap,
+  ArrowLeft,
+  ArrowRight,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -97,6 +99,9 @@ export function ManualTradingPage() {
 
   // Simulation Toggle (Demo Mode to inspect Open Position HUD)
   const [simulateOpen, setSimulateOpen] = useState(false)
+
+  // Screen View Mode: "POSITION" (Focus on active trade) or "ORDER" (Strike & order entry)
+  const [viewMode, setViewMode] = useState<"POSITION" | "ORDER">("POSITION")
 
   // Quotes
   const [cePrice, setCePrice] = useState<number | null>(null)
@@ -235,10 +240,14 @@ export function ManualTradingPage() {
           buy_avg: cePrice || 142.5,
           ltp: (cePrice || 142.5) + 13.5,
           unrealized_pnl: Math.round(13.5 * totalQty),
+          tp_pts: tpPts,
+          tl_pts: slPts,
           is_demo: true,
         },
       ]
     : []
+
+  const hasActivePosition = displayPositions.length > 0
 
   // 1-TAP INSTANT BUY ORDER
   async function hitOrder(optionType: "CE" | "PE") {
@@ -280,6 +289,8 @@ export function ManualTradingPage() {
       })
       await positionsPoll.reload()
       await fundsPoll.reload()
+      // Immediately switch view to focus on the active position
+      setViewMode("POSITION")
     } catch (err: any) {
       toast.error("Order Rejected", { description: String(err?.message || err) })
     } finally {
@@ -343,415 +354,534 @@ export function ManualTradingPage() {
     }
   }
 
+  // When active position starts or demo toggled on, show POSITION mode first
+  function handleToggleDemo() {
+    setSimulateOpen((v) => {
+      const next = !v
+      if (next) setViewMode("POSITION")
+      return next
+    })
+  }
+
+  const isPositionFocused = hasActivePosition && viewMode === "POSITION"
+
   return (
-    <div className="flex flex-col w-full max-w-sm mx-auto p-2 gap-2 select-none text-foreground bg-background">
+    <div className="flex flex-col w-full max-w-sm mx-auto p-2 gap-2 select-none text-foreground bg-background min-h-[92vh] justify-between">
       
-      {/* ─── 1. TOPMOST HEADER: DAY P&L + AVAILABLE BALANCE + ACTIONS ─── */}
-      <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/50 shadow-2xs">
-        {/* Day P&L */}
-        <div className="flex flex-col">
-          <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
-            DAY'S P&L {closedPositions.length > 0 ? `(${closedPositions.length})` : ""}
-          </span>
-          <div
-            className={cn(
-              "text-xl font-black font-mono tracking-tight mt-0.5",
-              summary.net_pnl > 0 ? "text-emerald-500" : summary.net_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
-            )}
-          >
-            {summary.net_pnl > 0 ? "+" : ""}
-            {fmtRs(summary.net_pnl)}
-          </div>
-        </div>
-
-        {/* Available Trading Margin */}
-        <div className="flex flex-col items-center">
-          <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
-            AVAIL BALANCE
-          </span>
-          <div className="text-sm font-black font-mono text-foreground mt-0.5">
-            {availableFunds != null ? fmtRs(availableFunds) : isKotakConnected ? "₹37,258" : "—"}
-          </div>
-        </div>
-
-        {/* Demo & History Controls */}
-        <div className="flex items-center gap-1">
-          <button
-            type="button"
-            onClick={() => setSimulateOpen((v) => !v)}
-            className={cn(
-              "text-[9px] font-mono px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer",
-              simulateOpen
-                ? "bg-amber-500/20 text-amber-500 border-amber-500/40"
-                : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
-            )}
-            title="Toggle simulated trade HUD"
-          >
-            {simulateOpen ? "Demo On" : "👁️ Demo"}
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setHistoryOpen(true)}
-            className="text-[9px] font-mono px-2 py-1 rounded-lg border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground font-bold cursor-pointer"
-            title="View today's closed trades"
-          >
-            History
-          </button>
-        </div>
-      </div>
-
-      {/* ─── 2. INDEX SWITCHER & DEFAULT CURRENT WEEK EXPIRY ─── */}
-      <div className="flex flex-col gap-1">
-        <div className="grid grid-cols-2 gap-2">
-          {/* NIFTY Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setIndexSymbol("NIFTY")
-              setStrike("")
-            }}
-            className={cn(
-              "p-2 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
-              indexSymbol === "NIFTY"
-                ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
-                : "bg-card border-border/50 hover:bg-muted/30"
-            )}
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-black font-mono">NIFTY 50</span>
-              <span className="text-[10px] text-muted-foreground font-mono font-bold">65 Q</span>
-            </div>
-            <div className="text-lg font-black font-mono mt-0.5 text-foreground flex items-baseline gap-1">
-              <span>{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-          </button>
-
-          {/* SENSEX Button */}
-          <button
-            type="button"
-            onClick={() => {
-              setIndexSymbol("SENSEX")
-              setStrike("")
-            }}
-            className={cn(
-              "p-2 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
-              indexSymbol === "SENSEX"
-                ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
-                : "bg-card border-border/50 hover:bg-muted/30"
-            )}
-          >
-            <div className="flex items-center justify-between w-full">
-              <span className="text-xs font-black font-mono">SENSEX</span>
-              <span className="text-[10px] text-muted-foreground font-mono font-bold">20 Q</span>
-            </div>
-            <div className="text-lg font-black font-mono mt-0.5 text-foreground flex items-baseline gap-1">
-              <span>{indexSymbol === "SENSEX" ? spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}</span>
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            </div>
-          </button>
-        </div>
-
-        {/* Current Week Expiry: Defaults to current weekly, selectable if next week needed */}
-        <div className="flex items-center justify-between px-1 text-xs font-mono text-muted-foreground">
-          <span className="text-[10px] font-semibold flex items-center gap-1">
-            📅 Expiry:
-          </span>
-          {expiries.length > 0 && (
-            <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
-              <SelectTrigger className="h-6 text-[11px] font-mono font-bold px-2 py-0 border-border/50 bg-card rounded-lg gap-1">
-                <SelectValue placeholder="Expiry">
-                  {formatExpiryLabel(expiry)} {isCurrentWeek ? "(Current Week)" : ""}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {expiries.map((exp, idx) => (
-                  <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs font-mono">
-                    {formatExpiryLabel(exp.expiry)} {idx === 0 ? "★ Current Week" : idx === 1 ? "Next Week" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-      </div>
-
-      {/* ─── 3. ACTIVE TRADE HUD (COMPACT & CLEAN, DOES NOT PUSH BUTTONS BELOW) ─── */}
-      {displayPositions.length > 0 && (
-        <div className="flex flex-col gap-1 animate-in fade-in">
-          {displayPositions.map((pos) => {
-            const isLong = pos.net_qty > 0
-            const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
-            const entryAvg = pos.buy_avg || pos.average_price || 0
-            const ltp = pos.ltp || pos.last_price || 0
-            const ptsDiff = isLong ? ltp - entryAvg : entryAvg - ltp
-            const pnlPercent = entryAvg > 0 ? (ptsDiff / entryAvg) * 100 : 0
-
-            return (
-              <div
-                key={pos.symbol}
-                className={cn(
-                  "p-2 rounded-2xl border-2 flex items-center justify-between gap-2 shadow-md transition-all",
-                  pos.is_demo
-                    ? "bg-amber-500/10 border-amber-500/50"
-                    : tradePnl >= 0
-                    ? "bg-emerald-500/10 border-emerald-500/60"
-                    : "bg-rose-500/10 border-rose-500/60"
-                )}
-              >
-                {/* Position Details & Live P&L */}
-                <div className="flex flex-col min-w-0">
-                  <div className="flex items-center gap-1.5 text-xs font-mono font-bold text-foreground">
-                    <span className={cn("text-[9px] px-1 py-0.2 rounded font-black", isLong ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/20 text-rose-600 dark:text-rose-400")}>
-                      {isLong ? "LONG" : "SHORT"}
-                    </span>
-                    <span className="truncate">{pos.symbol}</span>
-                    <span className="text-[10px] text-muted-foreground">({Math.abs(pos.net_qty)}Q)</span>
-                    {pos.is_demo && (
-                      <span className="text-[8px] bg-amber-500/20 text-amber-500 px-1 rounded font-bold">DEMO</span>
-                    )}
-                  </div>
-
-                  <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <span className={cn("text-lg font-black font-mono tracking-tight leading-none", tradePnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                      {tradePnl >= 0 ? "+" : ""}{fmtRs(tradePnl)}
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground font-bold">
-                      ({ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)}pt · {pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%)
-                    </span>
-                  </div>
-                </div>
-
-                {/* Quick Actions: Breakeven & One-Touch Exit */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => moveToBreakeven(pos)}
-                    className="text-[10px] font-bold text-amber-500 bg-amber-500/15 border border-amber-500/30 px-2 py-2 rounded-xl hover:bg-amber-500/25 active:scale-95 cursor-pointer"
-                    title="Move SL to breakeven"
-                  >
-                    ⚡ BE
-                  </button>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    disabled={actionBusy}
-                    onClick={() => hitExit(pos)}
-                    className="h-9 px-3 text-xs font-black rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md tracking-wider cursor-pointer"
-                  >
-                    EXIT
-                  </Button>
-                </div>
-              </div>
-            )
-          })}
-        </div>
-      )}
-
-      {/* ─── 4. STRIKE STEPPER ─── */}
-      <div className="flex items-center justify-between p-1.5 px-3 rounded-2xl bg-card border border-border/50 shadow-2xs">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-          onClick={() => stepStrike(-1)}
-        >
-          <Minus className="size-4" />
-        </Button>
-
-        <div className="text-center">
-          <div className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-0.5">
-            STRIKE PRICE
-          </div>
-          <div className="text-xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
-            {strike || atmStrike}
-            {Number(strike) === atmStrike && (
-              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-500 font-bold border border-amber-500/30">
-                ATM
-              </span>
-            )}
-          </div>
-        </div>
-
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-9 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-          onClick={() => stepStrike(1)}
-        >
-          <Plus className="size-4" />
-        </Button>
-      </div>
-
-      {/* ─── 5. LOTS PICKER & RISK ROW (COMPACT ALL-IN-ONE) ─── */}
-      <div className="flex flex-col gap-1.5 p-2 rounded-2xl bg-card border border-border/50 shadow-2xs">
-        {/* Lots Stepper & Total Qty */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-              onClick={() => setLots((l) => Math.max(1, l - 1))}
-              disabled={lots <= 1}
-            >
-              <Minus className="size-3" />
-            </Button>
-
-            <span className="text-xs font-black font-mono text-foreground">
-              {lots} {lots === 1 ? "Lot" : "Lots"}
+      {/* ─── TOP SECTION ─── */}
+      <div className="flex flex-col gap-2">
+        {/* ─── 1. TOPMOST HEADER: DAY P&L + AVAILABLE BALANCE + ACTIONS ─── */}
+        <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/50 shadow-2xs">
+          {/* Day P&L */}
+          <div className="flex flex-col">
+            <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
+              DAY'S P&L {closedPositions.length > 0 ? `(${closedPositions.length})` : ""}
             </span>
-
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-              onClick={() => setLots((l) => Math.min(20, l + 1))}
-            >
-              <Plus className="size-3" />
-            </Button>
-          </div>
-
-          <span className="text-[11px] font-mono font-bold text-muted-foreground">
-            Total: <strong className="text-primary">{totalQty} Qty</strong>
-          </span>
-        </div>
-
-        {/* Quick Chips Row */}
-        <div className="grid grid-cols-5 gap-1 pt-1 border-t border-border/30">
-          {[1, 2, 3, 5, 10].map((l) => (
-            <button
-              key={l}
-              type="button"
-              onClick={() => setLots(l)}
+            <div
               className={cn(
-                "py-1 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer text-center",
-                lots === l
-                  ? "bg-foreground text-background border-foreground shadow-xs"
-                  : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
+                "text-xl font-black font-mono tracking-tight mt-0.5",
+                summary.net_pnl > 0 ? "text-emerald-500" : summary.net_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
               )}
             >
-              {l}L
+              {summary.net_pnl > 0 ? "+" : ""}
+              {fmtRs(summary.net_pnl)}
+            </div>
+          </div>
+
+          {/* Available Trading Margin */}
+          <div className="flex flex-col items-center">
+            <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
+              AVAIL BALANCE
+            </span>
+            <div className="text-sm font-black font-mono text-foreground mt-0.5">
+              {availableFunds != null ? fmtRs(availableFunds) : isKotakConnected ? "₹37,258" : "—"}
+            </div>
+          </div>
+
+          {/* Demo & History Controls */}
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={handleToggleDemo}
+              className={cn(
+                "text-[9px] font-mono px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer",
+                simulateOpen
+                  ? "bg-amber-500/20 text-amber-500 border-amber-500/40"
+                  : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
+              )}
+              title="Toggle simulated trade HUD"
+            >
+              {simulateOpen ? "Demo On" : "👁️ Demo"}
             </button>
-          ))}
-        </div>
 
-        {/* SL & Target Grid */}
-        <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border/30">
-          {/* SL */}
-          <div className="flex items-center justify-between bg-muted/30 p-1.5 rounded-xl border border-border/40">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-rose-500 uppercase flex items-center gap-0.5 leading-none">
-                <Shield className="size-2.5" /> SL
-              </span>
-              <span className="text-[9px] font-mono text-muted-foreground mt-0.5">
-                {slPts > 0 ? `-${(slPts * totalQty).toFixed(0)} ₹` : "Off"}
-              </span>
-            </div>
-            <div className="relative flex items-center w-14">
-              <Input
-                type="number"
-                min="0"
-                value={slPts || ""}
-                onChange={(e) => setSlPts(Math.max(0, parseFloat(e.target.value) || 0))}
-                className="h-6 text-center text-xs font-mono font-bold bg-background border border-border/60 p-0 rounded-md pr-5"
-              />
-              <span className="absolute right-1 text-[9px] font-mono text-muted-foreground pointer-events-none">pt</span>
-            </div>
-          </div>
-
-          {/* Target */}
-          <div className="flex items-center justify-between bg-muted/30 p-1.5 rounded-xl border border-border/40">
-            <div className="flex flex-col">
-              <span className="text-[9px] font-bold text-emerald-500 uppercase flex items-center gap-0.5 leading-none">
-                <Target className="size-2.5" /> Target
-              </span>
-              <span className="text-[9px] font-mono text-muted-foreground mt-0.5">
-                {tpPts > 0 ? `+${(tpPts * totalQty).toFixed(0)} ₹` : "Off"}
-              </span>
-            </div>
-            <div className="relative flex items-center w-14">
-              <Input
-                type="number"
-                min="0"
-                value={tpPts || ""}
-                onChange={(e) => setTpPts(Math.max(0, parseFloat(e.target.value) || 0))}
-                className="h-6 text-center text-xs font-mono font-bold bg-background border border-border/60 p-0 rounded-md pr-5"
-              />
-              <span className="absolute right-1 text-[9px] font-mono text-muted-foreground pointer-events-none">pt</span>
-            </div>
+            <button
+              type="button"
+              onClick={() => setHistoryOpen(true)}
+              className="text-[9px] font-mono px-2 py-1 rounded-lg border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground font-bold cursor-pointer"
+              title="View today's closed trades"
+            >
+              History
+            </button>
           </div>
         </div>
-      </div>
 
-      {/* ─── 6. BIGGER BUY CALL & BUY PUT BUTTONS WITH EXPECTED COST ─── */}
-      <div className="grid grid-cols-2 gap-2 mt-0.5">
-        {/* BUY CALL BUTTON */}
-        <button
-          type="button"
-          disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
-          onClick={() => hitOrder("CE")}
-          className="h-20 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-lg transition-all cursor-pointer text-left"
-        >
-          <div className="flex items-center justify-between w-full">
-            <span className="text-xs font-black tracking-wide flex items-center gap-1">
-              <Zap className="size-3.5 fill-current" /> BUY CALL ↗
+        {/* ─── SWITCHER BANNER WHEN IN ORDER VIEW WITH AN ACTIVE TRADE ─── */}
+        {hasActivePosition && viewMode === "ORDER" && (
+          <button
+            type="button"
+            onClick={() => setViewMode("POSITION")}
+            className="flex items-center justify-between p-2 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-xs font-mono font-bold text-foreground transition-all active:scale-98 cursor-pointer shadow-xs"
+          >
+            <span className="flex items-center gap-1.5 text-emerald-600 dark:text-emerald-400">
+              <span className="size-2 rounded-full bg-emerald-500 animate-ping" />
+              <span>ACTIVE TRADE IN PROGRESS</span>
             </span>
-            <span className="text-[10px] font-mono font-bold bg-white/20 px-1.5 py-0.5 rounded">
-              {strike} CE
+            <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+              View Position <ArrowRight className="size-3" />
             </span>
+          </button>
+        )}
+
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {/* VIEW A: FOCUSED ACTIVE TRADE DETAILS (When in trade)             */}
+        {/* ══════════════════════════════════════════════════════════════════ */}
+        {isPositionFocused ? (
+          <div className="flex flex-col gap-2.5 animate-in fade-in duration-150">
+            {displayPositions.map((pos) => {
+              const isLong = pos.net_qty > 0
+              const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
+              const entryAvg = pos.buy_avg || pos.average_price || 0
+              const ltp = pos.ltp || pos.last_price || 0
+              const ptsDiff = isLong ? ltp - entryAvg : entryAvg - ltp
+              const pnlPercent = entryAvg > 0 ? (ptsDiff / entryAvg) * 100 : 0
+              const targetPrice = entryAvg > 0 && tpPts > 0 ? entryAvg + (isLong ? tpPts : -tpPts) : null
+              const stopPrice = entryAvg > 0 && slPts > 0 ? entryAvg - (isLong ? slPts : -slPts) : null
+              const investedCost = Math.round(entryAvg * Math.abs(pos.net_qty))
+
+              return (
+                <div key={pos.symbol} className="flex flex-col gap-2.5">
+                  {/* Active Trade Header & Badges */}
+                  <div className="flex items-center justify-between p-3 rounded-2xl bg-card border border-border/50 shadow-2xs">
+                    <div className="flex items-center gap-2">
+                      <span className={cn("text-xs px-2 py-0.5 rounded-lg font-black tracking-wide", isLong ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/20 text-rose-600 dark:text-rose-400")}>
+                        {isLong ? "LONG CALL" : "SHORT PUT"}
+                      </span>
+                      <span className="text-sm font-black font-mono text-foreground">{pos.symbol}</span>
+                      {pos.is_demo && (
+                        <span className="text-[9px] bg-amber-500/20 text-amber-500 px-1.5 py-0.5 rounded font-bold">
+                          DEMO
+                        </span>
+                      )}
+                    </div>
+                    <span className="text-xs font-mono font-bold text-muted-foreground">
+                      {Math.abs(pos.net_qty)} Qty ({lots}L)
+                    </span>
+                  </div>
+
+                  {/* GIANT LIVE TRADE P&L CARD */}
+                  <div className={cn(
+                    "p-4 rounded-3xl border-2 flex flex-col items-center justify-center text-center shadow-md transition-all",
+                    tradePnl >= 0 ? "bg-emerald-500/10 border-emerald-500/60" : "bg-rose-500/10 border-rose-500/60"
+                  )}>
+                    <span className="text-[10px] uppercase font-bold tracking-widest text-muted-foreground mb-1">
+                      RUNNING TRADE P&L
+                    </span>
+                    <div className={cn(
+                      "text-4xl font-black font-mono tracking-tight",
+                      tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"
+                    )}>
+                      {tradePnl >= 0 ? "+" : ""}{fmtRs(tradePnl)}
+                    </div>
+                    <div className="flex items-center gap-2 mt-1 font-mono text-xs font-bold text-muted-foreground">
+                      <span>{ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt</span>
+                      <span>•</span>
+                      <span>{pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%</span>
+                      <span className="size-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+                    </div>
+                  </div>
+
+                  {/* 3-METRICS GRID: ENTRY, LTP, INVESTED */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="p-2.5 rounded-2xl bg-card border border-border/50 text-center">
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
+                        Avg Entry
+                      </span>
+                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
+                        ₹{entryAvg.toFixed(1)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-2xl bg-card border border-border/50 text-center">
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
+                        Live LTP
+                      </span>
+                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
+                        ₹{ltp.toFixed(1)}
+                      </span>
+                    </div>
+
+                    <div className="p-2.5 rounded-2xl bg-card border border-border/50 text-center">
+                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
+                        Invested
+                      </span>
+                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
+                        {fmtRs(investedCost)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* TARGET & STOP LOSS STATUS */}
+                  <div className="p-3 rounded-2xl bg-card border border-border/50 shadow-2xs flex flex-col gap-2">
+                    <div className="flex items-center justify-between text-xs font-mono">
+                      <span className="text-rose-500 font-bold flex items-center gap-1 text-[11px]">
+                        <Shield className="size-3" /> Stop Loss: {stopPrice != null ? `₹${stopPrice.toFixed(1)}` : "—"}
+                      </span>
+                      <span className="text-muted-foreground text-[10px]">
+                        {slPts > 0 ? `-${slPts} pt (-${(slPts * Math.abs(pos.net_qty)).toFixed(0)} ₹)` : "No SL"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs font-mono border-t border-border/30 pt-1.5">
+                      <span className="text-emerald-500 font-bold flex items-center gap-1 text-[11px]">
+                        <Target className="size-3" /> Target: {targetPrice != null ? `₹${targetPrice.toFixed(1)}` : "—"}
+                      </span>
+                      <span className="text-muted-foreground text-[10px]">
+                        {tpPts > 0 ? `+${tpPts} pt (+${(tpPts * Math.abs(pos.net_qty)).toFixed(0)} ₹)` : "No TP"}
+                      </span>
+                    </div>
+
+                    {/* Quick Move SL to Breakeven */}
+                    <button
+                      type="button"
+                      onClick={() => moveToBreakeven(pos)}
+                      className="mt-1 w-full py-2 rounded-xl text-xs font-mono font-bold text-amber-500 bg-amber-500/10 border border-amber-500/30 hover:bg-amber-500/20 active:scale-98 transition-all flex items-center justify-center gap-1 cursor-pointer"
+                    >
+                      <Zap className="size-3.5 fill-current" /> Trail Stop Loss to Breakeven (₹{entryAvg.toFixed(1)})
+                    </button>
+                  </div>
+
+                  {/* ONE-TOUCH FULL-WIDTH EXIT BUTTON */}
+                  <Button
+                    variant="destructive"
+                    disabled={actionBusy}
+                    onClick={() => hitExit(pos)}
+                    className="h-14 w-full rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 text-white font-black text-base tracking-wider shadow-lg transition-all cursor-pointer"
+                  >
+                    🚨 ONE-TOUCH EXIT (MARKET)
+                  </Button>
+
+                  {/* SWITCH TO ORDER ENTRY / TRADE AGAIN */}
+                  <button
+                    type="button"
+                    onClick={() => setViewMode("ORDER")}
+                    className="w-full py-2.5 rounded-xl border border-border/60 bg-muted/30 hover:bg-muted/50 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <span>Trade Again / Place Another Order</span>
+                    <ArrowRight className="size-3.5" />
+                  </button>
+                </div>
+              )
+            })}
           </div>
+        ) : (
+          /* ══════════════════════════════════════════════════════════════════ */
+          /* VIEW B: ORDER ENTRY DESK (Strike Stepper, Lots, Buy Buttons)      */
+          /* ══════════════════════════════════════════════════════════════════ */
+          <div className="flex flex-col gap-2 animate-in fade-in duration-150">
+            {/* 2. INDEX SWITCHER & DEFAULT CURRENT WEEK EXPIRY */}
+            <div className="flex flex-col gap-1">
+              <div className="grid grid-cols-2 gap-2">
+                {/* NIFTY Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIndexSymbol("NIFTY")
+                    setStrike("")
+                  }}
+                  className={cn(
+                    "p-2 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
+                    indexSymbol === "NIFTY"
+                      ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
+                      : "bg-card border-border/50 hover:bg-muted/30"
+                  )}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-black font-mono">NIFTY 50</span>
+                    <span className="text-[10px] text-muted-foreground font-mono font-bold">65 Q</span>
+                  </div>
+                  <div className="text-lg font-black font-mono mt-0.5 text-foreground flex items-baseline gap-1">
+                    <span>{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+                </button>
 
-          <div className="flex items-baseline justify-between w-full">
-            <span className="text-lg font-black font-mono">
-              {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
-            </span>
-            <div className="text-right">
-              <span className="text-[11px] font-mono text-emerald-100 font-semibold block leading-tight">
-                Cost: <strong className="text-white">{ceCost != null ? fmtRs(ceCost) : "—"}</strong>
-              </span>
-              <span className="text-[9px] text-emerald-200/80 font-mono block">
-                ({totalQty} Qty)
-              </span>
+                {/* SENSEX Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIndexSymbol("SENSEX")
+                    setStrike("")
+                  }}
+                  className={cn(
+                    "p-2 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
+                    indexSymbol === "SENSEX"
+                      ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
+                      : "bg-card border-border/50 hover:bg-muted/30"
+                  )}
+                >
+                  <div className="flex items-center justify-between w-full">
+                    <span className="text-xs font-black font-mono">SENSEX</span>
+                    <span className="text-[10px] text-muted-foreground font-mono font-bold">20 Q</span>
+                  </div>
+                  <div className="text-lg font-black font-mono mt-0.5 text-foreground flex items-baseline gap-1">
+                    <span>{indexSymbol === "SENSEX" ? spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}</span>
+                    <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  </div>
+                </button>
+              </div>
+
+              {/* Current Week Expiry: Defaults to current weekly */}
+              <div className="flex items-center justify-between px-1 text-xs font-mono text-muted-foreground">
+                <span className="text-[10px] font-semibold flex items-center gap-1">
+                  📅 Expiry:
+                </span>
+                {expiries.length > 0 && (
+                  <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
+                    <SelectTrigger className="h-6 text-[11px] font-mono font-bold px-2 py-0 border-border/50 bg-card rounded-lg gap-1">
+                      <SelectValue placeholder="Expiry">
+                        {formatExpiryLabel(expiry)} {isCurrentWeek ? "(Current Week)" : ""}
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent>
+                      {expiries.map((exp, idx) => (
+                        <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs font-mono">
+                          {formatExpiryLabel(exp.expiry)} {idx === 0 ? "★ Current Week" : idx === 1 ? "Next Week" : ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
             </div>
-          </div>
-        </button>
 
-        {/* BUY PUT BUTTON */}
-        <button
-          type="button"
-          disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
-          onClick={() => hitOrder("PE")}
-          className="h-20 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-lg transition-all cursor-pointer text-left"
-        >
-          <div className="flex items-center justify-between w-full">
-            <span className="text-xs font-black tracking-wide flex items-center gap-1">
-              <Zap className="size-3.5 fill-current" /> BUY PUT ↘
-            </span>
-            <span className="text-[10px] font-mono font-bold bg-white/20 px-1.5 py-0.5 rounded">
-              {strike} PE
-            </span>
-          </div>
+            {/* 3. STRIKE STEPPER */}
+            <div className="flex items-center justify-between p-1.5 px-3 rounded-2xl bg-card border border-border/50 shadow-2xs">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+                onClick={() => stepStrike(-1)}
+              >
+                <Minus className="size-4" />
+              </Button>
 
-          <div className="flex items-baseline justify-between w-full">
-            <span className="text-lg font-black font-mono">
-              {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
-            </span>
-            <div className="text-right">
-              <span className="text-[11px] font-mono text-rose-100 font-semibold block leading-tight">
-                Cost: <strong className="text-white">{peCost != null ? fmtRs(peCost) : "—"}</strong>
-              </span>
-              <span className="text-[9px] text-rose-200/80 font-mono block">
-                ({totalQty} Qty)
-              </span>
+              <div className="text-center">
+                <div className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-0.5">
+                  STRIKE PRICE
+                </div>
+                <div className="text-xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
+                  {strike || atmStrike}
+                  {Number(strike) === atmStrike && (
+                    <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-500 font-bold border border-amber-500/30">
+                      ATM
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="size-9 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+                onClick={() => stepStrike(1)}
+              >
+                <Plus className="size-4" />
+              </Button>
             </div>
+
+            {/* 4. LOTS PICKER & RISK ROW (COMPACT ALL-IN-ONE) */}
+            <div className="flex flex-col gap-1.5 p-2 rounded-2xl bg-card border border-border/50 shadow-2xs">
+              {/* Lots Stepper & Total Qty */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+                    onClick={() => setLots((l) => Math.max(1, l - 1))}
+                    disabled={lots <= 1}
+                  >
+                    <Minus className="size-3" />
+                  </Button>
+
+                  <span className="text-xs font-black font-mono text-foreground">
+                    {lots} {lots === 1 ? "Lot" : "Lots"}
+                  </span>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+                    onClick={() => setLots((l) => Math.min(20, l + 1))}
+                  >
+                    <Plus className="size-3" />
+                  </Button>
+                </div>
+
+                <span className="text-[11px] font-mono font-bold text-muted-foreground">
+                  Total: <strong className="text-primary">{totalQty} Qty</strong>
+                </span>
+              </div>
+
+              {/* Quick Chips Row */}
+              <div className="grid grid-cols-5 gap-1 pt-1 border-t border-border/30">
+                {[1, 2, 3, 5, 10].map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => setLots(l)}
+                    className={cn(
+                      "py-1 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer text-center",
+                      lots === l
+                        ? "bg-foreground text-background border-foreground shadow-xs"
+                        : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {l}L
+                  </button>
+                ))}
+              </div>
+
+              {/* SL & Target Grid */}
+              <div className="grid grid-cols-2 gap-1.5 pt-1 border-t border-border/30">
+                {/* SL */}
+                <div className="flex items-center justify-between bg-muted/30 p-1.5 rounded-xl border border-border/40">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-rose-500 uppercase flex items-center gap-0.5 leading-none">
+                      <Shield className="size-2.5" /> SL
+                    </span>
+                    <span className="text-[9px] font-mono text-muted-foreground mt-0.5">
+                      {slPts > 0 ? `-${(slPts * totalQty).toFixed(0)} ₹` : "Off"}
+                    </span>
+                  </div>
+                  <div className="relative flex items-center w-14">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={slPts || ""}
+                      onChange={(e) => setSlPts(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="h-6 text-center text-xs font-mono font-bold bg-background border border-border/60 p-0 rounded-md pr-5"
+                    />
+                    <span className="absolute right-1 text-[9px] font-mono text-muted-foreground pointer-events-none">pt</span>
+                  </div>
+                </div>
+
+                {/* Target */}
+                <div className="flex items-center justify-between bg-muted/30 p-1.5 rounded-xl border border-border/40">
+                  <div className="flex flex-col">
+                    <span className="text-[9px] font-bold text-emerald-500 uppercase flex items-center gap-0.5 leading-none">
+                      <Target className="size-2.5" /> Target
+                    </span>
+                    <span className="text-[9px] font-mono text-muted-foreground mt-0.5">
+                      {tpPts > 0 ? `+${(tpPts * totalQty).toFixed(0)} ₹` : "Off"}
+                    </span>
+                  </div>
+                  <div className="relative flex items-center w-14">
+                    <Input
+                      type="number"
+                      min="0"
+                      value={tpPts || ""}
+                      onChange={(e) => setTpPts(Math.max(0, parseFloat(e.target.value) || 0))}
+                      className="h-6 text-center text-xs font-mono font-bold bg-background border border-border/60 p-0 rounded-md pr-5"
+                    />
+                    <span className="absolute right-1 text-[9px] font-mono text-muted-foreground pointer-events-none">pt</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 5. BIGGER BUY CALL & BUY PUT BUTTONS WITH EXPECTED COST */}
+            <div className="grid grid-cols-2 gap-2 mt-0.5">
+              {/* BUY CALL BUTTON */}
+              <button
+                type="button"
+                disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
+                onClick={() => hitOrder("CE")}
+                className="h-20 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-lg transition-all cursor-pointer text-left"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-black tracking-wide flex items-center gap-1">
+                    <Zap className="size-3.5 fill-current" /> BUY CALL ↗
+                  </span>
+                  <span className="text-[10px] font-mono font-bold bg-white/20 px-1.5 py-0.5 rounded">
+                    {strike} CE
+                  </span>
+                </div>
+
+                <div className="flex items-baseline justify-between w-full">
+                  <span className="text-lg font-black font-mono">
+                    {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
+                  </span>
+                  <div className="text-right">
+                    <span className="text-[11px] font-mono text-emerald-100 font-semibold block leading-tight">
+                      Cost: <strong className="text-white">{ceCost != null ? fmtRs(ceCost) : "—"}</strong>
+                    </span>
+                    <span className="text-[9px] text-emerald-200/80 font-mono block">
+                      ({totalQty} Qty)
+                    </span>
+                  </div>
+                </div>
+              </button>
+
+              {/* BUY PUT BUTTON */}
+              <button
+                type="button"
+                disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
+                onClick={() => hitOrder("PE")}
+                className="h-20 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-lg transition-all cursor-pointer text-left"
+              >
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-xs font-black tracking-wide flex items-center gap-1">
+                    <Zap className="size-3.5 fill-current" /> BUY PUT ↘
+                  </span>
+                  <span className="text-[10px] font-mono font-bold bg-white/20 px-1.5 py-0.5 rounded">
+                    {strike} PE
+                  </span>
+                </div>
+
+                <div className="flex items-baseline justify-between w-full">
+                  <span className="text-lg font-black font-mono">
+                    {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
+                  </span>
+                  <div className="text-right">
+                    <span className="text-[11px] font-mono text-rose-100 font-semibold block leading-tight">
+                      Cost: <strong className="text-white">{peCost != null ? fmtRs(peCost) : "—"}</strong>
+                    </span>
+                    <span className="text-[9px] text-rose-200/80 font-mono block">
+                      ({totalQty} Qty)
+                    </span>
+                  </div>
+                </div>
+              </button>
+            </div>
+
+            {/* BACK TO POSITION BUTTON (If position exists) */}
+            {hasActivePosition && (
+              <button
+                type="button"
+                onClick={() => setViewMode("POSITION")}
+                className="w-full py-2.5 mt-1 rounded-xl border border-emerald-500/40 bg-emerald-500/10 hover:bg-emerald-500/20 text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400 transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <ArrowLeft className="size-3.5" />
+                <span>Return to Active Trade Position</span>
+              </button>
+            )}
           </div>
-        </button>
+        )}
       </div>
 
       {/* ─── TODAY'S COMPLETED TRADES MODAL ─── */}
