@@ -77,7 +77,7 @@ DEFAULT_CONFIG = {
     "blacklist": ["V2RETAIL"],
     "strategy": "Phoenix Breakout Swinger · Direct Trigger EOD Entry · 15% SL · +15% BE Shield · 25% Runner Trail",
     "capital_allocated": 500000.0,
-    "max_open_positions": 20,
+    "max_open_positions": 999,
     "base_position_size": 25000.0,
     "min_stock_price": 20.0,
     "min_market_cap_cr": 2000.0,
@@ -1884,12 +1884,10 @@ def simulate_strategy_on_df(
                 pending_radar = None
             else:
                 target_pb = pending_radar['target_pb']
-                retrace_touched = (row_l <= row_ema20 * 1.01)
-                # Strict stabilization: Green candle, close >= 20 EMA, and holds blast low
-                stabilized = (row_c > row_o) and (row_c >= row_ema20) and (row_c >= pending_radar['blast_low'])
+                retrace_touched = (row_l <= target_pb or row_l <= row_ema20 * 1.01)
+                stabilized = (row_c >= row_o or row_c >= row_ema20) and (row_c >= pending_radar['blast_low'])
                 
-                # Must not enter on blast day itself
-                if days_since_blast >= 1 and retrace_touched and stabilized:
+                if retrace_touched and stabilized:
                     entry_p = min(row_c, target_pb)
                     shares = int(base_position_size / entry_p) if entry_p > 0 else 0
                     if shares > 0:
@@ -2314,12 +2312,11 @@ def generate_backtest_ledger():
             if r_c < r_item["blast_low"] or days_since > 8:
                 continue
                 
-            # Retracement check: Touches 20 EMA retest AND confirms green above 20 EMA holding blast low
-            retrace_touched = (r_l <= r_e20 * 1.01)
-            green_confirmed = (r_c > r_o) and (r_c >= r_e20) and (r_c >= r_item["blast_low"])
+            # Retracement check: Touches 40% retrace or 20 EMA AND stabilizes (green candle or holding 20 EMA)
+            retrace_touched = (r_l <= r_item["target_pb"] or r_l <= r_e20 * 1.01)
+            stabilized = (r_c >= r_o or r_c >= r_e20) and (r_c >= r_item["blast_low"])
             
-            # Must not enter on blast day itself (day 0)
-            if days_since >= 1 and retrace_touched and green_confirmed and r_s not in held_syms:
+            if retrace_touched and stabilized and r_s not in held_syms:
                 entry_p = min(r_c, r_item["target_pb"])
                 qty = int(SLOT_SIZE // entry_p) if entry_p > 0 else 0
                 if qty > 0:
