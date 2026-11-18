@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders } from "lucide-react"
+import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth"
 
 const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
+  { to: "/trade", label: "Quick Trade", icon: Zap },
   { to: "/day", label: "Day viewer", icon: CalendarDays },
   { to: "/paper", label: "Trades P&L", icon: Wallet },
   { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },

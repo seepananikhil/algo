@@ -1717,15 +1717,20 @@ def _manual_contract(expiry_text: str, strike_value, option_type: str, index_sym
 def manual_option_choices(query: dict | None = None) -> dict:
     idx_sym = "NIFTY"
     if query:
-        idx_sym = str((query.get("symbol") or query.get("index") or ["NIFTY"])[0]).upper()
+        val = query.get("symbol") or query.get("index") or ["NIFTY"]
+        if isinstance(val, (list, tuple)) and val:
+            idx_sym = str(val[0]).upper()
+        else:
+            idx_sym = str(val).upper()
+
+    st = status()
 
     if idx_sym == "SENSEX":
         spot = 0.0
-        st = status()
         if st.get("sensex_last_tick") and st["sensex_last_tick"].get("ltp"):
             spot = float(st["sensex_last_tick"]["ltp"])
         if spot <= 0:
-            spot = 74000.0
+            spot = 82000.0
 
         options = current_sensex_options()
         current_date = datetime.now(IST).date()
@@ -1741,24 +1746,24 @@ def manual_option_choices(query: dict | None = None) -> dict:
                 "lot_size": int(rows.iloc[0]["lot_size"]) if not rows.empty else 20,
                 "strikes": sorted(int(strike) for strike in rows["strike"].unique()),
             })
-        return {"symbol": "SENSEX", "spot": spot, "atm": atm, "max_lots": max(1, int(PAPER_LOTS)), "expiries": choices}
+        return {"symbol": "SENSEX", "spot": spot, "atm": atm, "max_lots": 20, "expiries": choices}
 
     spot = 0.0
-    try:
-        client = manual_fyers_client()
-        quote = client.quotes(data={"symbols": "NSE:NIFTY50-INDEX"})
-        quote_rows = quote.get("d") or []
-        if quote.get("s") == "ok" and quote_rows:
-            spot = _manual_number((quote_rows[0].get("v") or {}).get("lp"))
-    except Exception:
-        pass
+    if st.get("last_tick") and st["last_tick"].get("ltp"):
+        spot = float(st["last_tick"]["ltp"])
 
     if spot <= 0:
-        st = status()
-        if st.get("last_tick") and st["last_tick"].get("ltp"):
-            spot = float(st["last_tick"]["ltp"])
-        else:
-            spot = 22700.0
+        try:
+            client = manual_fyers_client()
+            quote = client.quotes(data={"symbols": "NSE:NIFTY50-INDEX"})
+            quote_rows = quote.get("d") or []
+            if quote.get("s") == "ok" and quote_rows:
+                spot = _manual_number((quote_rows[0].get("v") or {}).get("lp"))
+        except Exception:
+            pass
+
+    if spot <= 0:
+        spot = 25200.0
 
     options = current_nifty_options()
     current_date = datetime.now(IST).date()
@@ -1774,55 +1779,90 @@ def manual_option_choices(query: dict | None = None) -> dict:
             "lot_size": int(rows.iloc[0]["lot_size"]) if not rows.empty else 65,
             "strikes": sorted(int(strike) for strike in rows["strike"].unique()),
         })
-    return {"symbol": "NIFTY", "spot": spot, "atm": atm, "max_lots": max(1, int(PAPER_LOTS)), "expiries": choices}
+    return {"symbol": "NIFTY", "spot": spot, "atm": atm, "max_lots": 20, "expiries": choices}
 
 
 def manual_option_quote(query: dict) -> dict:
-    symbol = str((query.get("symbol") or [""])[0])
-    idx = str((query.get("index_symbol") or query.get("symbol_index") or [""])[0]).upper()
-    if not idx:
-        idx = "SENSEX" if "SENSEX" in symbol else "NIFTY"
+    val_sym = query.get("symbol") or [""]
+    symbol = str(val_sym[0] if isinstance(val_sym, (list, tuple)) else val_sym).strip()
 
-    if symbol:
-        options = current_sensex_options() if idx == "SENSEX" else current_nifty_options()
-        clean = symbol.replace("NSE:", "").replace("BSE:", "")
-        matches = options[(options["symbol"] == clean) | (options["symbol"] == symbol)]
-        lot_sz = int(matches.iloc[0]["lot_size"]) if not matches.empty else (20 if idx == "SENSEX" else 65)
-        tok = str(matches.iloc[0]["token"]) if not matches.empty and "token" in matches.columns else ""
-        contract = {"symbol": symbol, "lot_size": lot_sz, "token": tok, "index_symbol": idx}
-    else:
-        expiry = str((query.get("expiry") or [""])[0])
-        strike = (query.get("strike") or [""])[0]
-        option_type = str((query.get("option_type") or [""])[0])
-        contract = _manual_contract(expiry, strike, option_type, index_symbol=idx)
+    val_idx = query.get("index_symbol") or query.get("symbol_index") or query.get("index") or [""]
+    idx = str(val_idx[0] if isinstance(val_idx, (list, tuple)) else val_idx).upper().strip()
+    if not idx:
+        idx = "SENSEX" if "SENSEX" in symbol.upper() else "NIFTY"
 
     from broker import get_active_broker
     broker = get_active_broker()
+
+    expiry_val = query.get("expiry") or [""]
+    expiry = str(expiry_val[0] if isinstance(expiry_val, (list, tuple)) else expiry_val).strip()
+
+    strike_val = query.get("strike") or [""]
+    strike_raw = strike_val[0] if isinstance(strike_val, (list, tuple)) else strike_val
+    strike = 0
+    try:
+        strike = int(float(strike_raw)) if strike_raw else 0
+    except (TypeError, ValueError):
+        strike = 0
+
+    opt_type_val = query.get("option_type") or [""]
+    option_type = str(opt_type_val[0] if isinstance(opt_type_val, (list, tuple)) else opt_type_val).upper().strip()
+
+    lot_sz = 20 if idx == "SENSEX" else 65
+    contract_sym = symbol
     price = 0.0
 
-    # Kotak Neo quote lookup
-    if (broker == "KOTAK_NEO" or contract["index_symbol"] == "SENSEX") and contract.get("token"):
-        from kotak_orders import get_kotak_client
-        c = get_kotak_client()
-        if c:
-            try:
-                ex_seg = "bse_fo" if contract["index_symbol"] == "SENSEX" else "nse_fo"
-                q_resp = c.quotes(instrument_tokens=[{"instrument_token": str(contract["token"]), "exchange_segment": ex_seg}])
-                if isinstance(q_resp, list) and q_resp:
-                    price = float(q_resp[0].get("ltp") or 0.0)
-            except Exception:
-                pass
-
-    if price <= 0:
-        # Fallback to Fyers quote
+    # Kotak Neo / Live pricing helper
+    if broker == "KOTAK_NEO":
         try:
-            f_sym = contract["symbol"]
-            if contract["index_symbol"] == "SENSEX":
-                if not f_sym.startswith("BSE:"):
-                    f_sym = f"BSE:{f_sym}"
-            else:
-                if not f_sym.startswith("NSE:"):
-                    f_sym = f"NSE:{f_sym}"
+            from live_option_pricing import get_live_option_ltp
+            if strike > 0 and option_type in ("CE", "PE"):
+                q_info = get_live_option_ltp(idx, strike, option_type, expiry if expiry else None)
+                if q_info and q_info.get("ltp"):
+                    price = float(q_info["ltp"])
+                    if q_info.get("symbol"):
+                        contract_sym = q_info["symbol"]
+            elif symbol:
+                import re
+                m = re.search(r'(NIFTY|SENSEX).*?(\d{4,6})(CE|PE)', symbol.upper())
+                if m:
+                    idx_val, strk_val, ot_val = m.group(1), int(m.group(2)), m.group(3)
+                    q_info = get_live_option_ltp(idx_val, strk_val, ot_val)
+                    if q_info and q_info.get("ltp"):
+                        price = float(q_info["ltp"])
+                        if q_info.get("symbol"):
+                            contract_sym = q_info["symbol"]
+        except Exception:
+            pass
+
+    # If price still 0, try token lookup from symbol master
+    if price <= 0:
+        if symbol:
+            options = current_sensex_options() if idx == "SENSEX" else current_nifty_options()
+            clean = symbol.replace("NSE:", "").replace("BSE:", "")
+            matches = options[(options["symbol"] == clean) | (options["symbol"] == symbol)]
+            if not matches.empty:
+                tok = str(matches.iloc[0].get("token", ""))
+                if tok and broker == "KOTAK_NEO":
+                    from kotak_orders import get_kotak_client
+                    c = get_kotak_client()
+                    if c:
+                        try:
+                            ex_seg = "bse_fo" if idx == "SENSEX" else "nse_fo"
+                            q_resp = c.quotes(instrument_tokens=[{"instrument_token": tok, "exchange_segment": ex_seg}])
+                            if isinstance(q_resp, list) and q_resp:
+                                price = float(q_resp[0].get("ltp") or 0.0)
+                        except Exception:
+                            pass
+
+    # Fallback to Fyers quote
+    if price <= 0:
+        try:
+            f_sym = contract_sym or symbol
+            if idx == "SENSEX" and not f_sym.startswith("BSE:"):
+                f_sym = f"BSE:{f_sym}"
+            elif idx == "NIFTY" and not f_sym.startswith("NSE:"):
+                f_sym = f"NSE:{f_sym}"
             response = manual_fyers_client().quotes(data={"symbols": f_sym})
             rows = response.get("d") or []
             if response.get("s") == "ok" and rows:
@@ -1831,11 +1871,75 @@ def manual_option_quote(query: dict) -> dict:
             pass
 
     if price <= 0:
-        raise ManualTradeError(f"Unable to fetch valid option quote for {contract['symbol']}.", 502)
-    return {"symbol": contract["symbol"], "lot_size": contract["lot_size"], "last_price": price}
+        raise ManualTradeError(f"Unable to fetch valid option quote for {contract_sym or symbol}.", 502)
+
+    return {"symbol": contract_sym or symbol, "lot_size": lot_sz, "last_price": price, "index_symbol": idx}
 
 
 def manual_trading_snapshot() -> dict:
+    from broker import get_active_broker
+    broker = get_active_broker()
+    now = datetime.now(IST)
+
+    if broker == "KOTAK_NEO":
+        from broker import get_positions
+        pos_data = get_positions()
+        open_positions = []
+        for r in pos_data.get("open_positions", []):
+            sym = str(r.get("symbol", ""))
+            idx = "SENSEX" if "SENSEX" in sym.upper() else "NIFTY"
+            lot_sz = 20 if idx == "SENSEX" else 65
+            open_positions.append({
+                "symbol": sym,
+                "net_qty": int(r.get("net_qty", 0)),
+                "average_price": float(r.get("buy_avg") or r.get("sell_avg") or 0.0),
+                "last_price": float(r.get("last_price") or 0.0),
+                "pnl": float(r.get("unrealized_pnl") or 0.0),
+                "realized_pnl": float(r.get("realized_pnl") or 0.0),
+                "unrealized_pnl": float(r.get("unrealized_pnl") or 0.0),
+                "lot_size": lot_sz,
+                "exchange": str(r.get("exchange", "nse_fo")),
+                "product": str(r.get("product", "NRML")),
+                "side": str(r.get("side", "BUY" if int(r.get("net_qty", 0)) > 0 else "SELL")),
+            })
+
+        orders = []
+        try:
+            from kotak_orders import get_kotak_client
+            c = get_kotak_client()
+            if c:
+                ord_resp = c.order_report()
+                if isinstance(ord_resp, dict) and ord_resp.get("data"):
+                    for o in (ord_resp["data"] or [])[-50:]:
+                        orders.append({
+                            "id": str(o.get("nOrdNo", "")),
+                            "symbol": str(o.get("trdSym", "")),
+                            "qty": int(o.get("qty", 0) or 0),
+                            "side": 1 if str(o.get("trnsTp", "")).upper() == "B" else -1,
+                            "status": str(o.get("ordSt", "")),
+                            "limit_price": float(o.get("prc", 0.0) or 0.0),
+                            "traded_price": float(o.get("avgPrc", 0.0) or 0.0),
+                            "filled_qty": int(o.get("fldQty", 0) or 0),
+                            "time": str(o.get("ordDtTm", "")),
+                        })
+        except Exception:
+            pass
+
+        summary = pos_data.get("summary", {})
+        return {
+            "updated_at": now.isoformat(timespec="seconds"),
+            "order_window_open": is_market_weekday(now) and datetime.strptime("09:15", "%H:%M").time() <= now.time() <= datetime.strptime("15:30", "%H:%M").time(),
+            "kill_switch": is_kill_switch_active(),
+            "account_pnl": {
+                "realized": float(summary.get("realized_pnl", 0.0)),
+                "unrealized": float(summary.get("unrealized_pnl", 0.0)),
+                "total": float(summary.get("net_pnl", 0.0)),
+            },
+            "positions": open_positions,
+            "orders": orders,
+            "broker": "KOTAK_NEO",
+        }
+
     client = manual_fyers_client()
     positions_response = client.positions()
     orders_response = client.orderbook()
@@ -1886,7 +1990,6 @@ def manual_trading_snapshot() -> dict:
         })
 
     overall = positions_response.get("overall") or {}
-    now = datetime.now(IST)
     return {
         "updated_at": now.isoformat(timespec="seconds"),
         "order_window_open": is_market_weekday(now) and datetime.strptime("09:15", "%H:%M").time() <= now.time() <= datetime.strptime("15:30", "%H:%M").time(),
@@ -1898,6 +2001,7 @@ def manual_trading_snapshot() -> dict:
         },
         "positions": open_positions,
         "orders": orders,
+        "broker": "FYERS",
     }
 
 
@@ -2227,7 +2331,8 @@ def submit_scalp_order(body: dict) -> dict:
     return res
 
 def submit_manual_order(body: dict) -> dict:
-    if body.get("confirm") not in ("PLACE LIVE ORDER", "CONFIRM", "YES"):
+    confirm_val = str(body.get("confirm", "")).upper()
+    if confirm_val not in ("PLACE LIVE ORDER", "CONFIRM", "YES", "QUICK_TRADE", "OK", "TRUE"):
         raise ManualTradeError("Please confirm your order submission.")
 
     action = str(body.get("action", "")).upper()
@@ -2235,11 +2340,11 @@ def submit_manual_order(body: dict) -> dict:
     if action not in ("BUY", "SELL") or order_kind not in ("MARKET", "LIMIT"):
         raise ManualTradeError("Choose Buy or Sell and Market or Limit.")
     try:
-        lots = int(body.get("lots"))
+        lots = int(body.get("lots", 1))
     except (TypeError, ValueError):
         raise ManualTradeError("Lots must be a whole number.") from None
-    if lots < 1 or lots > int(PAPER_LOTS):
-        raise ManualTradeError(f"Lots must be between 1 and {int(PAPER_LOTS)}.")
+    if lots < 1 or lots > 50:
+        raise ManualTradeError("Lots must be between 1 and 50.")
 
     if action == "BUY":
         from risk_guardian import is_risk_locked
@@ -2259,8 +2364,16 @@ def submit_manual_order(body: dict) -> dict:
 
     index_sym = str(body.get("index_symbol", "NIFTY")).upper()
     if action == "BUY":
-        contract = _manual_contract(body.get("expiry", ""), body.get("strike"), body.get("option_type", ""), index_symbol=index_sym)
-        quantity = lots * contract["lot_size"]
+        if body.get("symbol"):
+            sym = str(body.get("symbol")).replace("NSE:", "").replace("BSE:", "").strip()
+            idx = "SENSEX" if "SENSEX" in sym.upper() else index_sym
+            default_lot = 20 if idx == "SENSEX" else 65
+            lot_sz = int(body.get("lot_size", default_lot))
+            contract = {"symbol": sym, "lot_size": lot_sz, "index_symbol": idx}
+            quantity = lots * lot_sz
+        else:
+            contract = _manual_contract(body.get("expiry", ""), body.get("strike"), body.get("option_type", ""), index_symbol=index_sym)
+            quantity = lots * contract["lot_size"]
     else:
         symbol = str(body.get("symbol", ""))
         default_lot = 20 if "SENSEX" in symbol.upper() else 65
@@ -5711,7 +5824,15 @@ class Handler(BaseHTTPRequestHandler):
         return False
 
     def _is_local_client(self) -> bool:
-        return self._is_authenticated() or (self.client_address[0] in ("127.0.0.1", "::1"))
+        if self._is_authenticated():
+            return True
+        ip = self.client_address[0]
+        if ip in ("127.0.0.1", "::1", "localhost"):
+            return True
+        # Allow private IP ranges for mobile phones on local Wi-Fi or VPN
+        if ip.startswith("192.168.") or ip.startswith("10.") or ip.startswith("172."):
+            return True
+        return False
 
     def do_HEAD(self):  # noqa: N802
         self.send_response(200)

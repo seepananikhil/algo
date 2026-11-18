@@ -123,6 +123,8 @@ export default function App() {
                   <Routes>
                     <Route element={<Layout />}>
                       <Route index element={<LivePage />} />
+                      <Route path="trade" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
+                      <Route path="mobile" element={<Navigate to="/trade" replace />} />
                       <Route path="manual" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
                       <Route path="day" element={<Suspense fallback={<PageFallback />}><DayPage /></Suspense>} />
                       <Route path="paper" element={<Suspense fallback={<PageFallback />}><PaperPage /></Suspense>} />
