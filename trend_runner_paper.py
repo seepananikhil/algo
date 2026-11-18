@@ -32,7 +32,7 @@ import sys
 import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, List, Callable
 
 import numpy as np
 import pandas as pd
@@ -223,8 +223,10 @@ class TrendRunnerPaperEngine:
         reentry_cooloff_bars: int = 20,
         call_cutoff_time: str = "10:45",
         allow_call_reentry: bool = True,
+        entry_gate_fn: Optional[Callable[[str, str, str], bool]] = None,
         **kwargs,
     ) -> None:
+        self.entry_gate_fn = entry_gate_fn
         self.sl_points = sl_points
         self.reentry_sl_points = reentry_sl_points
         self.reentry_be_trigger = reentry_be_trigger
@@ -764,6 +766,8 @@ class TrendRunnerPaperEngine:
                         stage_name = "REENTRY_EXPANSION"
 
         if sig in ("LONG", "SHORT"):
+            if self.entry_gate_fn is not None and not self.entry_gate_fn(self.symbol, sig, t_str):
+                return None
             entry_px = next_bar_open if next_bar_open is not None else c
             is_sx = (self.symbol == "SENSEX")
 

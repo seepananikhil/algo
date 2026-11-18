@@ -883,6 +883,32 @@ def load_portfolio_config() -> dict:
             pass
     return {}
 
+LIVE_ENGINES: dict[str, Any] = {"nifty": None, "sensex": None}
+
+def check_nifty_cross_gate(sym: str, sig: str, t_str: str) -> bool:
+    port_cfg = load_portfolio_config()
+    inst = port_cfg.get("trading_instruments", "BOTH")
+    cross_mode = port_cfg.get("cross_instrument_concurrency", "FIRST_TRIGGERED")
+    if inst in ("BOTH", "PARALLEL_FIRST_TRIGGERED") and cross_mode == "FIRST_TRIGGERED":
+        sx_eng = LIVE_ENGINES.get("sensex")
+        if sx_eng and sx_eng.active_position is not None:
+            print(f"[{t_str}] ⚠️ [NIFTY RACE GATE] Sensex entered first! Nifty trade blocked (Parallel First-Triggered mode).")
+            log_engine_telemetry("NIFTY", "Race Guard", "SKIP", f"Sensex trade already active | Nifty entry blocked at {t_str}")
+            return False
+    return True
+
+def check_sensex_cross_gate(sym: str, sig: str, t_str: str) -> bool:
+    port_cfg = load_portfolio_config()
+    inst = port_cfg.get("trading_instruments", "BOTH")
+    cross_mode = port_cfg.get("cross_instrument_concurrency", "FIRST_TRIGGERED")
+    if inst in ("BOTH", "PARALLEL_FIRST_TRIGGERED") and cross_mode == "FIRST_TRIGGERED":
+        nf_eng = LIVE_ENGINES.get("nifty")
+        if nf_eng and nf_eng.active_position is not None:
+            print(f"[{t_str}] ⚠️ [SENSEX RACE GATE] Nifty entered first! Sensex trade blocked (Parallel First-Triggered mode).")
+            log_engine_telemetry("SENSEX", "Race Guard", "SKIP", f"Nifty trade already active | Sensex entry blocked at {t_str}")
+            return False
+    return True
+
 def trend_runner_forward_loop() -> None:
     """Continuously monitor today's live 1-min stream for Trend Catcher (VIX Runner) setups."""
     today_str = today()
@@ -957,12 +983,16 @@ def trend_runner_forward_loop() -> None:
                     notify_telegram=True,
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
+                    entry_gate_fn=check_nifty_cross_gate,
                 )
                 engine.current_day_str = today_str
+                LIVE_ENGINES["nifty"] = engine
                 log_engine_telemetry("NIFTY", "Apex Duo", "SYSTEM", f"Apex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
             else:
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
+                engine.entry_gate_fn = check_nifty_cross_gate
+                LIVE_ENGINES["nifty"] = engine
                 if nifty_ratchet:
                     engine.r1_trigger = float(nifty_ratchet.get("tier1_trigger_pts", 70.0))
                     engine.r1_lock = float(nifty_ratchet.get("tier1_lock_pts", 20.0))
@@ -1169,12 +1199,16 @@ def sensex_runner_forward_loop() -> None:
                     notify_telegram=True,
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
+                    entry_gate_fn=check_sensex_cross_gate,
                 )
                 engine.current_day_str = today_str
+                LIVE_ENGINES["sensex"] = engine
                 log_engine_telemetry("SENSEX", "Apex Duo", "SYSTEM", f"Sensex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
             else:
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
+                engine.entry_gate_fn = check_sensex_cross_gate
+                LIVE_ENGINES["sensex"] = engine
                 if sx_ratchet:
                     engine.r1_trigger = float(sx_ratchet.get("tier1_trigger_pts", 240.0))
                     engine.r1_lock = float(sx_ratchet.get("tier1_lock_pts", 80.0))
@@ -6404,6 +6438,8 @@ class Handler(BaseHTTPRequestHandler):
                     curr["symbol"] = body["symbol"]
                 if "trading_instruments" in body and body["trading_instruments"] in ("BOTH", "NIFTY_ONLY", "SENSEX_ONLY"):
                     curr["trading_instruments"] = body["trading_instruments"]
+                if "cross_instrument_concurrency" in body and body["cross_instrument_concurrency"] in ("FIRST_TRIGGERED", "CONCURRENT"):
+                    curr["cross_instrument_concurrency"] = body["cross_instrument_concurrency"]
                 if "mode" in body and body["mode"] in ("priority", "concurrent"):
                     curr["mode"] = body["mode"]
                 if "max_trades_per_day" in body:

@@ -48,6 +48,7 @@ export type SpotRatchetSettings = {
 export type PortfolioConfig = {
   symbol: string
   trading_instruments?: "BOTH" | "NIFTY_ONLY" | "SENSEX_ONLY"
+  cross_instrument_concurrency?: "FIRST_TRIGGERED" | "CONCURRENT"
   mode: "priority" | "concurrent"
   max_trades_per_day: number
   max_concurrent_positions: number
@@ -65,27 +66,27 @@ export type PortfolioConfig = {
 }
 
 export const DEFAULT_NIFTY_RATCHET: SpotRatchetSettings = {
-  initial_sl_pts: 28.0,
-  tier0a_trigger_pts: 35.0,
-  tier0a_lock_pts: -12.0,
-  tier0b_breakeven_trigger_pts: 50.0,
+  initial_sl_pts: 30.0,
+  tier0a_trigger_pts: 40.0,
+  tier0a_lock_pts: -15.0,
+  tier0b_breakeven_trigger_pts: 55.0,
   tier0b_breakeven_lock_pts: 5.0,
   tier1_trigger_pts: 70.0,
-  tier1_lock_pts: 25.0,
-  tier2_trigger_pts: 95.0,
+  tier1_lock_pts: 20.0,
+  tier2_trigger_pts: 110.0,
   tier2_lock_pts: 50.0,
-  tier3_trigger_pts: 135.0,
-  tier3_lock_pts: 85.0,
-  tier4_trigger_pts: 180.0,
-  tier4_lock_pts: 125.0,
-  tier5_trigger_pts: 230.0,
-  tier5_lock_pts: 175.0,
-  tier6_trigger_pts: 290.0,
-  tier6_lock_pts: 230.0,
+  tier3_trigger_pts: 180.0,
+  tier3_lock_pts: 110.0,
+  tier4_trigger_pts: 230.0,
+  tier4_lock_pts: 165.0,
+  tier5_trigger_pts: 280.0,
+  tier5_lock_pts: 220.0,
+  tier6_trigger_pts: 330.0,
+  tier6_lock_pts: 270.0,
 }
 
 export const DEFAULT_SENSEX_RATCHET: SpotRatchetSettings = {
-  initial_sl_pts: 100.0,
+  initial_sl_pts: 120.0,
   tier0a_trigger_pts: 115.0,
   tier0a_lock_pts: -40.0,
   tier0b_breakeven_trigger_pts: 180.0,
@@ -107,6 +108,7 @@ export const DEFAULT_SENSEX_RATCHET: SpotRatchetSettings = {
 const DEFAULT_CONFIG: PortfolioConfig = {
   symbol: "NIFTY",
   trading_instruments: "BOTH",
+  cross_instrument_concurrency: "FIRST_TRIGGERED",
   mode: "priority",
   max_trades_per_day: 2,
   max_concurrent_positions: 1,
@@ -156,6 +158,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
       setConfig({
         ...data,
         trading_instruments: data.trading_instruments || "BOTH",
+        cross_instrument_concurrency: data.cross_instrument_concurrency || "FIRST_TRIGGERED",
         spot_ratchet_settings: data.spot_ratchet_settings || DEFAULT_NIFTY_RATCHET,
         sensex_spot_ratchet_settings: data.sensex_spot_ratchet_settings || DEFAULT_SENSEX_RATCHET,
         setups,
@@ -481,6 +484,88 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
               </div>
             </button>
           </div>
+
+          {/* Dual Index Parallel Execution Policy: First-Triggered vs Concurrent */}
+          {activeInstruments === "BOTH" && (
+            <div className="p-3.5 rounded-xl border border-sky-500/30 bg-sky-500/5 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Zap className="size-4 text-amber-400" />
+                    <span className="text-xs font-bold text-foreground">Dual-Index Concurrency Policy (Parallel Race Mode)</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    Controls whether Nifty and Sensex compete in a parallel race where whichever triggers first takes that trade, or if both can trade simultaneously.
+                  </p>
+                </div>
+                <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10 text-xs font-mono shrink-0">
+                  {config.cross_instrument_concurrency === "CONCURRENT" ? "👥 Concurrent (Both Open)" : "⚡ First Triggered Wins (1 Trade at a time)"}
+                </Badge>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfig({
+                      ...config,
+                      cross_instrument_concurrency: "FIRST_TRIGGERED",
+                      max_concurrent_positions: 1,
+                    })
+                  }
+                  className={cn(
+                    "p-3 rounded-lg border text-left transition-all cursor-pointer space-y-1.5",
+                    config.cross_instrument_concurrency !== "CONCURRENT"
+                      ? "border-amber-500/80 bg-amber-500/15 ring-1 ring-amber-500/40 shadow-xs"
+                      : "border-border/60 bg-muted/20 hover:bg-muted/40"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
+                      <Zap className="size-3.5 text-amber-400" />
+                      <span>Whichever Triggers First Takes Trade</span>
+                    </div>
+                    <Badge variant="outline" className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">
+                      Active / Recommended
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Nifty and Sensex run parallel scanners. Whichever prints a confirmed breakout or reversal first takes the position immediately, locking out the other instrument until the trade closes. Strictly 1 active trade at a time.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() =>
+                    setConfig({
+                      ...config,
+                      cross_instrument_concurrency: "CONCURRENT",
+                      max_concurrent_positions: 2,
+                    })
+                  }
+                  className={cn(
+                    "p-3 rounded-lg border text-left transition-all cursor-pointer space-y-1.5",
+                    config.cross_instrument_concurrency === "CONCURRENT"
+                      ? "border-sky-500/80 bg-sky-500/15 ring-1 ring-sky-500/40 shadow-xs"
+                      : "border-border/60 bg-muted/20 hover:bg-muted/40"
+                  )}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
+                      <Layers className="size-3.5 text-sky-400" />
+                      <span>Both Can Trade Concurrently</span>
+                    </div>
+                    <Badge variant="secondary" className="text-[10px]">
+                      Dual Positions
+                    </Badge>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Both Nifty and Sensex can enter and hold positions at the same time if both setups trigger independently. Requires higher margin capital (≥ ₹1.5L).
+                  </p>
+                </button>
+              </div>
+            </div>
+          )}
 
           {/* Regime Decision Matrix: Which is right for you? */}
           <div className="rounded-xl border border-border/70 bg-muted/30 p-3.5 space-y-2.5">
