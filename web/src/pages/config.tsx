@@ -5,14 +5,12 @@ import {
   ShieldCheck,
   Save,
   RotateCcw,
-  Layers,
-  Info,
-  TrendingUp,
   Zap,
-  Target,
   ChevronDown,
   ChevronUp,
-  Scale,
+  Layers,
+  AlertTriangle,
+  Flame,
 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -23,7 +21,6 @@ import { Switch } from "@/components/ui/switch"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { cn } from "@/lib/utils"
 import { getJSON, postJSON, type Settings } from "@/lib/api"
-import { StrategyInfoPage } from "./strategy-info"
 
 export type SpotRatchetSettings = {
   initial_sl_pts: number
@@ -56,10 +53,6 @@ export type PortfolioConfig = {
     trend_runner: boolean
     vix_trap: boolean
     williams_fractal?: boolean
-    vix_master_morning?: boolean
-    williams_afternoon?: boolean
-    vix_master_afternoon?: boolean
-    gap_and_go_morning?: boolean
   }
   spot_ratchet_settings: SpotRatchetSettings
   sensex_spot_ratchet_settings?: SpotRatchetSettings
@@ -124,17 +117,13 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [config, setConfig] = useState<PortfolioConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [showHandbook, setShowHandbook] = useState(false)
+  const [showAdvancedRatchets, setShowAdvancedRatchets] = useState(false)
 
   const [capitalSettings, setCapitalSettings] = useState({
     lots: 1,
     sensex_lots: 1,
     daily_loss_limit: 2500,
     per_trade_loss_limit: 650,
-    per_trade_loss_pct: 20,
-    per_trade_auto_cut: true,
-    minimum_live_funds: 10000,
-    sizing_mode: "fixed",
   })
 
   const [isLiveTrading, setIsLiveTrading] = useState(false)
@@ -151,29 +140,24 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
     setLoading(true)
     try {
       const data = await getJSON<PortfolioConfig>("/api/portfolio/config")
-      const setups = {
-        trend_runner: data.setups?.trend_runner ?? true,
-        vix_trap: data.setups?.vix_trap ?? true,
-      }
       setConfig({
         ...data,
         trading_instruments: data.trading_instruments || "BOTH",
         cross_instrument_concurrency: data.cross_instrument_concurrency || "FIRST_TRIGGERED",
         spot_ratchet_settings: data.spot_ratchet_settings || DEFAULT_NIFTY_RATCHET,
         sensex_spot_ratchet_settings: data.sensex_spot_ratchet_settings || DEFAULT_SENSEX_RATCHET,
-        setups,
+        setups: {
+          trend_runner: data.setups?.trend_runner ?? true,
+          vix_trap: data.setups?.vix_trap ?? true,
+        },
       })
       try {
         const sData = await getJSON<Settings>("/api/settings")
         setCapitalSettings({
-          lots: sData.sizing_mode === "fixed" ? 1 : Math.max(1, Number(sData.lots || 1)),
+          lots: Math.max(1, Number(sData.lots || 1)),
           sensex_lots: Math.max(1, Number((sData as any).sensex_runner_lots || 1)),
           daily_loss_limit: sData.daily_loss_limit ?? 2500,
           per_trade_loss_limit: sData.per_trade_loss_limit ?? 650,
-          per_trade_loss_pct: sData.per_trade_loss_pct ?? 20,
-          per_trade_auto_cut: sData.per_trade_auto_cut ?? true,
-          minimum_live_funds: sData.minimum_live_funds ?? 10000,
-          sizing_mode: sData.sizing_mode || "fixed",
         })
         const live = Boolean(sData.trend_runner_live_trading || sData.midpoint_live_trading || sData.live_trading)
         setIsLiveTrading(live)
@@ -201,22 +185,10 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
           trend_runner_live_trading: Boolean(isLiveTrading),
           daily_loss_limit: Number(capitalSettings.daily_loss_limit),
           per_trade_loss_limit: Number(capitalSettings.per_trade_loss_limit),
-          per_trade_loss_pct: Number(capitalSettings.per_trade_loss_pct),
-          per_trade_auto_cut: Boolean(capitalSettings.per_trade_auto_cut),
-          minimum_live_funds: Number(capitalSettings.minimum_live_funds),
-          sizing_mode: capitalSettings.sizing_mode,
         }),
       ])
       if (res.ok) {
-        toast.success("Apex Duo strategy & multi-index configuration saved!")
-        const setups = {
-          trend_runner: res.config.setups?.trend_runner ?? true,
-          vix_trap: res.config.setups?.vix_trap ?? true,
-        }
-        setConfig({
-          ...res.config,
-          setups,
-        })
+        toast.success("Strategy settings saved successfully!")
       } else {
         toast.error("Failed to save configuration.")
       }
@@ -227,29 +199,19 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
     }
   }
 
-  function handleToggleNiftyLive(enabled: boolean) {
+  function handleToggleLive(target: "NIFTY" | "SENSEX", enabled: boolean) {
     if (enabled) {
-      setConfirmTarget("NIFTY")
+      setConfirmTarget(target)
       setConfirmOpen(true)
     } else {
-      postJSON("/api/settings", { trend_runner_live_trading: false, midpoint_live_trading: false })
+      const payload = target === "NIFTY" 
+        ? { trend_runner_live_trading: false, midpoint_live_trading: false }
+        : { sensex_runner_live_trading: false }
+      postJSON("/api/settings", payload)
         .then(() => {
-          setIsLiveTrading(false)
-          toast.success("NSE Nifty switched to PAPER simulation mode")
-        })
-        .catch((err) => toast.error(String(err)))
-    }
-  }
-
-  function handleToggleSensexLive(enabled: boolean) {
-    if (enabled) {
-      setConfirmTarget("SENSEX")
-      setConfirmOpen(true)
-    } else {
-      postJSON("/api/settings", { sensex_runner_live_trading: false })
-        .then(() => {
-          setIsSensexLiveTrading(false)
-          toast.success("BSE Sensex switched to PAPER simulation mode")
+          if (target === "NIFTY") setIsLiveTrading(false)
+          else setIsSensexLiveTrading(false)
+          toast.success(`${target} switched to PAPER simulation mode`)
         })
         .catch((err) => toast.error(String(err)))
     }
@@ -259,20 +221,13 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
     if (typed !== "LIVE" || !confirmTarget) return
     try {
       if (confirmTarget === "SENSEX") {
-        await postJSON("/api/settings", {
-          sensex_runner_live_trading: true,
-          confirm: typed,
-        })
+        await postJSON("/api/settings", { sensex_runner_live_trading: true, confirm: typed })
         setIsSensexLiveTrading(true)
-        toast.success("🔥 LIVE TRADING ENABLED for BSE SENSEX - Real orders active on Kotak Neo")
+        toast.success("🔥 LIVE TRADING ENABLED for SENSEX")
       } else {
-        await postJSON("/api/settings", {
-          trend_runner_live_trading: true,
-          midpoint_live_trading: true,
-          confirm: typed,
-        })
+        await postJSON("/api/settings", { trend_runner_live_trading: true, midpoint_live_trading: true, confirm: typed })
         setIsLiveTrading(true)
-        toast.success("🔥 LIVE TRADING ENABLED for NSE NIFTY - Real orders active on Kotak Neo")
+        toast.success("🔥 LIVE TRADING ENABLED for NIFTY")
       }
       setConfirmOpen(false)
       setTyped("")
@@ -284,16 +239,15 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   function resetToDefaults() {
     setConfig(DEFAULT_CONFIG)
-    toast.info("Reset to production recommended parameters. Click Save to persist.")
+    toast.info("Reset to 10-year verified defaults. Click Save to persist.")
   }
 
   const updateNiftyRatchet = (field: keyof SpotRatchetSettings, val: number) => {
     if (!config) return
-    const prev = config.spot_ratchet_settings || { ...DEFAULT_NIFTY_RATCHET }
     setConfig({
       ...config,
       spot_ratchet_settings: {
-        ...prev,
+        ...(config.spot_ratchet_settings || DEFAULT_NIFTY_RATCHET),
         [field]: val,
       },
     })
@@ -301,11 +255,10 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   const updateSensexRatchet = (field: keyof SpotRatchetSettings, val: number) => {
     if (!config) return
-    const prev = config.sensex_spot_ratchet_settings || { ...DEFAULT_SENSEX_RATCHET }
     setConfig({
       ...config,
       sensex_spot_ratchet_settings: {
-        ...prev,
+        ...(config.sensex_spot_ratchet_settings || DEFAULT_SENSEX_RATCHET),
         [field]: val,
       },
     })
@@ -313,1083 +266,592 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
 
   if (loading || !config) {
     return (
-      <div className="flex h-96 w-full items-center justify-center text-sm text-muted-foreground animate-pulse">
-        Loading Unified Multi-Index Strategy Settings...
+      <div className="flex h-72 w-full items-center justify-center text-xs font-mono text-muted-foreground animate-pulse">
+        Loading strategy configuration...
       </div>
     )
   }
 
-  const activeInstruments = config.trading_instruments || "BOTH"
-  const activeSetupsCount = [config.setups.trend_runner, config.setups.vix_trap].filter(Boolean).length
-
-  const niftyRatchet = config.spot_ratchet_settings || DEFAULT_NIFTY_RATCHET
-  const sensexRatchet = config.sensex_spot_ratchet_settings || DEFAULT_SENSEX_RATCHET
+  const activeInst = config.trading_instruments || "BOTH"
+  const isParallelRace = activeInst === "BOTH" && config.cross_instrument_concurrency !== "CONCURRENT"
+  const isConcurrent = activeInst === "BOTH" && config.cross_instrument_concurrency === "CONCURRENT"
 
   return (
-    <div className={embedded ? "w-full space-y-5" : "w-full flex-1 space-y-5 p-1 sm:p-2 md:p-3"}>
-      {/* Header Bar */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5">
+    <div className={cn("space-y-4 max-w-5xl mx-auto", embedded ? "w-full" : "p-3 sm:p-5")}>
+      {/* Top Header Bar */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
         <div>
-          <div className="flex items-center gap-2 mb-1.5 flex-wrap">
-            <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10 gap-1 text-xs">
-              <Sliders className="size-3" /> Apex Duo Multi-Index
+          <div className="flex items-center gap-2 mb-1">
+            <Badge variant="outline" className="border-sky-500/40 text-sky-400 bg-sky-500/10 gap-1 text-[11px]">
+              <Sliders className="size-3" /> Strategy Control Center
             </Badge>
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 gap-1 text-xs">
-              <ShieldCheck className="size-3" /> 10-Year Verified Engine
-            </Badge>
-            <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10 gap-1 text-xs">
-              {activeSetupsCount} / 2 Setups Active
-            </Badge>
-            <Badge variant="secondary" className="text-xs font-mono">
-              Active: {activeInstruments === "BOTH" ? "NIFTY & SENSEX (DUAL)" : activeInstruments}
+            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 gap-1 text-[11px]">
+              <ShieldCheck className="size-3" /> +30,699 pts Verified
             </Badge>
           </div>
-          <h2 className="text-xl md:text-2xl font-bold tracking-tight">Strategy Configuration &amp; Instrument Control</h2>
-          <p className="text-xs md:text-sm text-muted-foreground mt-1">
-            Universal core strategy engine for NSE Nifty 50 and BSE Sensex. Engine rules apply globally; instrument-specific lot sizes, execution modes, and spot ratchet ladders are displayed together without tabs.
+          <h2 className="text-xl font-bold tracking-tight">Strategy &amp; Instrument Configuration</h2>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Configure index trading modes, risk rules, and execution policy in one streamlined view.
           </p>
         </div>
 
-        <div className="flex items-center gap-2 shrink-0">
-          <Button variant="outline" size="sm" onClick={resetToDefaults}>
-            <RotateCcw className="size-3.5 mr-1.5" /> Reset Defaults
+        <div className="flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={resetToDefaults} className="text-xs h-8">
+            <RotateCcw className="size-3 mr-1.5" /> Defaults
           </Button>
-          <Button size="sm" onClick={saveConfig} disabled={saving} className="bg-primary text-primary-foreground font-semibold shadow-xs">
-            <Save className="size-3.5 mr-1.5" /> {saving ? "Saving..." : "Save Configuration"}
+          <Button size="sm" onClick={saveConfig} disabled={saving} className="bg-primary text-primary-foreground font-semibold text-xs h-8">
+            <Save className="size-3 mr-1.5" /> {saving ? "Saving..." : "Save Configuration"}
           </Button>
         </div>
       </div>
 
-      {/* TOP SECTION 1: WHICH INSTRUMENT IS RIGHT FOR TRADING? */}
+      {/* 1. INSTRUMENT & EXECUTION MODE SELECTOR */}
       <Card className="border-border bg-card shadow-xs">
-        <CardHeader className="pb-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+        <CardHeader className="pb-3 pt-4 px-4 sm:px-5">
+          <div className="flex items-center justify-between">
             <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Target className="size-4 text-sky-400" />
-                Active Trading Instrument Selection
+              <CardTitle className="text-sm font-bold flex items-center gap-2">
+                <Zap className="size-4 text-amber-400" />
+                Trading Instrument &amp; Execution Mode
               </CardTitle>
-              <CardDescription>
-                Choose which index the engine should trade: Trade Both simultaneously (Apex Duo) or focus strictly on one.
+              <CardDescription className="text-xs mt-0.5">
+                Select how the strategy executes across Nifty and Sensex.
               </CardDescription>
             </div>
-            <Badge
-              variant="outline"
-              className={
-                activeInstruments === "BOTH"
-                  ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-bold text-xs"
-                  : activeInstruments === "NIFTY_ONLY"
-                  ? "border-teal-500/40 text-teal-400 bg-teal-500/10 font-bold text-xs"
-                  : "border-sky-500/40 text-sky-400 bg-sky-500/10 font-bold text-xs"
-              }
-            >
-              {activeInstruments === "BOTH"
-                ? "🟢 & 🔵 DUAL INDEX ACTIVE (BOTH)"
-                : activeInstruments === "NIFTY_ONLY"
-                ? "🟢 NSE NIFTY 50 ONLY"
-                : "🔵 BSE SENSEX ONLY"}
+            <Badge variant="outline" className="text-xs font-mono font-semibold">
+              {isParallelRace
+                ? "⚡ First-Triggered Race"
+                : isConcurrent
+                ? "👥 Dual Concurrent"
+                : activeInst === "NIFTY_ONLY"
+                ? "🟢 Nifty 50 Only"
+                : "🔵 Sensex Only"}
             </Badge>
           </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Main 3-Option Button Switcher */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            {/* Option 1: Trade BOTH */}
+        <CardContent className="px-4 sm:px-5 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+            {/* Mode 1: Parallel Race (Whichever Triggers First) */}
             <button
               type="button"
-              onClick={() => setConfig({ ...config, trading_instruments: "BOTH" })}
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  trading_instruments: "BOTH",
+                  cross_instrument_concurrency: "FIRST_TRIGGERED",
+                  max_concurrent_positions: 1,
+                })
+              }
               className={cn(
-                "p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between cursor-pointer",
-                activeInstruments === "BOTH"
-                  ? "border-emerald-500 bg-emerald-500/10 shadow-sm ring-1 ring-emerald-500/30"
+                "p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer space-y-2",
+                isParallelRace
+                  ? "border-amber-500 bg-amber-500/10 ring-1 ring-amber-500/30 shadow-xs"
                   : "border-border/70 hover:border-border bg-muted/20 hover:bg-muted/40"
               )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <div className="flex -space-x-1">
-                    <span className="size-2.5 rounded-full bg-emerald-400 inline-block ring-2 ring-background" />
-                    <span className="size-2.5 rounded-full bg-sky-400 inline-block ring-2 ring-background" />
-                  </div>
-                  <span className="font-extrabold text-sm text-foreground">Trade BOTH (Dual Index)</span>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                    <Zap className="size-3.5 text-amber-400" /> Parallel Race
+                  </span>
+                  <Badge variant="outline" className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30 px-1 py-0">
+                    Recommended
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="text-[10px] bg-emerald-500/20 text-emerald-400 border-emerald-500/30">
-                  Recommended
-                </Badge>
+                <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                  Whichever index triggers first takes the trade. Locks out the other index while trade is active (strictly 1 position).
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                Runs simultaneous 15m OR breakout + VIX confluence on both Nifty &amp; Sensex. You capture the trend whichever exchange leads.
-              </p>
-              <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-[11px] font-mono text-muted-foreground">
-                <span>Capital: ≥ ₹1.5L</span>
-                <span className="text-emerald-400 font-bold">Max Edge</span>
-              </div>
+              <span className="text-[10px] font-mono text-amber-400 font-semibold block pt-1 border-t border-border/40">
+                Max 1 Active Trade
+              </span>
             </button>
 
-            {/* Option 2: NIFTY 50 Only */}
+            {/* Mode 2: Both Concurrent */}
             <button
               type="button"
-              onClick={() => setConfig({ ...config, trading_instruments: "NIFTY_ONLY" })}
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  trading_instruments: "BOTH",
+                  cross_instrument_concurrency: "CONCURRENT",
+                  max_concurrent_positions: 2,
+                })
+              }
               className={cn(
-                "p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between cursor-pointer",
-                activeInstruments === "NIFTY_ONLY"
-                  ? "border-emerald-500 bg-emerald-500/10 shadow-sm ring-1 ring-emerald-500/30"
+                "p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer space-y-2",
+                isConcurrent
+                  ? "border-sky-500 bg-sky-500/10 ring-1 ring-sky-500/30 shadow-xs"
                   : "border-border/70 hover:border-border bg-muted/20 hover:bg-muted/40"
               )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full bg-emerald-400 inline-block" />
-                  <span className="font-extrabold text-sm text-foreground">Trade NIFTY 50 Only</span>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                    <Layers className="size-3.5 text-sky-400" /> Dual Concurrent
+                  </span>
+                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                    Dual
+                  </Badge>
                 </div>
-                <Badge variant="secondary" className="text-[10px]">
-                  NSE Focus
-                </Badge>
+                <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                  Both Nifty and Sensex can hold open trades simultaneously if both setups trigger. Requires margin for both.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                Trades only NSE Nifty 50. Ideal for lower capital, ultra-tight 0.05 bid-ask spread, and minimal option slippage.
-              </p>
-              <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-[11px] font-mono text-muted-foreground">
-                <span>Capital: ~₹65k / Lot</span>
-                <span className="text-sky-400 font-bold">High Liquidity</span>
-              </div>
+              <span className="text-[10px] font-mono text-sky-400 font-semibold block pt-1 border-t border-border/40">
+                Up to 2 Active Trades
+              </span>
             </button>
 
-            {/* Option 3: SENSEX Only */}
+            {/* Mode 3: Nifty Only */}
             <button
               type="button"
-              onClick={() => setConfig({ ...config, trading_instruments: "SENSEX_ONLY" })}
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  trading_instruments: "NIFTY_ONLY",
+                  max_concurrent_positions: 1,
+                })
+              }
               className={cn(
-                "p-3.5 rounded-xl border text-left transition-all relative flex flex-col justify-between cursor-pointer",
-                activeInstruments === "SENSEX_ONLY"
-                  ? "border-sky-500 bg-sky-500/10 shadow-sm ring-1 ring-sky-500/30"
+                "p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer space-y-2",
+                activeInst === "NIFTY_ONLY"
+                  ? "border-emerald-500 bg-emerald-500/10 ring-1 ring-emerald-500/30 shadow-xs"
                   : "border-border/70 hover:border-border bg-muted/20 hover:bg-muted/40"
               )}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <span className="size-2.5 rounded-full bg-sky-400 inline-block" />
-                  <span className="font-extrabold text-sm text-foreground">Trade BSE SENSEX Only</span>
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                    <span className="size-2 rounded-full bg-emerald-400" /> Nifty 50 Only
+                  </span>
+                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                    NSE
+                  </Badge>
                 </div>
-                <Badge variant="secondary" className="text-[10px]">
-                  BSE Focus
-                </Badge>
+                <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                  Trades exclusively NSE Nifty 50. Lowest slippage, tight 0.05 bid-ask spread, 25 qty lot size.
+                </p>
               </div>
-              <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
-                Trades only BSE Sensex. High point ATR (+300 to +800 pt runs) with 20 qty lot size. Ideal for Tuesday/Friday trending days.
-              </p>
-              <div className="mt-3 pt-2 border-t border-border/40 flex items-center justify-between text-[11px] font-mono text-muted-foreground">
-                <span>Capital: ~₹60k / Lot</span>
-                <span className="text-purple-400 font-bold">Explosive Moves</span>
-              </div>
+              <span className="text-[10px] font-mono text-emerald-400 font-semibold block pt-1 border-t border-border/40">
+                1 Trade at a Time
+              </span>
             </button>
-          </div>
 
-          {/* Dual Index Parallel Execution Policy: First-Triggered vs Concurrent */}
-          {activeInstruments === "BOTH" && (
-            <div className="p-3.5 rounded-xl border border-sky-500/30 bg-sky-500/5 space-y-3">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <Zap className="size-4 text-amber-400" />
-                    <span className="text-xs font-bold text-foreground">Dual-Index Concurrency Policy (Parallel Race Mode)</span>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">
-                    Controls whether Nifty and Sensex compete in a parallel race where whichever triggers first takes that trade, or if both can trade simultaneously.
-                  </p>
+            {/* Mode 4: Sensex Only */}
+            <button
+              type="button"
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  trading_instruments: "SENSEX_ONLY",
+                  max_concurrent_positions: 1,
+                })
+              }
+              className={cn(
+                "p-3 rounded-xl border text-left transition-all flex flex-col justify-between cursor-pointer space-y-2",
+                activeInst === "SENSEX_ONLY"
+                  ? "border-purple-500 bg-purple-500/10 ring-1 ring-purple-500/30 shadow-xs"
+                  : "border-border/70 hover:border-border bg-muted/20 hover:bg-muted/40"
+              )}
+            >
+              <div>
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-xs flex items-center gap-1.5 text-foreground">
+                    <span className="size-2 rounded-full bg-purple-400" /> Sensex Only
+                  </span>
+                  <Badge variant="secondary" className="text-[10px] px-1 py-0">
+                    BSE
+                  </Badge>
                 </div>
-                <Badge variant="outline" className="border-amber-500/40 text-amber-400 bg-amber-500/10 text-xs font-mono shrink-0">
-                  {config.cross_instrument_concurrency === "CONCURRENT" ? "👥 Concurrent (Both Open)" : "⚡ First Triggered Wins (1 Trade at a time)"}
-                </Badge>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() =>
-                    setConfig({
-                      ...config,
-                      cross_instrument_concurrency: "FIRST_TRIGGERED",
-                      max_concurrent_positions: 1,
-                    })
-                  }
-                  className={cn(
-                    "p-3 rounded-lg border text-left transition-all cursor-pointer space-y-1.5",
-                    config.cross_instrument_concurrency !== "CONCURRENT"
-                      ? "border-amber-500/80 bg-amber-500/15 ring-1 ring-amber-500/40 shadow-xs"
-                      : "border-border/60 bg-muted/20 hover:bg-muted/40"
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
-                      <Zap className="size-3.5 text-amber-400" />
-                      <span>Whichever Triggers First Takes Trade</span>
-                    </div>
-                    <Badge variant="outline" className="text-[10px] bg-amber-500/20 text-amber-400 border-amber-500/30">
-                      Active / Recommended
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Nifty and Sensex run parallel scanners. Whichever prints a confirmed breakout or reversal first takes the position immediately, locking out the other instrument until the trade closes. Strictly 1 active trade at a time.
-                  </p>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() =>
-                    setConfig({
-                      ...config,
-                      cross_instrument_concurrency: "CONCURRENT",
-                      max_concurrent_positions: 2,
-                    })
-                  }
-                  className={cn(
-                    "p-3 rounded-lg border text-left transition-all cursor-pointer space-y-1.5",
-                    config.cross_instrument_concurrency === "CONCURRENT"
-                      ? "border-sky-500/80 bg-sky-500/15 ring-1 ring-sky-500/40 shadow-xs"
-                      : "border-border/60 bg-muted/20 hover:bg-muted/40"
-                  )}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5 font-bold text-xs text-foreground">
-                      <Layers className="size-3.5 text-sky-400" />
-                      <span>Both Can Trade Concurrently</span>
-                    </div>
-                    <Badge variant="secondary" className="text-[10px]">
-                      Dual Positions
-                    </Badge>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground leading-relaxed">
-                    Both Nifty and Sensex can enter and hold positions at the same time if both setups trigger independently. Requires higher margin capital (≥ ₹1.5L).
-                  </p>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Regime Decision Matrix: Which is right for you? */}
-          <div className="rounded-xl border border-border/70 bg-muted/30 p-3.5 space-y-2.5">
-            <div className="flex items-center gap-2 text-xs font-bold text-foreground">
-              <Scale className="size-4 text-sky-400" />
-              <span>Which Instrument Is Right For You? (Decision Guide)</span>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5 text-xs">
-              <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
-                <span className="font-bold text-foreground block">When to choose BOTH:</span>
-                <p className="text-muted-foreground mt-1 text-[11px]">
-                  Recommended default. If you have ₹1.5L+ capital, running both gives highest statistical consistency because Sensex and Nifty rotate market leadership.
+                <p className="text-[11px] text-muted-foreground mt-1.5 leading-relaxed">
+                  Trades exclusively BSE Sensex. High point ATR (+300 to +800 pts) with 20 qty lot size.
                 </p>
               </div>
-              <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
-                <span className="font-bold text-foreground block">When to choose NIFTY ONLY:</span>
-                <p className="text-muted-foreground mt-1 text-[11px]">
-                  Best when capital is ~₹65k–₹1L, or during tight, range-bound regimes (India VIX 11–13) where narrow option bid-ask spreads keep slippage virtually zero.
-                </p>
-              </div>
-              <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
-                <span className="font-bold text-foreground block">When to choose SENSEX ONLY:</span>
-                <p className="text-muted-foreground mt-1 text-[11px]">
-                  Best on high-volatility sessions (VIX &gt; 14) and Sensex weekly expiry days. Offers enormous +400 to +600 pt excursions with 20 qty lot size.
-                </p>
-              </div>
-            </div>
+              <span className="text-[10px] font-mono text-purple-400 font-semibold block pt-1 border-t border-border/40">
+                1 Trade at a Time
+              </span>
+            </button>
           </div>
         </CardContent>
       </Card>
 
-      {/* TOP SECTION 2: GLOBAL STRATEGY & RISK GUARDIAN (APPLIES TO BOTH) */}
-      <Card className="border-border bg-card shadow-xs">
-        <CardHeader className="pb-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle className="text-base flex items-center gap-2">
-                <Layers className="size-4 text-sky-400" />
-                Universal Strategy Engine &amp; Capital Guardian
-              </CardTitle>
-              <CardDescription>
-                Core strategy setups and risk limits applied universally across both Nifty and Sensex.
-              </CardDescription>
-            </div>
-            <Badge variant="outline" className="border-emerald-500/40 text-emerald-400 bg-emerald-500/10 text-xs font-mono">
-              Universal Engine
-            </Badge>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-            {/* Setup 1: Trend Runner */}
-            <div className="p-3 rounded-lg border bg-card/60 flex items-center justify-between gap-3">
-              <div className="space-y-0.5 min-w-0">
-                <Label className="text-xs font-bold text-foreground block truncate">Trend Runner ORB</Label>
-                <p className="text-[11px] text-muted-foreground truncate">15m OR breakout + VWAP</p>
+      {/* 2. CORE STRATEGY & RISK CONTROLS */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Setups Card */}
+        <Card className="border-border bg-card shadow-xs">
+          <CardHeader className="pb-3 pt-4 px-4 sm:px-5">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <Sliders className="size-4 text-sky-400" /> Strategy Setups
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Enable or disable the strategy breakout &amp; reversal engines.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="px-4 sm:px-5 pb-4 space-y-3">
+            <div className="p-3 rounded-xl border bg-muted/15 flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-bold text-foreground">Trend Runner (15m ORB)</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Opening range breakout with VIX momentum confirmation. Cutoff: 10:45 AM.
+                </p>
               </div>
               <Switch
                 checked={config.setups.trend_runner}
                 onCheckedChange={(val) =>
-                  setConfig({
-                    ...config,
-                    setups: { ...config.setups, trend_runner: val },
-                  })
+                  setConfig({ ...config, setups: { ...config.setups, trend_runner: val } })
                 }
               />
             </div>
 
-            {/* Setup 2: VIX Trap */}
-            <div className="p-3 rounded-lg border bg-card/60 flex items-center justify-between gap-3">
-              <div className="space-y-0.5 min-w-0">
-                <Label className="text-xs font-bold text-foreground block truncate">VIX Trap Reversal</Label>
-                <p className="text-[11px] text-muted-foreground truncate">Fade false breakouts</p>
+            <div className="p-3 rounded-xl border bg-muted/15 flex items-center justify-between gap-3">
+              <div className="space-y-0.5">
+                <Label className="text-xs font-bold text-foreground">VIX Trap Reversal</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  Sniper reversal against false morning breakouts using VIX divergence.
+                </p>
               </div>
               <Switch
                 checked={config.setups.vix_trap}
                 onCheckedChange={(val) =>
-                  setConfig({
-                    ...config,
-                    setups: { ...config.setups, vix_trap: val },
-                  })
+                  setConfig({ ...config, setups: { ...config.setups, vix_trap: val } })
                 }
               />
-            </div>
-
-            {/* Daily Loss Circuit Breaker */}
-            <div className="p-3 rounded-lg border bg-card/60 space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <Label htmlFor="daily-loss" className="text-muted-foreground font-medium">Daily Loss Limit</Label>
-                <span className="text-[10px] text-rose-400 font-mono font-bold">Auto-Halt</span>
-              </div>
-              <Input
-                id="daily-loss"
-                type="number"
-                step={250}
-                value={capitalSettings.daily_loss_limit}
-                onChange={(e) =>
-                  setCapitalSettings({ ...capitalSettings, daily_loss_limit: parseFloat(e.target.value) || 2500 })
-                }
-                className="h-8 text-xs font-mono font-bold"
-              />
-              <p className="text-[10px] text-muted-foreground">Hard daily account circuit breaker</p>
-            </div>
-
-            {/* Max Trades Per Day */}
-            <div className="p-3 rounded-lg border bg-card/60 space-y-1.5">
-              <div className="flex items-center justify-between text-xs">
-                <Label htmlFor="max-trades" className="text-muted-foreground font-medium">Max Trades / Day</Label>
-                <span className="text-[10px] text-sky-400 font-mono font-bold">{config.mode.toUpperCase()}</span>
-              </div>
-              <Input
-                id="max-trades"
-                type="number"
-                min={1}
-                max={4}
-                value={config.max_trades_per_day}
-                onChange={(e) =>
-                  setConfig({ ...config, max_trades_per_day: parseInt(e.target.value) || 2 })
-                }
-                className="h-8 text-xs font-mono font-bold"
-              />
-              <p className="text-[10px] text-muted-foreground">Maximum trades per index session</p>
-            </div>
-          </div>
-
-          {/* Sizing & Mode Info Strip */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-            <div className="p-2.5 rounded-lg border bg-muted/20 text-xs space-y-1">
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider block">Target Philosophy</span>
-              <span className="font-semibold text-foreground">Uncapped Pure Ride to 15:15</span>
-              <p className="text-[10px] text-muted-foreground">Trailing SL locks profit sequentially; runner rides full extension</p>
-            </div>
-            <div className="p-2.5 rounded-lg border bg-muted/20 text-xs space-y-1">
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider block">Risk-Free Pyramiding</span>
-              <span className="font-semibold text-foreground">Tier 1 Automatic Lot 2 Add</span>
-              <p className="text-[10px] text-muted-foreground">Adds Lot 2 once profit is locked, keeping net risk strictly at zero</p>
-            </div>
-            <div className="p-2.5 rounded-lg border bg-muted/20 text-xs space-y-1">
-              <span className="text-muted-foreground text-[10px] font-bold uppercase tracking-wider block">Sizing Mode</span>
-              <span className="font-semibold text-foreground">Fixed Base Sizing (Conservative)</span>
-              <p className="text-[10px] text-muted-foreground">Each instrument trades its configured lot count independently</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* SECTION 3: BOTH CONFIGURATIONS DIRECTLY VISIBLE (NO TABS!) */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* ========================================================= */}
-        {/* PANEL A: 🟢 NSE NIFTY 50 CONFIGURATION */}
-        {/* ========================================================= */}
-        <Card className={cn(
-          "border-emerald-500/40 bg-emerald-500/[0.015] shadow-xs flex flex-col justify-between transition-all",
-          isLiveTrading && "border-red-600/70 bg-red-950/5"
-        )}>
-          <CardHeader className="pb-3 border-b border-border/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="size-3 rounded-full bg-emerald-400 shrink-0" />
-                <div>
-                  <CardTitle className="text-base font-bold text-foreground">
-                    NSE NIFTY 50 Configuration
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    ~24,500 Index · 65 Qty/Lot · 0.05 pt Tick Size
-                  </CardDescription>
-                </div>
-              </div>
-              <Badge variant={isLiveTrading ? "destructive" : "secondary"} className="font-mono text-xs">
-                {isLiveTrading ? "🔥 NIFTY LIVE" : "🛡️ NIFTY PAPER"}
-              </Badge>
-            </div>
-          </CardHeader>
-
-          <CardContent className="space-y-4 pt-4 flex-1">
-            {/* Nifty Live/Paper Switch & Lot Sizing Strip */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-3 rounded-lg border bg-card/60 flex items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <span className="text-xs font-bold text-foreground block">Execution Mode</span>
-                  <span className={cn("text-[11px] font-mono", isLiveTrading ? "text-red-500 font-bold" : "text-muted-foreground")}>
-                    {isLiveTrading ? "LIVE (Real Kotak Orders)" : "PAPER (Simulation)"}
-                  </span>
-                </div>
-                <Switch
-                  checked={isLiveTrading}
-                  onCheckedChange={handleToggleNiftyLive}
-                  aria-label="Nifty Live Trading Switch"
-                />
-              </div>
-
-              <div className="p-3 rounded-lg border bg-card/60 space-y-1">
-                <div className="flex justify-between items-center text-xs">
-                  <Label htmlFor="nifty-lots" className="font-semibold text-foreground">Nifty Lots (65 Qty/Lot)</Label>
-                  <span className="text-[10px] font-mono text-muted-foreground">{capitalSettings.lots * 65} Qty</span>
-                </div>
-                <Input
-                  id="nifty-lots"
-                  type="number"
-                  min={1}
-                  max={10}
-                  value={capitalSettings.lots}
-                  onChange={(e) => setCapitalSettings({ ...capitalSettings, lots: parseInt(e.target.value) || 1 })}
-                  className="h-8 text-xs font-mono font-bold"
-                />
-              </div>
-            </div>
-
-            {/* Initial Stop Loss */}
-            <div className="p-2.5 rounded-lg border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-mono">
-              <span className="text-muted-foreground">Initial Fixed Stop Loss:</span>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-foreground">{niftyRatchet.initial_sl_pts} pts spot</span>
-                <span className="text-emerald-400 font-semibold text-[11px]">
-                  ~₹{Math.round(niftyRatchet.initial_sl_pts * 0.5 * 65 * capitalSettings.lots)}/lot
-                </span>
-                <span className="text-muted-foreground text-[10px]">
-                  (ATM Opt Δ~0.5 · Fut: ₹{niftyRatchet.initial_sl_pts * 65 * capitalSettings.lots})
-                </span>
-              </div>
-            </div>
-
-            {/* NIFTY Spot Ratchet Ladder */}
-            <div className="space-y-2.5 pt-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-emerald-400 flex items-center gap-1.5">
-                  <TrendingUp className="size-3.5" />
-                  NIFTY Spot Ratchet Ladder (Tiers 0A – 6)
-                </span>
-                <span className="text-[10px] text-muted-foreground font-mono">Trigger → Lock Pts</span>
-              </div>
-
-              {/* Pre-Ratchet Guards (Tiers 0A & 0B) */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-semibold text-foreground">Tier 0A (Retention)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier0a_trigger_pts}
-                      onChange={(e) => updateNiftyRatchet("tier0a_trigger_pts", parseFloat(e.target.value) || 35.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier0a_lock_pts}
-                      onChange={(e) => updateNiftyRatchet("tier0a_lock_pts", parseFloat(e.target.value) || -12.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points (Entry offset)"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">Reach +{niftyRatchet.tier0a_trigger_pts}pt → SL entry - 12pt</p>
-                </div>
-
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-semibold text-foreground">Tier 0B (Breakeven)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier0b_breakeven_trigger_pts}
-                      onChange={(e) => updateNiftyRatchet("tier0b_breakeven_trigger_pts", parseFloat(e.target.value) || 50.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier0b_breakeven_lock_pts}
-                      onChange={(e) => updateNiftyRatchet("tier0b_breakeven_lock_pts", parseFloat(e.target.value) || 5.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">Reach +{niftyRatchet.tier0b_breakeven_trigger_pts}pt → Lock +{niftyRatchet.tier0b_breakeven_lock_pts}pt</p>
-                </div>
-              </div>
-
-              {/* Expansion Tiers 1-6 Grid */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {/* Tier 1 */}
-                <div className="p-2 rounded-lg border border-emerald-500/30 bg-emerald-500/5 space-y-1">
-                  <div className="text-[11px] font-bold text-emerald-400">Tier 1 (+Pyramid)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier1_trigger_pts}
-                      onChange={(e) => updateNiftyRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 70.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier1_lock_pts}
-                      onChange={(e) => updateNiftyRatchet("tier1_lock_pts", parseFloat(e.target.value) || 25.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier1_trigger_pts}pt → Lock +{niftyRatchet.tier1_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 2 */}
-                <div className="p-2 rounded-lg border border-sky-500/30 bg-sky-500/5 space-y-1">
-                  <div className="text-[11px] font-bold text-sky-400">Tier 2 (Momentum)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier2_trigger_pts}
-                      onChange={(e) => updateNiftyRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 95.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier2_lock_pts}
-                      onChange={(e) => updateNiftyRatchet("tier2_lock_pts", parseFloat(e.target.value) || 50.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier2_trigger_pts}pt → Lock +{niftyRatchet.tier2_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 3 */}
-                <div className="p-2 rounded-lg border border-indigo-500/30 bg-indigo-500/5 space-y-1">
-                  <div className="text-[11px] font-bold text-indigo-400">Tier 3 (Super Runner)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier3_trigger_pts}
-                      onChange={(e) => updateNiftyRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 135.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier3_lock_pts}
-                      onChange={(e) => updateNiftyRatchet("tier3_lock_pts", parseFloat(e.target.value) || 85.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier3_trigger_pts}pt → Lock +{niftyRatchet.tier3_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 4 */}
-                <div className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/5 space-y-1">
-                  <div className="text-[11px] font-bold text-purple-400">Tier 4 (Exhaustion)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier4_trigger_pts}
-                      onChange={(e) => updateNiftyRatchet("tier4_trigger_pts", parseFloat(e.target.value) || 180.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier4_lock_pts}
-                      onChange={(e) => updateNiftyRatchet("tier4_lock_pts", parseFloat(e.target.value) || 125.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier4_trigger_pts}pt → Lock +{niftyRatchet.tier4_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 5 */}
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-bold text-foreground">Tier 5 (Mega Runner)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier5_trigger_pts ?? 230.0}
-                      onChange={(e) => updateNiftyRatchet("tier5_trigger_pts", parseFloat(e.target.value) || 230.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier5_lock_pts ?? 175.0}
-                      onChange={(e) => updateNiftyRatchet("tier5_lock_pts", parseFloat(e.target.value) || 175.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier5_trigger_pts ?? 230}pt → Lock +{niftyRatchet.tier5_lock_pts ?? 175}pt</p>
-                </div>
-
-                {/* Tier 6 */}
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-bold text-foreground">Tier 6 (Extreme)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier6_trigger_pts ?? 290.0}
-                      onChange={(e) => updateNiftyRatchet("tier6_trigger_pts", parseFloat(e.target.value) || 290.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={niftyRatchet.tier6_lock_pts ?? 230.0}
-                      onChange={(e) => updateNiftyRatchet("tier6_lock_pts", parseFloat(e.target.value) || 230.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{niftyRatchet.tier6_trigger_pts ?? 290}pt → Lock +{niftyRatchet.tier6_lock_pts ?? 230}pt</p>
-                </div>
-              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* ========================================================= */}
-        {/* PANEL B: 🔵 BSE SENSEX CONFIGURATION */}
-        {/* ========================================================= */}
-        <Card className={cn(
-          "border-sky-500/40 bg-sky-500/[0.015] shadow-xs flex flex-col justify-between transition-all",
-          isSensexLiveTrading && "border-red-600/70 bg-red-950/5"
-        )}>
-          <CardHeader className="pb-3 border-b border-border/50">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="size-3 rounded-full bg-sky-400 shrink-0" />
-                <div>
-                  <CardTitle className="text-base font-bold text-foreground">
-                    BSE SENSEX Configuration
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    ~82,500 Index · 20 Qty/Lot · 0.05 pt Tick Size
-                  </CardDescription>
-                </div>
-              </div>
-              <Badge variant={isSensexLiveTrading ? "destructive" : "secondary"} className="font-mono text-xs">
-                {isSensexLiveTrading ? "🔥 SENSEX LIVE" : "🛡️ SENSEX PAPER"}
-              </Badge>
-            </div>
+        {/* Risk & Limits Card */}
+        <Card className="border-border bg-card shadow-xs">
+          <CardHeader className="pb-3 pt-4 px-4 sm:px-5">
+            <CardTitle className="text-sm font-bold flex items-center gap-2">
+              <ShieldCheck className="size-4 text-emerald-400" /> Risk &amp; Sizing Controls
+            </CardTitle>
+            <CardDescription className="text-xs">
+              Daily trade frequency, lot size, and circuit breaker.
+            </CardDescription>
           </CardHeader>
-
-          <CardContent className="space-y-4 pt-4 flex-1">
-            {/* Sensex Live/Paper Switch & Lot Sizing Strip */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="p-3 rounded-lg border bg-card/60 flex items-center justify-between gap-3">
-                <div className="space-y-0.5">
-                  <span className="text-xs font-bold text-foreground block">Execution Mode</span>
-                  <span className={cn("text-[11px] font-mono", isSensexLiveTrading ? "text-red-500 font-bold" : "text-muted-foreground")}>
-                    {isSensexLiveTrading ? "LIVE (Real Kotak Orders)" : "PAPER (Simulation)"}
-                  </span>
-                </div>
-                <Switch
-                  checked={isSensexLiveTrading}
-                  onCheckedChange={handleToggleSensexLive}
-                  aria-label="Sensex Live Trading Switch"
-                />
-              </div>
-
-              <div className="p-3 rounded-lg border border-sky-500/30 bg-sky-500/5 space-y-1">
-                <div className="flex justify-between items-center text-xs">
-                  <Label htmlFor="sensex-lots" className="font-semibold text-sky-400">Sensex Lots (20 Qty/Lot)</Label>
-                  <span className="text-[10px] font-mono text-muted-foreground">{(capitalSettings.sensex_lots || 1) * 20} Qty</span>
-                </div>
+          <CardContent className="px-4 sm:px-5 pb-4">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Max Trades / Day</Label>
                 <Input
-                  id="sensex-lots"
                   type="number"
                   min={1}
-                  max={10}
-                  value={capitalSettings.sensex_lots || 1}
-                  onChange={(e) => setCapitalSettings({ ...capitalSettings, sensex_lots: parseInt(e.target.value) || 1 })}
+                  max={4}
+                  value={config.max_trades_per_day}
+                  onChange={(e) =>
+                    setConfig({ ...config, max_trades_per_day: parseInt(e.target.value) || 2 })
+                  }
                   className="h-8 text-xs font-mono font-bold"
                 />
               </div>
-            </div>
 
-            {/* Initial Stop Loss */}
-            <div className="p-2.5 rounded-lg border bg-muted/20 flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-xs font-mono">
-              <span className="text-muted-foreground">Initial Fixed Stop Loss:</span>
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="font-bold text-foreground">{sensexRatchet.initial_sl_pts} pts spot</span>
-                <span className="text-sky-400 font-semibold text-[11px]">
-                  ~₹{Math.round(sensexRatchet.initial_sl_pts * 0.5 * 20 * (capitalSettings.sensex_lots || 1))}/lot
-                </span>
-                <span className="text-muted-foreground text-[10px]">
-                  (ATM Opt Δ~0.5 · Fut: ₹{sensexRatchet.initial_sl_pts * 20 * (capitalSettings.sensex_lots || 1)})
-                </span>
-              </div>
-            </div>
-
-            {/* SENSEX Spot Ratchet Ladder */}
-            <div className="space-y-2.5 pt-2">
-              <div className="flex items-center justify-between text-xs">
-                <span className="font-bold text-sky-400 flex items-center gap-1.5">
-                  <TrendingUp className="size-3.5" />
-                  SENSEX Spot Ratchet Ladder (Tiers 0A – 6)
-                </span>
-                <span className="text-[10px] text-muted-foreground font-mono">Trigger → Lock Pts</span>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Daily Loss Limit (₹)</Label>
+                <Input
+                  type="number"
+                  step={250}
+                  value={capitalSettings.daily_loss_limit}
+                  onChange={(e) =>
+                    setCapitalSettings({ ...capitalSettings, daily_loss_limit: parseFloat(e.target.value) || 2500 })
+                  }
+                  className="h-8 text-xs font-mono font-bold text-rose-400"
+                />
               </div>
 
-              {/* Pre-Ratchet Guards (Tiers 0A & 0B) */}
-              <div className="grid grid-cols-2 gap-2">
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-semibold text-foreground">Tier 0A (Retention)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier0a_trigger_pts}
-                      onChange={(e) => updateSensexRatchet("tier0a_trigger_pts", parseFloat(e.target.value) || 115.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier0a_lock_pts}
-                      onChange={(e) => updateSensexRatchet("tier0a_lock_pts", parseFloat(e.target.value) || -40.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points (Entry offset)"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">Reach +{sensexRatchet.tier0a_trigger_pts}pt → SL entry - 40pt</p>
-                </div>
-
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-semibold text-foreground">Tier 0B (Breakeven)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier0b_breakeven_trigger_pts}
-                      onChange={(e) => updateSensexRatchet("tier0b_breakeven_trigger_pts", parseFloat(e.target.value) || 180.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier0b_breakeven_lock_pts}
-                      onChange={(e) => updateSensexRatchet("tier0b_breakeven_lock_pts", parseFloat(e.target.value) || 15.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">Reach +{sensexRatchet.tier0b_breakeven_trigger_pts}pt → Lock +{sensexRatchet.tier0b_breakeven_lock_pts}pt</p>
-                </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Nifty Lots (25 Qty)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={capitalSettings.lots}
+                  onChange={(e) =>
+                    setCapitalSettings({ ...capitalSettings, lots: Math.max(1, parseInt(e.target.value) || 1) })
+                  }
+                  className="h-8 text-xs font-mono font-bold"
+                />
               </div>
 
-              {/* Expansion Tiers 1-6 Grid */}
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                {/* Tier 1 */}
-                <div className="p-2 rounded-lg border border-sky-500/30 bg-sky-500/5 space-y-1">
-                  <div className="text-[11px] font-bold text-sky-400">Tier 1 (+Pyramid)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier1_trigger_pts}
-                      onChange={(e) => updateSensexRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 240.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier1_lock_pts}
-                      onChange={(e) => updateSensexRatchet("tier1_lock_pts", parseFloat(e.target.value) || 80.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier1_trigger_pts}pt → Lock +{sensexRatchet.tier1_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 2 */}
-                <div className="p-2 rounded-lg border border-indigo-500/30 bg-indigo-500/5 space-y-1">
-                  <div className="text-[11px] font-bold text-indigo-400">Tier 2 (Momentum)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier2_trigger_pts}
-                      onChange={(e) => updateSensexRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 340.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier2_lock_pts}
-                      onChange={(e) => updateSensexRatchet("tier2_lock_pts", parseFloat(e.target.value) || 180.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier2_trigger_pts}pt → Lock +{sensexRatchet.tier2_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 3 */}
-                <div className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/5 space-y-1">
-                  <div className="text-[11px] font-bold text-purple-400">Tier 3 (Super Runner)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier3_trigger_pts}
-                      onChange={(e) => updateSensexRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 480.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier3_lock_pts}
-                      onChange={(e) => updateSensexRatchet("tier3_lock_pts", parseFloat(e.target.value) || 280.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier3_trigger_pts}pt → Lock +{sensexRatchet.tier3_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 4 */}
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-bold text-foreground">Tier 4 (Exhaustion)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier4_trigger_pts}
-                      onChange={(e) => updateSensexRatchet("tier4_trigger_pts", parseFloat(e.target.value) || 650.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier4_lock_pts}
-                      onChange={(e) => updateSensexRatchet("tier4_lock_pts", parseFloat(e.target.value) || 420.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier4_trigger_pts}pt → Lock +{sensexRatchet.tier4_lock_pts}pt</p>
-                </div>
-
-                {/* Tier 5 */}
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-bold text-foreground">Tier 5 (Mega Runner)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier5_trigger_pts ?? 850.0}
-                      onChange={(e) => updateSensexRatchet("tier5_trigger_pts", parseFloat(e.target.value) || 850.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier5_lock_pts ?? 600.0}
-                      onChange={(e) => updateSensexRatchet("tier5_lock_pts", parseFloat(e.target.value) || 600.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier5_trigger_pts ?? 850}pt → Lock +{sensexRatchet.tier5_lock_pts ?? 600}pt</p>
-                </div>
-
-                {/* Tier 6 */}
-                <div className="p-2 rounded-lg border border-border/70 bg-card/40 space-y-1">
-                  <div className="text-[11px] font-bold text-foreground">Tier 6 (Extreme)</div>
-                  <div className="grid grid-cols-2 gap-1.5">
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier6_trigger_pts ?? 1100.0}
-                      onChange={(e) => updateSensexRatchet("tier6_trigger_pts", parseFloat(e.target.value) || 1100.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Trigger"
-                      title="Trigger Points"
-                    />
-                    <Input
-                      type="number"
-                      step={0.5}
-                      value={sensexRatchet.tier6_lock_pts ?? 850.0}
-                      onChange={(e) => updateSensexRatchet("tier6_lock_pts", parseFloat(e.target.value) || 850.0)}
-                      className="h-7 text-xs font-mono w-full"
-                      placeholder="Lock"
-                      title="Lock Points"
-                    />
-                  </div>
-                  <p className="text-[9px] text-muted-foreground">At +{sensexRatchet.tier6_trigger_pts ?? 1100}pt → Lock +{sensexRatchet.tier6_lock_pts ?? 850}pt</p>
-                </div>
+              <div className="space-y-1">
+                <Label className="text-xs text-muted-foreground">Sensex Lots (20 Qty)</Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={10}
+                  value={capitalSettings.sensex_lots}
+                  onChange={(e) =>
+                    setCapitalSettings({ ...capitalSettings, sensex_lots: Math.max(1, parseInt(e.target.value) || 1) })
+                  }
+                  className="h-8 text-xs font-mono font-bold"
+                />
               </div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* STRATEGY HANDBOOK COLLAPSIBLE DRAWER */}
-      <Card className="border-border/70 bg-card/60 shadow-xs">
-        <CardHeader
-          className="py-3 cursor-pointer hover:bg-muted/20 transition-all select-none"
-          onClick={() => setShowHandbook(!showHandbook)}
-        >
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Info className="size-4 text-emerald-400" />
-              <CardTitle className="text-sm font-semibold">Strategy Edge Playbook &amp; Multi-Index Rules Documentation</CardTitle>
+      {/* 3. EXECUTION STATUS: PAPER vs LIVE */}
+      <Card className="border-border bg-card shadow-xs">
+        <CardHeader className="pb-2 pt-3 px-4 sm:px-5">
+          <CardTitle className="text-sm font-bold flex items-center gap-2">
+            <Flame className="size-4 text-orange-400" /> Execution Mode (Paper vs Live Broker)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="px-4 sm:px-5 pb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {/* Nifty Execution Toggle */}
+            <div className={cn(
+              "p-3 rounded-xl border flex items-center justify-between gap-3 transition-colors",
+              isLiveTrading ? "border-rose-500/60 bg-rose-500/10" : "border-border/60 bg-muted/15"
+            )}>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">NSE Nifty 50</span>
+                  <Badge variant={isLiveTrading ? "destructive" : "secondary"} className="text-[10px] px-1 py-0">
+                    {isLiveTrading ? "🔥 LIVE TRADING" : "PAPER SIMULATION"}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {isLiveTrading ? "Real orders routed to Kotak Neo" : "Simulated fills based on 1-min live stream"}
+                </p>
+              </div>
+              <Switch
+                checked={isLiveTrading}
+                onCheckedChange={(val) => handleToggleLive("NIFTY", val)}
+              />
             </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline" className="text-[10px]">
-                {showHandbook ? "Click to Collapse" : "Click to View Details"}
-              </Badge>
-              {showHandbook ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+
+            {/* Sensex Execution Toggle */}
+            <div className={cn(
+              "p-3 rounded-xl border flex items-center justify-between gap-3 transition-colors",
+              isSensexLiveTrading ? "border-rose-500/60 bg-rose-500/10" : "border-border/60 bg-muted/15"
+            )}>
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold text-foreground">BSE Sensex</span>
+                  <Badge variant={isSensexLiveTrading ? "destructive" : "secondary"} className="text-[10px] px-1 py-0">
+                    {isSensexLiveTrading ? "🔥 LIVE TRADING" : "PAPER SIMULATION"}
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  {isSensexLiveTrading ? "Real orders routed to Kotak Neo" : "Simulated fills based on 1-min live stream"}
+                </p>
+              </div>
+              <Switch
+                checked={isSensexLiveTrading}
+                onCheckedChange={(val) => handleToggleLive("SENSEX", val)}
+              />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      {/* 4. ADVANCED RATCHET LADDERS (COLLAPSIBLE / ACCORDION) */}
+      <Card className="border-border bg-card shadow-xs">
+        <CardHeader
+          onClick={() => setShowAdvancedRatchets(!showAdvancedRatchets)}
+          className="py-3 px-4 sm:px-5 cursor-pointer flex flex-row items-center justify-between hover:bg-muted/10 transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <ShieldCheck className="size-4 text-emerald-400" />
+            <div>
+              <CardTitle className="text-xs font-bold text-foreground">
+                Advanced Spot Ratchet Ladders (10-Year Verified Combo B)
+              </CardTitle>
+              <CardDescription className="text-[11px]">
+                Nifty: 30pt SL | R1: +70/20 | R2: +110/50 | R3: +180/110 · Sensex: 120pt SL | R1: +240/80 | R2: +340/180
+              </CardDescription>
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground">
+            {showAdvancedRatchets ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
+          </Button>
         </CardHeader>
-        {showHandbook && (
-          <CardContent className="pt-2 border-t border-border/50">
-            <StrategyInfoPage />
+
+        {showAdvancedRatchets && (
+          <CardContent className="px-4 sm:px-5 pb-4 pt-2 border-t border-border/40 space-y-4">
+            <p className="text-xs text-muted-foreground">
+              These ladders were calibrated across 2,107 trading days. It is recommended to keep these verified defaults.
+            </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Nifty Ladder */}
+              <div className="p-3 rounded-xl border bg-muted/15 space-y-2.5">
+                <span className="text-xs font-bold text-emerald-400 block border-b pb-1">
+                  🟢 NIFTY Ratchet Ladder
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Initial SL (pts)</Label>
+                    <Input
+                      type="number"
+                      value={config.spot_ratchet_settings?.initial_sl_pts ?? 30.0}
+                      onChange={(e) => updateNiftyRatchet("initial_sl_pts", parseFloat(e.target.value) || 30.0)}
+                      className="h-7 text-xs font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Tier 1 (+Trigger / Lock)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        type="number"
+                        value={config.spot_ratchet_settings?.tier1_trigger_pts ?? 70.0}
+                        onChange={(e) => updateNiftyRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 70.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                      <Input
+                        type="number"
+                        value={config.spot_ratchet_settings?.tier1_lock_pts ?? 20.0}
+                        onChange={(e) => updateNiftyRatchet("tier1_lock_pts", parseFloat(e.target.value) || 20.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Tier 2 (+Trigger / Lock)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        type="number"
+                        value={config.spot_ratchet_settings?.tier2_trigger_pts ?? 110.0}
+                        onChange={(e) => updateNiftyRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 110.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                      <Input
+                        type="number"
+                        value={config.spot_ratchet_settings?.tier2_lock_pts ?? 50.0}
+                        onChange={(e) => updateNiftyRatchet("tier2_lock_pts", parseFloat(e.target.value) || 50.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Tier 3 (+Trigger / Lock)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        type="number"
+                        value={config.spot_ratchet_settings?.tier3_trigger_pts ?? 180.0}
+                        onChange={(e) => updateNiftyRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 180.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                      <Input
+                        type="number"
+                        value={config.spot_ratchet_settings?.tier3_lock_pts ?? 110.0}
+                        onChange={(e) => updateNiftyRatchet("tier3_lock_pts", parseFloat(e.target.value) || 110.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Sensex Ladder */}
+              <div className="p-3 rounded-xl border bg-muted/15 space-y-2.5">
+                <span className="text-xs font-bold text-sky-400 block border-b pb-1">
+                  🔵 SENSEX Ratchet Ladder
+                </span>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Initial SL (pts)</Label>
+                    <Input
+                      type="number"
+                      value={config.sensex_spot_ratchet_settings?.initial_sl_pts ?? 120.0}
+                      onChange={(e) => updateSensexRatchet("initial_sl_pts", parseFloat(e.target.value) || 120.0)}
+                      className="h-7 text-xs font-mono font-bold"
+                    />
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Tier 1 (+Trigger / Lock)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        type="number"
+                        value={config.sensex_spot_ratchet_settings?.tier1_trigger_pts ?? 240.0}
+                        onChange={(e) => updateSensexRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 240.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                      <Input
+                        type="number"
+                        value={config.sensex_spot_ratchet_settings?.tier1_lock_pts ?? 80.0}
+                        onChange={(e) => updateSensexRatchet("tier1_lock_pts", parseFloat(e.target.value) || 80.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Tier 2 (+Trigger / Lock)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        type="number"
+                        value={config.sensex_spot_ratchet_settings?.tier2_trigger_pts ?? 340.0}
+                        onChange={(e) => updateSensexRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 340.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                      <Input
+                        type="number"
+                        value={config.sensex_spot_ratchet_settings?.tier2_lock_pts ?? 180.0}
+                        onChange={(e) => updateSensexRatchet("tier2_lock_pts", parseFloat(e.target.value) || 180.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] text-muted-foreground">Tier 3 (+Trigger / Lock)</Label>
+                    <div className="flex gap-1">
+                      <Input
+                        type="number"
+                        value={config.sensex_spot_ratchet_settings?.tier3_trigger_pts ?? 480.0}
+                        onChange={(e) => updateSensexRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 480.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                      <Input
+                        type="number"
+                        value={config.sensex_spot_ratchet_settings?.tier3_lock_pts ?? 280.0}
+                        onChange={(e) => updateSensexRatchet("tier3_lock_pts", parseFloat(e.target.value) || 280.0)}
+                        className="h-7 text-xs font-mono font-bold"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
           </CardContent>
         )}
       </Card>
 
-      {/* LIVE TRADING ACTIVATION CONFIRMATION DIALOG */}
-      <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="sm:max-w-md">
+      {/* Safety Confirmation Modal for Live Trading */}
+      <Dialog open={confirmOpen} onOpenChange={(o) => { if (!o) { setConfirmOpen(false); setTyped(""); setConfirmTarget(null); } }}>
+        <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-red-500 font-extrabold text-lg">
-              <Zap className="size-5" /> Enable Live Money Trading for {confirmTarget}
+            <DialogTitle className="flex items-center gap-2 text-rose-500 text-base">
+              <AlertTriangle className="size-5 shrink-0" />
+              Confirm LIVE Trading Mode ({confirmTarget})
             </DialogTitle>
-            <DialogDescription className="text-xs pt-1 space-y-2">
-              <span className="block text-foreground font-semibold">
-                You are about to switch automated execution from PAPER simulation to REAL MONEY execution on your connected Kotak Neo account.
-              </span>
-              <span className="block text-muted-foreground">
-                Automated buy and sell market orders will be placed for {confirmTarget} whenever Trend Runner or VIX Trap generates high-conviction signals.
-              </span>
+            <DialogDescription className="text-xs pt-1.5 leading-relaxed">
+              You are about to activate real live orders routed to Kotak Neo. Real capital is at risk. Type <strong className="text-foreground">LIVE</strong> below to confirm.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-3 space-y-2">
-            <div className="text-xs font-bold text-red-400">Confirmation Required</div>
-            <p className="text-[11px] text-muted-foreground">
-              To confirm that you understand real capital is at risk, type <strong className="text-foreground font-mono">LIVE</strong> in the box below:
-            </p>
+          <div className="space-y-2 py-2">
+            <Label htmlFor="live-confirm" className="text-xs text-muted-foreground">Type LIVE to proceed:</Label>
             <Input
-              type="text"
+              id="live-confirm"
               value={typed}
               onChange={(e) => setTyped(e.target.value.toUpperCase())}
-              placeholder="Type LIVE to enable"
-              className="h-8 text-xs font-mono tracking-widest uppercase border-red-500/50"
+              placeholder="LIVE"
+              className="text-xs font-mono font-bold"
             />
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => {
-                setConfirmOpen(false)
-                setTyped("")
-                setConfirmTarget(null)
-              }}
-            >
+            <Button variant="outline" size="sm" onClick={() => { setConfirmOpen(false); setTyped(""); setConfirmTarget(null); }}>
               Cancel
             </Button>
             <Button
-              type="button"
-              variant="destructive"
               size="sm"
+              variant="destructive"
               disabled={typed !== "LIVE"}
               onClick={confirmLiveAction}
-              className="font-bold"
+              className="font-semibold text-xs"
             >
               Activate Live Trading
             </Button>
