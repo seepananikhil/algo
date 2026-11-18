@@ -933,24 +933,26 @@ def trend_runner_forward_loop() -> None:
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
                 engine = TrendRunnerPaperEngine(
                     symbol="NIFTY",
-                    sl_points=float(nifty_ratchet.get("initial_sl_pts", 28.0)),
+                    sl_points=float(nifty_ratchet.get("initial_sl_pts", 30.0)),
                     sl_mode="fixed",
                     lots=lots_cfg,
                     sizing_mode=sizing_cfg,
+                    call_cutoff_time=str(nifty_ratchet.get("call_cutoff_time", "10:45")),
+                    reentry_cooloff_bars=int(nifty_ratchet.get("reentry_cooloff_bars", 20)),
                     vix_th=float(nifty_ratchet.get("vix_th", 1.8)),
                     vix_call_th=float(nifty_ratchet.get("vix_call_th", 1.8)),
                     r1_trigger=float(nifty_ratchet.get("tier1_trigger_pts", 70.0)),
-                    r1_lock=float(nifty_ratchet.get("tier1_lock_pts", 25.0)),
-                    r2_trigger=float(nifty_ratchet.get("tier2_trigger_pts", 95.0)),
+                    r1_lock=float(nifty_ratchet.get("tier1_lock_pts", 20.0)),
+                    r2_trigger=float(nifty_ratchet.get("tier2_trigger_pts", 110.0)),
                     r2_lock=float(nifty_ratchet.get("tier2_lock_pts", 50.0)),
-                    r3_trigger=float(nifty_ratchet.get("tier3_trigger_pts", 135.0)),
-                    r3_lock=float(nifty_ratchet.get("tier3_lock_pts", 85.0)),
-                    r4_trigger=float(nifty_ratchet.get("tier4_trigger_pts", 180.0)),
-                    r4_lock=float(nifty_ratchet.get("tier4_lock_pts", 125.0)),
-                    r5_trigger=float(nifty_ratchet.get("tier5_trigger_pts", 230.0)),
-                    r5_lock=float(nifty_ratchet.get("tier5_lock_pts", 175.0)),
-                    r6_trigger=float(nifty_ratchet.get("tier6_trigger_pts", 290.0)),
-                    r6_lock=float(nifty_ratchet.get("tier6_lock_pts", 230.0)),
+                    r3_trigger=float(nifty_ratchet.get("tier3_trigger_pts", 180.0)),
+                    r3_lock=float(nifty_ratchet.get("tier3_lock_pts", 110.0)),
+                    r4_trigger=float(nifty_ratchet.get("tier4_trigger_pts", 230.0)),
+                    r4_lock=float(nifty_ratchet.get("tier4_lock_pts", 165.0)),
+                    r5_trigger=float(nifty_ratchet.get("tier5_trigger_pts", 280.0)),
+                    r5_lock=float(nifty_ratchet.get("tier5_lock_pts", 220.0)),
+                    r6_trigger=float(nifty_ratchet.get("tier6_trigger_pts", 330.0)),
+                    r6_lock=float(nifty_ratchet.get("tier6_lock_pts", 270.0)),
                     reentry=True,
                     notify_telegram=True,
                     enable_trend_runner=enable_trend,
@@ -963,17 +965,19 @@ def trend_runner_forward_loop() -> None:
                 engine.enable_vix_trap = enable_trap
                 if nifty_ratchet:
                     engine.r1_trigger = float(nifty_ratchet.get("tier1_trigger_pts", 70.0))
-                    engine.r1_lock = float(nifty_ratchet.get("tier1_lock_pts", 25.0))
-                    engine.r2_trigger = float(nifty_ratchet.get("tier2_trigger_pts", 95.0))
+                    engine.r1_lock = float(nifty_ratchet.get("tier1_lock_pts", 20.0))
+                    engine.r2_trigger = float(nifty_ratchet.get("tier2_trigger_pts", 110.0))
                     engine.r2_lock = float(nifty_ratchet.get("tier2_lock_pts", 50.0))
-                    engine.r3_trigger = float(nifty_ratchet.get("tier3_trigger_pts", 135.0))
-                    engine.r3_lock = float(nifty_ratchet.get("tier3_lock_pts", 85.0))
-                    engine.r4_trigger = float(nifty_ratchet.get("tier4_trigger_pts", 180.0))
-                    engine.r4_lock = float(nifty_ratchet.get("tier4_lock_pts", 125.0))
-                    engine.r5_trigger = float(nifty_ratchet.get("tier5_trigger_pts", 230.0))
-                    engine.r5_lock = float(nifty_ratchet.get("tier5_lock_pts", 175.0))
-                    engine.r6_trigger = float(nifty_ratchet.get("tier6_trigger_pts", 290.0))
-                    engine.r6_lock = float(nifty_ratchet.get("tier6_lock_pts", 230.0))
+                    engine.r3_trigger = float(nifty_ratchet.get("tier3_trigger_pts", 180.0))
+                    engine.r3_lock = float(nifty_ratchet.get("tier3_lock_pts", 110.0))
+                    engine.r4_trigger = float(nifty_ratchet.get("tier4_trigger_pts", 230.0))
+                    engine.r4_lock = float(nifty_ratchet.get("tier4_lock_pts", 165.0))
+                    engine.r5_trigger = float(nifty_ratchet.get("tier5_trigger_pts", 280.0))
+                    engine.r5_lock = float(nifty_ratchet.get("tier5_lock_pts", 220.0))
+                    engine.r6_trigger = float(nifty_ratchet.get("tier6_trigger_pts", 330.0))
+                    engine.r6_lock = float(nifty_ratchet.get("tier6_lock_pts", 270.0))
+                    engine.call_cutoff_time = str(nifty_ratchet.get("call_cutoff_time", "10:45"))
+                    engine.reentry_cooloff_bars = int(nifty_ratchet.get("reentry_cooloff_bars", 20))
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:
@@ -1147,6 +1151,8 @@ def sensex_runner_forward_loop() -> None:
                     sl_mode="fixed",
                     lots=lots_cfg,
                     sizing_mode=sizing_cfg,
+                    call_cutoff_time=str(sx_ratchet.get("call_cutoff_time", "10:45")),
+                    reentry_cooloff_bars=int(sx_ratchet.get("reentry_cooloff_bars", 20)),
                     r1_trigger=float(sx_ratchet.get("tier1_trigger_pts", 240.0)),
                     r1_lock=float(sx_ratchet.get("tier1_lock_pts", 80.0)),
                     r2_trigger=float(sx_ratchet.get("tier2_trigger_pts", 340.0)),
@@ -1176,6 +1182,14 @@ def sensex_runner_forward_loop() -> None:
                     engine.r2_lock = float(sx_ratchet.get("tier2_lock_pts", 180.0))
                     engine.r3_trigger = float(sx_ratchet.get("tier3_trigger_pts", 480.0))
                     engine.r3_lock = float(sx_ratchet.get("tier3_lock_pts", 280.0))
+                    engine.r4_trigger = float(sx_ratchet.get("tier4_trigger_pts", 650.0))
+                    engine.r4_lock = float(sx_ratchet.get("tier4_lock_pts", 420.0))
+                    engine.r5_trigger = float(sx_ratchet.get("tier5_trigger_pts", 850.0))
+                    engine.r5_lock = float(sx_ratchet.get("tier5_lock_pts", 600.0))
+                    engine.r6_trigger = float(sx_ratchet.get("tier6_trigger_pts", 1100.0))
+                    engine.r6_lock = float(sx_ratchet.get("tier6_lock_pts", 850.0))
+                    engine.call_cutoff_time = str(sx_ratchet.get("call_cutoff_time", "10:45"))
+                    engine.reentry_cooloff_bars = int(sx_ratchet.get("reentry_cooloff_bars", 20))
 
             df5, or_high, or_low, or_range = compute_indicators(df1)
             if df5.empty:

@@ -102,7 +102,7 @@ class MasterPortfolioDispatcher:
         for name, active in self.setups.items():
             status = "🟢 ENABLED" if active else "⚪ DISABLED"
             print(f"     - {name:<26}: {status}")
-        print(f"   Spot Ratchet Ladder: SL -{self.ratchet.get('initial_sl_pts', 28.0):.0f}pt | BE +{self.ratchet.get('tier0b_breakeven_trigger_pts', 55.0):.0f}->+{self.ratchet.get('tier0b_breakeven_lock_pts', 5.0):.0f}pt | R1 +{self.ratchet.get('tier1_trigger_pts', 70.0):.0f}->+{self.ratchet.get('tier1_lock_pts', 20.0):.0f}pt | R2 +{self.ratchet.get('tier2_trigger_pts', 130.0):.0f}->+{self.ratchet.get('tier2_lock_pts', 60.0):.0f}pt")
+        print(f"   Spot Ratchet Ladder: SL -{self.ratchet.get('initial_sl_pts', 30.0):.0f}pt | BE +{self.ratchet.get('tier0b_breakeven_trigger_pts', 55.0):.0f}->+{self.ratchet.get('tier0b_breakeven_lock_pts', 5.0):.0f}pt | R1 +{self.ratchet.get('tier1_trigger_pts', 70.0):.0f}->+{self.ratchet.get('tier1_lock_pts', 20.0):.0f}pt | R2 +{self.ratchet.get('tier2_trigger_pts', 110.0):.0f}->+{self.ratchet.get('tier2_lock_pts', 50.0):.0f}pt")
         print("=" * 75)
 
     def on_market_open(self, open_price, prev_close_1515):
@@ -198,8 +198,8 @@ class MasterPortfolioDispatcher:
         t0b_lock = self.ratchet.get("tier0b_breakeven_lock_pts", 5.0)
         r1_trig = self.ratchet.get("tier1_trigger_pts", 70.0)
         r1_lock = self.ratchet.get("tier1_lock_pts", 20.0)
-        r2_trig = self.ratchet.get("tier2_trigger_pts", 130.0)
-        r2_lock = self.ratchet.get("tier2_lock_pts", 60.0)
+        r2_trig = self.ratchet.get("tier2_trigger_pts", 110.0)
+        r2_lock = self.ratchet.get("tier2_lock_pts", 50.0)
         r3_trig = self.ratchet.get("tier3_trigger_pts", 180.0)
         r3_lock = self.ratchet.get("tier3_lock_pts", 110.0)
         r4_trig = self.ratchet.get("tier4_trigger_pts", 230.0)
