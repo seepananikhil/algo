@@ -165,8 +165,13 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
             aft_taken = False
             for _, r in grp.iterrows():
                 t_str = r['entry_time_str']
-                is_morn = t_str < '11:30'
+                is_morn = t_str < '11:00'
                 is_aft = t_str >= '12:00'
+
+                # Midday chop filter: ignore entries between 11:00 and 11:59 so they don't consume slots
+                if not is_morn and not is_aft:
+                    continue
+
                 if is_morn and morn_taken:
                     continue
                 if is_aft and aft_taken:
@@ -177,7 +182,7 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
                 count_today += 1
                 if is_morn:
                     morn_taken = True
-                else:
+                elif is_aft:
                     aft_taken = True
 
         final_trades = pd.DataFrame(selected).reset_index(drop=True)

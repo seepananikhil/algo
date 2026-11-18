@@ -53,18 +53,18 @@ for sf in (ROOT / "performance" / "trend_runner_signals.csv", ROOT / "performanc
 perf_file = ROOT / "performance" / "nifty_10y_backtest_trades.csv"
 latest_date = None
 existing_trades = []
-current_month_start = datetime.now().date().replace(day=1)
+current_year_start = datetime(datetime.now().year, 1, 1).date()
 
 if not cli_args.full and perf_file.exists():
     try:
         prev_df = pd.read_csv(perf_file)
         if not prev_df.empty and "date" in prev_df.columns:
             prev_df["date"] = pd.to_datetime(prev_df["date"]).dt.date
-            # Retain historical trades strictly before current month so this month is always re-computed fresh
-            hist_df = prev_df[prev_df["date"] < current_month_start]
+            # Retain historical trades prior to current year (2017-2025) so the current year (2026) is always re-evaluated fresh
+            hist_df = prev_df[prev_df["date"] < current_year_start]
             existing_trades = hist_df.to_dict(orient="records")
-            latest_date = current_month_start
-            print(f"Incremental mode: cached {len(existing_trades)} historical trades prior to {current_month_start}. Re-evaluating current month {current_month_start.strftime('%Y-%m')}...")
+            latest_date = current_year_start
+            print(f"Incremental mode: cached {len(existing_trades)} historical trades prior to {current_year_start}. Re-evaluating year {current_year_start.year} fresh...")
     except Exception as exc:
         print(f"Warning reading existing backtest: {exc}")
 
@@ -72,12 +72,12 @@ base_dir = ROOT / "captured_data" / "technovusin_nifty50" / "1min"
 all_files = sorted(base_dir.rglob("*.csv"))
 
 if latest_date:
-    latest_ym = current_month_start.strftime("%Y-%m")
+    latest_ym = current_year_start.strftime("%Y-%m")
     filtered = []
     for f in all_files:
         try:
             f_year = int(f.parent.name)
-            if f_year < current_month_start.year:
+            if f_year < current_year_start.year:
                 continue
         except ValueError:
             pass
@@ -150,7 +150,7 @@ for y in years:
     df_y['time_str'] = df_y['timestamp'].dt.strftime('%H:%M')
 
     if latest_date:
-        df_y = df_y[df_y['date'] >= current_month_start].copy().reset_index(drop=True)
+        df_y = df_y[df_y['date'] >= current_year_start].copy().reset_index(drop=True)
         if df_y.empty:
             continue
 
