@@ -1,16 +1,11 @@
 import { useEffect, useState } from "react"
 import { toast } from "sonner"
 import {
-  ArrowUpRight,
-  ArrowDownRight,
   Plus,
   Minus,
   Clock,
-  Download,
-  Zap,
   Target,
   Shield,
-  Layers,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -21,7 +16,6 @@ import {
   pnlClass,
   postJSON,
   usePoll,
-  type FundsStatus,
   type ManualOptionChoices,
 } from "@/lib/api"
 import { useStatus } from "@/lib/status"
@@ -79,7 +73,6 @@ export function ManualTradingPage() {
 
   // Fast live polling: 1000ms for active scalping positions & PnL
   const positionsPoll = usePoll<PositionsResponse>(isKotakConnected ? "/api/positions" : null, 1000)
-  const fundsPoll = usePoll<FundsStatus>(isKotakConnected ? "/api/funds" : null, 10000)
   const optionsPoll = usePoll<ManualOptionChoices>(
     isKotakConnected ? `/api/manual-options?symbol=${indexSymbol}` : null,
     15000
@@ -97,10 +90,6 @@ export function ManualTradingPage() {
   const [slPts, setSlPts] = useState<number>(10)
   const [tpPts, setTpPts] = useState<number>(15)
 
-  // PWA Install prompt state
-  const [deferredPrompt, setDeferredPrompt] = useState<any>(null)
-  const [isInstallable, setIsInstallable] = useState(false)
-
   // Quotes
   const [cePrice, setCePrice] = useState<number | null>(null)
   const [pePrice, setPePrice] = useState<number | null>(null)
@@ -111,27 +100,6 @@ export function ManualTradingPage() {
   // Action busy states
   const [actionBusy, setActionBusy] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
-
-  // Listen for Chrome PWA install prompt
-  useEffect(() => {
-    const handler = (e: any) => {
-      e.preventDefault()
-      setDeferredPrompt(e)
-      setIsInstallable(true)
-    }
-    window.addEventListener("beforeinstallprompt", handler)
-    return () => window.removeEventListener("beforeinstallprompt", handler)
-  }, [])
-
-  async function handleInstallApp() {
-    if (!deferredPrompt) return
-    deferredPrompt.prompt()
-    const { outcome } = await deferredPrompt.userChoice
-    if (outcome === "accepted") {
-      setIsInstallable(false)
-      setDeferredPrompt(null)
-    }
-  }
 
   // Expiries from symbol master
   const expiries = optionsPoll.data?.expiries ?? []
@@ -308,7 +276,6 @@ export function ManualTradingPage() {
       })
       toast.success("Position Closed!", { description: `Squared off ${pos.symbol}` })
       await positionsPoll.reload()
-      await fundsPoll.reload()
     } catch (err: any) {
       toast.error("Exit Failed", { description: String(err?.message || err) })
     } finally {
@@ -336,128 +303,102 @@ export function ManualTradingPage() {
   }
 
   return (
-    <div className="flex flex-col h-[100dvh] max-h-[100dvh] w-full max-w-md mx-auto p-3.5 justify-between select-none text-foreground bg-background overflow-hidden">
+    <div className="flex flex-col h-full max-h-full w-full max-w-md mx-auto p-2 justify-between select-none text-foreground bg-background overflow-hidden">
       
-      {/* ─── 1. TOP BAR: Index & Expiry + OVERALL DAY P&L ─── */}
+      {/* ─── 2. INSTRUMENT & EXPIRY ROW ─── */}
       <div className="flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-1.5">
-          {/* Index Selector Toggle */}
-          <div className="flex bg-muted/60 p-0.5 rounded-xl border border-border/40">
-            <button
-              type="button"
-              onClick={() => {
-                setIndexSymbol("NIFTY")
-                setStrike("")
-              }}
-              className={cn(
-                "px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-all",
-                indexSymbol === "NIFTY"
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              NIFTY
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setIndexSymbol("SENSEX")
-                setStrike("")
-              }}
-              className={cn(
-                "px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-all",
-                indexSymbol === "SENSEX"
-                  ? "bg-background text-foreground shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
-              )}
-            >
-              SENSEX
-            </button>
-          </div>
-
-          {/* Expiry Dropdown Pill */}
-          {expiries.length > 0 && (
-            <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
-              <SelectTrigger className="h-7 text-xs font-mono font-bold px-2 py-0 border-border/50 bg-muted/40 rounded-xl gap-1">
-                <SelectValue placeholder="Expiry">
-                  {formatExpiryLabel(expiry)}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {expiries.map((exp, idx) => (
-                  <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs font-mono">
-                    {exp.expiry} {idx === 0 ? "★ Current" : idx === 1 ? "Next" : ""}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          )}
-        </div>
-
-        {/* OVERALL DAY P&L (Total Realized + Unrealized across all trades today) */}
-        <button
-          type="button"
-          onClick={() => setHistoryOpen(true)}
-          className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-muted/30 border border-border/40 hover:bg-muted/50 active:scale-95 transition-all text-right"
-          title="Click to view today's closed trades ledger"
-        >
-          <div className="flex flex-col items-end leading-none">
-            <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Day P&L {closedPositions.length > 0 ? `(${closedPositions.length})` : ""}
-            </span>
-            <span
-              className={cn(
-                "text-sm font-black font-mono mt-0.5",
-                summary.net_pnl > 0 ? "text-emerald-400" : summary.net_pnl < 0 ? "text-rose-400" : "text-muted-foreground"
-              )}
-            >
-              {summary.net_pnl > 0 ? "+" : ""}
-              {fmtRs(summary.net_pnl)}
-            </span>
-          </div>
-          <span
-            className={cn(
-              "size-2 rounded-full shrink-0",
-              isKotakConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
-            )}
-            title={isKotakConnected ? "Kotak Live Connected" : "Kotak Disconnected"}
-          />
-        </button>
-      </div>
-
-      {/* ─── 2. SPOT & PWA SUB-HEADER (Clean 1-liner) ─── */}
-      <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground px-1 shrink-0 -my-1">
-        <span>
-          Spot: <strong className="text-foreground">{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</strong>
-        </span>
-        {isInstallable && (
+        {/* [ NIFTY | SENSEX ] */}
+        <div className="flex bg-muted/60 p-0.5 rounded-xl border border-border/40">
           <button
             type="button"
-            onClick={handleInstallApp}
-            className="text-[10px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-full flex items-center gap-1"
+            onClick={() => {
+              setIndexSymbol("NIFTY")
+              setStrike("")
+            }}
+            className={cn(
+              "px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all",
+              indexSymbol === "NIFTY"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
           >
-            <Download className="size-2.5" /> Install App
+            NIFTY
           </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIndexSymbol("SENSEX")
+              setStrike("")
+            }}
+            className={cn(
+              "px-3 py-1 rounded-lg text-xs font-bold font-mono transition-all",
+              indexSymbol === "SENSEX"
+                ? "bg-background text-foreground shadow-xs"
+                : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            SENSEX
+          </button>
+        </div>
+
+        {/* [23 Nov ▾] Expiry Pill */}
+        {expiries.length > 0 && (
+          <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
+            <SelectTrigger className="h-7 text-xs font-mono font-bold px-2.5 py-0 border-border/50 bg-muted/40 rounded-xl gap-1">
+              <SelectValue placeholder="Expiry">
+                {formatExpiryLabel(expiry)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {expiries.map((exp, idx) => (
+                <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs font-mono">
+                  {exp.expiry} {idx === 0 ? "★ Current" : idx === 1 ? "Next" : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         )}
       </div>
 
-      {/* ─── 3. CLEAN STRIKE STEPPER (Only Strike & Stepper — No Cost Duplication!) ─── */}
-      <div className="flex items-center justify-between p-3 rounded-2xl bg-card border border-border/50 shadow-sm shrink-0">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-12 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-          onClick={() => stepStrike(-1)}
-        >
-          <Minus className="size-5" />
-        </Button>
+      {/* ─── 3. SPOT & LIVE P&L ROW ─── */}
+      <div className="flex items-center justify-between text-xs font-mono px-0.5 shrink-0">
+        <span className="text-muted-foreground">
+          Spot: <strong className="text-foreground font-bold">{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong>
+        </span>
 
-        <div className="text-center flex flex-col items-center">
-          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
-            Strike Price
+        {/* DAY P&L (count): +₹... */}
+        <button
+          type="button"
+          onClick={() => setHistoryOpen(true)}
+          className="text-xs font-mono font-bold flex items-center gap-1 hover:underline cursor-pointer"
+          title="Click to view today's closed trades ledger"
+        >
+          <span className="text-muted-foreground">
+            DAY P&L{closedPositions.length > 0 ? ` (${closedPositions.length})` : ""}:
           </span>
-          <div className="text-3xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-2">
+          <span className={cn(summary.net_pnl > 0 ? "text-emerald-400" : summary.net_pnl < 0 ? "text-rose-400" : "text-muted-foreground")}>
+            {summary.net_pnl > 0 ? "+" : ""}{fmtRs(summary.net_pnl)}
+          </span>
+        </button>
+      </div>
+
+      {/* ─── 4. STRIKE STEPPER ─── */}
+      <div className="flex flex-col gap-1 p-2 rounded-2xl bg-card border border-border/50 shadow-sm shrink-0">
+        <div className="text-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+          STRIKE PRICE
+        </div>
+        <div className="flex items-center justify-between px-2">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+            onClick={() => stepStrike(-1)}
+          >
+            <Minus className="size-5" />
+          </Button>
+
+          <div className="text-2xl font-black font-mono tracking-tight text-foreground flex items-center gap-2">
             {strike || atmStrike}
             {Number(strike) === atmStrike && (
               <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">
@@ -465,25 +406,25 @@ export function ManualTradingPage() {
               </span>
             )}
           </div>
-        </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-12 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-          onClick={() => stepStrike(1)}
-        >
-          <Plus className="size-5" />
-        </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+            onClick={() => stepStrike(1)}
+          >
+            <Plus className="size-5" />
+          </Button>
+        </div>
       </div>
 
-      {/* ─── 4. UNIFIED CONFIG STRIP (Lots, Stop Loss, Target) ─── */}
+      {/* ─── 5. RISK & QTY GRID (3 Columns) ─── */}
       <div className="grid grid-cols-3 gap-2 p-2 rounded-2xl bg-muted/20 border border-border/40 shrink-0">
-        {/* Lots Stepper */}
+        {/* Col 1: LOTS */}
         <div className="flex flex-col items-center justify-center bg-background/60 p-1.5 rounded-xl border border-border/30">
-          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold mb-1 flex items-center gap-1">
-            <Layers className="size-2.5" /> Lots
+          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold mb-1">
+            LOTS
           </span>
           <div className="flex items-center gap-1.5">
             <button
@@ -494,7 +435,7 @@ export function ManualTradingPage() {
             >
               <Minus className="size-3" />
             </button>
-            <span className="w-6 text-center font-black font-mono text-sm">
+            <span className="w-6 text-center font-black font-mono text-xs">
               {lots}L
             </span>
             <button
@@ -505,12 +446,15 @@ export function ManualTradingPage() {
               <Plus className="size-3" />
             </button>
           </div>
+          <span className="text-[8px] font-mono text-muted-foreground mt-0.5">
+            ({totalQty} Q)
+          </span>
         </div>
 
-        {/* Stop Loss (SL) */}
+        {/* Col 2: SL PTS */}
         <div className="flex flex-col items-center justify-center bg-background/60 p-1.5 rounded-xl border border-border/30">
           <span className="text-[9px] uppercase tracking-wider text-rose-400 font-bold mb-1 flex items-center gap-1">
-            <Shield className="size-2.5" /> SL Pts
+            <Shield className="size-2.5" /> SL PTS
           </span>
           <div className="relative flex items-center w-full px-1">
             <Input
@@ -527,10 +471,10 @@ export function ManualTradingPage() {
           </span>
         </div>
 
-        {/* Target (TP) */}
+        {/* Col 3: TARGET */}
         <div className="flex flex-col items-center justify-center bg-background/60 p-1.5 rounded-xl border border-border/30">
           <span className="text-[9px] uppercase tracking-wider text-emerald-400 font-bold mb-1 flex items-center gap-1">
-            <Target className="size-2.5" /> Target
+            <Target className="size-2.5" /> TARGET
           </span>
           <div className="relative flex items-center w-full px-1">
             <Input
@@ -548,30 +492,31 @@ export function ManualTradingPage() {
         </div>
       </div>
 
-      {/* ─── 5. HERO 1-TAP SCALP PADS (Holds Rate + Total Cost Cleanly) ─── */}
+      {/* ─── 6. EXECUTION ZONE (BUY CALL ↗ vs BUY PUT ↘) ─── */}
       <div className="grid grid-cols-2 gap-2.5 my-auto shrink-0">
         {/* BUY CALL */}
         <button
           type="button"
           disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
           onClick={() => hitOrder("CE")}
-          className="h-32 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3.5 flex flex-col justify-between text-left shadow-lg transition-transform"
+          className="h-32 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3 flex flex-col justify-between text-left shadow-lg transition-transform"
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-black tracking-wide flex items-center gap-0.5">
-              <Zap className="size-3.5 fill-current" />
-              BUY CALL
-              <ArrowUpRight className="size-3.5 stroke-[3]" />
+              BUY CALL ↗
             </span>
             <span className="text-[11px] font-mono opacity-80 font-bold">{strike} CE</span>
           </div>
 
           <div>
-            <div className="text-3xl font-black font-mono leading-none tracking-tight">
+            <div className="text-2xl font-black font-mono leading-none tracking-tight">
               {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
             </div>
-            <div className="text-xs font-mono mt-1.5 font-bold opacity-90">
-              Cost: {ceCost != null ? fmtRs(ceCost) : "—"} <span className="opacity-70 font-normal">({totalQty}Q)</span>
+            <div className="text-xs font-mono mt-1 font-bold opacity-90">
+              Cost: {ceCost != null ? fmtRs(ceCost) : "—"}
+            </div>
+            <div className="text-[10px] font-mono opacity-70">
+              ({totalQty} Q)
             </div>
           </div>
         </button>
@@ -581,31 +526,32 @@ export function ManualTradingPage() {
           type="button"
           disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
           onClick={() => hitOrder("PE")}
-          className="h-32 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3.5 flex flex-col justify-between text-left shadow-lg transition-transform"
+          className="h-32 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3 flex flex-col justify-between text-left shadow-lg transition-transform"
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-black tracking-wide flex items-center gap-0.5">
-              <Zap className="size-3.5 fill-current" />
-              BUY PUT
-              <ArrowDownRight className="size-3.5 stroke-[3]" />
+              BUY PUT ↘
             </span>
             <span className="text-[11px] font-mono opacity-80 font-bold">{strike} PE</span>
           </div>
 
           <div>
-            <div className="text-3xl font-black font-mono leading-none tracking-tight">
+            <div className="text-2xl font-black font-mono leading-none tracking-tight">
               {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
             </div>
-            <div className="text-xs font-mono mt-1.5 font-bold opacity-90">
-              Cost: {peCost != null ? fmtRs(peCost) : "—"} <span className="opacity-70 font-normal">({totalQty}Q)</span>
+            <div className="text-xs font-mono mt-1 font-bold opacity-90">
+              Cost: {peCost != null ? fmtRs(peCost) : "—"}
+            </div>
+            <div className="text-[10px] font-mono opacity-70">
+              ({totalQty} Q)
             </div>
           </div>
         </button>
       </div>
 
-      {/* ─── 6. ACTIVE TRADE CARD (Only shown when holding an open position; Flat renders NOTHING!) ─── */}
+      {/* ACTIVE TRADE CARD (If Open Position) */}
       {openPositions.length > 0 && (
-        <div className="flex flex-col gap-1.5 shrink-0 pt-1">
+        <div className="flex flex-col gap-1.5 shrink-0 pt-0.5">
           {openPositions.map((pos) => {
             const isLong = pos.net_qty > 0
             const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
@@ -617,7 +563,7 @@ export function ManualTradingPage() {
             return (
               <div
                 key={pos.symbol}
-                className="p-3 bg-card border-2 border-primary/70 rounded-2xl shadow-xl flex items-center justify-between gap-2"
+                className="p-2.5 bg-card border-2 border-primary/70 rounded-2xl shadow-xl flex items-center justify-between gap-2"
               >
                 <div className="flex flex-col">
                   <div className="flex items-center gap-1.5 text-xs font-black font-mono text-foreground">
@@ -633,28 +579,28 @@ export function ManualTradingPage() {
                     <button
                       type="button"
                       onClick={() => moveToBreakeven(pos)}
-                      className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md hover:bg-amber-500/20 active:scale-95"
+                      className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md hover:bg-amber-500/20 active:scale-95 cursor-pointer"
                     >
                       ⚡ Trail BE
                     </button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2.5">
+                <div className="flex items-center gap-2">
                   <div className="text-right">
                     <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider leading-none">
                       Trade P&L
                     </div>
                     <div
                       className={cn(
-                        "text-lg font-black font-mono tracking-tight",
+                        "text-base font-black font-mono tracking-tight",
                         tradePnl > 0 ? "text-emerald-400" : tradePnl < 0 ? "text-rose-400" : "text-muted-foreground"
                       )}
                     >
                       {tradePnl > 0 ? "+" : ""}
                       {fmtRs(tradePnl)}
                     </div>
-                    <div className="text-[10px] font-mono font-bold text-muted-foreground">
+                    <div className="text-[9px] font-mono font-bold text-muted-foreground">
                       {ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt ({pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%)
                     </div>
                   </div>
@@ -663,7 +609,7 @@ export function ManualTradingPage() {
                     variant="destructive"
                     size="sm"
                     disabled={actionBusy}
-                    className="h-11 text-xs font-black px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md"
+                    className="h-10 text-xs font-black px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md cursor-pointer"
                     onClick={() => hitExit(pos)}
                   >
                     EXIT
@@ -675,7 +621,7 @@ export function ManualTradingPage() {
         </div>
       )}
 
-      {/* ─── 7. TODAY'S COMPLETED TRADES MODAL ─── */}
+      {/* ─── TODAY'S COMPLETED TRADES MODAL ─── */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
         <DialogContent className="max-w-xs rounded-2xl max-h-[80vh] flex flex-col">
           <DialogHeader>

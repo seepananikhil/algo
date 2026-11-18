@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, CalendarDays, LineChart, Lock, Moon, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
+import { Activity, CalendarDays, LineChart, Lock, Moon, Power, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -69,19 +69,69 @@ export function Layout() {
           isFixedViewport ? "h-[100dvh] max-h-[100dvh] overflow-hidden" : "min-h-screen"
         )}
       >
-        <header
-          className={cn(
-            "sticky top-0 z-10 items-center gap-2 border-b bg-background/80 px-3 py-1 backdrop-blur md:px-4",
-            isTrade ? "hidden md:flex h-10 shrink-0" : "flex h-10 shrink-0"
-          )}
-        >
-          <nav className="flex gap-1 md:hidden">
-            {nav.map(({ to, icon: Icon, label }) => (
-              <NavLink key={to} to={to} end={to === "/"} aria-label={label} className={({ isActive }) => cn("rounded-md p-1.5", isActive && "bg-muted")}>
-                <Icon className="size-3.5" />
-              </NavLink>
-            ))}
-          </nav>
+        {/* 1. Mobile Top Status Bar */}
+        <header className="flex md:hidden h-10 shrink-0 items-center justify-between px-3 border-b bg-background/95 backdrop-blur z-20">
+          <div className="flex items-center gap-2">
+            <div className="grid size-6 place-items-center rounded-md bg-primary text-xs font-black text-primary-foreground shadow-xs">
+              A
+            </div>
+            <NavLink
+              to="/settings?tab=broker"
+              className={cn(
+                "inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[11px] font-semibold transition-all select-none",
+                status?.token.valid
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                  : "bg-red-500/15 border-red-500/40 text-red-400 animate-pulse"
+              )}
+            >
+              <Dot ok={Boolean(status?.token.valid)} />
+              <span>Kotak: {status?.token.valid ? "Connected" : "Offline"}</span>
+            </NavLink>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            <Badge
+              className={cn(
+                "py-0 px-1.5 text-[10px] font-bold",
+                status?.mode === "LIVE" ? "bg-red-600 text-white" : "bg-sky-600 text-white"
+              )}
+            >
+              • {status?.mode || "LIVE"}
+            </Badge>
+
+            <button
+              type="button"
+              onClick={async () => {
+                const isStopped = status?.kill_switch
+                const url = isStopped ? "/api/kill-switch/off" : "/api/kill-switch/on"
+                await postJSON(url, {})
+                await reload()
+              }}
+              title={status?.kill_switch ? "Trading Halted - Tap to Resume" : "Emergency Kill Switch"}
+              className={cn(
+                "size-7 rounded-lg border flex items-center justify-center transition-all",
+                status?.kill_switch
+                  ? "bg-rose-500 text-white border-rose-600 animate-pulse"
+                  : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground active:scale-95"
+              )}
+            >
+              <Power className="size-3.5" />
+            </button>
+
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="size-7 text-muted-foreground hover:text-foreground"
+              title="Lock terminal"
+              onClick={() => logout()}
+            >
+              <Lock className="size-3.5" />
+            </Button>
+          </div>
+        </header>
+
+        {/* Desktop Header */}
+        <header className="sticky top-0 z-10 hidden md:flex h-10 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur">
           <div className="ml-auto flex items-center gap-2">
             <span className="text-xs text-muted-foreground tabular-nums">{status?.now.slice(11) ?? "…"} IST</span>
             {error && <Badge variant="destructive" className="py-0 text-[10px]">Backend offline</Badge>}
@@ -162,6 +212,7 @@ export function Layout() {
             </Button>
           </div>
         </header>
+
         <main
           className={cn(
             "flex-1 flex flex-col min-h-0",
@@ -170,6 +221,43 @@ export function Layout() {
         >
           <Outlet />
         </main>
+
+        {/* 7. Bottom Tab Bar (Mobile) */}
+        <nav className="flex md:hidden h-12 shrink-0 items-center justify-around border-t bg-background/95 backdrop-blur z-20 px-1">
+          {[
+            { to: "/", label: "Live", icon: Activity },
+            { to: "/trade", label: "Quick*", icon: Zap },
+            { to: "/day", label: "Day", icon: CalendarDays },
+            { to: "/paper", label: "Trades", icon: Wallet },
+            { to: "/settings", label: "Settings", icon: SettingsIcon },
+          ].map(({ to, label, icon: Icon }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={to === "/"}
+              className={({ isActive }) =>
+                cn(
+                  "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] transition-colors",
+                  isActive
+                    ? "text-primary font-bold"
+                    : "text-muted-foreground hover:text-foreground font-medium"
+                )
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div className="relative">
+                    <Icon className={cn("size-4", isActive && "stroke-[2.5]")} />
+                    {to === "/trade" && (
+                      <span className="absolute -top-0.5 -right-1 size-1.5 rounded-full bg-amber-400 animate-ping" />
+                    )}
+                  </div>
+                  <span className="mt-0.5 leading-none">{label}</span>
+                </>
+              )}
+            </NavLink>
+          ))}
+        </nav>
       </div>
     </div>
   )
