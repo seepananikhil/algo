@@ -41,6 +41,7 @@ interface OpenPosition {
   tl_pts?: number
   target_price?: number
   stop_price?: number
+  is_demo?: boolean
 }
 
 interface ClosedPosition {
@@ -72,11 +73,11 @@ export function ManualTradingPage() {
   // Instrument: NIFTY vs SENSEX
   const [indexSymbol, setIndexSymbol] = useState<"NIFTY" | "SENSEX">("NIFTY")
 
-  // Fast live polling: 1000ms for active scalping positions & PnL
+  // Fast live polling: 1000ms for positions, 2500ms for real-time spot and ATM options
   const positionsPoll = usePoll<PositionsResponse>(isKotakConnected ? "/api/positions" : null, 1000)
   const optionsPoll = usePoll<ManualOptionChoices>(
     isKotakConnected ? `/api/manual-options?symbol=${indexSymbol}` : null,
-    15000
+    2500
   )
 
   // Expiry selection
@@ -90,6 +91,9 @@ export function ManualTradingPage() {
   // Scalper Target & Stop Loss points
   const [slPts, setSlPts] = useState<number>(10)
   const [tpPts, setTpPts] = useState<number>(15)
+
+  // Simulation Toggle (Demo Mode to inspect Open Position HUD)
+  const [simulateOpen, setSimulateOpen] = useState(false)
 
   // Quotes
   const [cePrice, setCePrice] = useState<number | null>(null)
@@ -145,7 +149,7 @@ export function ManualTradingPage() {
     }
   }, [atmStrike, indexSymbol])
 
-  // Fetch Quotes for both CE and PE continuously
+  // Fetch Quotes for both CE and PE continuously in real-time
   useEffect(() => {
     if (!isKotakConnected || !currentExpiry || !strike) return
 
@@ -186,7 +190,7 @@ export function ManualTradingPage() {
     }
 
     void loadQuotes()
-    const timer = setInterval(() => void loadQuotes(), 2000)
+    const timer = setInterval(() => void loadQuotes(), 1500)
     return () => {
       cancelled = true
       clearInterval(timer)
@@ -212,6 +216,22 @@ export function ManualTradingPage() {
     open_count: openPositions.length,
     closed_count: closedPositions.length,
   }
+
+  // Active positions to display (Real or Simulated)
+  const displayPositions: OpenPosition[] = openPositions.length > 0
+    ? openPositions
+    : simulateOpen
+    ? [
+        {
+          symbol: `${indexSymbol} ${strike || atmStrike} CE`,
+          net_qty: totalQty,
+          buy_avg: cePrice || 142.5,
+          ltp: (cePrice || 142.5) + 13.5,
+          unrealized_pnl: Math.round(13.5 * totalQty),
+          is_demo: true,
+        },
+      ]
+    : []
 
   // 1-TAP INSTANT BUY ORDER
   async function hitOrder(optionType: "CE" | "PE") {
@@ -261,6 +281,12 @@ export function ManualTradingPage() {
 
   // 1-TAP INSTANT EXIT
   async function hitExit(pos: OpenPosition) {
+    if (pos.is_demo) {
+      setSimulateOpen(false)
+      toast.success("Demo Position Squared Off!", { description: "Simulation exited at market" })
+      return
+    }
+
     if (actionBusy) return
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate([40, 40])
@@ -286,6 +312,11 @@ export function ManualTradingPage() {
 
   // 1-TAP TRAIL TO BREAKEVEN
   async function moveToBreakeven(pos: OpenPosition) {
+    if (pos.is_demo) {
+      toast.success("Demo SL Moved to Breakeven!", { description: "Protected entry @ ₹" + (pos.buy_avg || 142.5).toFixed(1) })
+      return
+    }
+
     const entry = pos.buy_avg || pos.average_price || 0
     if (entry <= 0) return
     try {
@@ -304,97 +335,129 @@ export function ManualTradingPage() {
   }
 
   return (
-    <div className="flex flex-col w-full max-w-sm mx-auto p-2 gap-2.5 select-none text-foreground bg-background">
+    <div className="flex flex-col w-full max-w-sm mx-auto p-2.5 gap-3 select-none text-foreground bg-background">
       
-      {/* ─── 1. TOP HEADER HUD: INSTRUMENT / EXPIRY + BIG DAY P&L ─── */}
-      <div className="flex items-center justify-between gap-2 p-2 rounded-2xl bg-card border border-border/50 shadow-2xs">
-        {/* Left: Index Toggle + Spot + Expiry */}
-        <div className="flex flex-col gap-1.5">
-          <div className="flex items-center gap-1.5">
-            {/* [ NIFTY | SENSEX ] */}
-            <div className="flex bg-muted/70 p-0.5 rounded-xl border border-border/40">
-              <button
-                type="button"
-                onClick={() => {
-                  setIndexSymbol("NIFTY")
-                  setStrike("")
-                }}
-                className={cn(
-                  "px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer",
-                  indexSymbol === "NIFTY"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                NIFTY
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setIndexSymbol("SENSEX")
-                  setStrike("")
-                }}
-                className={cn(
-                  "px-2.5 py-1 rounded-lg text-xs font-bold font-mono transition-all cursor-pointer",
-                  indexSymbol === "SENSEX"
-                    ? "bg-background text-foreground shadow-xs"
-                    : "text-muted-foreground hover:text-foreground"
-                )}
-              >
-                SENSEX
-              </button>
-            </div>
-
-            {/* [ 23 Nov ▾ ] Expiry Pill */}
-            {expiries.length > 0 && (
-              <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
-                <SelectTrigger className="h-7 text-xs font-mono font-bold px-2 py-0 border-border/50 bg-muted/40 rounded-xl gap-1">
-                  <SelectValue placeholder="Expiry">
-                    {formatExpiryLabel(expiry)}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {expiries.map((exp, idx) => (
-                    <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs font-mono">
-                      {exp.expiry} {idx === 0 ? "★ Current" : idx === 1 ? "Next" : ""}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            )}
-          </div>
-
-          <div className="text-[11px] font-mono text-muted-foreground px-0.5">
-            Spot: <strong className="text-foreground">{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong>
-          </div>
-        </div>
-
-        {/* Right: BIG DAY'S P&L */}
-        <button
-          type="button"
-          onClick={() => setHistoryOpen(true)}
-          className="flex flex-col items-end justify-center px-2.5 py-1 rounded-xl bg-muted/30 border border-border/40 hover:bg-muted/50 active:scale-95 transition-all text-right cursor-pointer"
-          title="Click to view today's closed trades ledger"
-        >
-          <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold">
-            Day P&L {closedPositions.length > 0 ? `(${closedPositions.length})` : ""}
+      {/* ─── 1. TOPMOST HEADER: BIG DAY'S P&L + STATUS ACTIONS ─── */}
+      <div className="flex items-center justify-between p-3 rounded-2xl bg-card border border-border/50 shadow-2xs">
+        <div className="flex flex-col">
+          <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
+            DAY'S P&L {closedPositions.length > 0 ? `(${closedPositions.length} TRADES)` : ""}
           </span>
-          <span
+          <div
             className={cn(
-              "text-lg font-black font-mono leading-tight tracking-tight mt-0.5",
+              "text-2xl font-black font-mono tracking-tight mt-0.5",
               summary.net_pnl > 0 ? "text-emerald-500" : summary.net_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
             )}
           >
             {summary.net_pnl > 0 ? "+" : ""}
             {fmtRs(summary.net_pnl)}
-          </span>
-        </button>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <button
+            type="button"
+            onClick={() => setSimulateOpen((v) => !v)}
+            className={cn(
+              "text-[10px] font-mono px-2 py-1 rounded-lg border font-bold transition-all cursor-pointer",
+              simulateOpen
+                ? "bg-amber-500/20 text-amber-500 border-amber-500/40"
+                : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
+            )}
+            title="Toggle simulated open trade HUD to preview active card"
+          >
+            {simulateOpen ? "Hide Demo" : "👁️ Demo Trade"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setHistoryOpen(true)}
+            className="text-[10px] font-mono px-2 py-1 rounded-lg border border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground font-bold cursor-pointer"
+            title="View today's closed trades"
+          >
+            History
+          </button>
+        </div>
       </div>
 
-      {/* ─── 2. RUNNING TRADE FOCUS CARD (With One-Touch Exit) ─── */}
-      {openPositions.length > 0 && (
+      {/* ─── 2. BIGGER & BETTER NIFTY / SENSEX BUTTONS (With Real-Time Spot) ─── */}
+      <div className="flex flex-col gap-1.5">
+        <div className="grid grid-cols-2 gap-2">
+          {/* NIFTY Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIndexSymbol("NIFTY")
+              setStrike("")
+            }}
+            className={cn(
+              "p-3 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
+              indexSymbol === "NIFTY"
+                ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
+                : "bg-card border-border/50 hover:bg-muted/30"
+            )}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black font-mono">NIFTY 50</span>
+              <span className="text-[10px] text-muted-foreground font-mono font-bold">65 Q</span>
+            </div>
+            <div className="text-xl font-black font-mono mt-1 text-foreground flex items-baseline gap-1">
+              <span>{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 })}</span>
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+          </button>
+
+          {/* SENSEX Button */}
+          <button
+            type="button"
+            onClick={() => {
+              setIndexSymbol("SENSEX")
+              setStrike("")
+            }}
+            className={cn(
+              "p-3 rounded-2xl border transition-all text-left flex flex-col justify-between cursor-pointer",
+              indexSymbol === "SENSEX"
+                ? "bg-primary/10 border-primary shadow-xs ring-1 ring-primary/30"
+                : "bg-card border-border/50 hover:bg-muted/30"
+            )}
+          >
+            <div className="flex items-center justify-between w-full">
+              <span className="text-xs font-black font-mono">SENSEX</span>
+              <span className="text-[10px] text-muted-foreground font-mono font-bold">20 Q</span>
+            </div>
+            <div className="text-xl font-black font-mono mt-1 text-foreground flex items-baseline gap-1">
+              <span>{indexSymbol === "SENSEX" ? spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}</span>
+              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+          </button>
+        </div>
+
+        {/* Expiry Bar directly beneath index switcher */}
+        <div className="flex items-center justify-between px-1 text-xs font-mono text-muted-foreground">
+          <span>Weekly Expiry:</span>
+          {expiries.length > 0 && (
+            <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
+              <SelectTrigger className="h-7 text-xs font-mono font-bold px-2.5 py-0 border-border/50 bg-card rounded-xl gap-1">
+                <SelectValue placeholder="Expiry">
+                  {formatExpiryLabel(expiry)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {expiries.map((exp, idx) => (
+                  <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs font-mono">
+                    {exp.expiry} {idx === 0 ? "★ Current Weekly" : idx === 1 ? "Next Weekly" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+        </div>
+      </div>
+
+      {/* ─── 3. RUNNING TRADE FOCUS CARD (With One-Touch Exit) ─── */}
+      {displayPositions.length > 0 && (
         <div className="flex flex-col gap-2">
-          {openPositions.map((pos) => {
+          {displayPositions.map((pos) => {
             const isLong = pos.net_qty > 0
             const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
             const entryAvg = pos.buy_avg || pos.average_price || 0
@@ -405,7 +468,12 @@ export function ManualTradingPage() {
             return (
               <div
                 key={pos.symbol}
-                className="p-3 bg-card border-2 border-primary/70 rounded-2xl shadow-xl flex flex-col gap-2.5 animate-in fade-in"
+                className={cn(
+                  "p-3 rounded-2xl shadow-xl flex flex-col gap-2.5 transition-all border-2",
+                  pos.is_demo
+                    ? "bg-amber-500/5 border-amber-500/50"
+                    : "bg-card border-primary/70"
+                )}
               >
                 {/* Header: Position info + Trail BE */}
                 <div className="flex items-center justify-between">
@@ -415,6 +483,9 @@ export function ManualTradingPage() {
                     </span>
                     <span>{pos.symbol}</span>
                     <span className="text-[10px] text-muted-foreground font-normal">({Math.abs(pos.net_qty)} Q)</span>
+                    {pos.is_demo && (
+                      <span className="text-[8px] bg-amber-500/20 text-amber-500 px-1 rounded font-bold">DEMO</span>
+                    )}
                   </div>
 
                   <button
@@ -466,7 +537,7 @@ export function ManualTradingPage() {
         </div>
       )}
 
-      {/* ─── 3. STRIKE STEPPER ─── */}
+      {/* ─── 4. STRIKE STEPPER ─── */}
       <div className="flex flex-col gap-1 p-2.5 rounded-2xl bg-card border border-border/50 shadow-2xs">
         <div className="text-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
           STRIKE PRICE
@@ -503,65 +574,70 @@ export function ManualTradingPage() {
         </div>
       </div>
 
-      {/* ─── 4A. LOTS (IN ONE LINE) ─── */}
-      <div className="flex items-center justify-between p-2 rounded-2xl bg-card border border-border/50 shadow-2xs">
-        <div className="flex items-center gap-1.5">
+      {/* ─── 5. FULL ROW FOR LOTS PICKER ─── */}
+      <div className="flex flex-col gap-2 p-3 rounded-2xl bg-card border border-border/50 shadow-2xs">
+        <div className="flex items-center justify-between">
           <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
-            LOTS:
+            SELECT LOTS
           </span>
           <span className="text-xs font-mono font-bold text-foreground">
-            {totalQty} Qty
+            Total: <strong className="text-primary">{totalQty} Qty</strong>
           </span>
         </div>
 
-        {/* Stepper + Quick Lot Chips */}
-        <div className="flex items-center gap-1.5">
-          <button
+        <div className="flex items-center justify-between gap-3">
+          <Button
             type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
             onClick={() => setLots((l) => Math.max(1, l - 1))}
             disabled={lots <= 1}
-            className="size-7 rounded-lg bg-muted flex items-center justify-center active:scale-90 disabled:opacity-30 cursor-pointer"
           >
-            <Minus className="size-3.5" />
-          </button>
+            <Minus className="size-5" />
+          </Button>
 
-          <span className="w-7 text-center font-black font-mono text-xs">
-            {lots}L
-          </span>
-
-          <button
-            type="button"
-            onClick={() => setLots((l) => Math.min(20, l + 1))}
-            className="size-7 rounded-lg bg-muted flex items-center justify-center active:scale-90 cursor-pointer"
-          >
-            <Plus className="size-3.5" />
-          </button>
-
-          {/* Quick Lot Chips: 1L, 2L, 3L, 5L */}
-          <div className="flex items-center gap-1 ml-1 border-l border-border/40 pl-1.5">
-            {[1, 2, 3, 5].map((l) => (
-              <button
-                key={l}
-                type="button"
-                onClick={() => setLots(l)}
-                className={cn(
-                  "px-1.5 py-0.5 rounded-md text-[10px] font-mono border transition-all cursor-pointer",
-                  lots === l
-                    ? "bg-foreground text-background font-black border-foreground shadow-2xs"
-                    : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {l}L
-              </button>
-            ))}
+          <div className="text-center">
+            <div className="text-2xl font-black font-mono tracking-tight text-foreground">
+              {lots} {lots === 1 ? "Lot" : "Lots"}
+            </div>
           </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-11 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+            onClick={() => setLots((l) => Math.min(20, l + 1))}
+          >
+            <Plus className="size-5" />
+          </Button>
+        </div>
+
+        {/* Quick Lot Chips across the full row */}
+        <div className="grid grid-cols-5 gap-1.5 pt-1 border-t border-border/30">
+          {[1, 2, 3, 5, 10].map((l) => (
+            <button
+              key={l}
+              type="button"
+              onClick={() => setLots(l)}
+              className={cn(
+                "py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer text-center",
+                lots === l
+                  ? "bg-foreground text-background border-foreground shadow-xs"
+                  : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {l}L
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* ─── 4B. SL & TARGET (IN ANOTHER LINE — 2 EQUAL COLUMNS) ─── */}
+      {/* ─── 6. SL & TARGET (2 EQUAL COLUMNS) ─── */}
       <div className="grid grid-cols-2 gap-2">
         {/* Stop Loss (SL) */}
-        <div className="flex flex-col justify-between p-2 rounded-2xl bg-card border border-border/50 shadow-2xs">
+        <div className="flex flex-col justify-between p-2.5 rounded-2xl bg-card border border-border/50 shadow-2xs">
           <div className="flex items-center justify-between text-rose-500 font-bold text-[10px] uppercase tracking-wider">
             <span className="flex items-center gap-1">
               <Shield className="size-3" /> Stop Loss
@@ -570,7 +646,7 @@ export function ManualTradingPage() {
               {slPts > 0 ? `-${(slPts * totalQty).toFixed(0)} ₹` : "Off"}
             </span>
           </div>
-          <div className="relative flex items-center mt-1">
+          <div className="relative flex items-center mt-1.5">
             <Input
               type="number"
               min="0"
@@ -587,7 +663,7 @@ export function ManualTradingPage() {
         </div>
 
         {/* Target (TP) */}
-        <div className="flex flex-col justify-between p-2 rounded-2xl bg-card border border-border/50 shadow-2xs">
+        <div className="flex flex-col justify-between p-2.5 rounded-2xl bg-card border border-border/50 shadow-2xs">
           <div className="flex items-center justify-between text-emerald-500 font-bold text-[10px] uppercase tracking-wider">
             <span className="flex items-center gap-1">
               <Target className="size-3" /> Target
@@ -596,7 +672,7 @@ export function ManualTradingPage() {
               {tpPts > 0 ? `+${(tpPts * totalQty).toFixed(0)} ₹` : "Off"}
             </span>
           </div>
-          <div className="relative flex items-center mt-1">
+          <div className="relative flex items-center mt-1.5">
             <Input
               type="number"
               min="0"
@@ -613,7 +689,7 @@ export function ManualTradingPage() {
         </div>
       </div>
 
-      {/* ─── 5. EXECUTION ZONE: COST ABOVE + MEDIUM BUY BUTTONS ─── */}
+      {/* ─── 7. EXECUTION ZONE: COST ABOVE + MEDIUM BUY BUTTONS ─── */}
       <div className="flex flex-col gap-2 p-2.5 rounded-2xl bg-card border border-border/50 shadow-2xs">
         {/* Cost Cards Above */}
         <div className="grid grid-cols-2 gap-2 text-xs font-mono">
