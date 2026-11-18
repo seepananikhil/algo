@@ -1,3 +1,5 @@
 date,trade_num,stage,side,option,option_symbol,option_entry_price,option_exit_price,option_pnl_points,option_pnl_rupees,entry_time,entry_price,sl,final_sl,target,exit_time,exit_price,exit_reason,pnl_points,pnl_rupees,futures_pnl_rupees,diff_rupees,max_fav,max_adv,rr,lots,qty,vix_chg,initial_sl,base_lots,total_lots,pyramided
 2026-11-17,1,STAGE1_TREND,LONG,SENSEX 82400 CE (ATM),SENSEX26N1982400CE,410.8,0.0,210.0,8400.0,09:45,82351.29,,82631.29,,13:06,82631.29,RATCHET_LOCK,280.0,8400.0,6600.0,-1800.0,546.2,,3.3,,,-2.23,82251.29,1,2,True
 2026-11-17,1,STAGE1_TREND,LONG,SENSEX 25400 CE (ATM),,0.0,0.0,24.3,486.0,09:54,25380.6,,25340.6,,15:15,25413.0,EOD_RUNNER_1515,32.4,486.0,648.0,162.0,120.75,,0.27,,,-2.17,25260.6,1,1,False
+2026-11-18,1,STAGE1_TREND,SHORT,SENSEX 82200 PE (ATM),SENSEX26N1982200PE,410.8,0.0,11.25,450.0,09:39,82180.14,,82165.14,,09:52,82165.14,RATCHET_LOCK,15.0,450.0,600.0,150.0,200.5,,0.12,,,2.0,82300.14,2,2,False
+2026-11-18,2,REENTRY_EXPANSION,SHORT,SENSEX 81900 PE (ATM),SENSEX26N1981900PE,410.8,0.0,-22.5,-900.0,12:32,81941.61,,81971.61,,12:33,81971.61,STOP_LOSS,-30.0,-900.0,-1200.0,-300.0,0.99,,-1.0,,,1.93,81971.61,2,2,False
