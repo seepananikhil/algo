@@ -69,7 +69,12 @@ export function Layout() {
           isFixedViewport ? "h-[100dvh] max-h-[100dvh] overflow-hidden" : "min-h-screen"
         )}
       >
-        <header className="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b bg-background/80 px-3 py-1 backdrop-blur md:px-4">
+        <header
+          className={cn(
+            "sticky top-0 z-10 items-center gap-2 border-b bg-background/80 px-3 py-1 backdrop-blur md:px-4",
+            isTrade ? "hidden md:flex h-10 shrink-0" : "flex h-10 shrink-0"
+          )}
+        >
           <nav className="flex gap-1 md:hidden">
             {nav.map(({ to, icon: Icon, label }) => (
               <NavLink key={to} to={to} end={to === "/"} aria-label={label} className={({ isActive }) => cn("rounded-md p-1.5", isActive && "bg-muted")}>
