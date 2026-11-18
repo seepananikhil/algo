@@ -5,7 +5,6 @@ import {
   ArrowDownRight,
   Plus,
   Minus,
-  CheckCircle2,
   Clock,
   Download,
   Zap,
@@ -339,7 +338,7 @@ export function ManualTradingPage() {
   return (
     <div className="flex flex-col h-[100dvh] max-h-[100dvh] w-full max-w-md mx-auto p-3.5 justify-between select-none text-foreground bg-background overflow-hidden">
       
-      {/* ─── 1. MINIMAL TOP BAR (Index, Expiry, Live P&L) ─── */}
+      {/* ─── 1. TOP BAR: Index & Expiry + OVERALL DAY P&L ─── */}
       <div className="flex items-center justify-between gap-2 shrink-0">
         <div className="flex items-center gap-1.5">
           {/* Index Selector Toggle */}
@@ -395,20 +394,20 @@ export function ManualTradingPage() {
           )}
         </div>
 
-        {/* Live Net P&L (Tap to view trades) */}
+        {/* OVERALL DAY P&L (Total Realized + Unrealized across all trades today) */}
         <button
           type="button"
           onClick={() => setHistoryOpen(true)}
-          className="flex items-center gap-1.5 px-2 py-1 rounded-xl bg-muted/30 border border-border/40 hover:bg-muted/50 active:scale-95 transition-all text-right"
-          title="Click to view today's closed trades"
+          className="flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-muted/30 border border-border/40 hover:bg-muted/50 active:scale-95 transition-all text-right"
+          title="Click to view today's closed trades ledger"
         >
           <div className="flex flex-col items-end leading-none">
             <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-semibold">
-              Net P&L {closedPositions.length > 0 ? `(${closedPositions.length})` : ""}
+              Day P&L {closedPositions.length > 0 ? `(${closedPositions.length})` : ""}
             </span>
             <span
               className={cn(
-                "text-sm font-black font-mono",
+                "text-sm font-black font-mono mt-0.5",
                 summary.net_pnl > 0 ? "text-emerald-400" : summary.net_pnl < 0 ? "text-rose-400" : "text-muted-foreground"
               )}
             >
@@ -421,6 +420,7 @@ export function ManualTradingPage() {
               "size-2 rounded-full shrink-0",
               isKotakConnected ? "bg-emerald-500 animate-pulse" : "bg-red-500"
             )}
+            title={isKotakConnected ? "Kotak Live Connected" : "Kotak Disconnected"}
           />
         </button>
       </div>
@@ -441,55 +441,41 @@ export function ManualTradingPage() {
         )}
       </div>
 
-      {/* ─── 3. CLEAN STRIKE SELECTOR & OPTION RATES ─── */}
-      <div className="flex flex-col gap-1.5 p-3 rounded-2xl bg-card border border-border/50 shadow-sm shrink-0">
-        <div className="flex items-center justify-between">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-            onClick={() => stepStrike(-1)}
-          >
-            <Minus className="size-5" />
-          </Button>
+      {/* ─── 3. CLEAN STRIKE STEPPER (Only Strike & Stepper — No Cost Duplication!) ─── */}
+      <div className="flex items-center justify-between p-3 rounded-2xl bg-card border border-border/50 shadow-sm shrink-0">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-12 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+          onClick={() => stepStrike(-1)}
+        >
+          <Minus className="size-5" />
+        </Button>
 
-          <div className="text-center flex flex-col items-center">
-            <div className="text-3xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-2">
-              {strike || atmStrike}
-              {Number(strike) === atmStrike && (
-                <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">
-                  ATM
-                </span>
-              )}
-            </div>
-          </div>
-
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="size-11 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-            onClick={() => stepStrike(1)}
-          >
-            <Plus className="size-5" />
-          </Button>
-        </div>
-
-        {/* Live LTP & Cost Sub-Bar */}
-        <div className="flex items-center justify-between text-xs font-mono border-t border-border/40 pt-1.5 px-1">
-          <div className="text-emerald-400 font-bold">
-            CE: {cePrice != null ? `₹${cePrice.toFixed(1)}` : "…"}
-            {ceCost != null && <span className="text-muted-foreground text-[10px] font-normal ml-1">({fmtRs(ceCost)})</span>}
-          </div>
-          <span className="text-[10px] text-muted-foreground font-semibold">
-            {totalQty} Qty
+        <div className="text-center flex flex-col items-center">
+          <span className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider">
+            Strike Price
           </span>
-          <div className="text-rose-400 font-bold">
-            PE: {pePrice != null ? `₹${pePrice.toFixed(1)}` : "…"}
-            {peCost != null && <span className="text-muted-foreground text-[10px] font-normal ml-1">({fmtRs(peCost)})</span>}
+          <div className="text-3xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-2">
+            {strike || atmStrike}
+            {Number(strike) === atmStrike && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">
+                ATM
+              </span>
+            )}
           </div>
         </div>
+
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-12 rounded-xl bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
+          onClick={() => stepStrike(1)}
+        >
+          <Plus className="size-5" />
+        </Button>
       </div>
 
       {/* ─── 4. UNIFIED CONFIG STRIP (Lots, Stop Loss, Target) ─── */}
@@ -562,14 +548,14 @@ export function ManualTradingPage() {
         </div>
       </div>
 
-      {/* ─── 5. HERO 1-TAP SCALP PADS (Clean, Decisive, High-Impact) ─── */}
+      {/* ─── 5. HERO 1-TAP SCALP PADS (Holds Rate + Total Cost Cleanly) ─── */}
       <div className="grid grid-cols-2 gap-2.5 my-auto shrink-0">
         {/* BUY CALL */}
         <button
           type="button"
           disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
           onClick={() => hitOrder("CE")}
-          className="h-28 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3 flex flex-col justify-between text-left shadow-lg transition-transform"
+          className="h-32 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3.5 flex flex-col justify-between text-left shadow-lg transition-transform"
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-black tracking-wide flex items-center gap-0.5">
@@ -577,15 +563,15 @@ export function ManualTradingPage() {
               BUY CALL
               <ArrowUpRight className="size-3.5 stroke-[3]" />
             </span>
-            <span className="text-[10px] font-mono opacity-80">{strike} CE</span>
+            <span className="text-[11px] font-mono opacity-80 font-bold">{strike} CE</span>
           </div>
 
           <div>
-            <div className="text-2xl font-black font-mono leading-none tracking-tight">
+            <div className="text-3xl font-black font-mono leading-none tracking-tight">
               {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
             </div>
-            <div className="text-[11px] font-mono mt-1 font-semibold opacity-90">
-              Cost: {ceCost != null ? fmtRs(ceCost) : "—"}
+            <div className="text-xs font-mono mt-1.5 font-bold opacity-90">
+              Cost: {ceCost != null ? fmtRs(ceCost) : "—"} <span className="opacity-70 font-normal">({totalQty}Q)</span>
             </div>
           </div>
         </button>
@@ -595,7 +581,7 @@ export function ManualTradingPage() {
           type="button"
           disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
           onClick={() => hitOrder("PE")}
-          className="h-28 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3 flex flex-col justify-between text-left shadow-lg transition-transform"
+          className="h-32 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3.5 flex flex-col justify-between text-left shadow-lg transition-transform"
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-black tracking-wide flex items-center gap-0.5">
@@ -603,94 +589,91 @@ export function ManualTradingPage() {
               BUY PUT
               <ArrowDownRight className="size-3.5 stroke-[3]" />
             </span>
-            <span className="text-[10px] font-mono opacity-80">{strike} PE</span>
+            <span className="text-[11px] font-mono opacity-80 font-bold">{strike} PE</span>
           </div>
 
           <div>
-            <div className="text-2xl font-black font-mono leading-none tracking-tight">
+            <div className="text-3xl font-black font-mono leading-none tracking-tight">
               {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
             </div>
-            <div className="text-[11px] font-mono mt-1 font-semibold opacity-90">
-              Cost: {peCost != null ? fmtRs(peCost) : "—"}
+            <div className="text-xs font-mono mt-1.5 font-bold opacity-90">
+              Cost: {peCost != null ? fmtRs(peCost) : "—"} <span className="opacity-70 font-normal">({totalQty}Q)</span>
             </div>
           </div>
         </button>
       </div>
 
-      {/* ─── 6. ACTIVE POSITION / STATUS (Smart bottom area) ─── */}
-      <div className="shrink-0 pt-1">
-        {openPositions.length === 0 ? (
-          <div className="flex items-center justify-center gap-1.5 py-1.5 text-[10px] text-muted-foreground font-mono">
-            <CheckCircle2 className="size-3 text-emerald-500" />
-            <span>Flat · Ready to Scalp · ₹0 Brokerage</span>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-1.5">
-            {openPositions.map((pos) => {
-              const isLong = pos.net_qty > 0
-              const currentPnl = pos.unrealized_pnl ?? pos.pnl ?? 0
-              const entryAvg = pos.buy_avg || pos.average_price || 0
-              const ltp = pos.ltp || pos.last_price || 0
-              const pnlPercent = entryAvg > 0 ? ((ltp - entryAvg) / entryAvg) * 100 * (isLong ? 1 : -1) : 0
+      {/* ─── 6. ACTIVE TRADE CARD (Only shown when holding an open position; Flat renders NOTHING!) ─── */}
+      {openPositions.length > 0 && (
+        <div className="flex flex-col gap-1.5 shrink-0 pt-1">
+          {openPositions.map((pos) => {
+            const isLong = pos.net_qty > 0
+            const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
+            const entryAvg = pos.buy_avg || pos.average_price || 0
+            const ltp = pos.ltp || pos.last_price || 0
+            const pnlPercent = entryAvg > 0 ? ((ltp - entryAvg) / entryAvg) * 100 * (isLong ? 1 : -1) : 0
+            const ptsDiff = isLong ? ltp - entryAvg : entryAvg - ltp
 
-              return (
-                <div
-                  key={pos.symbol}
-                  className="p-2.5 bg-card border-2 border-primary/60 rounded-2xl shadow-lg flex items-center justify-between gap-2"
-                >
-                  <div className="flex flex-col">
-                    <div className="flex items-center gap-1 text-xs font-black font-mono text-foreground">
-                      <span className={cn("text-[9px] px-1 rounded font-black", isLong ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400")}>
-                        {isLong ? "LONG" : "SHORT"}
-                      </span>
-                      {pos.symbol}
-                    </div>
-                    <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                      {Math.abs(pos.net_qty)}Q · In: ₹{entryAvg.toFixed(1)} → Now: ₹{ltp.toFixed(1)}
-                    </div>
-                    <div className="flex items-center gap-1 mt-1">
-                      <button
-                        type="button"
-                        onClick={() => moveToBreakeven(pos)}
-                        className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-1.5 py-0.5 rounded-md hover:bg-amber-500/20"
-                      >
-                        ⚡ Trail BE
-                      </button>
-                    </div>
+            return (
+              <div
+                key={pos.symbol}
+                className="p-3 bg-card border-2 border-primary/70 rounded-2xl shadow-xl flex items-center justify-between gap-2"
+              >
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5 text-xs font-black font-mono text-foreground">
+                    <span className={cn("text-[9px] px-1.5 py-0.2 rounded font-black", isLong ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400")}>
+                      {isLong ? "LONG" : "SHORT"}
+                    </span>
+                    {pos.symbol}
                   </div>
-
-                  <div className="flex items-center gap-2">
-                    <div className="text-right">
-                      <div
-                        className={cn(
-                          "text-base font-black font-mono tracking-tight",
-                          currentPnl > 0 ? "text-emerald-500" : currentPnl < 0 ? "text-rose-500" : "text-muted-foreground"
-                        )}
-                      >
-                        {currentPnl > 0 ? "+" : ""}
-                        {fmtRs(currentPnl)}
-                      </div>
-                      <div className="text-[10px] font-mono font-bold text-muted-foreground">
-                        {pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%
-                      </div>
-                    </div>
-
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={actionBusy}
-                      className="h-10 text-xs font-black px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md"
-                      onClick={() => hitExit(pos)}
+                  <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                    {Math.abs(pos.net_qty)}Q · In: ₹{entryAvg.toFixed(1)} → LTP: ₹{ltp.toFixed(1)}
+                  </div>
+                  <div className="flex items-center gap-1 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => moveToBreakeven(pos)}
+                      className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md hover:bg-amber-500/20 active:scale-95"
                     >
-                      EXIT
-                    </Button>
+                      ⚡ Trail BE
+                    </button>
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        )}
-      </div>
+
+                <div className="flex items-center gap-2.5">
+                  <div className="text-right">
+                    <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider leading-none">
+                      Trade P&L
+                    </div>
+                    <div
+                      className={cn(
+                        "text-lg font-black font-mono tracking-tight",
+                        tradePnl > 0 ? "text-emerald-400" : tradePnl < 0 ? "text-rose-400" : "text-muted-foreground"
+                      )}
+                    >
+                      {tradePnl > 0 ? "+" : ""}
+                      {fmtRs(tradePnl)}
+                    </div>
+                    <div className="text-[10px] font-mono font-bold text-muted-foreground">
+                      {ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt ({pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%)
+                    </div>
+                  </div>
+
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    disabled={actionBusy}
+                    className="h-11 text-xs font-black px-4 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md"
+                    onClick={() => hitExit(pos)}
+                  >
+                    EXIT
+                  </Button>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
 
       {/* ─── 7. TODAY'S COMPLETED TRADES MODAL ─── */}
       <Dialog open={historyOpen} onOpenChange={setHistoryOpen}>
@@ -698,7 +681,7 @@ export function ManualTradingPage() {
           <DialogHeader>
             <DialogTitle className="text-sm font-bold flex items-center justify-between">
               <span className="flex items-center gap-1.5">
-                <Clock className="size-3.5 text-muted-foreground" /> Today's Trades
+                <Clock className="size-3.5 text-muted-foreground" /> Today's Closed Trades
               </span>
               <span className={cn("text-xs font-black font-mono", pnlClass(summary.realized_pnl))}>
                 {summary.realized_pnl > 0 ? "+" : ""}{fmtRs(summary.realized_pnl)}
