@@ -5705,10 +5705,11 @@ class Handler(BaseHTTPRequestHandler):
             from swinger_engine import load_config
             return self._json(load_config())
         elif url.path == "/api/swinger/candles":
-            from swinger_engine import get_stock_candles, get_stock_trade_context
-            sym = q.get("symbol", [""])[0]
-            if not sym:
+            from swinger_engine import get_stock_candles, get_stock_trade_context, resolve_symbol
+            raw_sym = q.get("symbol", [""])[0]
+            if not raw_sym:
                 return self._json({"error": "symbol required"}, 400)
+            sym = resolve_symbol(raw_sym)
             from_dt = q.get("from", [None])[0]
             to_dt = q.get("to", [None])[0]
             stock_candles = get_stock_candles(sym, from_dt, to_dt)
@@ -5716,6 +5717,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({
                 "ok": True,
                 "symbol": sym,
+                "requested_symbol": raw_sym,
                 "candles": stock_candles,
                 "radar_triggers": ctx["radar_triggers"],
                 "first_radar_date": ctx["first_radar_date"],
@@ -5724,12 +5726,12 @@ class Handler(BaseHTTPRequestHandler):
                 "radar_info": ctx["radar_info"],
                 "market_cap_cr": ctx.get("market_cap_cr")
             })
-        elif url.path == "/api/swinger/backtest-stock":
+        elif url.path in ["/api/swinger/backtest-stock", "/api/swinger/backtest"]:
             from swinger_engine import backtest_single_stock
-            sym = q.get("symbol", [""])[0]
-            if not sym:
+            raw_sym = q.get("symbol", [""])[0]
+            if not raw_sym:
                 return self._json({"error": "symbol required"}, 400)
-            res = backtest_single_stock(sym)
+            res = backtest_single_stock(raw_sym)
             return self._json(res)
 
         if not self._is_authenticated():

@@ -1,6 +1,78 @@
 {
   "positions": [
     {
+      "symbol": "PRINCEPIPE",
+      "name": "PRINCEPIPE",
+      "leg": 1,
+      "strategy_leg": "LEG1_PHOENIX_BREAKOUT",
+      "entry_date": "2026-05-19",
+      "entry_price": 268.21,
+      "avg_price": 268.21,
+      "cmp": 315.5,
+      "shares": 93,
+      "initial_qty": 93,
+      "current_qty": 93,
+      "invested": 24943.35,
+      "initial_sl_pct": -15.0,
+      "sl_price": 269.55,
+      "be_active": true,
+      "be_trigger_price": 308.44,
+      "tp_hit": false,
+      "tp_target_price": 348.67,
+      "runner_mode": false,
+      "peak_price": 325.9,
+      "highest_close": 318.25,
+      "peak_gain_pct": 18.7,
+      "pnl": 4397.97,
+      "pnl_pct": 17.63,
+      "unrealized_pnl": 4397.97,
+      "unrealized_pnl_pct": 17.63,
+      "days_held": 119,
+      "bars_held": 119,
+      "unrealized_pct": 17.63,
+      "ema20": 253.83,
+      "ema50": 251.02,
+      "runner_trail_sl": 227.98,
+      "breakout_candle_gain": 6.4,
+      "entry_type": "DIRECT_BREAKOUT"
+    },
+    {
+      "symbol": "COHANCE",
+      "name": "COHANCE",
+      "leg": 1,
+      "strategy_leg": "LEG1_PHOENIX_BREAKOUT",
+      "entry_date": "2026-08-20",
+      "entry_price": 475.55,
+      "avg_price": 475.55,
+      "cmp": 443.65,
+      "shares": 52,
+      "initial_qty": 52,
+      "current_qty": 52,
+      "invested": 24728.6,
+      "initial_sl_pct": -15.0,
+      "sl_price": 404.22,
+      "be_active": false,
+      "be_trigger_price": 546.88,
+      "tp_hit": false,
+      "tp_target_price": 618.21,
+      "runner_mode": false,
+      "peak_price": 493.05,
+      "highest_close": 481.35,
+      "peak_gain_pct": 1.2,
+      "pnl": -1658.8,
+      "pnl_pct": -6.71,
+      "unrealized_pnl": -1658.8,
+      "unrealized_pnl_pct": -6.71,
+      "days_held": 54,
+      "bars_held": 54,
+      "unrealized_pct": -6.71,
+      "ema20": 444.93,
+      "ema50": 437.6,
+      "runner_trail_sl": 404.22,
+      "breakout_candle_gain": 6.4,
+      "entry_type": "DIRECT_BREAKOUT"
+    },
+    {
       "symbol": "CHEMPLASTS",
       "name": "CHEMPLASTS",
       "leg": 1,
@@ -32,75 +104,9 @@
       "unrealized_pct": 19.71,
       "ema20": 177.48,
       "ema50": 185.06,
-      "runner_trail_sl": 168.87
-    },
-    {
-      "symbol": "IRCON",
-      "name": "IRCON",
-      "leg": 1,
-      "strategy_leg": "LEG1_PHOENIX_RETRACEMENT",
-      "entry_date": "2026-10-01",
-      "entry_price": 110.25,
-      "avg_price": 110.25,
-      "cmp": 111.36,
-      "shares": 226,
-      "initial_qty": 226,
-      "current_qty": 226,
-      "invested": 24916.5,
-      "initial_sl_pct": -15.0,
-      "sl_price": 93.71,
-      "be_active": false,
-      "be_trigger_price": 126.79,
-      "tp_hit": false,
-      "tp_target_price": 143.33,
-      "runner_mode": false,
-      "peak_price": 111.9,
-      "highest_close": 111.36,
-      "peak_gain_pct": 1.0,
-      "pnl": 250.86,
-      "pnl_pct": 1.01,
-      "unrealized_pnl": 250.86,
-      "unrealized_pnl_pct": 1.01,
-      "days_held": 25,
-      "bars_held": 25,
-      "unrealized_pct": 1.01,
-      "ema20": 111.6,
-      "ema50": 118.35,
-      "runner_trail_sl": 93.71
-    },
-    {
-      "symbol": "WHIRLPOOL",
-      "name": "WHIRLPOOL",
-      "leg": 1,
-      "strategy_leg": "LEG1_PHOENIX_RETRACEMENT",
-      "entry_date": "2026-10-07",
-      "entry_price": 808.53,
-      "avg_price": 808.53,
-      "cmp": 837.7,
-      "shares": 30,
-      "initial_qty": 30,
-      "current_qty": 30,
-      "invested": 24255.9,
-      "initial_sl_pct": -15.0,
-      "sl_price": 687.25,
-      "be_active": false,
-      "be_trigger_price": 929.81,
-      "tp_hit": false,
-      "tp_target_price": 1051.09,
-      "runner_mode": false,
-      "peak_price": 888.0,
-      "highest_close": 850.15,
-      "peak_gain_pct": 5.1,
-      "pnl": 875.1,
-      "pnl_pct": 3.61,
-      "unrealized_pnl": 875.1,
-      "unrealized_pnl_pct": 3.61,
-      "days_held": 22,
-      "bars_held": 22,
-      "unrealized_pct": 3.61,
-      "ema20": 834.03,
-      "ema50": 812.45,
-      "runner_trail_sl": 687.25
+      "runner_trail_sl": 168.87,
+      "breakout_candle_gain": 9.7,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "BSOFT",
@@ -134,7 +140,9 @@
       "unrealized_pct": 11.98,
       "ema20": 280.47,
       "ema50": 288.13,
-      "runner_trail_sl": 252.24
+      "runner_trail_sl": 252.24,
+      "breakout_candle_gain": 8.8,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "TATAELXSI",
@@ -168,7 +176,9 @@
       "unrealized_pct": 13.52,
       "ema20": 3239.55,
       "ema50": 3412.82,
-      "runner_trail_sl": 2912.69
+      "runner_trail_sl": 2912.69,
+      "breakout_candle_gain": 5.2,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "JAIBALAJI",
@@ -202,7 +212,9 @@
       "unrealized_pct": -4.58,
       "ema20": 65.83,
       "ema50": 66.06,
-      "runner_trail_sl": 58.96
+      "runner_trail_sl": 58.96,
+      "breakout_candle_gain": 5.9,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "KITEX",
@@ -236,7 +248,9 @@
       "unrealized_pct": 8.13,
       "ema20": 118.49,
       "ema50": 125.26,
-      "runner_trail_sl": 103.87
+      "runner_trail_sl": 103.87,
+      "breakout_candle_gain": 5.2,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "KPITTECH",
@@ -270,7 +284,9 @@
       "unrealized_pct": -2.28,
       "ema20": 518.17,
       "ema50": 548.86,
-      "runner_trail_sl": 471.75
+      "runner_trail_sl": 471.75,
+      "breakout_candle_gain": 5.5,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "BATAINDIA",
@@ -304,7 +320,9 @@
       "unrealized_pct": -3.49,
       "ema20": 631.47,
       "ema50": 642.93,
-      "runner_trail_sl": 563.04
+      "runner_trail_sl": 563.04,
+      "breakout_candle_gain": 6.1,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "PATELENG",
@@ -338,41 +356,9 @@
       "unrealized_pct": -0.95,
       "ema20": 24.21,
       "ema50": 25.53,
-      "runner_trail_sl": 21.47
-    },
-    {
-      "symbol": "PRINCEPIPE",
-      "name": "PRINCEPIPE",
-      "leg": 1,
-      "strategy_leg": "LEG1_PHOENIX_BREAKOUT",
-      "entry_date": "2026-11-04",
-      "entry_price": 297.75,
-      "avg_price": 297.75,
-      "cmp": 315.5,
-      "shares": 83,
-      "initial_qty": 83,
-      "current_qty": 83,
-      "invested": 24713.25,
-      "initial_sl_pct": -15.0,
-      "sl_price": 253.09,
-      "be_active": false,
-      "be_trigger_price": 342.41,
-      "tp_hit": false,
-      "tp_target_price": 387.07,
-      "runner_mode": false,
-      "peak_price": 325.9,
-      "highest_close": 318.25,
-      "peak_gain_pct": 6.9,
-      "pnl": 1473.25,
-      "pnl_pct": 5.96,
-      "unrealized_pnl": 1473.25,
-      "unrealized_pnl_pct": 5.96,
-      "days_held": 3,
-      "bars_held": 3,
-      "unrealized_pct": 5.96,
-      "ema20": 266.62,
-      "ema50": 267.13,
-      "runner_trail_sl": 253.09
+      "runner_trail_sl": 21.47,
+      "breakout_candle_gain": 7.1,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "JYOTHYLAB",
@@ -406,7 +392,9 @@
       "unrealized_pct": 1.74,
       "ema20": 184.72,
       "ema50": 189.49,
-      "runner_trail_sl": 169.34
+      "runner_trail_sl": 169.34,
+      "breakout_candle_gain": 5.9,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "NACLIND",
@@ -440,7 +428,9 @@
       "unrealized_pct": -10.18,
       "ema20": 123.83,
       "ema50": 138.16,
-      "runner_trail_sl": 114.08
+      "runner_trail_sl": 114.08,
+      "breakout_candle_gain": 6.3,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "THOMASCOOK",
@@ -474,7 +464,9 @@
       "unrealized_pct": 1.07,
       "ema20": 94.35,
       "ema50": 98.52,
-      "runner_trail_sl": 85.24
+      "runner_trail_sl": 85.24,
+      "breakout_candle_gain": 5.4,
+      "entry_type": "DIRECT_BREAKOUT"
     },
     {
       "symbol": "SONATSOFTW",
@@ -508,11 +500,13 @@
       "unrealized_pct": 0.0,
       "ema20": 240.06,
       "ema50": 255.51,
-      "runner_trail_sl": 217.66
+      "runner_trail_sl": 217.66,
+      "breakout_candle_gain": 6.9,
+      "entry_type": "DIRECT_BREAKOUT"
     }
   ],
-  "total_open": 15,
-  "total_invested": 371675.31,
-  "total_unrealized_pnl": 11099.99,
-  "last_updated": "2026-11-17T22:59:39.120338+05:30"
+  "total_open": 14,
+  "total_invested": 347461.61,
+  "total_unrealized_pnl": 11239.95,
+  "last_updated": "2026-11-18T00:04:09.340202+05:30"
 }
