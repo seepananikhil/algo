@@ -30,12 +30,14 @@ export function Layout() {
   const dark = resolvedTheme !== "light"
   const location = useLocation()
   const isLive = location.pathname === "/"
+  const isTrade = location.pathname === "/trade" || location.pathname === "/manual" || location.pathname === "/mobile"
+  const isFixedViewport = isLive || isTrade
 
   return (
     <div
       className={cn(
         "flex bg-background text-foreground",
-        isLive ? "h-screen max-h-screen overflow-hidden" : "min-h-screen"
+        isFixedViewport ? "h-[100dvh] max-h-[100dvh] overflow-hidden" : "min-h-screen"
       )}
     >
       <aside className="sticky top-0 hidden h-screen w-16 shrink-0 flex-col items-center border-r bg-sidebar py-3 md:flex">
@@ -64,7 +66,7 @@ export function Layout() {
       <div
         className={cn(
           "flex min-w-0 flex-1 flex-col",
-          isLive ? "h-screen max-h-screen overflow-hidden" : "min-h-screen"
+          isFixedViewport ? "h-[100dvh] max-h-[100dvh] overflow-hidden" : "min-h-screen"
         )}
       >
         <header className="sticky top-0 z-10 flex h-10 shrink-0 items-center gap-2 border-b bg-background/80 px-3 py-1 backdrop-blur md:px-4">
@@ -157,8 +159,8 @@ export function Layout() {
         </header>
         <main
           className={cn(
-            "flex-1 p-2 sm:p-2.5 flex flex-col",
-            isLive ? "min-h-0 overflow-hidden p-0" : "min-h-0 overflow-y-auto"
+            "flex-1 flex flex-col min-h-0",
+            isLive ? "overflow-hidden p-0" : isFixedViewport ? "overflow-hidden p-1 sm:p-2" : "overflow-y-auto p-2 sm:p-2.5"
           )}
         >
           <Outlet />

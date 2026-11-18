@@ -74,8 +74,6 @@ interface PositionsResponse {
     net_pnl: number
     open_count: number
     closed_count: number
-    total_invested?: number
-    current_value?: number
   }
 }
 
@@ -176,7 +174,6 @@ export function ManualTradingPage() {
     if (!strikes?.length) return
     const currentAtm = optionsPoll.data?.atm ?? (indexSymbol === "SENSEX" ? 82000 : 25250)
     if (!strike || !strikes.includes(Number(strike))) {
-      // Find closest strike to ATM
       let closest = strikes[0]
       let minDiff = Math.abs(closest - currentAtm)
       for (const s of strikes) {
@@ -322,7 +319,6 @@ export function ManualTradingPage() {
       })
       setConfirmOpen(false)
       setPendingOrder(null)
-      // Switch tab to positions to see live trade
       setActiveTab("positions")
       await reloadAll()
     } catch (err: any) {
@@ -380,153 +376,122 @@ export function ManualTradingPage() {
   }
 
   return (
-    <div className="flex flex-col gap-3 max-w-2xl mx-auto w-full pb-20 px-2 sm:px-4 pt-1">
-      {/* 1. Header Card: Funds & Live Today P&L */}
-      <Card className="border border-border/80 bg-gradient-to-br from-card via-card to-muted/20 shadow-sm overflow-hidden">
-        <CardContent className="p-3 sm:p-4">
-          <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2.5 mb-2.5">
-            <div className="flex items-center gap-2">
-              <div className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span className="text-xs font-semibold tracking-wide text-foreground flex items-center gap-1.5">
-                ⚡ Quick Trade
-                <Badge variant="outline" className="text-[10px] py-0 px-1.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
-                  ₹0 Brokerage (API)
-                </Badge>
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <Button
-                variant="ghost"
-                size="icon"
-                className="size-7 text-muted-foreground hover:text-foreground"
-                onClick={() => void reloadAll()}
-                title="Refresh"
-              >
-                <RefreshCw className={cn("size-3.5", (positionsPoll.loading || fundsPoll.loading) && "animate-spin")} />
-              </Button>
-            </div>
+    <div className="flex flex-col h-full max-h-full w-full max-w-md mx-auto overflow-hidden justify-between p-1 sm:p-2 select-none">
+      {/* 1. Ultra-Compact Top Summary Bar */}
+      <div className="shrink-0 flex items-center justify-between bg-card/90 border border-border/80 rounded-xl px-2.5 py-1.5 shadow-2xs backdrop-blur-xs mb-1.5">
+        <div className="flex items-center gap-1.5">
+          <Wallet className="size-3.5 text-primary" />
+          <div className="flex flex-col leading-none">
+            <span className="text-[9px] text-muted-foreground uppercase font-semibold">Margin</span>
+            <span className="text-xs font-bold font-mono text-foreground">
+              {availableFunds != null ? fmtRs(availableFunds) : "₹37,258"}
+            </span>
           </div>
+        </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            {/* Available Funds */}
-            <div className="flex flex-col">
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                <Wallet className="size-3 text-primary" /> Margin Available
-              </span>
-              <span className="text-base sm:text-lg font-bold font-mono tracking-tight text-foreground">
-                {availableFunds != null ? fmtRs(availableFunds) : "₹37,258.12"}
-              </span>
-            </div>
+        <div className="flex items-center gap-1">
+          <Badge variant="outline" className="text-[9px] py-0 px-1.5 bg-emerald-500/10 text-emerald-400 border-emerald-500/30">
+            ₹0 Brokerage
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-6 text-muted-foreground hover:text-foreground"
+            onClick={() => void reloadAll()}
+            title="Refresh"
+          >
+            <RefreshCw className={cn("size-3", (positionsPoll.loading || fundsPoll.loading) && "animate-spin")} />
+          </Button>
+        </div>
 
-            {/* Today Net P&L */}
-            <div className="flex flex-col items-end text-right">
-              <span className="text-[11px] text-muted-foreground flex items-center gap-1">
-                Today's Net P&L
-              </span>
-              <div className="flex items-baseline gap-1">
-                <span
-                  className={cn(
-                    "text-base sm:text-lg font-extrabold font-mono tracking-tight",
-                    summary.net_pnl > 0
-                      ? "text-emerald-500"
-                      : summary.net_pnl < 0
-                      ? "text-rose-500"
-                      : "text-muted-foreground"
-                  )}
-                >
-                  {summary.net_pnl > 0 ? "+" : ""}
-                  {fmtRs(summary.net_pnl)}
-                </span>
-                {summary.net_pnl !== 0 && (
-                  <span className="text-[10px] text-muted-foreground">
-                    ({summary.unrealized_pnl !== 0 ? `Unrl: ${fmtRs(summary.unrealized_pnl)}` : "Realized"})
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        <div className="flex flex-col items-end leading-none">
+          <span className="text-[9px] text-muted-foreground uppercase font-semibold">Today P&L</span>
+          <span
+            className={cn(
+              "text-xs font-extrabold font-mono",
+              summary.net_pnl > 0 ? "text-emerald-500" : summary.net_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
+            )}
+          >
+            {summary.net_pnl > 0 ? "+" : ""}
+            {fmtRs(summary.net_pnl)}
+          </span>
+        </div>
+      </div>
 
-      {/* 2. Main Mobile Tabs Switcher */}
-      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="w-full">
-        <TabsList className="grid grid-cols-3 w-full bg-muted/60 p-1 rounded-xl h-10">
-          <TabsTrigger value="trade" className="text-xs font-semibold rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs">
-            <Zap className="size-3.5 mr-1 text-amber-500" />
+      {/* 2. Compact Mobile Navigation Tabs */}
+      <Tabs value={activeTab} onValueChange={(val) => setActiveTab(val as any)} className="w-full shrink-0 mb-1.5">
+        <TabsList className="grid grid-cols-3 w-full bg-muted/60 p-0.5 rounded-lg h-7">
+          <TabsTrigger value="trade" className="text-[11px] font-semibold py-0.5 rounded-md data-[state=active]:bg-background">
+            <Zap className="size-3 mr-1 text-amber-500" />
             Trade
           </TabsTrigger>
-          <TabsTrigger value="positions" className="text-xs font-semibold rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs relative">
-            <TrendingUp className="size-3.5 mr-1 text-primary" />
+          <TabsTrigger value="positions" className="text-[11px] font-semibold py-0.5 rounded-md data-[state=active]:bg-background relative">
+            <TrendingUp className="size-3 mr-1 text-primary" />
             Positions
             {openPositions.length > 0 && (
-              <span className="ml-1 px-1.5 py-0.2 rounded-full text-[10px] font-bold bg-primary text-primary-foreground">
+              <span className="ml-1 px-1 py-0 rounded-full text-[9px] font-bold bg-primary text-primary-foreground">
                 {openPositions.length}
               </span>
             )}
           </TabsTrigger>
-          <TabsTrigger value="history" className="text-xs font-semibold rounded-lg data-[state=active]:bg-background data-[state=active]:shadow-xs">
-            <Clock className="size-3.5 mr-1 text-muted-foreground" />
+          <TabsTrigger value="history" className="text-[11px] font-semibold py-0.5 rounded-md data-[state=active]:bg-background">
+            <Clock className="size-3 mr-1 text-muted-foreground" />
             History ({closedPositions.length})
           </TabsTrigger>
         </TabsList>
       </Tabs>
 
-      {/* ================= TAB 1: QUICK TRADE ================= */}
+      {/* ================= TAB 1: QUICK TRADE (ZERO-SCROLL FIT) ================= */}
       {activeTab === "trade" && (
-        <div className="flex flex-col gap-3">
-          {/* Index Switcher & Spot Display */}
-          <Card className="border border-border/70 bg-card">
-            <CardContent className="p-3 sm:p-4 flex flex-col gap-3">
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={indexSymbol === "NIFTY" ? "default" : "outline"}
-                  className={cn(
-                    "h-12 flex flex-col items-center justify-center rounded-xl transition-all",
-                    indexSymbol === "NIFTY" ? "bg-primary text-primary-foreground shadow-md font-bold" : "border-border/80"
-                  )}
-                  onClick={() => {
-                    setIndexSymbol("NIFTY")
-                    setStrike("")
-                  }}
-                >
-                  <span className="text-xs font-bold tracking-wide">NIFTY 50</span>
-                  <span className="text-[10px] opacity-80 font-mono">1 Lot = 65 Qty</span>
-                </Button>
+        <div className="flex-1 flex flex-col min-h-0 justify-between gap-1.5">
+          {/* Top Panel: Instrument, Expiry, Strike & Lots */}
+          <Card className="border border-border/80 bg-card/95 shadow-2xs shrink-0">
+            <CardContent className="p-2 sm:p-2.5 flex flex-col gap-1.5">
+              {/* Row 1: Index Switcher & Expiry */}
+              <div className="flex items-center justify-between gap-1.5">
+                <div className="grid grid-cols-2 gap-1 flex-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIndexSymbol("NIFTY")
+                      setStrike("")
+                    }}
+                    className={cn(
+                      "py-1 px-2 rounded-lg text-left transition-all border",
+                      indexSymbol === "NIFTY"
+                        ? "bg-primary text-primary-foreground font-bold border-primary shadow-xs"
+                        : "bg-muted/40 border-border/60 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    <div className="text-[11px] font-bold leading-tight">NIFTY 50</div>
+                    <div className="text-[9px] font-mono opacity-80 leading-tight">
+                      {spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })} · 65Q
+                    </div>
+                  </button>
 
-                <Button
-                  type="button"
-                  variant={indexSymbol === "SENSEX" ? "default" : "outline"}
-                  className={cn(
-                    "h-12 flex flex-col items-center justify-center rounded-xl transition-all",
-                    indexSymbol === "SENSEX" ? "bg-primary text-primary-foreground shadow-md font-bold" : "border-border/80"
-                  )}
-                  onClick={() => {
-                    setIndexSymbol("SENSEX")
-                    setStrike("")
-                  }}
-                >
-                  <span className="text-xs font-bold tracking-wide">SENSEX</span>
-                  <span className="text-[10px] opacity-80 font-mono">1 Lot = 20 Qty</span>
-                </Button>
-              </div>
-
-              {/* Spot Price & Expiry */}
-              <div className="flex items-center justify-between bg-muted/40 rounded-lg p-2.5 text-xs">
-                <div>
-                  <span className="text-[10px] text-muted-foreground uppercase font-medium">Spot Price</span>
-                  <div className="text-sm font-bold font-mono text-foreground flex items-center gap-1.5">
-                    {spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 1 })}
-                    <span className="text-[10px] font-semibold text-muted-foreground">
-                      (ATM: {atmStrike.toLocaleString("en-IN")})
-                    </span>
-                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIndexSymbol("SENSEX")
+                      setStrike("")
+                    }}
+                    className={cn(
+                      "py-1 px-2 rounded-lg text-left transition-all border",
+                      indexSymbol === "SENSEX"
+                        ? "bg-primary text-primary-foreground font-bold border-primary shadow-xs"
+                        : "bg-muted/40 border-border/60 text-muted-foreground hover:bg-muted"
+                    )}
+                  >
+                    <div className="text-[11px] font-bold leading-tight">SENSEX</div>
+                    <div className="text-[9px] font-mono opacity-80 leading-tight">
+                      {indexSymbol === "SENSEX" ? spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "82,032"} · 20Q
+                    </div>
+                  </button>
                 </div>
 
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] text-muted-foreground uppercase font-medium">Expiry</span>
+                <div className="shrink-0">
                   <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
-                    <SelectTrigger className="h-7 text-xs font-semibold border-border/80 bg-background px-2 py-0">
+                    <SelectTrigger className="h-8 text-[11px] font-semibold border-border/80 bg-background px-2 py-0">
                       <SelectValue placeholder="Expiry" />
                     </SelectTrigger>
                     <SelectContent>
@@ -540,17 +505,17 @@ export function ManualTradingPage() {
                 </div>
               </div>
 
-              {/* Quick Strike Selector Chips */}
-              <div className="flex flex-col gap-1.5">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-foreground flex items-center gap-1">
-                    <Sparkles className="size-3 text-amber-500" /> Strike Selection
+              {/* Row 2: 5 Strike Chips around ATM + Custom Dropdown */}
+              <div className="flex flex-col gap-1">
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="font-semibold text-foreground flex items-center gap-1 text-[10px] uppercase">
+                    <Sparkles className="size-2.5 text-amber-500" /> Strike (ATM: {atmStrike})
                   </span>
                   <Select value={strike} onValueChange={(val) => val && setStrike(val)}>
-                    <SelectTrigger className="h-6 w-24 text-[11px] font-mono border-border/70 px-1.5">
-                      <SelectValue placeholder="Custom" />
+                    <SelectTrigger className="h-5 w-20 text-[10px] font-mono border-border/70 px-1 py-0">
+                      <SelectValue placeholder="All" />
                     </SelectTrigger>
-                    <SelectContent className="max-h-56">
+                    <SelectContent className="max-h-48">
                       {(selectedExpiry?.strikes ?? []).map((s) => (
                         <SelectItem key={s} value={String(s)} className="text-xs font-mono">
                           {s.toLocaleString("en-IN")}
@@ -560,8 +525,7 @@ export function ManualTradingPage() {
                   </Select>
                 </div>
 
-                {/* 5 Instant Strike Chips */}
-                <div className="grid grid-cols-5 gap-1.5">
+                <div className="grid grid-cols-5 gap-1">
                   {quickStrikes.map((s) => {
                     const isSelected = String(s) === strike
                     const isAtm = s === atmStrike
@@ -571,18 +535,18 @@ export function ManualTradingPage() {
                         type="button"
                         onClick={() => setStrike(String(s))}
                         className={cn(
-                          "py-2 px-1 rounded-lg text-center transition-all flex flex-col items-center justify-center",
+                          "py-1 px-0.5 rounded-md text-center transition-all flex flex-col items-center justify-center leading-tight",
                           isSelected
-                            ? "bg-primary text-primary-foreground font-bold shadow-sm ring-2 ring-primary/40"
+                            ? "bg-primary text-primary-foreground font-bold shadow-xs ring-1 ring-primary/40"
                             : isAtm
-                            ? "bg-amber-500/15 border border-amber-500/40 text-amber-400 font-semibold hover:bg-amber-500/25"
-                            : "bg-muted/40 border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+                            ? "bg-amber-500/15 border border-amber-500/40 text-amber-400 font-semibold"
+                            : "bg-muted/40 border border-border/60 text-muted-foreground hover:bg-muted"
                         )}
                       >
-                        <span className="text-[11px] sm:text-xs font-mono font-bold tracking-tight">
-                          {s.toLocaleString("en-IN")}
+                        <span className="text-[10px] sm:text-[11px] font-mono font-bold">
+                          {s}
                         </span>
-                        <span className="text-[9px] opacity-75">
+                        <span className="text-[8px] opacity-75">
                           {isAtm ? "ATM" : s > atmStrike ? `+${s - atmStrike}` : `${s - atmStrike}`}
                         </span>
                       </button>
@@ -591,107 +555,80 @@ export function ManualTradingPage() {
                 </div>
               </div>
 
-              {/* Lots & Quantity Stepper */}
-              <div className="flex flex-col gap-1.5 pt-1 border-t border-border/40">
-                <div className="flex items-center justify-between text-xs">
-                  <span className="font-semibold text-foreground">Quantity</span>
-                  <span className="text-muted-foreground font-mono text-[11px]">
-                    Total: <strong className="text-foreground">{totalQty} Qty</strong> ({lots} {lots === 1 ? "Lot" : "Lots"})
-                  </span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center border border-border rounded-lg bg-muted/20 p-0.5">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-md"
-                      onClick={() => setLots((prev) => Math.max(1, prev - 1))}
-                      disabled={lots <= 1}
-                    >
-                      <Minus className="size-3.5" />
-                    </Button>
-                    <div className="w-14 text-center font-bold font-mono text-sm">
-                      {lots} {lots === 1 ? "Lot" : "Lots"}
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 rounded-md"
-                      onClick={() => setLots((prev) => Math.min(20, prev + 1))}
-                    >
-                      <Plus className="size-3.5" />
-                    </Button>
-                  </div>
-
-                  {/* Quick Lot Chips */}
-                  <div className="flex items-center gap-1 flex-1 overflow-x-auto">
-                    {[1, 2, 3, 5, 10].map((l) => (
-                      <button
-                        key={l}
-                        type="button"
-                        onClick={() => setLots(l)}
-                        className={cn(
-                          "px-2.5 py-1.5 rounded-lg text-xs font-mono transition-colors border",
-                          lots === l
-                            ? "bg-secondary text-secondary-foreground font-bold border-secondary"
-                            : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted"
-                        )}
-                      >
-                        {l}L
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              {/* Order Mode & Product Bar */}
-              <div className="flex items-center justify-between text-xs pt-1">
-                <div className="flex items-center gap-2">
-                  <button
+              {/* Row 3: Lots, Product & Order Type */}
+              <div className="flex items-center justify-between gap-1 pt-1 border-t border-border/40 text-xs">
+                {/* Lots Stepper */}
+                <div className="flex items-center border border-border rounded-lg bg-muted/20 p-0.5">
+                  <Button
                     type="button"
-                    onClick={() => setOrderType("MARKET")}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors",
-                      orderType === "MARKET"
-                        ? "bg-primary/20 border-primary/50 text-primary"
-                        : "border-border/60 text-muted-foreground"
-                    )}
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 rounded-md"
+                    onClick={() => setLots((prev) => Math.max(1, prev - 1))}
+                    disabled={lots <= 1}
                   >
-                    Market (Instant)
-                  </button>
-                  <button
+                    <Minus className="size-3" />
+                  </Button>
+                  <div className="w-10 text-center font-bold font-mono text-xs">
+                    {lots}L
+                  </div>
+                  <Button
                     type="button"
-                    onClick={() => setOrderType("LIMIT")}
-                    className={cn(
-                      "px-2.5 py-1 rounded-md text-[11px] font-semibold border transition-colors",
-                      orderType === "LIMIT"
-                        ? "bg-primary/20 border-primary/50 text-primary"
-                        : "border-border/60 text-muted-foreground"
-                    )}
+                    variant="ghost"
+                    size="icon"
+                    className="size-6 rounded-md"
+                    onClick={() => setLots((prev) => Math.min(20, prev + 1))}
                   >
-                    Limit
-                  </button>
+                    <Plus className="size-3" />
+                  </Button>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground font-medium">
-                  <span>Product:</span>
+                {/* Quick Lot Chips */}
+                <div className="flex items-center gap-1">
+                  {[1, 2, 3, 5].map((l) => (
+                    <button
+                      key={l}
+                      type="button"
+                      onClick={() => setLots(l)}
+                      className={cn(
+                        "px-1.5 py-0.5 rounded text-[10px] font-mono border",
+                        lots === l
+                          ? "bg-secondary text-secondary-foreground font-bold border-secondary"
+                          : "bg-muted/30 border-border/50 text-muted-foreground"
+                      )}
+                    >
+                      {l}L
+                    </button>
+                  ))}
+                </div>
+
+                {/* Product & Qty Info */}
+                <div className="flex items-center gap-1 text-[10px] font-mono">
+                  <span className="text-muted-foreground">{totalQty}Q</span>
                   <button
                     type="button"
                     onClick={() => setProduct(product === "NRML" ? "MIS" : "NRML")}
-                    className="font-mono font-bold text-foreground bg-muted hover:bg-muted/80 px-2 py-0.5 rounded border border-border/60 transition-colors"
-                    title="Click to toggle NRML / MIS"
+                    className="font-bold text-foreground bg-muted hover:bg-muted/80 px-1.5 py-0.5 rounded border border-border/60"
+                    title="Toggle NRML / MIS"
                   >
                     {product}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOrderType(orderType === "MARKET" ? "LIMIT" : "MARKET")}
+                    className={cn(
+                      "px-1.5 py-0.5 rounded border font-semibold",
+                      orderType === "MARKET" ? "bg-primary/20 text-primary border-primary/40" : "border-border/60 text-muted-foreground"
+                    )}
+                  >
+                    {orderType === "MARKET" ? "MKT" : "LMT"}
                   </button>
                 </div>
               </div>
 
               {orderType === "LIMIT" && (
-                <div className="flex items-center gap-2 bg-muted/30 p-2 rounded-lg">
-                  <Label htmlFor="limit-price" className="text-xs whitespace-nowrap">
+                <div className="flex items-center gap-2 bg-muted/30 p-1 rounded-md">
+                  <Label htmlFor="limit-price" className="text-[10px] whitespace-nowrap">
                     Limit Price (₹):
                   </Label>
                   <Input
@@ -699,92 +636,84 @@ export function ManualTradingPage() {
                     type="number"
                     step="0.05"
                     min="0.05"
-                    placeholder="Enter limit price"
+                    placeholder="Limit price"
                     value={limitPrice}
                     onChange={(e) => setLimitPrice(e.target.value)}
-                    className="h-8 text-xs font-mono"
+                    className="h-6 text-xs font-mono"
                   />
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* DUAL ACTION CARDS: BUY CALL (CE) vs BUY PUT (PE) */}
-          <div className="grid grid-cols-2 gap-3">
+          {/* Bottom Panel: Two Big Action Cards (CE vs PE) taking remaining screen height */}
+          <div className="flex-1 min-h-0 grid grid-cols-2 gap-2">
             {/* CALL (CE) Card */}
-            <Card className="border border-emerald-500/40 bg-gradient-to-b from-emerald-500/10 via-card to-card shadow-sm hover:border-emerald-500/60 transition-all flex flex-col justify-between">
-              <CardContent className="p-3 sm:p-4 flex flex-col gap-2.5">
-                <div className="flex items-center justify-between">
-                  <Badge className="bg-emerald-500 text-white font-bold text-[10px] px-1.5 py-0">
-                    CALL (CE)
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground font-mono">
-                    {indexSymbol}
-                  </span>
-                </div>
-
+            <Card className="border border-emerald-500/40 bg-gradient-to-b from-emerald-500/10 via-card to-card shadow-xs flex flex-col justify-between overflow-hidden">
+              <CardContent className="p-2.5 flex-1 flex flex-col justify-between">
                 <div>
-                  <div className="text-xs font-semibold text-foreground">
-                    {strike || "—"} CE
+                  <div className="flex items-center justify-between">
+                    <Badge className="bg-emerald-600 text-white font-bold text-[9px] px-1 py-0">
+                      CALL (CE)
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {strike || "—"}
+                    </span>
                   </div>
-                  <div className="text-lg sm:text-xl font-extrabold font-mono text-emerald-500 mt-0.5">
-                    {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "Fetching…" : "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">
-                    Est. Margin:{" "}
-                    <strong className="text-foreground font-mono">
-                      {cePrice ? fmtRs(cePrice * totalQty) : "—"}
-                    </strong>
+
+                  <div className="mt-1">
+                    <div className="text-xl sm:text-2xl font-black font-mono text-emerald-500 tracking-tight">
+                      {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                      Req: <strong className="text-foreground">{cePrice ? fmtRs(cePrice * totalQty) : "—"}</strong>
+                    </div>
                   </div>
                 </div>
 
                 <Button
                   type="button"
-                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md active:scale-95 transition-all mt-1"
+                  className="w-full h-11 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-md active:scale-95 transition-all mt-2"
                   disabled={!strike || !expiry || cePrice == null || !isKotakConnected}
                   onClick={() => initiateBuyOrder("CE")}
                 >
-                  <ArrowUpRight className="size-4 mr-1 stroke-[3]" />
-                  BUY CALL (CE)
+                  <ArrowUpRight className="size-4 mr-0.5 stroke-[3]" />
+                  BUY CE
                 </Button>
               </CardContent>
             </Card>
 
             {/* PUT (PE) Card */}
-            <Card className="border border-rose-500/40 bg-gradient-to-b from-rose-500/10 via-card to-card shadow-sm hover:border-rose-500/60 transition-all flex flex-col justify-between">
-              <CardContent className="p-3 sm:p-4 flex flex-col gap-2.5">
-                <div className="flex items-center justify-between">
-                  <Badge className="bg-rose-500 text-white font-bold text-[10px] px-1.5 py-0">
-                    PUT (PE)
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground font-mono">
-                    {indexSymbol}
-                  </span>
-                </div>
-
+            <Card className="border border-rose-500/40 bg-gradient-to-b from-rose-500/10 via-card to-card shadow-xs flex flex-col justify-between overflow-hidden">
+              <CardContent className="p-2.5 flex-1 flex flex-col justify-between">
                 <div>
-                  <div className="text-xs font-semibold text-foreground">
-                    {strike || "—"} PE
+                  <div className="flex items-center justify-between">
+                    <Badge className="bg-rose-600 text-white font-bold text-[9px] px-1 py-0">
+                      PUT (PE)
+                    </Badge>
+                    <span className="text-[10px] text-muted-foreground font-mono">
+                      {strike || "—"}
+                    </span>
                   </div>
-                  <div className="text-lg sm:text-xl font-extrabold font-mono text-rose-500 mt-0.5">
-                    {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "Fetching…" : "—"}
-                  </div>
-                  <div className="text-[10px] text-muted-foreground mt-0.5">
-                    Est. Margin:{" "}
-                    <strong className="text-foreground font-mono">
-                      {pePrice ? fmtRs(pePrice * totalQty) : "—"}
-                    </strong>
+
+                  <div className="mt-1">
+                    <div className="text-xl sm:text-2xl font-black font-mono text-rose-500 tracking-tight">
+                      {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                      Req: <strong className="text-foreground">{pePrice ? fmtRs(pePrice * totalQty) : "—"}</strong>
+                    </div>
                   </div>
                 </div>
 
                 <Button
                   type="button"
-                  className="w-full h-11 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs sm:text-sm rounded-xl shadow-md active:scale-95 transition-all mt-1"
+                  className="w-full h-11 bg-rose-600 hover:bg-rose-500 text-white font-black text-xs sm:text-sm rounded-xl shadow-md active:scale-95 transition-all mt-2"
                   disabled={!strike || !expiry || pePrice == null || !isKotakConnected}
                   onClick={() => initiateBuyOrder("PE")}
                 >
-                  <ArrowDownRight className="size-4 mr-1 stroke-[3]" />
-                  BUY PUT (PE)
+                  <ArrowDownRight className="size-4 mr-0.5 stroke-[3]" />
+                  BUY PE
                 </Button>
               </CardContent>
             </Card>
@@ -792,23 +721,18 @@ export function ManualTradingPage() {
         </div>
       )}
 
-      {/* ================= TAB 2: ACTIVE POSITIONS ================= */}
+      {/* ================= TAB 2: ACTIVE POSITIONS (SCROLLABLE CONTAINER) ================= */}
       {activeTab === "positions" && (
-        <div className="flex flex-col gap-3">
-          {/* Top Bar for Positions */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <span className="text-xs font-bold text-foreground">Active Positions</span>
-              <Badge variant="outline" className="text-[10px] font-mono">
-                {openPositions.length} Open
-              </Badge>
-            </div>
-
+        <div className="flex-1 min-h-0 flex flex-col justify-between gap-1.5 overflow-hidden">
+          <div className="flex items-center justify-between shrink-0 px-0.5">
+            <span className="text-xs font-bold text-foreground">
+              Positions ({openPositions.length})
+            </span>
             {openPositions.length > 1 && (
               <Button
                 variant="destructive"
                 size="sm"
-                className="h-7 text-xs font-bold px-2.5 bg-rose-600 hover:bg-rose-700"
+                className="h-6 text-[11px] font-bold px-2 bg-rose-600 hover:bg-rose-700"
                 onClick={() => setExitAllModalOpen(true)}
               >
                 🛑 Close All ({openPositions.length})
@@ -817,26 +741,18 @@ export function ManualTradingPage() {
           </div>
 
           {openPositions.length === 0 ? (
-            <Card className="border border-dashed border-border/80 bg-card/50">
-              <CardContent className="p-8 flex flex-col items-center justify-center text-center gap-2">
-                <div className="size-10 rounded-full bg-muted flex items-center justify-center text-muted-foreground">
-                  <CheckCircle2 className="size-5" />
-                </div>
-                <div className="text-sm font-semibold text-foreground">No Open Positions</div>
-                <p className="text-xs text-muted-foreground max-w-xs">
-                  You have zero open risk in your account. Use the Quick Trade tab above to enter your next setup.
-                </p>
-                <Button
-                  size="sm"
-                  className="mt-2 text-xs font-semibold"
-                  onClick={() => setActiveTab("trade")}
-                >
+            <Card className="border border-dashed border-border/80 bg-card/50 flex-1 flex items-center justify-center">
+              <CardContent className="p-4 flex flex-col items-center justify-center text-center gap-1.5">
+                <CheckCircle2 className="size-8 text-muted-foreground opacity-60" />
+                <div className="text-xs font-semibold text-foreground">No Open Positions</div>
+                <p className="text-[10px] text-muted-foreground">Zero open risk in your account.</p>
+                <Button size="sm" className="h-7 text-xs font-semibold mt-1" onClick={() => setActiveTab("trade")}>
                   Go to Quick Trade
                 </Button>
               </CardContent>
             </Card>
           ) : (
-            <div className="flex flex-col gap-2.5">
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1.5 pr-0.5">
               {openPositions.map((pos) => {
                 const isLong = pos.net_qty > 0
                 const currentPnl = pos.unrealized_pnl ?? pos.pnl ?? 0
@@ -845,36 +761,32 @@ export function ManualTradingPage() {
                 const pnlPercent = entryAvg > 0 ? ((ltp - entryAvg) / entryAvg) * 100 * (isLong ? 1 : -1) : 0
 
                 return (
-                  <Card
-                    key={pos.symbol}
-                    className="border border-border/80 bg-card shadow-xs overflow-hidden"
-                  >
-                    <CardContent className="p-3 sm:p-4 flex flex-col gap-2.5">
-                      <div className="flex items-start justify-between gap-2">
+                  <Card key={pos.symbol} className="border border-border/80 bg-card shadow-2xs">
+                    <CardContent className="p-2 sm:p-2.5 flex flex-col gap-1.5">
+                      <div className="flex items-start justify-between gap-1">
                         <div>
-                          <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-1">
                             <Badge
                               className={cn(
-                                "text-[10px] font-bold py-0 px-1.5",
+                                "text-[9px] font-bold py-0 px-1",
                                 isLong ? "bg-emerald-600 text-white" : "bg-rose-600 text-white"
                               )}
                             >
-                              {isLong ? "BUY / LONG" : "SELL / SHORT"}
+                              {isLong ? "BUY" : "SELL"}
                             </Badge>
-                            <span className="text-xs font-bold font-mono tracking-tight text-foreground">
+                            <span className="text-[11px] font-bold font-mono tracking-tight text-foreground truncate max-w-[140px]">
                               {pos.symbol}
                             </span>
                           </div>
-                          <div className="text-[11px] text-muted-foreground font-mono mt-1">
-                            Qty: <strong className="text-foreground">{Math.abs(pos.net_qty)}</strong> · {pos.product || "NRML"}
+                          <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
+                            Qty: <strong className="text-foreground">{Math.abs(pos.net_qty)}</strong> · Avg: ₹{entryAvg.toFixed(1)}
                           </div>
                         </div>
 
-                        {/* Large Live P&L Pill */}
                         <div className="text-right">
                           <div
                             className={cn(
-                              "text-base sm:text-lg font-extrabold font-mono",
+                              "text-sm sm:text-base font-extrabold font-mono",
                               currentPnl > 0 ? "text-emerald-500" : currentPnl < 0 ? "text-rose-500" : "text-muted-foreground"
                             )}
                           >
@@ -883,7 +795,7 @@ export function ManualTradingPage() {
                           </div>
                           <div
                             className={cn(
-                              "text-[10px] font-mono font-semibold",
+                              "text-[9px] font-mono font-semibold",
                               pnlPercent >= 0 ? "text-emerald-400" : "text-rose-400"
                             )}
                           >
@@ -893,21 +805,14 @@ export function ManualTradingPage() {
                         </div>
                       </div>
 
-                      {/* Prices & 1-Tap Square Off Button */}
-                      <div className="flex items-center justify-between border-t border-border/40 pt-2 text-xs">
-                        <div className="flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
-                          <div>
-                            Avg: <span className="text-foreground font-medium">{fmtRs(entryAvg)}</span>
-                          </div>
-                          <div>
-                            LTP: <span className="text-foreground font-medium">{fmtRs(ltp)}</span>
-                          </div>
-                        </div>
-
+                      <div className="flex items-center justify-between border-t border-border/40 pt-1 text-[11px]">
+                        <span className="text-[10px] text-muted-foreground font-mono">
+                          LTP: <strong className="text-foreground">₹{ltp.toFixed(1)}</strong>
+                        </span>
                         <Button
                           variant="destructive"
                           size="sm"
-                          className="h-8 text-xs font-bold px-3 rounded-lg shadow-xs active:scale-95 transition-all"
+                          className="h-6 text-[10px] font-bold px-2 rounded-md"
                           onClick={() => {
                             setPosToExit(pos)
                             setExitModalOpen(true)
@@ -925,38 +830,37 @@ export function ManualTradingPage() {
         </div>
       )}
 
-      {/* ================= TAB 3: HISTORY & ORDERS ================= */}
+      {/* ================= TAB 3: HISTORY (SCROLLABLE CONTAINER) ================= */}
       {activeTab === "history" && (
-        <div className="flex flex-col gap-3">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold text-foreground">Today's Completed Trades</span>
-            <span className="text-xs font-mono font-bold text-muted-foreground">
-              Total Realized:{" "}
-              <strong className={pnlClass(summary.realized_pnl)}>{fmtRs(summary.realized_pnl)}</strong>
+        <div className="flex-1 min-h-0 flex flex-col justify-between gap-1.5 overflow-hidden">
+          <div className="flex items-center justify-between shrink-0 px-0.5 text-xs">
+            <span className="font-bold text-foreground">Completed Trades</span>
+            <span className="font-mono text-muted-foreground">
+              Total: <strong className={pnlClass(summary.realized_pnl)}>{fmtRs(summary.realized_pnl)}</strong>
             </span>
           </div>
 
           {closedPositions.length === 0 ? (
-            <Card className="border border-dashed border-border/80 bg-card/50">
-              <CardContent className="p-6 text-center text-xs text-muted-foreground">
+            <Card className="border border-dashed border-border/80 bg-card/50 flex-1 flex items-center justify-center">
+              <CardContent className="p-4 text-center text-xs text-muted-foreground">
                 No closed trades yet today.
               </CardContent>
             </Card>
           ) : (
-            <div className="flex flex-col gap-2">
+            <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-1 pr-0.5">
               {closedPositions.map((trade, idx) => (
                 <Card key={`${trade.symbol}-${idx}`} className="border border-border/60 bg-card">
-                  <CardContent className="p-3 flex items-center justify-between text-xs">
+                  <CardContent className="p-2 flex items-center justify-between text-xs">
                     <div>
-                      <div className="font-bold font-mono text-foreground">{trade.symbol}</div>
-                      <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                        Qty: {trade.qty} · Buy: ₹{trade.buy_avg.toFixed(1)} · Sell: ₹{trade.sell_avg.toFixed(1)}
+                      <div className="font-bold font-mono text-[11px] text-foreground">{trade.symbol}</div>
+                      <div className="text-[9px] text-muted-foreground font-mono">
+                        {trade.qty}Q · Buy: ₹{trade.buy_avg.toFixed(1)} · Sell: ₹{trade.sell_avg.toFixed(1)}
                       </div>
                     </div>
                     <div className="text-right">
                       <span
                         className={cn(
-                          "font-bold font-mono text-sm",
+                          "font-bold font-mono text-xs sm:text-sm",
                           trade.realized_pnl > 0 ? "text-emerald-500" : trade.realized_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
                         )}
                       >
@@ -974,57 +878,45 @@ export function ManualTradingPage() {
 
       {/* ================= DIALOG: CONFIRM ORDER SUBMISSION ================= */}
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
-        <DialogContent className="max-w-sm rounded-2xl">
+        <DialogContent className="max-w-xs rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2">
+            <DialogTitle className="text-sm font-bold flex items-center gap-1.5">
               Confirm Live Order
-              <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[10px] py-0">
+              <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/30 text-[9px] py-0">
                 ₹0 Brokerage
               </Badge>
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              Orders execute directly on Kotak Neo Trade API from your deployed machine.
-            </DialogDescription>
           </DialogHeader>
 
           {pendingOrder && (
-            <div className="flex flex-col gap-2.5 py-2 text-xs">
-              <div className="bg-muted/40 rounded-xl p-3 flex flex-col gap-2">
+            <div className="flex flex-col gap-2 py-1 text-xs">
+              <div className="bg-muted/40 rounded-xl p-2.5 flex flex-col gap-1.5 font-mono">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Contract:</span>
-                  <span className="font-bold font-mono text-foreground">
-                    {pendingOrder.strike} {pendingOrder.optionType} ({indexSymbol})
+                  <span className="font-bold text-foreground">
+                    {pendingOrder.strike} {pendingOrder.optionType}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Quantity:</span>
-                  <span className="font-bold font-mono text-foreground">
-                    {pendingOrder.qty} Qty ({pendingOrder.lots} {pendingOrder.lots === 1 ? "Lot" : "Lots"})
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Order Type:</span>
                   <span className="font-bold text-foreground">
-                    {orderType} {orderType === "LIMIT" ? `@ ₹${pendingOrder.price}` : "(Market LTP)"}
+                    {pendingOrder.qty} Qty ({pendingOrder.lots}L)
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Est. Total Value:</span>
-                  <span className="font-extrabold font-mono text-base text-foreground">
+                  <span className="text-muted-foreground">Est. Value:</span>
+                  <span className="font-black text-sm text-foreground">
                     {fmtRs(pendingOrder.price * pendingOrder.qty)}
                   </span>
-                </div>
-                <div className="flex items-center justify-between border-t border-border/40 pt-1.5 text-[11px]">
-                  <span className="text-emerald-400 font-medium">Kotak Brokerage:</span>
-                  <span className="text-emerald-400 font-bold font-mono">₹0.00 FREE</span>
                 </div>
               </div>
             </div>
           )}
 
-          <DialogFooter className="flex flex-row items-center gap-2 pt-2">
+          <DialogFooter className="flex flex-row items-center gap-2 pt-1">
             <Button
               variant="outline"
+              size="sm"
               className="flex-1 text-xs"
               onClick={() => setConfirmOpen(false)}
               disabled={orderBusy}
@@ -1032,6 +924,7 @@ export function ManualTradingPage() {
               Cancel
             </Button>
             <Button
+              size="sm"
               className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs"
               onClick={() => void submitOrder()}
               disabled={orderBusy}
@@ -1044,22 +937,19 @@ export function ManualTradingPage() {
 
       {/* ================= DIALOG: CONFIRM SQUARE OFF ================= */}
       <Dialog open={exitModalOpen} onOpenChange={setExitModalOpen}>
-        <DialogContent className="max-w-sm rounded-2xl">
+        <DialogContent className="max-w-xs rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2 text-rose-500">
-              <AlertTriangle className="size-5" />
+            <DialogTitle className="text-sm font-bold flex items-center gap-1.5 text-rose-500">
+              <AlertTriangle className="size-4" />
               Square Off Position?
             </DialogTitle>
-            <DialogDescription className="text-xs">
-              This will send an immediate market order to close your position on Kotak Neo.
-            </DialogDescription>
           </DialogHeader>
 
           {posToExit && (
-            <div className="bg-muted/40 rounded-xl p-3 flex flex-col gap-1.5 text-xs">
-              <div className="font-bold font-mono text-foreground">{posToExit.symbol}</div>
-              <div className="text-muted-foreground font-mono">
-                Quantity: {Math.abs(posToExit.net_qty)} · Current P&L:{" "}
+            <div className="bg-muted/40 rounded-xl p-2 flex flex-col gap-1 text-xs font-mono">
+              <div className="font-bold text-foreground truncate">{posToExit.symbol}</div>
+              <div className="text-muted-foreground">
+                Qty: {Math.abs(posToExit.net_qty)} · P&L:{" "}
                 <strong className={pnlClass(posToExit.unrealized_pnl ?? 0)}>
                   {fmtRs(posToExit.unrealized_pnl ?? 0)}
                 </strong>
@@ -1067,9 +957,10 @@ export function ManualTradingPage() {
             </div>
           )}
 
-          <DialogFooter className="flex flex-row items-center gap-2 pt-2">
+          <DialogFooter className="flex flex-row items-center gap-2 pt-1">
             <Button
               variant="outline"
+              size="sm"
               className="flex-1 text-xs"
               onClick={() => setExitModalOpen(false)}
               disabled={orderBusy}
@@ -1078,11 +969,12 @@ export function ManualTradingPage() {
             </Button>
             <Button
               variant="destructive"
+              size="sm"
               className="flex-1 text-xs font-bold bg-rose-600 hover:bg-rose-700"
               onClick={() => posToExit && void executeExit(posToExit)}
               disabled={orderBusy}
             >
-              {orderBusy ? "Closing..." : "Yes, Square Off"}
+              {orderBusy ? "Closing..." : "Yes, Exit"}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1090,20 +982,21 @@ export function ManualTradingPage() {
 
       {/* ================= DIALOG: EMERGENCY EXIT ALL ================= */}
       <Dialog open={exitAllModalOpen} onOpenChange={setExitAllModalOpen}>
-        <DialogContent className="max-w-sm rounded-2xl">
+        <DialogContent className="max-w-xs rounded-2xl">
           <DialogHeader>
-            <DialogTitle className="text-base font-bold flex items-center gap-2 text-rose-500">
-              <ShieldAlert className="size-5" />
-              Exit ALL Open Positions?
+            <DialogTitle className="text-sm font-bold flex items-center gap-1.5 text-rose-500">
+              <ShieldAlert className="size-4" />
+              Exit ALL Positions?
             </DialogTitle>
             <DialogDescription className="text-xs">
-              This will immediately square off ALL {openPositions.length} active positions on Kotak Neo.
+              This will immediately square off ALL {openPositions.length} active positions.
             </DialogDescription>
           </DialogHeader>
 
-          <DialogFooter className="flex flex-row items-center gap-2 pt-2">
+          <DialogFooter className="flex flex-row items-center gap-2 pt-1">
             <Button
               variant="outline"
+              size="sm"
               className="flex-1 text-xs"
               onClick={() => setExitAllModalOpen(false)}
               disabled={orderBusy}
@@ -1112,11 +1005,12 @@ export function ManualTradingPage() {
             </Button>
             <Button
               variant="destructive"
+              size="sm"
               className="flex-1 text-xs font-bold bg-rose-600 hover:bg-rose-700"
               onClick={() => void executeExitAll()}
               disabled={orderBusy}
             >
-              {orderBusy ? "Closing All..." : "Exit Everything"}
+              {orderBusy ? "Closing..." : "Exit All"}
             </Button>
           </DialogFooter>
         </DialogContent>
