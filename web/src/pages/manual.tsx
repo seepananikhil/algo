@@ -13,10 +13,12 @@ import {
   Zap,
   Target,
   Shield,
+  ChevronDown,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@/components/ui/select"
 import {
   fmtRs,
   pnlClass,
@@ -86,6 +88,9 @@ export function ManualTradingPage() {
     15000
   )
 
+  // Expiry selection
+  const [expiry, setExpiry] = useState<string>("")
+
   // Trading parameters
   const [strike, setStrike] = useState("")
   const [lots, setLots] = useState(1)
@@ -131,14 +136,42 @@ export function ManualTradingPage() {
     }
   }
 
-  // Current instrument metadata & auto-select current weekly expiry
+  // Expiries from symbol master
   const expiries = optionsPoll.data?.expiries ?? []
-  const activeExpiryGroup = expiries[0]
-  const currentExpiry = activeExpiryGroup?.expiry ?? ""
-  const lotSize = activeExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
+
+  // Default to first weekly expiry if none selected or if index switched
+  useEffect(() => {
+    if (expiries.length > 0) {
+      if (!expiry || !expiries.some((e) => e.expiry === expiry)) {
+        setExpiry(expiries[0].expiry)
+      }
+    }
+  }, [expiries, indexSymbol])
+
+  const selectedExpiryGroup = expiries.find((e) => e.expiry === expiry) || expiries[0]
+  const currentExpiry = selectedExpiryGroup?.expiry ?? ""
+  const lotSize = selectedExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
   const atmStrike = optionsPoll.data?.atm ?? (indexSymbol === "SENSEX" ? 82000 : 25250)
   const spotPrice = optionsPoll.data?.spot ?? (indexSymbol === "SENSEX" ? 82031.8 : 25227.95)
   const strikeStep = indexSymbol === "SENSEX" ? 100 : 50
+
+  // Format expiry label nicely: e.g. "23 Nov", "01 Dec"
+  function formatExpiryLabel(expStr: string, idx: number) {
+    if (!expStr) return "Expiry"
+    try {
+      const parts = expStr.split("-")
+      if (parts.length === 3) {
+        const monthNames = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        const day = parts[2]
+        const month = monthNames[parseInt(parts[1], 10)] || parts[1]
+        const tag = idx === 0 ? "Weekly" : idx === 1 ? "Next" : ""
+        return `${day} ${month}${tag ? ` (${tag})` : ""}`
+      }
+      return expStr
+    } catch {
+      return expStr
+    }
+  }
 
   // Automatically default strike to ATM on load or instrument switch
   useEffect(() => {
@@ -202,6 +235,9 @@ export function ManualTradingPage() {
   }
 
   const totalQty = lots * lotSize
+  const ceCost = cePrice != null && cePrice > 0 ? Math.round(cePrice * totalQty) : null
+  const peCost = pePrice != null && pePrice > 0 ? Math.round(pePrice * totalQty) : null
+
   const availableFunds = fundsPoll.data?.ok ? fundsPoll.data.available_equity_funds : null
   const openPositions = positionsPoll.data?.open_positions ?? []
   const closedPositions = positionsPoll.data?.closed_positions ?? []
@@ -293,7 +329,7 @@ export function ManualTradingPage() {
       await postJSON("/api/update-tp-tl", {
         symbol: pos.symbol,
         tp_pts: pos.tp_pts || tpPts || 15,
-        tl_pts: 0.5, // 0.5 pt buffer for breakeven
+        tl_pts: 0.5,
         entry_price: entry,
         qty: Math.abs(pos.net_qty),
       })
@@ -366,76 +402,152 @@ export function ManualTradingPage() {
         </div>
       </div>
 
-      {/* 2. INSTRUMENT SELECTOR (NIFTY vs SENSEX) */}
-      <div className="flex bg-muted/60 p-0.5 rounded-xl border border-border/40 my-1">
-        <button
-          type="button"
-          onClick={() => setIndexSymbol("NIFTY")}
-          className={cn(
-            "flex-1 py-1 rounded-lg text-center transition-all",
-            indexSymbol === "NIFTY"
-              ? "bg-background text-foreground font-black shadow-xs"
-              : "text-muted-foreground font-medium hover:text-foreground"
-          )}
-        >
-          <div className="text-xs font-bold leading-tight">NIFTY 50</div>
-          <div className="text-[10px] font-mono opacity-80">
-            {spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })} · 65Q
-          </div>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => setIndexSymbol("SENSEX")}
-          className={cn(
-            "flex-1 py-1 rounded-lg text-center transition-all",
-            indexSymbol === "SENSEX"
-              ? "bg-background text-foreground font-black shadow-xs"
-              : "text-muted-foreground font-medium hover:text-foreground"
-          )}
-        >
-          <div className="text-xs font-bold leading-tight">SENSEX</div>
-          <div className="text-[10px] font-mono opacity-80">
-            {indexSymbol === "SENSEX" ? spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "82,032"} · 20Q
-          </div>
-        </button>
-      </div>
-
-      {/* 3. STRIKE CONTROLLER (Only [-] and [+] Stepper) */}
-      <div className="flex items-center justify-between py-1 bg-muted/30 rounded-xl px-3 border border-border/40">
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 rounded-lg bg-background border border-border/60 shadow-2xs hover:bg-muted active:scale-95"
-          onClick={() => stepStrike(-1)}
-        >
-          <Minus className="size-4" />
-        </Button>
-
-        <div className="text-center flex flex-col items-center">
-          <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
-            Strike ({currentExpiry ? currentExpiry.slice(5) : "Weekly"})
-          </span>
-          <div className="text-xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
-            {strike || atmStrike}
-            {Number(strike) === atmStrike && (
-              <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-bold">
-                ATM
-              </span>
+      {/* 2. INSTRUMENT & EXPIRY SELECTOR */}
+      <div className="flex items-center justify-between gap-1.5 my-1">
+        {/* NIFTY vs SENSEX Segmented Toggle */}
+        <div className="flex bg-muted/60 p-0.5 rounded-xl border border-border/40 flex-1">
+          <button
+            type="button"
+            onClick={() => {
+              setIndexSymbol("NIFTY")
+              setStrike("")
+            }}
+            className={cn(
+              "flex-1 py-1 rounded-lg text-center transition-all",
+              indexSymbol === "NIFTY"
+                ? "bg-background text-foreground font-black shadow-xs"
+                : "text-muted-foreground font-medium hover:text-foreground"
             )}
-          </div>
+          >
+            <div className="text-xs font-bold leading-tight">NIFTY 50</div>
+            <div className="text-[10px] font-mono opacity-80">
+              {spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })} · 65Q
+            </div>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIndexSymbol("SENSEX")
+              setStrike("")
+            }}
+            className={cn(
+              "flex-1 py-1 rounded-lg text-center transition-all",
+              indexSymbol === "SENSEX"
+                ? "bg-background text-foreground font-black shadow-xs"
+                : "text-muted-foreground font-medium hover:text-foreground"
+            )}
+          >
+            <div className="text-xs font-bold leading-tight">SENSEX</div>
+            <div className="text-[10px] font-mono opacity-80">
+              {indexSymbol === "SENSEX" ? spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 }) : "82,032"} · 20Q
+            </div>
+          </button>
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="size-8 rounded-lg bg-background border border-border/60 shadow-2xs hover:bg-muted active:scale-95"
-          onClick={() => stepStrike(1)}
-        >
-          <Plus className="size-4" />
-        </Button>
+        {/* Quick Expiry Switcher (Current vs Next Weekly) */}
+        {expiries.length > 0 && (
+          <div className="flex items-center gap-1 shrink-0">
+            <button
+              type="button"
+              onClick={() => setExpiry(expiries[0]?.expiry || "")}
+              className={cn(
+                "px-2 py-1.5 rounded-xl text-[10px] font-bold font-mono transition-all border leading-tight",
+                expiry === expiries[0]?.expiry
+                  ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                  : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
+              )}
+              title="Current Weekly Expiry"
+            >
+              {formatExpiryLabel(expiries[0]?.expiry, 0)}
+            </button>
+
+            {expiries.length > 1 && (
+              <button
+                type="button"
+                onClick={() => setExpiry(expiries[1]?.expiry || "")}
+                className={cn(
+                  "px-2 py-1.5 rounded-xl text-[10px] font-bold font-mono transition-all border leading-tight",
+                  expiry === expiries[1]?.expiry
+                    ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                    : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
+                )}
+                title="Next Weekly Expiry"
+              >
+                {formatExpiryLabel(expiries[1]?.expiry, 1)}
+              </button>
+            )}
+
+            {expiries.length > 2 && (
+              <Select value={expiry} onValueChange={(val) => val && setExpiry(val)}>
+                <SelectTrigger className="h-7 w-6 text-[10px] p-0 border-border/60 bg-muted/40 justify-center rounded-xl">
+                  <ChevronDown className="size-3" />
+                </SelectTrigger>
+                <SelectContent>
+                  {expiries.map((exp, idx) => (
+                    <SelectItem key={exp.expiry} value={exp.expiry} className="text-xs">
+                      {exp.expiry} {idx === 0 ? "(Current Weekly)" : idx === 1 ? "(Next Weekly)" : ""}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 3. STRIKE CONTROLLER (With Live Option Cost) */}
+      <div className="flex flex-col gap-1 py-1.5 bg-muted/30 rounded-xl px-2.5 border border-border/40">
+        <div className="flex items-center justify-between">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-lg bg-background border border-border/60 shadow-2xs hover:bg-muted active:scale-95"
+            onClick={() => stepStrike(-1)}
+          >
+            <Minus className="size-4" />
+          </Button>
+
+          <div className="text-center flex flex-col items-center">
+            <span className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">
+              Selected Strike ({currentExpiry ? formatExpiryLabel(currentExpiry, expiries.findIndex(e => e.expiry === currentExpiry)) : "Weekly"})
+            </span>
+            <div className="text-xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
+              {strike || atmStrike}
+              {Number(strike) === atmStrike && (
+                <span className="text-[9px] px-1.5 py-0.2 rounded-full bg-amber-500/20 text-amber-400 font-bold">
+                  ATM
+                </span>
+              )}
+            </div>
+          </div>
+
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-8 rounded-lg bg-background border border-border/60 shadow-2xs hover:bg-muted active:scale-95"
+            onClick={() => stepStrike(1)}
+          >
+            <Plus className="size-4" />
+          </Button>
+        </div>
+
+        {/* Live Total Cost for CE & PE */}
+        <div className="flex items-center justify-between text-[11px] font-mono border-t border-border/40 pt-1 mt-0.5 px-1">
+          <div className="flex items-center gap-1 text-emerald-400 font-bold">
+            <span className="text-[9px] uppercase opacity-75">CE Cost:</span>
+            <span>{ceCost != null ? fmtRs(ceCost) : "…"}</span>
+          </div>
+          <div className="text-[9px] text-muted-foreground font-semibold">
+            {totalQty} Qty ({lots}L)
+          </div>
+          <div className="flex items-center gap-1 text-rose-400 font-bold">
+            <span className="text-[9px] uppercase opacity-75">PE Cost:</span>
+            <span>{peCost != null ? fmtRs(peCost) : "…"}</span>
+          </div>
+        </div>
       </div>
 
       {/* 4. TARGET & STOP LOSS INPUT BOXES */}
@@ -551,7 +663,7 @@ export function ManualTradingPage() {
           type="button"
           disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
           onClick={() => hitOrder("CE")}
-          className="h-22 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white p-2.5 flex flex-col justify-between text-left shadow-lg transition-all ring-1 ring-emerald-400/40"
+          className="h-24 rounded-2xl bg-gradient-to-br from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white p-2.5 flex flex-col justify-between text-left shadow-lg transition-all ring-1 ring-emerald-400/40"
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-black tracking-wider flex items-center">
@@ -559,15 +671,15 @@ export function ManualTradingPage() {
               BUY CALL
               <ArrowUpRight className="size-3.5 stroke-[3] ml-0.5" />
             </span>
-            <span className="text-[9px] opacity-80 font-mono font-bold">{strike} CE</span>
+            <span className="text-[10px] opacity-80 font-mono font-bold">{strike} CE</span>
           </div>
 
           <div>
             <div className="text-2xl font-black font-mono leading-none tracking-tight">
               {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
             </div>
-            <div className="text-[9px] opacity-80 font-mono mt-0.5">
-              {cePrice ? `Est: ${fmtRs(cePrice * totalQty)} · 1-Tap` : "1-Tap Market"}
+            <div className="text-[10px] font-mono mt-1 font-bold bg-black/25 px-1.5 py-0.5 rounded-md inline-block">
+              Total Cost: {ceCost != null ? fmtRs(ceCost) : "—"}
             </div>
           </div>
         </button>
@@ -577,7 +689,7 @@ export function ManualTradingPage() {
           type="button"
           disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
           onClick={() => hitOrder("PE")}
-          className="h-22 rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white p-2.5 flex flex-col justify-between text-left shadow-lg transition-all ring-1 ring-rose-400/40"
+          className="h-24 rounded-2xl bg-gradient-to-br from-rose-600 to-rose-700 hover:from-rose-500 hover:to-rose-600 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white p-2.5 flex flex-col justify-between text-left shadow-lg transition-all ring-1 ring-rose-400/40"
         >
           <div className="flex items-center justify-between w-full">
             <span className="text-xs font-black tracking-wider flex items-center">
@@ -585,15 +697,15 @@ export function ManualTradingPage() {
               BUY PUT
               <ArrowDownRight className="size-3.5 stroke-[3] ml-0.5" />
             </span>
-            <span className="text-[9px] opacity-80 font-mono font-bold">{strike} PE</span>
+            <span className="text-[10px] opacity-80 font-mono font-bold">{strike} PE</span>
           </div>
 
           <div>
             <div className="text-2xl font-black font-mono leading-none tracking-tight">
               {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
             </div>
-            <div className="text-[9px] opacity-80 font-mono mt-0.5">
-              {pePrice ? `Est: ${fmtRs(pePrice * totalQty)} · 1-Tap` : "1-Tap Market"}
+            <div className="text-[10px] font-mono mt-1 font-bold bg-black/25 px-1.5 py-0.5 rounded-md inline-block">
+              Total Cost: {peCost != null ? fmtRs(peCost) : "—"}
             </div>
           </div>
         </button>
