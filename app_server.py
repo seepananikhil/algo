@@ -2389,6 +2389,23 @@ def submit_manual_order(body: dict) -> dict:
         try:
             order_id, fill_price = place_kotak_order(symbol=raw_symbol, qty=quantity, side=side_val, product=product, exchange_segment=ex_seg)
             log_live_order_event(action, raw_symbol, quantity, order_id, fill_price, "MANUAL_ORDER", "LIVE")
+
+            # If user provided Target or Stop-Loss points, configure them immediately
+            if action == "BUY":
+                try:
+                    sl_pts = float(body.get("sl_pts", 0.0) or 0.0)
+                    tgt_pts = float(body.get("target_pts", body.get("tp_pts", 0.0)) or 0.0)
+                    if sl_pts > 0 or tgt_pts > 0:
+                        update_tp_tl({
+                            "symbol": raw_symbol,
+                            "tp_pts": tgt_pts,
+                            "tl_pts": sl_pts,
+                            "entry_price": fill_price,
+                            "qty": quantity,
+                        })
+                except Exception as sl_exc:
+                    print(f"Warning: could not set Kotak SL/TP on manual order: {sl_exc}")
+
             return {
                 "ok": True,
                 "order_id": order_id,

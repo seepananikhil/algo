@@ -251,6 +251,20 @@ def kotak_positions() -> dict:
         open_pos.sort(key=lambda x: str(x.get("symbol", "")))
         closed_pos.sort(key=lambda x: str(x.get("symbol", "")))
 
+        # Attach active Scalp Target & Stop-Loss if set
+        try:
+            from app_server import load_scalp_targets
+            targets = load_scalp_targets()
+            for p in open_pos:
+                sym_clean = str(p.get("symbol", "")).replace("NSE:", "").replace("BSE:", "").strip()
+                t_info = targets.get(p.get("symbol", "")) or targets.get(sym_clean) or {}
+                p["tp_pts"] = float(t_info.get("tp_pts") or 0.0)
+                p["tl_pts"] = float(t_info.get("tl_pts") or 0.0)
+                p["target_price"] = float(t_info.get("target_price") or 0.0)
+                p["stop_price"] = float(t_info.get("stop_price") or 0.0)
+        except Exception:
+            pass
+
         result = {
             "ok": True,
             "broker": "KOTAK_NEO",
