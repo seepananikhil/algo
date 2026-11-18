@@ -222,42 +222,44 @@ export function Layout() {
           <Outlet />
         </main>
 
-        {/* 7. Bottom Tab Bar (Mobile) */}
-        <nav className="flex md:hidden h-12 shrink-0 items-center justify-around border-t bg-background/95 backdrop-blur z-20 px-1">
-          {[
-            { to: "/", label: "Live", icon: Activity },
-            { to: "/trade", label: "Quick*", icon: Zap },
-            { to: "/day", label: "Day", icon: CalendarDays },
-            { to: "/paper", label: "Trades", icon: Wallet },
-            { to: "/settings", label: "Settings", icon: SettingsIcon },
-          ].map(({ to, label, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={to === "/"}
-              className={({ isActive }) =>
-                cn(
-                  "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] transition-colors",
-                  isActive
-                    ? "text-primary font-bold"
-                    : "text-muted-foreground hover:text-foreground font-medium"
-                )
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <div className="relative">
-                    <Icon className={cn("size-4", isActive && "stroke-[2.5]")} />
-                    {to === "/trade" && (
-                      <span className="absolute -top-0.5 -right-1 size-1.5 rounded-full bg-amber-400 animate-ping" />
-                    )}
-                  </div>
-                  <span className="mt-0.5 leading-none">{label}</span>
-                </>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+        {/* 7. Bottom Tab Bar (Mobile) - Hidden on Quick Scalper (/trade) */}
+        {!isTrade && (
+          <nav className="flex md:hidden h-12 shrink-0 items-center justify-around border-t bg-background/95 backdrop-blur z-20 px-1">
+            {[
+              { to: "/", label: "Live", icon: Activity },
+              { to: "/trade", label: "Quick*", icon: Zap },
+              { to: "/day", label: "Day", icon: CalendarDays },
+              { to: "/paper", label: "Trades", icon: Wallet },
+              { to: "/settings", label: "Settings", icon: SettingsIcon },
+            ].map(({ to, label, icon: Icon }) => (
+              <NavLink
+                key={to}
+                to={to}
+                end={to === "/"}
+                className={({ isActive }) =>
+                  cn(
+                    "flex flex-col items-center justify-center flex-1 py-1 rounded-lg text-[10px] transition-colors",
+                    isActive
+                      ? "text-primary font-bold"
+                      : "text-muted-foreground hover:text-foreground font-medium"
+                  )
+                }
+              >
+                {({ isActive }) => (
+                  <>
+                    <div className="relative">
+                      <Icon className={cn("size-4", isActive && "stroke-[2.5]")} />
+                      {to === "/trade" && (
+                        <span className="absolute -top-0.5 -right-1 size-1.5 rounded-full bg-amber-400 animate-ping" />
+                      )}
+                    </div>
+                    <span className="mt-0.5 leading-none">{label}</span>
+                  </>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+        )}
       </div>
     </div>
   )

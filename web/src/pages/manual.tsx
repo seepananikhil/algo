@@ -6,16 +6,20 @@ import {
   Clock,
   Target,
   Shield,
+  Zap,
+  LineChart,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { CandleChart } from "@/components/candle-chart"
 import {
   fmtRs,
   pnlClass,
   postJSON,
   usePoll,
+  type DayData,
   type ManualOptionChoices,
 } from "@/lib/api"
 import { useStatus } from "@/lib/status"
@@ -77,6 +81,7 @@ export function ManualTradingPage() {
     isKotakConnected ? `/api/manual-options?symbol=${indexSymbol}` : null,
     15000
   )
+  const dayPoll = usePoll<DayData>(`/api/day?symbol=${indexSymbol}&full=1`, 4000)
 
   // Expiry selection
   const [expiry, setExpiry] = useState<string>("")
@@ -89,6 +94,9 @@ export function ManualTradingPage() {
   // Scalper Target & Stop Loss points
   const [slPts, setSlPts] = useState<number>(10)
   const [tpPts, setTpPts] = useState<number>(15)
+
+  // Mini Chart Toggle
+  const [showChart, setShowChart] = useState(true)
 
   // Quotes
   const [cePrice, setCePrice] = useState<number | null>(null)
@@ -303,7 +311,7 @@ export function ManualTradingPage() {
   }
 
   return (
-    <div className="flex flex-col h-full max-h-full w-full max-w-md mx-auto p-2 justify-between select-none text-foreground bg-background overflow-hidden">
+    <div className="flex flex-col h-full max-h-full w-full max-w-md mx-auto p-2.5 gap-2 select-none text-foreground bg-background overflow-y-auto scrollbar-none justify-between">
       
       {/* ─── 2. INSTRUMENT & EXPIRY ROW ─── */}
       <div className="flex items-center justify-between gap-2 shrink-0">
@@ -360,11 +368,27 @@ export function ManualTradingPage() {
         )}
       </div>
 
-      {/* ─── 3. SPOT & LIVE P&L ROW ─── */}
+      {/* ─── 3. SPOT & LIVE P&L ROW (With Chart Toggle) ─── */}
       <div className="flex items-center justify-between text-xs font-mono px-0.5 shrink-0">
-        <span className="text-muted-foreground">
-          Spot: <strong className="text-foreground font-bold">{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong>
-        </span>
+        <div className="flex items-center gap-1.5">
+          <span className="text-muted-foreground">
+            Spot: <strong className="text-foreground font-bold">{spotPrice.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => setShowChart((v) => !v)}
+            className={cn(
+              "px-1.5 py-0.5 rounded-md text-[10px] font-mono border transition-all flex items-center gap-1 cursor-pointer",
+              showChart
+                ? "bg-primary/10 border-primary/30 text-primary font-bold"
+                : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
+            )}
+            title="Toggle Mini Chart"
+          >
+            <LineChart className="size-2.5" />
+            <span>{showChart ? "Hide Chart" : "Chart"}</span>
+          </button>
+        </div>
 
         {/* DAY P&L (count): +₹... */}
         <button
@@ -376,14 +400,37 @@ export function ManualTradingPage() {
           <span className="text-muted-foreground">
             DAY P&L{closedPositions.length > 0 ? ` (${closedPositions.length})` : ""}:
           </span>
-          <span className={cn(summary.net_pnl > 0 ? "text-emerald-400" : summary.net_pnl < 0 ? "text-rose-400" : "text-muted-foreground")}>
-            {summary.net_pnl > 0 ? "+" : ""}{fmtRs(summary.net_pnl)}
+          <span className={cn(summary.net_pnl > 0 ? "text-emerald-500 font-black" : summary.net_pnl < 0 ? "text-rose-500 font-black" : "text-muted-foreground")}>
+            {summary.net_pnl > 0 ? "+" : ""}
+            {fmtRs(summary.net_pnl)}
           </span>
         </button>
       </div>
 
+      {/* ─── COMPACT MINI CANDLESTICK CHART ─── */}
+      {showChart && (
+        <div className="h-32 w-full rounded-2xl overflow-hidden border border-border/50 bg-card/60 shadow-inner shrink-0 relative">
+          {dayPoll.data?.candles && dayPoll.data.candles.length > 0 ? (
+            <CandleChart
+              date={status?.now ? status.now.slice(0, 10) : new Date().toISOString().slice(0, 10)}
+              symbol={indexSymbol}
+              candles={dayPoll.data.candles}
+              forming={dayPoll.data.forming}
+              currentPrice={spotPrice}
+              className="h-full w-full"
+              hideToolbar={true}
+              zoomable={true}
+            />
+          ) : (
+            <div className="h-full w-full flex items-center justify-center text-xs text-muted-foreground font-mono">
+              Loading {indexSymbol} live candles…
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ─── 4. STRIKE STEPPER ─── */}
-      <div className="flex flex-col gap-1 p-2 rounded-2xl bg-card border border-border/50 shadow-sm shrink-0">
+      <div className="flex flex-col gap-1 p-2 rounded-2xl bg-card border border-border/50 shadow-xs shrink-0">
         <div className="text-center text-[10px] uppercase font-bold tracking-wider text-muted-foreground">
           STRIKE PRICE
         </div>
@@ -401,7 +448,7 @@ export function ManualTradingPage() {
           <div className="text-2xl font-black font-mono tracking-tight text-foreground flex items-center gap-2">
             {strike || atmStrike}
             {Number(strike) === atmStrike && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-400 font-bold border border-amber-500/30">
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-500 font-bold border border-amber-500/30">
                 ATM
               </span>
             )}
@@ -422,7 +469,7 @@ export function ManualTradingPage() {
       {/* ─── 5. RISK & QTY GRID (3 Columns) ─── */}
       <div className="grid grid-cols-3 gap-2 p-2 rounded-2xl bg-muted/20 border border-border/40 shrink-0">
         {/* Col 1: LOTS */}
-        <div className="flex flex-col items-center justify-center bg-background/60 p-1.5 rounded-xl border border-border/30">
+        <div className="flex flex-col items-center justify-center bg-card/80 p-1.5 rounded-xl border border-border/30 shadow-2xs">
           <span className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold mb-1">
             LOTS
           </span>
@@ -452,8 +499,8 @@ export function ManualTradingPage() {
         </div>
 
         {/* Col 2: SL PTS */}
-        <div className="flex flex-col items-center justify-center bg-background/60 p-1.5 rounded-xl border border-border/30">
-          <span className="text-[9px] uppercase tracking-wider text-rose-400 font-bold mb-1 flex items-center gap-1">
+        <div className="flex flex-col items-center justify-center bg-card/80 p-1.5 rounded-xl border border-border/30 shadow-2xs">
+          <span className="text-[9px] uppercase tracking-wider text-rose-500 font-bold mb-1 flex items-center gap-1">
             <Shield className="size-2.5" /> SL PTS
           </span>
           <div className="relative flex items-center w-full px-1">
@@ -472,8 +519,8 @@ export function ManualTradingPage() {
         </div>
 
         {/* Col 3: TARGET */}
-        <div className="flex flex-col items-center justify-center bg-background/60 p-1.5 rounded-xl border border-border/30">
-          <span className="text-[9px] uppercase tracking-wider text-emerald-400 font-bold mb-1 flex items-center gap-1">
+        <div className="flex flex-col items-center justify-center bg-card/80 p-1.5 rounded-xl border border-border/30 shadow-2xs">
+          <span className="text-[9px] uppercase tracking-wider text-emerald-500 font-bold mb-1 flex items-center gap-1">
             <Target className="size-2.5" /> TARGET
           </span>
           <div className="relative flex items-center w-full px-1">
@@ -492,64 +539,60 @@ export function ManualTradingPage() {
         </div>
       </div>
 
-      {/* ─── 6. EXECUTION ZONE (BUY CALL ↗ vs BUY PUT ↘) ─── */}
-      <div className="grid grid-cols-2 gap-2.5 my-auto shrink-0">
-        {/* BUY CALL */}
-        <button
-          type="button"
-          disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
-          onClick={() => hitOrder("CE")}
-          className="h-32 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3 flex flex-col justify-between text-left shadow-lg transition-transform"
-        >
-          <div className="flex items-center justify-between w-full">
-            <span className="text-xs font-black tracking-wide flex items-center gap-0.5">
-              BUY CALL ↗
-            </span>
-            <span className="text-[11px] font-mono opacity-80 font-bold">{strike} CE</span>
+      {/* ─── 6. EXECUTION ZONE: COST ABOVE & MEDIUM BUY BUTTONS ─── */}
+      <div className="flex flex-col gap-2 shrink-0">
+        {/* Cost & Quote Cards Above */}
+        <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+          {/* CE Cost Card */}
+          <div className="p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex flex-col justify-between">
+            <div className="flex items-center justify-between font-bold text-emerald-600 dark:text-emerald-400">
+              <span className="text-[11px]">{strike} CE</span>
+              <span className="text-sm font-black">{cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}</span>
+            </div>
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
+              <span>Cost: <strong className="text-foreground">{ceCost != null ? fmtRs(ceCost) : "—"}</strong></span>
+              <span>({totalQty} Q)</span>
+            </div>
           </div>
 
-          <div>
-            <div className="text-2xl font-black font-mono leading-none tracking-tight">
-              {cePrice != null ? fmtRs(cePrice) : quoteLoading ? "…" : "—"}
+          {/* PE Cost Card */}
+          <div className="p-2 rounded-xl bg-rose-500/10 border border-rose-500/30 flex flex-col justify-between">
+            <div className="flex items-center justify-between font-bold text-rose-600 dark:text-rose-400">
+              <span className="text-[11px]">{strike} PE</span>
+              <span className="text-sm font-black">{pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}</span>
             </div>
-            <div className="text-xs font-mono mt-1 font-bold opacity-90">
-              Cost: {ceCost != null ? fmtRs(ceCost) : "—"}
-            </div>
-            <div className="text-[10px] font-mono opacity-70">
-              ({totalQty} Q)
+            <div className="flex items-center justify-between text-[11px] text-muted-foreground mt-1">
+              <span>Cost: <strong className="text-foreground">{peCost != null ? fmtRs(peCost) : "—"}</strong></span>
+              <span>({totalQty} Q)</span>
             </div>
           </div>
-        </button>
+        </div>
 
-        {/* BUY PUT */}
-        <button
-          type="button"
-          disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
-          onClick={() => hitOrder("PE")}
-          className="h-32 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-30 disabled:pointer-events-none text-white p-3 flex flex-col justify-between text-left shadow-lg transition-transform"
-        >
-          <div className="flex items-center justify-between w-full">
-            <span className="text-xs font-black tracking-wide flex items-center gap-0.5">
-              BUY PUT ↘
-            </span>
-            <span className="text-[11px] font-mono opacity-80 font-bold">{strike} PE</span>
-          </div>
+        {/* Medium BUY Action Buttons */}
+        <div className="grid grid-cols-2 gap-2">
+          <button
+            type="button"
+            disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
+            onClick={() => hitOrder("CE")}
+            className="h-12 rounded-xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white font-black text-sm tracking-wide shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Zap className="size-4 fill-current" />
+            <span>BUY CALL ↗</span>
+          </button>
 
-          <div>
-            <div className="text-2xl font-black font-mono leading-none tracking-tight">
-              {pePrice != null ? fmtRs(pePrice) : quoteLoading ? "…" : "—"}
-            </div>
-            <div className="text-xs font-mono mt-1 font-bold opacity-90">
-              Cost: {peCost != null ? fmtRs(peCost) : "—"}
-            </div>
-            <div className="text-[10px] font-mono opacity-70">
-              ({totalQty} Q)
-            </div>
-          </div>
-        </button>
+          <button
+            type="button"
+            disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
+            onClick={() => hitOrder("PE")}
+            className="h-12 rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white font-black text-sm tracking-wide shadow-md flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+          >
+            <Zap className="size-4 fill-current" />
+            <span>BUY PUT ↘</span>
+          </button>
+        </div>
       </div>
 
-      {/* ACTIVE TRADE CARD (If Open Position) */}
+      {/* ─── ACTIVE TRADE POSITION HUD (Prominent when in trade) ─── */}
       {openPositions.length > 0 && (
         <div className="flex flex-col gap-1.5 shrink-0 pt-0.5">
           {openPositions.map((pos) => {
@@ -567,10 +610,10 @@ export function ManualTradingPage() {
               >
                 <div className="flex flex-col">
                   <div className="flex items-center gap-1.5 text-xs font-black font-mono text-foreground">
-                    <span className={cn("text-[9px] px-1.5 py-0.2 rounded font-black", isLong ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400")}>
+                    <span className={cn("text-[9px] px-1.5 py-0.2 rounded font-black", isLong ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/20 text-rose-600 dark:text-rose-400")}>
                       {isLong ? "LONG" : "SHORT"}
                     </span>
-                    {pos.symbol}
+                    <span>{pos.symbol}</span>
                   </div>
                   <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
                     {Math.abs(pos.net_qty)}Q · In: ₹{entryAvg.toFixed(1)} → LTP: ₹{ltp.toFixed(1)}
@@ -579,7 +622,7 @@ export function ManualTradingPage() {
                     <button
                       type="button"
                       onClick={() => moveToBreakeven(pos)}
-                      className="text-[9px] font-bold text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md hover:bg-amber-500/20 active:scale-95 cursor-pointer"
+                      className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 border border-amber-500/30 px-2 py-0.5 rounded-md hover:bg-amber-500/20 active:scale-95 cursor-pointer"
                     >
                       ⚡ Trail BE
                     </button>
@@ -594,7 +637,7 @@ export function ManualTradingPage() {
                     <div
                       className={cn(
                         "text-base font-black font-mono tracking-tight",
-                        tradePnl > 0 ? "text-emerald-400" : tradePnl < 0 ? "text-rose-400" : "text-muted-foreground"
+                        tradePnl > 0 ? "text-emerald-600 dark:text-emerald-400" : tradePnl < 0 ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
                       )}
                     >
                       {tradePnl > 0 ? "+" : ""}
