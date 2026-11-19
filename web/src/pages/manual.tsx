@@ -592,10 +592,17 @@ export function ManualTradingPage() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       style={{
-        paddingTop: "max(env(safe-area-inset-top, 0px), 48px)",
-        paddingBottom: "max(env(safe-area-inset-bottom, 0px), 24px)",
+        paddingTop: isPositionFocused
+          ? "max(env(safe-area-inset-top, 0px), 36px)"
+          : "max(env(safe-area-inset-top, 0px), 48px)",
+        paddingBottom: isPositionFocused
+          ? "max(env(safe-area-inset-bottom, 0px), 16px)"
+          : "max(env(safe-area-inset-bottom, 0px), 24px)",
       }}
-      className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto"
+      className={cn(
+        "flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background",
+        isPositionFocused ? "overflow-y-hidden" : "overflow-y-auto"
+      )}
     >
       {/* ─── PULL TO REFRESH INDICATOR ─── */}
       {(pullDistance > 0 || isRefreshing) && (
@@ -672,7 +679,7 @@ export function ManualTradingPage() {
         </header>
 
         {/* ─── 1. TOPMOST HEADER: DAY P&L + AVAILABLE BALANCE + HISTORY ─── */}
-        <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/60 shadow-2xs">
+        <div className={cn("flex items-center justify-between rounded-2xl bg-card border border-border/60 shadow-2xs", isPositionFocused ? "p-2" : "p-2.5")}>
           {/* Day P&L */}
           <div className="flex flex-col">
             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
@@ -680,7 +687,8 @@ export function ManualTradingPage() {
             </span>
             <div
               className={cn(
-                "text-2xl font-black font-mono tracking-tight mt-0.5",
+                "font-black font-mono tracking-tight mt-0.5",
+                isPositionFocused ? "text-xl sm:text-2xl" : "text-2xl",
                 summary.net_pnl > 0 ? "text-emerald-500" : summary.net_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
               )}
             >
@@ -694,7 +702,7 @@ export function ManualTradingPage() {
             <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
               AVAIL BALANCE
             </span>
-            <div className="text-base font-black font-mono text-foreground mt-0.5">
+            <div className={cn("font-black font-mono text-foreground mt-0.5", isPositionFocused ? "text-sm sm:text-base" : "text-base")}>
               {availableFunds != null ? fmtRs(availableFunds) : isKotakConnected ? "₹37,258" : "—"}
             </div>
           </div>
@@ -854,99 +862,95 @@ export function ManualTradingPage() {
               const tpRupeeImpact = Math.round(activeTp * posQty)
 
               return (
-                <div key={pos.symbol} className="flex flex-col gap-2.5">
-                  {/* Active Trade Header & Badges */}
-                  <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/60 shadow-2xs">
-                    <div className="flex items-center gap-1.5">
-                      <span className={cn("text-xs px-2 py-0.5 rounded-lg font-black tracking-wide", isLong ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/20 text-rose-600 dark:text-rose-400")}>
-                        {isLong ? "LONG" : "SHORT"}
-                      </span>
-                      <span className="text-sm font-black font-mono text-foreground">{pos.symbol}</span>
-                    </div>
-                    <span className="text-xs font-mono font-bold text-muted-foreground">
-                      {posQty} Qty
-                    </span>
-                  </div>
-
-                  {/* RUNNING TRADE P&L CARD */}
+                <div key={pos.symbol} className="flex flex-col gap-2">
+                  {/* UNIFIED ACTIVE TRADE TERMINAL HERO (COMPACT & ZERO-SCROLL) */}
                   <div className={cn(
-                    "p-3.5 rounded-3xl border-2 flex flex-col items-center justify-center text-center shadow-sm transition-all",
-                    tradePnl >= 0 ? "bg-emerald-500/10 border-emerald-500/60" : "bg-rose-500/10 border-rose-500/60"
+                    "p-2.5 rounded-2xl border-2 flex flex-col gap-1.5 shadow-sm transition-all",
+                    tradePnl >= 0 ? "bg-emerald-500/10 border-emerald-500/50" : "bg-rose-500/10 border-rose-500/50"
                   )}>
-                    <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground mb-0.5">
-                      RUNNING TRADE P&L
-                    </span>
-                    <div className={cn(
-                      "text-3xl font-black font-mono tracking-tight",
-                      tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"
-                    )}>
-                      {tradePnl >= 0 ? "+" : ""}{fmtRs(tradePnl)}
+                    {/* Top Row: Symbol & Direction Badge */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn(
+                          "text-[10px] px-2 py-0.5 rounded-md font-black tracking-wide",
+                          isLong ? "bg-emerald-500/25 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/25 text-rose-600 dark:text-rose-400"
+                        )}>
+                          {isLong ? "LONG ↗" : "SHORT ↘"}
+                        </span>
+                        <span className="text-xs sm:text-sm font-black font-mono text-foreground">{pos.symbol}</span>
+                      </div>
+                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-card/90 text-foreground border border-border/60">
+                        {posQty} Qty
+                      </span>
                     </div>
-                    <div className="flex items-center gap-2 mt-0.5 font-mono text-xs font-bold text-muted-foreground">
-                      <span>{ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt</span>
-                      <span>•</span>
-                      <span>{pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%</span>
-                      <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+
+                    {/* Middle Row: Hero Running P&L */}
+                    <div className="flex flex-col items-center justify-center py-0.5">
+                      <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-0.5">
+                        RUNNING TRADE P&L
+                      </span>
+                      <div className={cn(
+                        "text-3xl sm:text-4xl font-black font-mono tracking-tight",
+                        tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"
+                      )}>
+                        {tradePnl >= 0 ? "+" : ""}{fmtRs(tradePnl)}
+                      </div>
+                      <div className="flex items-center gap-2 mt-0.5 font-mono text-xs font-bold text-muted-foreground">
+                        <span className={tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                          {ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt
+                        </span>
+                        <span>•</span>
+                        <span className={tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                          {pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%
+                        </span>
+                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+                      </div>
+                    </div>
+
+                    {/* Bottom Row: Key Metrics Strip */}
+                    <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-border/40 text-center font-mono">
+                      <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Avg Entry</span>
+                        <span className="text-xs font-black text-foreground block mt-0.5">₹{entryAvg.toFixed(1)}</span>
+                      </div>
+                      <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Live LTP</span>
+                        <span className="text-xs font-black text-foreground block mt-0.5">₹{ltp.toFixed(1)}</span>
+                      </div>
+                      <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
+                        <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Invested</span>
+                        <span className="text-xs font-black text-foreground block mt-0.5">{fmtRs(investedCost)}</span>
+                      </div>
                     </div>
                   </div>
 
-                  {/* 3-METRICS GRID: ENTRY, LTP, INVESTED */}
-                  <div className="grid grid-cols-3 gap-2 text-center">
-                    <div className="p-2 rounded-xl bg-card border border-border/60">
-                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
-                        Avg Entry
-                      </span>
-                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
-                        ₹{entryAvg.toFixed(1)}
-                      </span>
-                    </div>
-
-                    <div className="p-2 rounded-xl bg-card border border-border/60">
-                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
-                        Live LTP
-                      </span>
-                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
-                        ₹{ltp.toFixed(1)}
-                      </span>
-                    </div>
-
-                    <div className="p-2 rounded-xl bg-card border border-border/60">
-                      <span className="text-[9px] uppercase font-bold text-muted-foreground block">
-                        Invested
-                      </span>
-                      <span className="text-sm font-black font-mono text-foreground mt-0.5 block">
-                        {fmtRs(investedCost)}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* LIVE EDITABLE STOP LOSS & TARGET CARD WITH 5-STEPPERS */}
-                  <div className="p-3 rounded-2xl bg-card border border-border/60 shadow-2xs flex flex-col gap-2">
+                  {/* LIVE EDITABLE STOP LOSS & TARGET (COMPACT 2-COLUMN GRID) */}
+                  <div className="grid grid-cols-2 gap-2">
                     {/* STOP LOSS LIVE EDITOR */}
-                    <div className="p-2 rounded-xl bg-rose-500/5 border border-rose-500/25 flex flex-col gap-1.5">
+                    <div className="p-2 rounded-2xl bg-card border border-rose-500/35 flex flex-col justify-between gap-1 shadow-2xs">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-rose-500 uppercase flex items-center gap-1 text-[11px]">
+                        <span className="font-bold text-rose-500 uppercase flex items-center gap-1 text-[10px]">
                           <Shield className="size-3" /> Stop Loss
                         </span>
-                        <div className="text-right font-mono text-xs">
-                          <span className="font-bold text-foreground">
-                            {currentSlPrice != null ? `₹${currentSlPrice.toFixed(1)}` : "Off"}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground ml-1">
-                            {activeSl > 0 ? `(-₹${slRupeeImpact})` : ""}
-                          </span>
-                        </div>
+                        <button
+                          type="button"
+                          onClick={() => moveToBreakeven(pos)}
+                          className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all cursor-pointer"
+                          title="Trail SL to Entry"
+                        >
+                          ⚡ BE
+                        </button>
                       </div>
 
-                      <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center justify-between gap-1">
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
                           onClick={() => updateActiveRisk(pos.symbol, Math.max(0, activeSl - 5), activeTp, pos)}
                         >
-                          <Minus className="size-3.5 text-rose-500" />
+                          <Minus className="size-3 text-rose-500" />
                         </Button>
 
                         <div className="relative flex-1">
@@ -956,59 +960,47 @@ export function ManualTradingPage() {
                             step="5"
                             value={activeSl || ""}
                             onChange={(e) => updateActiveRisk(pos.symbol, parseFloat(e.target.value) || 0, activeTp, pos)}
-                            className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
+                            className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
                           />
-                          <span className="absolute right-2 top-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
-                            pts
-                          </span>
                         </div>
 
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
                           onClick={() => updateActiveRisk(pos.symbol, activeSl + 5, activeTp, pos)}
                         >
-                          <Plus className="size-3.5 text-rose-500" />
+                          <Plus className="size-3 text-rose-500" />
                         </Button>
+                      </div>
 
-                        <button
-                          type="button"
-                          onClick={() => moveToBreakeven(pos)}
-                          className="px-2 py-1.5 rounded-lg text-[10px] font-mono font-bold bg-amber-500/15 border border-amber-500/40 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all cursor-pointer shrink-0"
-                          title="Trail SL to Entry"
-                        >
-                          ⚡ BE
-                        </button>
+                      <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
+                        {currentSlPrice != null ? `Exit: ₹${currentSlPrice.toFixed(1)}` : "SL Off"}
+                        {activeSl > 0 ? ` (-₹${slRupeeImpact})` : ""}
                       </div>
                     </div>
 
                     {/* TARGET LIVE EDITOR */}
-                    <div className="p-2 rounded-xl bg-emerald-500/5 border border-emerald-500/25 flex flex-col gap-1.5">
+                    <div className="p-2 rounded-2xl bg-card border border-emerald-500/35 flex flex-col justify-between gap-1 shadow-2xs">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-emerald-500 uppercase flex items-center gap-1 text-[11px]">
+                        <span className="font-bold text-emerald-500 uppercase flex items-center gap-1 text-[10px]">
                           <Target className="size-3" /> Target
                         </span>
-                        <div className="text-right font-mono text-xs">
-                          <span className="font-bold text-foreground">
-                            {currentTpPrice != null ? `₹${currentTpPrice.toFixed(1)}` : "Off"}
-                          </span>
-                          <span className="text-[10px] text-muted-foreground ml-1">
-                            {activeTp > 0 ? `(+₹${tpRupeeImpact})` : ""}
-                          </span>
-                        </div>
+                        <span className="text-[10px] font-mono font-bold text-emerald-500">
+                          +{activeTp} pts
+                        </span>
                       </div>
 
-                      <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center justify-between gap-1">
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
                           onClick={() => updateActiveRisk(pos.symbol, activeSl, Math.max(0, activeTp - 5), pos)}
                         >
-                          <Minus className="size-3.5 text-emerald-500" />
+                          <Minus className="size-3 text-emerald-500" />
                         </Button>
 
                         <div className="relative flex-1">
@@ -1018,34 +1010,36 @@ export function ManualTradingPage() {
                             step="5"
                             value={activeTp || ""}
                             onChange={(e) => updateActiveRisk(pos.symbol, activeSl, parseFloat(e.target.value) || 0, pos)}
-                            className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
+                            className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
                           />
-                          <span className="absolute right-2 top-2 text-[10px] font-mono text-muted-foreground pointer-events-none">
-                            pts
-                          </span>
                         </div>
 
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
-                          className="size-8 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
                           onClick={() => updateActiveRisk(pos.symbol, activeSl, activeTp + 5, pos)}
                         >
-                          <Plus className="size-3.5 text-emerald-500" />
+                          <Plus className="size-3 text-emerald-500" />
                         </Button>
+                      </div>
+
+                      <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
+                        {currentTpPrice != null ? `Target: ₹${currentTpPrice.toFixed(1)}` : "TP Off"}
+                        {activeTp > 0 ? ` (+₹${tpRupeeImpact})` : ""}
                       </div>
                     </div>
                   </div>
 
                   {/* ACTION BUTTONS: EXIT THIS POSITION + EXIT ALL BUTTON */}
-                  <div className="flex flex-col gap-2 mt-1">
+                  <div className="flex flex-col gap-1.5 mt-0.5">
                     <Button
                       variant="destructive"
                       size="lg"
                       disabled={actionBusy}
                       onClick={() => hitExit(pos)}
-                      className="w-full h-12 text-sm font-black rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md tracking-wider cursor-pointer"
+                      className="w-full h-11 text-sm font-black rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md tracking-wider cursor-pointer"
                     >
                       SQUARE OFF {pos.symbol}
                     </Button>
@@ -1055,7 +1049,7 @@ export function ManualTradingPage() {
                         type="button"
                         disabled={actionBusy}
                         onClick={hitExitAll}
-                        className="w-full py-2.5 rounded-xl border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-mono font-bold text-rose-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
+                        className="w-full py-2 rounded-xl border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-mono font-bold text-rose-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
                       >
                         <span>🚨 EXIT ALL ({displayPositions.length} POSITIONS)</span>
                       </button>
@@ -1066,7 +1060,7 @@ export function ManualTradingPage() {
                   <button
                     type="button"
                     onClick={() => setViewMode("ORDER")}
-                    className="w-full py-3 mt-1 rounded-2xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-2 cursor-pointer shadow-2xs"
+                    className="w-full py-2 rounded-xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
                   >
                     <span>Trade Again / Place Another Order ➔</span>
                   </button>
@@ -1167,26 +1161,29 @@ export function ManualTradingPage() {
               </div>
             </div>
 
-            {/* ─── 3. STRIKE STEPPER (CLEAN & SUBSTANTIAL) ─── */}
-            <div className="flex items-center justify-between py-2 px-3 rounded-2xl bg-card border border-border/60 shadow-xs">
+            {/* ─── 3. STRIKE STEPPER (BIGGER & SPACIOUS) ─── */}
+            <div className="flex items-center justify-between py-3.5 px-3.5 rounded-2xl bg-card border border-border/70 shadow-sm my-0.5">
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-10 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                className="size-12 rounded-2xl bg-muted/70 border border-border/80 hover:bg-muted active:scale-90 cursor-pointer shadow-2xs"
                 onClick={() => stepStrike(-1)}
               >
-                <Minus className="size-4" />
+                <Minus className="size-5 text-foreground" />
               </Button>
 
-              <div className="text-center">
-                <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1">
-                  STRIKE PRICE
+              <div className="text-center flex flex-col items-center">
+                <div className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1.5 flex items-center gap-1.5">
+                  <span>STRIKE PRICE</span>
+                  <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-muted/80 text-muted-foreground">
+                    ±{strikeStep} pts
+                  </span>
                 </div>
-                <div className="text-2xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
-                  {strike || atmStrike}
+                <div className="text-3xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-2">
+                  <span>{strike || atmStrike}</span>
                   {Number(strike) === atmStrike && (
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-amber-500/20 text-amber-500 font-bold border border-amber-500/30">
+                    <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-500 font-black border border-amber-500/30 shadow-2xs">
                       ATM
                     </span>
                   )}
@@ -1197,10 +1194,10 @@ export function ManualTradingPage() {
                 type="button"
                 variant="ghost"
                 size="icon"
-                className="size-10 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                className="size-12 rounded-2xl bg-muted/70 border border-border/80 hover:bg-muted active:scale-90 cursor-pointer shadow-2xs"
                 onClick={() => stepStrike(1)}
               >
-                <Plus className="size-4" />
+                <Plus className="size-5 text-foreground" />
               </Button>
             </div>
 
