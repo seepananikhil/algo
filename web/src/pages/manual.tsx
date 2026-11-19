@@ -256,53 +256,99 @@ export function ManualTradingPage() {
     setStrikeMap((prev) => ({ ...prev, [indexSymbol]: val }))
   }
 
-  const [lots, setLots] = useState(1)
   const [product] = useState<"NRML" | "MIS">("NRML")
 
-  // Scalper Target & Stop Loss points (persisted in localStorage)
-  const [slPts, setSlPtsState] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem("scalper_sl_pts")
-      if (saved !== null) {
-        const val = parseFloat(saved)
-        if (!isNaN(val) && val >= 0) return val
-      }
-    } catch {}
-    return 10
-  })
-  const [tpPts, setTpPtsState] = useState<number>(() => {
-    try {
-      const saved = localStorage.getItem("scalper_tp_pts")
-      if (saved !== null) {
-        const val = parseFloat(saved)
-        if (!isNaN(val) && val >= 0) return val
-      }
-    } catch {}
-    return 15
+  // Scalper Target & Stop Loss points stored in separate buckets per symbol (NIFTY vs SENSEX)
+  const [tpMap, setTpMap] = useState<Record<"NIFTY" | "SENSEX", number>>(() => {
+    const parse = (key: string, fallback: number) => {
+      try {
+        const v = localStorage.getItem(key)
+        if (v !== null) {
+          const n = parseFloat(v)
+          if (!isNaN(n) && n >= 0) return n
+        }
+      } catch {}
+      return fallback
+    }
+    return {
+      NIFTY: parse("scalper_tp_NIFTY", 15),
+      SENSEX: parse("scalper_tp_SENSEX", 35),
+    }
   })
 
-  // Helper setters that automatically persist user edits to localStorage
-  const setSlPts = useCallback((valOrFn: number | ((prev: number) => number)) => {
-    setSlPtsState((prev) => {
-      const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn
-      const safeVal = Math.max(0, next)
+  const [slMap, setSlMap] = useState<Record<"NIFTY" | "SENSEX", number>>(() => {
+    const parse = (key: string, fallback: number) => {
       try {
-        localStorage.setItem("scalper_sl_pts", String(safeVal))
+        const v = localStorage.getItem(key)
+        if (v !== null) {
+          const n = parseFloat(v)
+          if (!isNaN(n) && n >= 0) return n
+        }
       } catch {}
-      return safeVal
-    })
-  }, [])
+      return fallback
+    }
+    return {
+      NIFTY: parse("scalper_sl_NIFTY", 10),
+      SENSEX: parse("scalper_sl_SENSEX", 20),
+    }
+  })
+
+  const [lotsMap, setLotsMap] = useState<Record<"NIFTY" | "SENSEX", number>>(() => {
+    const parse = (key: string, fallback: number) => {
+      try {
+        const v = localStorage.getItem(key)
+        if (v !== null) {
+          const n = parseInt(v, 10)
+          if (!isNaN(n) && n >= 1) return n
+        }
+      } catch {}
+      return fallback
+    }
+    return {
+      NIFTY: parse("scalper_lots_NIFTY", 1),
+      SENSEX: parse("scalper_lots_SENSEX", 1),
+    }
+  })
+
+  const tpPts = tpMap[indexSymbol] ?? (indexSymbol === "SENSEX" ? 35 : 15)
+  const slPts = slMap[indexSymbol] ?? (indexSymbol === "SENSEX" ? 20 : 10)
+  const lots = lotsMap[indexSymbol] ?? 1
 
   const setTpPts = useCallback((valOrFn: number | ((prev: number) => number)) => {
-    setTpPtsState((prev) => {
-      const next = typeof valOrFn === "function" ? valOrFn(prev) : valOrFn
+    setTpMap((prev) => {
+      const cur = prev[indexSymbol] ?? (indexSymbol === "SENSEX" ? 35 : 15)
+      const next = typeof valOrFn === "function" ? valOrFn(cur) : valOrFn
       const safeVal = Math.max(0, next)
       try {
-        localStorage.setItem("scalper_tp_pts", String(safeVal))
+        localStorage.setItem(`scalper_tp_${indexSymbol}`, String(safeVal))
       } catch {}
-      return safeVal
+      return { ...prev, [indexSymbol]: safeVal }
     })
-  }, [])
+  }, [indexSymbol])
+
+  const setSlPts = useCallback((valOrFn: number | ((prev: number) => number)) => {
+    setSlMap((prev) => {
+      const cur = prev[indexSymbol] ?? (indexSymbol === "SENSEX" ? 20 : 10)
+      const next = typeof valOrFn === "function" ? valOrFn(cur) : valOrFn
+      const safeVal = Math.max(0, next)
+      try {
+        localStorage.setItem(`scalper_sl_${indexSymbol}`, String(safeVal))
+      } catch {}
+      return { ...prev, [indexSymbol]: safeVal }
+    })
+  }, [indexSymbol])
+
+  const setLots = useCallback((valOrFn: number | ((prev: number) => number)) => {
+    setLotsMap((prev) => {
+      const cur = prev[indexSymbol] ?? 1
+      const next = typeof valOrFn === "function" ? valOrFn(cur) : valOrFn
+      const safeVal = Math.max(1, next)
+      try {
+        localStorage.setItem(`scalper_lots_${indexSymbol}`, String(safeVal))
+      } catch {}
+      return { ...prev, [indexSymbol]: safeVal }
+    })
+  }, [indexSymbol])
 
   // Per-position Risk mapping for active trades: symbol -> { sl, tp } (persisted in localStorage)
   const [riskMap, setRiskMap] = useState<Record<string, { sl: number; tp: number }>>(() => {
@@ -480,49 +526,8 @@ export function ManualTradingPage() {
     closed_count: closedPositions.length,
   }
 
-  // Only enable Demo mode when running on localhost (defaults to false so it never shows demo on refresh)
-  const isLocalhost =
-    typeof window !== "undefined" &&
-    (window.location.hostname === "localhost" ||
-      window.location.hostname === "127.0.0.1" ||
-      window.location.hostname === "0.0.0.0" ||
-      window.location.hostname.endsWith(".local"))
-
-  const [demoActive, setDemoActive] = useState<boolean>(false)
-
-  const DEFAULT_DEMO_POSITIONS: OpenPosition[] = [
-    {
-      symbol: "NIFTY 25250 CE",
-      net_qty: 65,
-      buy_avg: 124.5,
-      last_price: 142.0,
-      ltp: 142.0,
-      pnl: 1137.5,
-      unrealized_pnl: 1137.5,
-      lot_size: 65,
-      tl_pts: 10,
-      tp_pts: 15,
-    },
-    {
-      symbol: "SENSEX 82000 PE",
-      net_qty: 20,
-      buy_avg: 210.0,
-      last_price: 268.5,
-      ltp: 268.5,
-      pnl: 1170.0,
-      unrealized_pnl: 1170.0,
-      lot_size: 20,
-      tl_pts: 15,
-      tp_pts: 25,
-    },
-  ]
-  const [demoPositions, setDemoPositions] = useState<OpenPosition[]>(DEFAULT_DEMO_POSITIONS)
-
-  // Active positions to display (Real positions take precedence, or Demo preview if isLocalhost && demoActive is true)
-  const displayPositions: OpenPosition[] =
-    openPositions.length > 0 ? openPositions : (isLocalhost && demoActive) ? demoPositions : []
-
-  const isDemo = isLocalhost && openPositions.length === 0 && demoActive && displayPositions.length > 0
+  // Active positions to display (Real positions from broker)
+  const displayPositions: OpenPosition[] = openPositions
   const hasActivePosition = displayPositions.length > 0
   const activePos = displayPositions[selectedPosIdx] || displayPositions[0]
   const totalOpenPnl = displayPositions.reduce((acc, p) => acc + (p.unrealized_pnl ?? p.pnl ?? 0), 0)
@@ -562,9 +567,9 @@ export function ManualTradingPage() {
       return
     }
 
-    if (!isKotakConnected && !demoActive && !isDemo) {
+    if (!isKotakConnected) {
       toast.error("Kotak Broker Disconnected", {
-        description: "Connect Kotak Neo in Settings / Broker, or switch on Demo mode to test trades.",
+        description: "Connect Kotak Neo in Settings / Broker to place live orders.",
       })
       return
     }
@@ -575,28 +580,6 @@ export function ManualTradingPage() {
 
     const targetSymbol = optionType === "CE" ? ceSymbol : peSymbol
     const targetPrice = optionType === "CE" ? cePrice : pePrice
-
-    if (demoActive || isDemo) {
-      const simSymbol = targetSymbol || `${indexSymbol}${currentExpiry.replace(/-/g, "").toUpperCase()}${strike}${optionType}`
-      const simPrice = targetPrice || (optionType === "CE" ? 95 : 120)
-      const newPos: OpenPosition = {
-        symbol: simSymbol,
-        net_qty: totalQty,
-        buy_avg: simPrice,
-        ltp: simPrice,
-        unrealized_pnl: 0,
-        pnl: 0,
-        product: product,
-        exchange: indexSymbol === "SENSEX" ? "bse_fo" : "nse_fo",
-      }
-      setDemoPositions((prev) => [newPos, ...prev])
-      setDemoActive(true)
-      toast.success(`SIMULATED BUY ${totalQty}x ${strike} ${optionType}`, {
-        description: `Filled @ ₹${simPrice} · SL: -${slPts}pt · TP: +${tpPts}pt (Demo Trade)`,
-      })
-      setViewMode("POSITION")
-      return
-    }
 
     setActionBusy(true)
     try {
@@ -648,20 +631,6 @@ export function ManualTradingPage() {
       navigator.vibrate([40, 40])
     }
 
-    if (isDemo) {
-      toast.success("Demo Position Squared Off!", { description: `Squared off ${pos.symbol} · Simulated Exit` })
-      const remaining = demoPositions.filter((p) => p.symbol !== pos.symbol)
-      setDemoPositions(remaining)
-      if (selectedPosIdx >= remaining.length) {
-        setSelectedPosIdx(Math.max(0, remaining.length - 1))
-      }
-      if (remaining.length === 0) {
-        setDemoActive(false)
-        setViewMode("ORDER")
-      }
-      return
-    }
-
     setActionBusy(true)
     try {
       await postJSON("/api/exit-position", {
@@ -686,14 +655,6 @@ export function ManualTradingPage() {
     if (actionBusy) return
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate([50, 50, 50])
-    }
-
-    if (isDemo) {
-      toast.success("All Demo Positions Squared Off!")
-      setDemoPositions([])
-      setDemoActive(false)
-      setViewMode("ORDER")
-      return
     }
 
     setActionBusy(true)
@@ -724,10 +685,6 @@ export function ManualTradingPage() {
     // Also carry forward user's live adjusted risk preference for future trades
     setSlPts(validSl)
     setTpPts(validTp)
-
-    if (isDemo) {
-      return
-    }
 
     const entry = pos.buy_avg || pos.average_price || 0
     try {
@@ -808,34 +765,6 @@ export function ManualTradingPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Demo Mode Toggle Button (Enabled only when running on localhost) */}
-            {isLocalhost && (
-              <button
-                type="button"
-                onClick={() => {
-                  const next = !demoActive
-                  setDemoActive(next)
-                  if (next) {
-                    setDemoPositions(DEFAULT_DEMO_POSITIONS)
-                    setSelectedPosIdx(0)
-                    setViewMode("POSITION")
-                  } else {
-                    setViewMode("ORDER")
-                  }
-                }}
-                className={cn(
-                  "text-[10px] font-mono font-bold px-2 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95",
-                  demoActive
-                    ? "bg-amber-500/15 text-amber-500 border-amber-500/40 shadow-xs"
-                    : "bg-card text-muted-foreground border-border/60 hover:text-foreground"
-                )}
-                title={demoActive ? "Turn off demo preview" : "Show demo trade in active position HUD"}
-              >
-                <span className={cn("size-1.5 rounded-full", demoActive ? "bg-amber-500 animate-pulse" : "bg-muted-foreground")} />
-                <span>{demoActive ? "Demo ON" : "Demo"}</span>
-              </button>
-            )}
-
             {/* Quick Reload Button */}
             <Button
               type="button"
