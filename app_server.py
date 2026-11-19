@@ -1714,6 +1714,9 @@ def _manual_contract(expiry_text: str, strike_value, option_type: str, index_sym
     }
 
 
+_MANUAL_OPTIONS_CACHE: dict = {}
+
+
 def manual_option_choices(query: dict | None = None) -> dict:
     idx_sym = "NIFTY"
     if query:
@@ -1722,6 +1725,11 @@ def manual_option_choices(query: dict | None = None) -> dict:
             idx_sym = str(val[0]).upper()
         else:
             idx_sym = str(val).upper()
+
+    now_t = time.time()
+    cached = _MANUAL_OPTIONS_CACHE.get(idx_sym)
+    if cached and (now_t - cached["ts"] < 60.0):
+        return cached["data"]
 
     st = status()
 
@@ -1747,7 +1755,7 @@ def manual_option_choices(query: dict | None = None) -> dict:
                 "strikes": sorted(int(strike) for strike in rows["strike"].unique()),
             })
         sx_tick = st.get("sensex_last_tick") or {}
-        return {
+        result = {
             "symbol": "SENSEX",
             "spot": spot,
             "change": sx_tick.get("change"),
@@ -1757,6 +1765,8 @@ def manual_option_choices(query: dict | None = None) -> dict:
             "max_lots": 20,
             "expiries": choices,
         }
+        _MANUAL_OPTIONS_CACHE[idx_sym] = {"ts": now_t, "data": result}
+        return result
 
     spot = 0.0
     if st.get("last_tick") and st["last_tick"].get("ltp"):
@@ -1790,7 +1800,7 @@ def manual_option_choices(query: dict | None = None) -> dict:
             "strikes": sorted(int(strike) for strike in rows["strike"].unique()),
         })
     n_tick = st.get("last_tick") or {}
-    return {
+    result = {
         "symbol": "NIFTY",
         "spot": spot,
         "change": n_tick.get("change"),
@@ -1800,6 +1810,8 @@ def manual_option_choices(query: dict | None = None) -> dict:
         "max_lots": 20,
         "expiries": choices,
     }
+    _MANUAL_OPTIONS_CACHE[idx_sym] = {"ts": now_t, "data": result}
+    return result
 
 
 def manual_option_quote(query: dict) -> dict:
@@ -1828,7 +1840,34 @@ def manual_option_quote(query: dict) -> dict:
     opt_type_val = query.get("option_type") or [""]
     option_type = str(opt_type_val[0] if isinstance(opt_type_val, (list, tuple)) else opt_type_val).upper().strip()
 
+    is_pair = bool(query.get("pair")) or option_type in ("PAIR", "BOTH")
     lot_sz = 20 if idx == "SENSEX" else 65
+
+    # If pair quote is requested, fetch both CE and PE in a single batch request
+    if is_pair and strike > 0:
+        ce_px, pe_px = 0.0, 0.0
+        ce_sym, pe_sym = "", ""
+        if broker == "KOTAK_NEO":
+            try:
+                from live_option_pricing import get_live_option_pair
+                p_info = get_live_option_pair(idx, strike, expiry if expiry else None)
+                if p_info.get("ce"):
+                    ce_px = float(p_info["ce"].get("ltp") or 0.0)
+                    ce_sym = p_info["ce"].get("symbol") or ""
+                if p_info.get("pe"):
+                    pe_px = float(p_info["pe"].get("ltp") or 0.0)
+                    pe_sym = p_info["pe"].get("symbol") or ""
+            except Exception:
+                pass
+        return {
+            "ok": True,
+            "index_symbol": idx,
+            "strike": strike,
+            "lot_size": lot_sz,
+            "ce": {"symbol": ce_sym, "last_price": ce_px},
+            "pe": {"symbol": pe_sym, "last_price": pe_px},
+        }
+
     contract_sym = symbol
     price = 0.0
 

@@ -84,13 +84,8 @@ export function ManualTradingPage() {
   // Instrument: NIFTY vs SENSEX
   const [indexSymbol, setIndexSymbol] = useState<"NIFTY" | "SENSEX">("NIFTY")
 
-  // Fast live polling: 1000ms for positions, 2500ms for real-time spot and ATM options
+  // Fast live polling: 1000ms for positions, 8000ms for funds/margin
   const positionsPoll = usePoll<PositionsResponse>(isKotakConnected ? "/api/positions" : null, 1000)
-  const optionsPoll = usePoll<ManualOptionChoices>(
-    `/api/manual-options?symbol=${indexSymbol}`,
-    2500
-  )
-  // Poll funds/margin every 8 seconds
   const fundsPoll = usePoll<FundsStatus>(isKotakConnected ? "/api/funds" : null, 8000)
 
   // Track both NIFTY and SENSEX spot prices live (isolated per symbol to prevent cross-symbol flickers)
@@ -144,38 +139,14 @@ export function ManualTradingPage() {
     return sym.toUpperCase().includes("SENSEX") ? "SENSEX" : "NIFTY"
   }
 
-  // Update active index spot, atm, and expiries ONLY when response actually matches its symbol!
-  useEffect(() => {
-    const d = optionsPoll.data
-    if (!d || !d.ok) return
-    const sym = parseSymbol(d.symbol)
-    if (!sym) return
-
-    if (d.spot && d.spot > 0) {
-      setSpotMap((prev) => ({ ...prev, [sym]: d.spot }))
-    }
-    if (d.atm && d.atm > 0) {
-      setAtmMap((prev) => ({ ...prev, [sym]: d.atm }))
-      setStrikeMap((prev) => {
-        if (!prev[sym] || prev[sym] === "0") {
-          return { ...prev, [sym]: String(d.atm) }
-        }
-        return prev
-      })
-    }
-    if (d.expiries && d.expiries.length > 0) {
-      setExpiriesMap((prev) => ({ ...prev, [sym]: d.expiries }))
-    }
-  }, [optionsPoll.data])
-
-  // Also fetch alt index spot & options in background so both cards always display live spot values
-  useEffect(() => {
-    const altSymbol: "NIFTY" | "SENSEX" = indexSymbol === "NIFTY" ? "SENSEX" : "NIFTY"
-    fetch(`/api/manual-options?symbol=${altSymbol}`)
+  // Fetch option chain structure on-demand (only on mount, symbol switch, or manual refresh)
+  // Option chain structure is static throughout the trading day — no continuous polling needed!
+  const fetchOptionsFor = useCallback((targetSymbol: "NIFTY" | "SENSEX") => {
+    fetch(`/api/manual-options?symbol=${targetSymbol}`)
       .then((r) => r.json())
       .then((data: ManualOptionChoices) => {
         if (!data?.ok) return
-        const sym = parseSymbol(data.symbol) || altSymbol
+        const sym = parseSymbol(data.symbol) || targetSymbol
         if (data.spot && data.spot > 0) {
           setSpotMap((prev) => ({ ...prev, [sym]: data.spot }))
         }
@@ -193,19 +164,17 @@ export function ManualTradingPage() {
         }
       })
       .catch(() => {})
-  }, [indexSymbol])
+  }, [])
+
+  // Fetch on mount and when indexSymbol changes
+  useEffect(() => {
+    fetchOptionsFor(indexSymbol)
+    const altSymbol: "NIFTY" | "SENSEX" = indexSymbol === "NIFTY" ? "SENSEX" : "NIFTY"
+    fetchOptionsFor(altSymbol)
+  }, [indexSymbol, fetchOptionsFor])
 
   // Active expiries for current indexSymbol
-  const isDataForCurrentIndex = Boolean(
-    optionsPoll.data?.symbol && parseSymbol(optionsPoll.data.symbol) === indexSymbol
-  )
-
-  const expiries =
-    isDataForCurrentIndex && optionsPoll.data?.expiries && optionsPoll.data.expiries.length > 0
-      ? optionsPoll.data.expiries
-      : expiriesMap[indexSymbol]?.length
-      ? expiriesMap[indexSymbol]
-      : []
+  const expiries = expiriesMap[indexSymbol]?.length ? expiriesMap[indexSymbol] : []
 
   const currentExpiry = expiryMap[indexSymbol] || expiries[0]?.expiry || ""
 
@@ -228,10 +197,7 @@ export function ManualTradingPage() {
 
   const selectedExpiryGroup = expiries.find((e) => e.expiry === currentExpiry) || expiries[0]
   const lotSize = selectedExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
-  const atmStrike =
-    isDataForCurrentIndex && (optionsPoll.data?.atm ?? 0) > 0
-      ? optionsPoll.data!.atm
-      : atmMap[indexSymbol] || (indexSymbol === "SENSEX" ? 82000 : 25250)
+  const atmStrike = atmMap[indexSymbol] || (indexSymbol === "SENSEX" ? 82000 : 25250)
   const strikeStep = indexSymbol === "SENSEX" ? 100 : 50
 
   // Format expiry label nicely: e.g. "23 Nov", "01 Dec"
@@ -425,9 +391,10 @@ export function ManualTradingPage() {
         navigator.vibrate(25)
       }
       try {
+        fetchOptionsFor("NIFTY")
+        fetchOptionsFor("SENSEX")
         await Promise.allSettled([
           positionsPoll.reload(),
-          optionsPoll.reload(),
           fundsPoll.reload(),
         ])
       } finally {
@@ -443,7 +410,7 @@ export function ManualTradingPage() {
     }
   }
 
-  // Fetch Quotes for both CE and PE continuously in real-time
+  // Fetch Quotes for both CE and PE in a single batch request
   useEffect(() => {
     if (!strike) return
 
@@ -453,36 +420,35 @@ export function ManualTradingPage() {
     async function loadQuotes() {
       try {
         const expParam = currentExpiry ? `&expiry=${encodeURIComponent(currentExpiry)}` : ""
-        const [ceRes, peRes] = await Promise.allSettled([
-          fetch(`/api/manual-quote?symbol=${indexSymbol}&strike=${strike}&option_type=CE${expParam}`).then((r) =>
-            r.json()
-          ),
-          fetch(`/api/manual-quote?symbol=${indexSymbol}&strike=${strike}&option_type=PE${expParam}`).then((r) =>
-            r.json()
-          ),
-        ])
+        const res = await fetch(`/api/manual-quote?symbol=${indexSymbol}&strike=${strike}&pair=1${expParam}`)
+        const data = await res.json()
 
         if (cancelled) return
 
-        if (ceRes.status === "fulfilled" && ceRes.value && ceRes.value.last_price > 0) {
-          setCePrice(ceRes.value.last_price)
-          setCeSymbol(ceRes.value.symbol || "")
-        } else {
-          const curSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
-          setCePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "CE"))
-        }
+        const curSpot = indexSymbol === "NIFTY" ? (spotMap.NIFTY || niftySpot) : (spotMap.SENSEX || sensexSpot)
 
-        if (peRes.status === "fulfilled" && peRes.value && peRes.value.last_price > 0) {
-          setPePrice(peRes.value.last_price)
-          setPeSymbol(peRes.value.symbol || "")
+        if (data && data.ok) {
+          if (data.ce && data.ce.last_price > 0) {
+            setCePrice(data.ce.last_price)
+            setCeSymbol(data.ce.symbol || "")
+          } else {
+            setCePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "CE"))
+          }
+
+          if (data.pe && data.pe.last_price > 0) {
+            setPePrice(data.pe.last_price)
+            setPeSymbol(data.pe.symbol || "")
+          } else {
+            setPePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "PE"))
+          }
         } else {
-          const curSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
+          setCePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "CE"))
           setPePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "PE"))
         }
       } catch (err) {
         console.warn("Quote fetch error", err)
         if (!cancelled) {
-          const curSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
+          const curSpot = indexSymbol === "NIFTY" ? (spotMap.NIFTY || niftySpot) : (spotMap.SENSEX || sensexSpot)
           setCePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "CE"))
           setPePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "PE"))
         }
@@ -492,12 +458,12 @@ export function ManualTradingPage() {
     }
 
     void loadQuotes()
-    const timer = setInterval(() => void loadQuotes(), 1500)
+    const timer = setInterval(() => void loadQuotes(), 3500)
     return () => {
       cancelled = true
       clearInterval(timer)
     }
-  }, [indexSymbol, currentExpiry, strike, niftySpot, sensexSpot])
+  }, [indexSymbol, currentExpiry, strike])
 
   // Strike adjustment
   function stepStrike(dir: -1 | 1) {
@@ -773,7 +739,9 @@ export function ManualTradingPage() {
               onClick={async () => {
                 setIsRefreshing(true)
                 try {
-                  await Promise.allSettled([positionsPoll.reload(), optionsPoll.reload(), fundsPoll.reload()])
+                  fetchOptionsFor("NIFTY")
+                  fetchOptionsFor("SENSEX")
+                  await Promise.allSettled([positionsPoll.reload(), fundsPoll.reload()])
                 } finally {
                   setIsRefreshing(false)
                 }
