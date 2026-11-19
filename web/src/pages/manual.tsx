@@ -457,6 +457,11 @@ export function ManualTradingPage() {
   const realizedPnl = summary.realized_pnl ?? 0
   const overallPnl = realizedPnl + totalOpenPnl
 
+  // Strike offset relative to ATM / Spot (calculates how back or ahead the selected strike is)
+  const selectedStrikeNum = Number(strike) || atmStrike
+  const strikeDiffFromAtm = selectedStrikeNum - atmStrike
+  const stepsFromAtm = Math.round(strikeDiffFromAtm / strikeStep)
+
   // 1-TAP INSTANT BUY ORDER
   async function hitOrder(optionType: "CE" | "PE") {
     if (actionBusy) return
@@ -1202,11 +1207,25 @@ export function ManualTradingPage() {
                     65 Q
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
-                    {spotMap.NIFTY ? Number(spotMap.NIFTY).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "25,228.0"}
-                  </span>
+                <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
+                      {spotMap.NIFTY ? Number(spotMap.NIFTY).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "25,228.0"}
+                    </span>
+                  </div>
+                  {indexSymbol === "NIFTY" && (
+                    <span className={cn(
+                      "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border shadow-2xs",
+                      strikeDiffFromAtm === 0
+                        ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
+                        : strikeDiffFromAtm < 0
+                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                        : "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                    )}>
+                      {strikeDiffFromAtm === 0 ? "ATM" : `${strikeDiffFromAtm > 0 ? "+" : ""}${strikeDiffFromAtm} pts`}
+                    </span>
+                  )}
                 </div>
               </button>
 
@@ -1233,11 +1252,25 @@ export function ManualTradingPage() {
                     20 Q
                   </span>
                 </div>
-                <div className="flex items-center gap-1.5 mt-2">
-                  <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
-                  <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
-                    {spotMap.SENSEX ? Number(spotMap.SENSEX).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}
-                  </span>
+                <div className="flex items-center justify-between mt-2">
+                  <div className="flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                    <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
+                      {spotMap.SENSEX ? Number(spotMap.SENSEX).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}
+                    </span>
+                  </div>
+                  {indexSymbol === "SENSEX" && (
+                    <span className={cn(
+                      "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border shadow-2xs",
+                      strikeDiffFromAtm === 0
+                        ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
+                        : strikeDiffFromAtm < 0
+                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                        : "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                    )}>
+                      {strikeDiffFromAtm === 0 ? "ATM" : `${strikeDiffFromAtm > 0 ? "+" : ""}${strikeDiffFromAtm} pts`}
+                    </span>
+                  )}
                 </div>
               </button>
             </div>
@@ -1264,44 +1297,92 @@ export function ManualTradingPage() {
               </div>
             </div>
 
-            {/* ─── 3. STRIKE STEPPER (BIGGER & SPACIOUS) ─── */}
-            <div className="flex items-center justify-between py-3.5 px-3.5 rounded-2xl bg-card border border-border/70 shadow-sm my-0.5">
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-12 rounded-2xl bg-muted/70 border border-border/80 hover:bg-muted active:scale-90 cursor-pointer shadow-2xs"
-                onClick={() => stepStrike(-1)}
-              >
-                <Minus className="size-5 text-foreground" />
-              </Button>
+            {/* ─── 3. STRIKE STEPPER & OFFSET CALCULATOR ─── */}
+            <div className="flex flex-col gap-2 p-3 rounded-2xl bg-card border border-border/70 shadow-sm my-0.5">
+              <div className="flex items-center justify-between">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-12 rounded-2xl bg-muted/70 border border-border/80 hover:bg-muted active:scale-90 cursor-pointer shadow-2xs"
+                  onClick={() => stepStrike(-1)}
+                  title={`Step back -${strikeStep} pts`}
+                >
+                  <Minus className="size-5 text-foreground" />
+                </Button>
 
-              <div className="text-center flex flex-col items-center">
-                <div className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1.5 flex items-center gap-1.5">
-                  <span>STRIKE PRICE</span>
-                  <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-muted/80 text-muted-foreground">
-                    ±{strikeStep} pts
-                  </span>
-                </div>
-                <div className="text-3xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-2">
-                  <span>{strike || atmStrike}</span>
-                  {Number(strike) === atmStrike && (
-                    <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-500 font-black border border-amber-500/30 shadow-2xs">
-                      ATM
+                <div className="text-center flex flex-col items-center">
+                  <div className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1 flex items-center gap-1.5">
+                    <span>STRIKE PRICE</span>
+                    <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-muted/80 text-muted-foreground">
+                      ATM {atmStrike}
                     </span>
-                  )}
+                  </div>
+
+                  <div className="text-3xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-2">
+                    <span>{strike || atmStrike}</span>
+                  </div>
+
+                  {/* Offset distance badge: -50, -100, etc. */}
+                  <div className="mt-1 flex items-center gap-1.5">
+                    {strikeDiffFromAtm === 0 ? (
+                      <span className="text-xs px-2 py-0.5 rounded-lg bg-amber-500/20 text-amber-500 font-black border border-amber-500/30 shadow-2xs">
+                        ★ ATM (At The Money)
+                      </span>
+                    ) : (
+                      <span className={cn(
+                        "text-xs px-2 py-0.5 rounded-lg font-black font-mono border shadow-2xs flex items-center gap-1",
+                        strikeDiffFromAtm < 0
+                          ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
+                          : "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30"
+                      )}>
+                        <span>{strikeDiffFromAtm > 0 ? `+${strikeDiffFromAtm}` : strikeDiffFromAtm} pts</span>
+                        <span className="text-[10px] opacity-80 font-normal">
+                          ({Math.abs(stepsFromAtm)} {Math.abs(stepsFromAtm) === 1 ? "strike" : "strikes"} {strikeDiffFromAtm < 0 ? "back" : "ahead"})
+                        </span>
+                      </span>
+                    )}
+                  </div>
                 </div>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-12 rounded-2xl bg-muted/70 border border-border/80 hover:bg-muted active:scale-90 cursor-pointer shadow-2xs"
+                  onClick={() => stepStrike(1)}
+                  title={`Step forward +${strikeStep} pts`}
+                >
+                  <Plus className="size-5 text-foreground" />
+                </Button>
               </div>
 
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                className="size-12 rounded-2xl bg-muted/70 border border-border/80 hover:bg-muted active:scale-90 cursor-pointer shadow-2xs"
-                onClick={() => stepStrike(1)}
-              >
-                <Plus className="size-5 text-foreground" />
-              </Button>
+              {/* Quick Offset Chips: [-100] [-50] [ATM] [+50] [+100] */}
+              <div className="grid grid-cols-5 gap-1 pt-2 border-t border-border/40">
+                {[-2, -1, 0, 1, 2].map((step) => {
+                  const targetStrike = atmStrike + step * strikeStep
+                  const isSelected = selectedStrikeNum === targetStrike
+                  const offsetVal = step * strikeStep
+                  const chipLabel = step === 0 ? "ATM" : `${offsetVal > 0 ? "+" : ""}${offsetVal}`
+                  return (
+                    <button
+                      key={step}
+                      type="button"
+                      onClick={() => setStrike(String(targetStrike))}
+                      className={cn(
+                        "py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer text-center active:scale-95 flex flex-col items-center justify-center",
+                        isSelected
+                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                          : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
+                      )}
+                      title={`Jump to ${targetStrike} (${chipLabel} pts)`}
+                    >
+                      <span className="font-black leading-tight">{chipLabel}</span>
+                      <span className="text-[9px] opacity-70 leading-tight">{targetStrike}</span>
+                    </button>
+                  )
+                })}
+              </div>
             </div>
 
             {/* ─── 4. LOTS PICKER (BIGGER & PROMINENT LIKE SPOT/STRIKE) ─── */}
