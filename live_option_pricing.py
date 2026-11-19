@@ -26,13 +26,14 @@ def get_live_option_ltp(
     symbol_name: str = "NIFTY",
     strike: int = 22500,
     opt_type: str = "CE",
+    expiry_date: Optional[str] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Fetch exact real-time market quote for nearest weekly option contract from Kotak Neo."""
+    """Fetch exact real-time market quote for nearest or specified weekly option contract from Kotak Neo."""
     if get_kotak_client is None:
         return None
 
     opt_type = opt_type.upper()
-    cache_key = f"{symbol_name}_{strike}_{opt_type}"
+    cache_key = f"{symbol_name}_{strike}_{opt_type}_{expiry_date or 'nearest'}"
 
     client = get_kotak_client()
     if not client:
@@ -61,10 +62,14 @@ def get_live_option_ltp(
                     try:
                         exp_dt = datetime.strptime(exp_str, "%d%b%Y")
                         if exp_dt.date() >= now.date():
-                            valid.append((exp_dt, item))
+                            if expiry_date and exp_dt.strftime("%Y-%m-%d") == expiry_date:
+                                valid.insert(0, (exp_dt, item))
+                            else:
+                                valid.append((exp_dt, item))
                     except Exception:
                         pass
-                valid.sort(key=lambda x: x[0])
+                if not expiry_date:
+                    valid.sort(key=lambda x: x[0])
                 if valid:
                     nearest_exp, nearest_item = valid[0]
                     token = str(nearest_item.get("pSymbol"))

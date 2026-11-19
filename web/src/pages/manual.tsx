@@ -87,7 +87,7 @@ export function ManualTradingPage() {
   // Fast live polling: 1000ms for positions, 2500ms for real-time spot and ATM options
   const positionsPoll = usePoll<PositionsResponse>(isKotakConnected ? "/api/positions" : null, 1000)
   const optionsPoll = usePoll<ManualOptionChoices>(
-    isKotakConnected ? `/api/manual-options?symbol=${indexSymbol}` : null,
+    `/api/manual-options?symbol=${indexSymbol}`,
     2500
   )
   // Poll funds/margin every 8 seconds
@@ -170,7 +170,6 @@ export function ManualTradingPage() {
 
   // Also fetch alt index spot & options in background so both cards always display live spot values
   useEffect(() => {
-    if (!isKotakConnected) return
     const altSymbol: "NIFTY" | "SENSEX" = indexSymbol === "NIFTY" ? "SENSEX" : "NIFTY"
     fetch(`/api/manual-options?symbol=${altSymbol}`)
       .then((r) => r.json())
@@ -194,7 +193,7 @@ export function ManualTradingPage() {
         }
       })
       .catch(() => {})
-  }, [indexSymbol, isKotakConnected])
+  }, [indexSymbol])
 
   // Active expiries for current indexSymbol
   const isDataForCurrentIndex = Boolean(
@@ -384,7 +383,7 @@ export function ManualTradingPage() {
 
   // Fetch Quotes for both CE and PE continuously in real-time
   useEffect(() => {
-    if (!isKotakConnected || !currentExpiry || !strike) return
+    if (!currentExpiry || !strike) return
 
     let cancelled = false
     setQuoteLoading(true)
@@ -428,7 +427,7 @@ export function ManualTradingPage() {
       cancelled = true
       clearInterval(timer)
     }
-  }, [indexSymbol, currentExpiry, strike, isKotakConnected])
+  }, [indexSymbol, currentExpiry, strike])
 
   // Strike adjustment
   function stepStrike(dir: -1 | 1) {
@@ -536,14 +535,43 @@ export function ManualTradingPage() {
       return
     }
 
+    if (!isKotakConnected && !demoActive && !isDemo) {
+      toast.error("Kotak Broker Disconnected", {
+        description: "Connect Kotak Neo in Settings / Broker, or switch on Demo mode to test trades.",
+      })
+      return
+    }
+
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate(35)
     }
 
-    setActionBusy(true)
     const targetSymbol = optionType === "CE" ? ceSymbol : peSymbol
     const targetPrice = optionType === "CE" ? cePrice : pePrice
 
+    if (demoActive || isDemo) {
+      const simSymbol = targetSymbol || `${indexSymbol}${currentExpiry.replace(/-/g, "").toUpperCase()}${strike}${optionType}`
+      const simPrice = targetPrice || (optionType === "CE" ? 95 : 120)
+      const newPos: OpenPosition = {
+        symbol: simSymbol,
+        net_qty: totalQty,
+        buy_avg: simPrice,
+        ltp: simPrice,
+        unrealized_pnl: 0,
+        pnl: 0,
+        product: product,
+        exchange: indexSymbol === "SENSEX" ? "bse_fo" : "nse_fo",
+      }
+      setDemoPositions((prev) => [newPos, ...prev])
+      setDemoActive(true)
+      toast.success(`SIMULATED BUY ${totalQty}x ${strike} ${optionType}`, {
+        description: `Filled @ ₹${simPrice} · SL: -${slPts}pt · TP: +${tpPts}pt (Demo Trade)`,
+      })
+      setViewMode("POSITION")
+      return
+    }
+
+    setActionBusy(true)
     try {
       const res = await postJSON<{ ok: boolean; order_id?: string; fill_price?: number; symbol?: string; qty?: number }>(
         "/api/manual-order",
@@ -1193,14 +1221,14 @@ export function ManualTradingPage() {
                       </div>
                     </div>
 
-                    {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON (SLEEK BLACK TERMINAL STYLE) ─── */}
+                    {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON (MIMICKING PUT BUTTON STYLE) ─── */}
                     <button
                       type="button"
                       disabled={actionBusy}
                       onClick={() => hitExit(pos)}
-                      className="w-full h-12 text-sm font-black rounded-2xl bg-zinc-950 dark:bg-black hover:bg-zinc-900 active:scale-95 shadow-md border-2 border-zinc-800 hover:border-zinc-700 tracking-wider cursor-pointer text-white flex items-center justify-center gap-2 transition-all font-mono"
+                      className="w-full h-12 text-sm font-black rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 shadow-md shadow-rose-950/20 border border-rose-400/30 tracking-wider cursor-pointer text-white flex items-center justify-center gap-2 transition-all font-mono"
                     >
-                      <XCircle className="size-5 shrink-0 text-rose-500" />
+                      <XCircle className="size-5 shrink-0 text-white" />
                       <span>SQUARE OFF {pos.symbol}</span>
                     </button>
                   </div>
@@ -1232,10 +1260,10 @@ export function ManualTradingPage() {
                 type="button"
                 disabled={actionBusy}
                 onClick={hitExitAll}
-                className="flex-1 h-11 text-xs font-black rounded-xl bg-zinc-950 dark:bg-black hover:bg-zinc-900 active:scale-95 shadow-md border border-zinc-800 hover:border-zinc-700 font-mono text-white flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                className="flex-1 h-11 text-xs font-black rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 shadow-md shadow-rose-950/20 border border-rose-400/30 font-mono text-white flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                 title="Square off all open positions"
               >
-                <AlertTriangle className="size-4 shrink-0 text-rose-500" />
+                <AlertTriangle className="size-4 shrink-0 text-white" />
                 <span>SQUARE OFF ALL{displayPositions.length > 1 ? ` (${displayPositions.length})` : ""}</span>
               </button>
 
@@ -1571,7 +1599,7 @@ export function ManualTradingPage() {
               {/* CALL BUTTON */}
               <button
                 type="button"
-                disabled={!strike || cePrice == null || !isKotakConnected || actionBusy}
+                disabled={!strike || actionBusy}
                 onClick={() => hitOrder("CE")}
                 className="h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-center items-center gap-0.5 p-2 shadow-md transition-all cursor-pointer text-center"
               >
@@ -1589,7 +1617,7 @@ export function ManualTradingPage() {
               {/* PUT BUTTON */}
               <button
                 type="button"
-                disabled={!strike || pePrice == null || !isKotakConnected || actionBusy}
+                disabled={!strike || actionBusy}
                 onClick={() => hitOrder("PE")}
                 className="h-16 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-center items-center gap-0.5 p-2 shadow-md transition-all cursor-pointer text-center"
               >

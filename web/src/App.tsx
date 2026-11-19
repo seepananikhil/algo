@@ -140,7 +140,7 @@ export default function App() {
                     </Route>
                   </Routes>
                 </BrowserRouter>
-                <Toaster richColors position="bottom-right" />
+                <Toaster richColors position="top-center" visibleToasts={1} duration={2000} closeButton />
               </TooltipProvider>
             </StatusProvider>
           </AuthGate>
