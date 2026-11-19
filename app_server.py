@@ -2269,18 +2269,18 @@ def scalp_tp_tl_sentinel_loop() -> None:
                                 print(f"[{datetime.now(IST):%H:%M:%S}] [TP HIT] {clean_sym}: +{pts:.1f} pts >= +{tp_pts} pts (LTP: ₹{cur_ltp:.1f}, Buy: ₹{buy_avg:.1f}). Auto-exiting...")
                                 try:
                                     exit_position({"symbol": sym, "qty": qty})
+                                    clear_scalp_target(sym)
+                                    clear_scalp_target(clean_sym)
                                 except Exception as exc:
                                     print(f"Error auto-exiting on TP: {exc}")
-                                clear_scalp_target(sym)
-                                clear_scalp_target(clean_sym)
                             elif tl_pts > 0 and pts <= -tl_pts:
                                 print(f"[{datetime.now(IST):%H:%M:%S}] [TL HIT] {clean_sym}: {pts:.1f} pts <= -{tl_pts} pts (LTP: ₹{cur_ltp:.1f}, Buy: ₹{buy_avg:.1f}). Auto-exiting...")
                                 try:
                                     exit_position({"symbol": sym, "qty": qty})
+                                    clear_scalp_target(sym)
+                                    clear_scalp_target(clean_sym)
                                 except Exception as exc:
                                     print(f"Error auto-exiting on TL: {exc}")
-                                clear_scalp_target(sym)
-                                clear_scalp_target(clean_sym)
 
                         # Only prune targets if they have been active for > 90s and definitely no longer in open positions
                         now_ts = time.time()
@@ -2573,6 +2573,42 @@ def exit_position(body: dict) -> dict:
             transaction_type=tt,
             amo="NO",
         )
+        # If unauthorized or session expired, auto-relogin and retry exit immediately!
+        if not isinstance(resp, dict) or resp.get("stat") == "Not_Ok" or resp.get("error"):
+            err_str = resp.get("errMsg") or resp.get("message") or resp.get("error") if isinstance(resp, dict) else str(resp)
+            err_lower = str(err_str).lower()
+            if "unauthorized" in err_lower or "session" in err_lower or (isinstance(resp, dict) and resp.get("stCode") == 100008):
+                print(f"[Kotak Exit] Session expired during exit for {clean_sym}. Re-authenticating Kotak Neo and retrying...")
+                from kotak_orders import kotak_login
+                login_res = kotak_login()
+                if login_res.get("ok"):
+                    client = get_kotak_client()
+                    resp = client.place_order(
+                        exchange_segment=ex_seg,
+                        product=prod,
+                        price="0",
+                        order_type="MKT",
+                        quantity=str(exit_qty),
+                        validity="DAY",
+                        trading_symbol=clean_sym,
+                        transaction_type=tt,
+                        amo="NO",
+                    )
+            # If MIS was rejected by broker, fallback to NRML automatically
+            if isinstance(resp, dict) and prod == "MIS" and (resp.get("stat") == "Not_Ok" or resp.get("error")):
+                prod = "NRML"
+                resp = client.place_order(
+                    exchange_segment=ex_seg,
+                    product=prod,
+                    price="0",
+                    order_type="MKT",
+                    quantity=str(exit_qty),
+                    validity="DAY",
+                    trading_symbol=clean_sym,
+                    transaction_type=tt,
+                    amo="NO",
+                )
+
         if not isinstance(resp, dict) or resp.get("stat") == "Not_Ok" or resp.get("error"):
             err = resp.get("errMsg") or resp.get("message") or resp.get("error") if isinstance(resp, dict) else str(resp)
             raise ManualTradeError(f"Kotak exit failed: {err}")
