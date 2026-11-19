@@ -511,6 +511,9 @@ export type ManualOptionChoices = {
   ok: boolean
   symbol: string
   spot: number
+  change?: number
+  per_change?: number
+  prev_close?: number
   atm: number
   expiries: ManualExpiryGroup[]
   max_lots?: number

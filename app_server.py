@@ -1746,7 +1746,17 @@ def manual_option_choices(query: dict | None = None) -> dict:
                 "lot_size": int(rows.iloc[0]["lot_size"]) if not rows.empty else 20,
                 "strikes": sorted(int(strike) for strike in rows["strike"].unique()),
             })
-        return {"symbol": "SENSEX", "spot": spot, "atm": atm, "max_lots": 20, "expiries": choices}
+        sx_tick = st.get("sensex_last_tick") or {}
+        return {
+            "symbol": "SENSEX",
+            "spot": spot,
+            "change": sx_tick.get("change"),
+            "per_change": sx_tick.get("per_change"),
+            "prev_close": sx_tick.get("prev_close"),
+            "atm": atm,
+            "max_lots": 20,
+            "expiries": choices,
+        }
 
     spot = 0.0
     if st.get("last_tick") and st["last_tick"].get("ltp"):
@@ -1779,7 +1789,17 @@ def manual_option_choices(query: dict | None = None) -> dict:
             "lot_size": int(rows.iloc[0]["lot_size"]) if not rows.empty else 65,
             "strikes": sorted(int(strike) for strike in rows["strike"].unique()),
         })
-    return {"symbol": "NIFTY", "spot": spot, "atm": atm, "max_lots": 20, "expiries": choices}
+    n_tick = st.get("last_tick") or {}
+    return {
+        "symbol": "NIFTY",
+        "spot": spot,
+        "change": n_tick.get("change"),
+        "per_change": n_tick.get("per_change"),
+        "prev_close": n_tick.get("prev_close"),
+        "atm": atm,
+        "max_lots": 20,
+        "expiries": choices,
+    }
 
 
 def manual_option_quote(query: dict) -> dict:
@@ -2896,6 +2916,12 @@ def status() -> dict:
 
     # Check latest quotes cache from Kotak/Fyers for change and prev_close
     quotes_file = LIVE_DIR / f"quotes_{today()}.json"
+    if not quotes_file.exists():
+        q_files = sorted(LIVE_DIR.glob("quotes_*.json"))
+        if not q_files:
+            q_files = sorted(Path("captured_data/fyers/live").glob("quotes_*.json"))
+        if q_files:
+            quotes_file = q_files[-1]
     q_data = {}
     if quotes_file.exists():
         try:

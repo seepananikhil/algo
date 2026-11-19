@@ -9,8 +9,6 @@ import {
   Shield,
   ArrowLeft,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   RefreshCw,
   Sun,
   Moon,
@@ -97,9 +95,30 @@ export function ManualTradingPage() {
 
   // Track both NIFTY and SENSEX spot prices live (isolated per symbol to prevent cross-symbol flickers)
   const [spotMap, setSpotMap] = useState<Record<"NIFTY" | "SENSEX", number>>({
-    NIFTY: 25228,
-    SENSEX: 82031,
+    NIFTY: 25227.95,
+    SENSEX: 82031.81,
   })
+
+  // Real-time spot and day change from status ticks (polled every 1500ms) or cached spotMap
+  const niftyTick = status?.last_tick
+  const sensexTick = status?.sensex_last_tick
+
+  const niftySpot = niftyTick?.ltp || spotMap.NIFTY || 25227.95
+  const niftyChange = niftyTick?.change ?? (niftyTick?.prev_close ? niftySpot - niftyTick.prev_close : null)
+  const niftyPerChange = niftyTick?.per_change ?? (niftyTick?.prev_close && niftyChange != null ? (niftyChange / niftyTick.prev_close) * 100 : null)
+
+  const sensexSpot = sensexTick?.ltp || spotMap.SENSEX || 82031.81
+  const sensexChange = sensexTick?.change ?? (sensexTick?.prev_close ? sensexSpot - sensexTick.prev_close : null)
+  const sensexPerChange = sensexTick?.per_change ?? (sensexTick?.prev_close && sensexChange != null ? (sensexChange / sensexTick.prev_close) * 100 : null)
+
+  useEffect(() => {
+    if (niftyTick?.ltp && niftyTick.ltp > 0) {
+      setSpotMap((prev) => ({ ...prev, NIFTY: niftyTick.ltp }))
+    }
+    if (sensexTick?.ltp && sensexTick.ltp > 0) {
+      setSpotMap((prev) => ({ ...prev, SENSEX: sensexTick.ltp }))
+    }
+  }, [niftyTick?.ltp, sensexTick?.ltp])
 
   // Per-symbol caches for ATM, strikes, and expiries so switching symbols is instant with zero glitch or stale flash
   const [atmMap, setAtmMap] = useState<Record<"NIFTY" | "SENSEX", number>>({
@@ -434,8 +453,15 @@ export function ManualTradingPage() {
     closed_count: closedPositions.length,
   }
 
-  // Demo Mode Preview (Enabled so user can see and test the active position HUD live)
-  const [demoActive, setDemoActive] = useState<boolean>(true)
+  // Only enable Demo mode when running on localhost
+  const isLocalhost =
+    typeof window !== "undefined" &&
+    (window.location.hostname === "localhost" ||
+      window.location.hostname === "127.0.0.1" ||
+      window.location.hostname === "0.0.0.0" ||
+      window.location.hostname.endsWith(".local"))
+
+  const [demoActive, setDemoActive] = useState<boolean>(isLocalhost)
 
   const DEFAULT_DEMO_POSITIONS: OpenPosition[] = [
     {
@@ -465,11 +491,11 @@ export function ManualTradingPage() {
   ]
   const [demoPositions, setDemoPositions] = useState<OpenPosition[]>(DEFAULT_DEMO_POSITIONS)
 
-  // Active positions to display (Real positions take precedence, or Demo preview if demoActive is true)
+  // Active positions to display (Real positions take precedence, or Demo preview if isLocalhost && demoActive is true)
   const displayPositions: OpenPosition[] =
-    openPositions.length > 0 ? openPositions : demoActive ? demoPositions : []
+    openPositions.length > 0 ? openPositions : (isLocalhost && demoActive) ? demoPositions : []
 
-  const isDemo = openPositions.length === 0 && demoActive && displayPositions.length > 0
+  const isDemo = isLocalhost && openPositions.length === 0 && demoActive && displayPositions.length > 0
   const hasActivePosition = displayPositions.length > 0
   const activePos = displayPositions[selectedPosIdx] || displayPositions[0]
   const totalOpenPnl = displayPositions.reduce((acc, p) => acc + (p.unrealized_pnl ?? p.pnl ?? 0), 0)
@@ -734,33 +760,35 @@ export function ManualTradingPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
-            {/* Demo Mode Toggle Button */}
-            <button
-              type="button"
-              onClick={() => {
-                const next = !demoActive
-                setDemoActive(next)
-                if (next) {
-                  setDemoPositions(DEFAULT_DEMO_POSITIONS)
-                  setSelectedPosIdx(0)
-                  setViewMode("POSITION")
-                  toast.info("Demo Mode Active", { description: "Previewing 2 Active Positions with Swiper" })
-                } else {
-                  setViewMode("ORDER")
-                  toast.info("Demo Mode Disabled")
-                }
-              }}
-              className={cn(
-                "text-[10px] font-mono font-bold px-2 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95",
-                demoActive
-                  ? "bg-amber-500/15 text-amber-500 border-amber-500/40 shadow-xs"
-                  : "bg-card text-muted-foreground border-border/60 hover:text-foreground"
-              )}
-              title={demoActive ? "Turn off demo preview" : "Show demo trade in active position HUD"}
-            >
-              <span className={cn("size-1.5 rounded-full", demoActive ? "bg-amber-500 animate-pulse" : "bg-muted-foreground")} />
-              <span>{demoActive ? "Demo ON" : "Demo"}</span>
-            </button>
+            {/* Demo Mode Toggle Button (Enabled only when running on localhost) */}
+            {isLocalhost && (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !demoActive
+                  setDemoActive(next)
+                  if (next) {
+                    setDemoPositions(DEFAULT_DEMO_POSITIONS)
+                    setSelectedPosIdx(0)
+                    setViewMode("POSITION")
+                    toast.info("Demo Mode Active", { description: "Previewing Active Positions" })
+                  } else {
+                    setViewMode("ORDER")
+                    toast.info("Demo Mode Disabled")
+                  }
+                }}
+                className={cn(
+                  "text-[10px] font-mono font-bold px-2 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95",
+                  demoActive
+                    ? "bg-amber-500/15 text-amber-500 border-amber-500/40 shadow-xs"
+                    : "bg-card text-muted-foreground border-border/60 hover:text-foreground"
+                )}
+                title={demoActive ? "Turn off demo preview" : "Show demo trade in active position HUD"}
+              >
+                <span className={cn("size-1.5 rounded-full", demoActive ? "bg-amber-500 animate-pulse" : "bg-muted-foreground")} />
+                <span>{demoActive ? "Demo ON" : "Demo"}</span>
+              </button>
+            )}
 
             {/* Quick Reload Button */}
             <Button
@@ -954,83 +982,10 @@ export function ManualTradingPage() {
           </div>
         ) : isPositionFocused ? (
           /* ══════════════════════════════════════════════════════════════════ */
-          /* VIEW A: ACTIVE TRADE HUD (Swipable Multiple Position Cards)        */
+          /* VIEW A: ACTIVE TRADE HUD (Card-Level Swipable Position Cards)      */
           /* ══════════════════════════════════════════════════════════════════ */
           <div className="flex flex-col gap-2 animate-in fade-in duration-150">
-            {/* ─── TOP ACTIVE POSITIONS HEADER & SQUARE OFF ALL ACTION ─── */}
-            <div className="flex items-center justify-between gap-2 px-0.5">
-              <div className="flex items-center gap-1.5">
-                {displayPositions.length > 1 && (
-                  <div className="flex items-center gap-0.5 mr-0.5">
-                    <button
-                      type="button"
-                      disabled={selectedPosIdx === 0}
-                      onClick={() => scrollToPosition(Math.max(0, selectedPosIdx - 1))}
-                      className="size-7 rounded-lg bg-card border border-border/70 hover:bg-muted active:scale-90 disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-2xs"
-                      title="Previous position"
-                    >
-                      <ChevronLeft className="size-4 text-foreground" />
-                    </button>
-                    <button
-                      type="button"
-                      disabled={selectedPosIdx === displayPositions.length - 1}
-                      onClick={() => scrollToPosition(Math.min(displayPositions.length - 1, selectedPosIdx + 1))}
-                      className="size-7 rounded-lg bg-card border border-border/70 hover:bg-muted active:scale-90 disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-2xs"
-                      title="Next position"
-                    >
-                      <ChevronRight className="size-4 text-foreground" />
-                    </button>
-                  </div>
-                )}
-
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs font-mono font-black text-foreground">
-                      {displayPositions.length > 1 ? `Pos ${selectedPosIdx + 1} of ${displayPositions.length}` : "Active Trade"}
-                    </span>
-                    {displayPositions.length > 1 && (
-                      <span className="text-[10px] text-muted-foreground font-mono">
-                        (swipe ⇄)
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Dots Indicator for multiple positions */}
-                  {displayPositions.length > 1 && (
-                    <div className="flex items-center gap-1 mt-0.5">
-                      {displayPositions.map((_, i) => (
-                        <button
-                          key={i}
-                          type="button"
-                          onClick={() => scrollToPosition(i)}
-                          className={cn(
-                            "h-1.5 rounded-full transition-all cursor-pointer",
-                            selectedPosIdx === i ? "w-4 bg-primary" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
-                          )}
-                          title={`View position ${i + 1}`}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* SQUARE OFF ALL BUTTON (PROMINENT TOP ACTION) */}
-              <Button
-                type="button"
-                variant="destructive"
-                size="sm"
-                disabled={actionBusy}
-                onClick={hitExitAll}
-                className="h-8 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-mono font-black text-xs shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer ring-1 ring-rose-500/50"
-                title="Square off all open positions"
-              >
-                <AlertTriangle className="size-3.5 shrink-0" />
-                <span>SQUARE OFF ALL{displayPositions.length > 1 ? ` (${displayPositions.length})` : ""}</span>
-              </Button>
-            </div>
-
-            {/* ─── SWIPABLE POSITIONS CAROUSEL ─── */}
+            {/* ─── CARD-LEVEL SWIPABLE POSITIONS ─── */}
             <div
               ref={carouselRef}
               onScroll={handleCarouselScroll}
@@ -1255,14 +1210,47 @@ export function ManualTradingPage() {
               })}
             </div>
 
-            {/* ─── TRADE AGAIN / SWITCH TO ORDER DESK BUTTON ─── */}
-            <button
-              type="button"
-              onClick={() => setViewMode("ORDER")}
-              className="w-full py-2.5 rounded-xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98"
-            >
-              <span>Trade Again / Place Another Order ➔</span>
-            </button>
+            {/* ─── CARD PAGINATION DOTS (IF 2+ POSITIONS) ─── */}
+            {displayPositions.length > 1 && (
+              <div className="flex items-center justify-center gap-1.5 py-0.5">
+                {displayPositions.map((_, i) => (
+                  <button
+                    key={i}
+                    type="button"
+                    onClick={() => scrollToPosition(i)}
+                    className={cn(
+                      "h-1.5 rounded-full transition-all cursor-pointer",
+                      selectedPosIdx === i ? "w-5 bg-primary" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
+                    )}
+                    title={`Go to position ${i + 1}`}
+                  />
+                ))}
+              </div>
+            )}
+
+            {/* ─── BOTTOM ACTIONS: SQUARE OFF ALL + TRADE AGAIN ─── */}
+            <div className="flex items-center gap-2 mt-0.5">
+              <Button
+                type="button"
+                variant="destructive"
+                size="lg"
+                disabled={actionBusy}
+                onClick={hitExitAll}
+                className="flex-1 h-11 text-xs font-black rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md shadow-rose-600/30 font-mono flex items-center justify-center gap-1.5 cursor-pointer ring-1 ring-rose-500/50"
+                title="Square off all open positions"
+              >
+                <AlertTriangle className="size-4 shrink-0" />
+                <span>SQUARE OFF ALL{displayPositions.length > 1 ? ` (${displayPositions.length})` : ""}</span>
+              </Button>
+
+              <button
+                type="button"
+                onClick={() => setViewMode("ORDER")}
+                className="flex-1 h-11 rounded-xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98"
+              >
+                <span>Trade Again ➔</span>
+              </button>
+            </div>
           </div>
         ) : (
           /* ══════════════════════════════════════════════════════════════════ */
@@ -1270,7 +1258,7 @@ export function ManualTradingPage() {
           /* ══════════════════════════════════════════════════════════════════ */
           <div className="flex flex-col gap-2.5 animate-in fade-in duration-150">
             
-            {/* ─── 2. INDEX SELECTOR (BIGGER CARDS WITH SPOT VALUE) ─── */}
+            {/* ─── 2. INDEX SELECTOR (BIGGER CARDS WITH REAL-TIME SPOT & DAY CHANGE) ─── */}
             <div className="grid grid-cols-2 gap-2.5">
               {/* NIFTY Button */}
               <button
@@ -1295,25 +1283,22 @@ export function ManualTradingPage() {
                     65 Q
                   </span>
                 </div>
-                <div className="flex items-center justify-between mt-2">
+                <div className="flex flex-col mt-2">
                   <div className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                     <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
-                      {spotMap.NIFTY ? Number(spotMap.NIFTY).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "25,228.0"}
+                      {Number(niftySpot).toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                     </span>
                   </div>
-                  {indexSymbol === "NIFTY" && (
-                    <span className={cn(
-                      "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border shadow-2xs",
-                      strikeDiffFromAtm === 0
-                        ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
-                        : strikeDiffFromAtm < 0
-                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                        : "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30"
-                    )}>
-                      {strikeDiffFromAtm === 0 ? "ATM" : `${strikeDiffFromAtm > 0 ? "+" : ""}${strikeDiffFromAtm} pts`}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1 mt-0.5 font-mono text-[11px] font-bold">
+                    {niftyChange != null ? (
+                      <span className={niftyChange >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                        {niftyChange >= 0 ? "+" : ""}{niftyChange.toFixed(1)} ({niftyPerChange != null ? `${niftyPerChange >= 0 ? "+" : ""}${niftyPerChange.toFixed(2)}%` : ""})
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-[10px]">Real-time tick</span>
+                    )}
+                  </div>
                 </div>
               </button>
 
@@ -1340,25 +1325,22 @@ export function ManualTradingPage() {
                     20 Q
                   </span>
                 </div>
-                <div className="flex items-center justify-between mt-2">
+                <div className="flex flex-col mt-2">
                   <div className="flex items-center gap-1.5">
                     <span className="size-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                     <span className="text-base sm:text-lg font-black font-mono text-foreground tracking-tight">
-                      {spotMap.SENSEX ? Number(spotMap.SENSEX).toLocaleString("en-IN", { maximumFractionDigits: 1 }) : "82,031.8"}
+                      {Number(sensexSpot).toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
                     </span>
                   </div>
-                  {indexSymbol === "SENSEX" && (
-                    <span className={cn(
-                      "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-md border shadow-2xs",
-                      strikeDiffFromAtm === 0
-                        ? "bg-amber-500/15 text-amber-500 border-amber-500/30"
-                        : strikeDiffFromAtm < 0
-                        ? "bg-sky-500/15 text-sky-600 dark:text-sky-400 border-sky-500/30"
-                        : "bg-purple-500/15 text-purple-600 dark:text-purple-400 border-purple-500/30"
-                    )}>
-                      {strikeDiffFromAtm === 0 ? "ATM" : `${strikeDiffFromAtm > 0 ? "+" : ""}${strikeDiffFromAtm} pts`}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1 mt-0.5 font-mono text-[11px] font-bold">
+                    {sensexChange != null ? (
+                      <span className={sensexChange >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                        {sensexChange >= 0 ? "+" : ""}{sensexChange.toFixed(1)} ({sensexPerChange != null ? `${sensexPerChange >= 0 ? "+" : ""}${sensexPerChange.toFixed(2)}%` : ""})
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground text-[10px]">Real-time tick</span>
+                    )}
+                  </div>
                 </div>
               </button>
             </div>
@@ -1444,33 +1426,6 @@ export function ManualTradingPage() {
                   <Plus className="size-5 text-foreground" />
                 </Button>
               </div>
-
-              {/* Quick Offset Chips: [-100] [-50] [ATM] [+50] [+100] */}
-              <div className="grid grid-cols-5 gap-1 pt-2 border-t border-border/40">
-                {[-2, -1, 0, 1, 2].map((step) => {
-                  const targetStrike = atmStrike + step * strikeStep
-                  const isSelected = selectedStrikeNum === targetStrike
-                  const offsetVal = step * strikeStep
-                  const chipLabel = step === 0 ? "ATM" : `${offsetVal > 0 ? "+" : ""}${offsetVal}`
-                  return (
-                    <button
-                      key={step}
-                      type="button"
-                      onClick={() => setStrike(String(targetStrike))}
-                      className={cn(
-                        "py-1.5 rounded-xl text-xs font-mono font-bold border transition-all cursor-pointer text-center active:scale-95 flex flex-col items-center justify-center",
-                        isSelected
-                          ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                          : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
-                      )}
-                      title={`Jump to ${targetStrike} (${chipLabel} pts)`}
-                    >
-                      <span className="font-black leading-tight">{chipLabel}</span>
-                      <span className="text-[9px] opacity-70 leading-tight">{targetStrike}</span>
-                    </button>
-                  )
-                })}
-              </div>
             </div>
 
             {/* ─── 4. LOTS PICKER (BIGGER & PROMINENT LIKE SPOT/STRIKE) ─── */}
@@ -1511,25 +1466,6 @@ export function ManualTradingPage() {
                 >
                   <Plus className="size-4" />
                 </Button>
-              </div>
-
-              {/* Quick Lots Chips - Big Thumb-friendly Pills */}
-              <div className="grid grid-cols-5 gap-1.5 pt-1.5 border-t border-border/40">
-                {[1, 2, 3, 5, 10].map((l) => (
-                  <button
-                    key={l}
-                    type="button"
-                    onClick={() => setLots(l)}
-                    className={cn(
-                      "py-2 rounded-xl text-xs sm:text-sm font-mono font-black border transition-all cursor-pointer text-center active:scale-95",
-                      lots === l
-                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                        : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    {l} {l === 1 ? "Lot" : "L"}
-                  </button>
-                ))}
               </div>
             </div>
 
