@@ -2972,7 +2972,18 @@ def setup_info(df: pd.DataFrame) -> dict:
     return out
 
 
+_last_status_cache = {}
+_last_status_time = 0.0
+
+
 def status() -> dict:
+    global _last_status_cache, _last_status_time
+    now_ts = time.time()
+    if (now_ts - _last_status_time) < 2.5 and _last_status_cache:
+        res = dict(_last_status_cache)
+        res["now"] = datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")
+        return res
+
     cfg = read_config()
     live_orders = read_csv_rows(LIVE_DIR / f"live_orders_{today()}.csv")
     auto_live_started = any(row.get("mode") == "LIVE" for row in live_orders)
@@ -3048,7 +3059,7 @@ def status() -> dict:
 
     from broker import get_active_broker, get_all_broker_status
     active_broker = get_active_broker()
-    return {
+    res = {
         "now": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
         "market_open_day": is_market_weekday(),
         "token": token_status(),
@@ -3065,6 +3076,9 @@ def status() -> dict:
         "vix_last_tick": vix_last_tick,
         "scalper": scalper_status(),
     }
+    _last_status_cache = res
+    _last_status_time = time.time()
+    return res
 
 
 def option_trades(date: str | None = None) -> list:
@@ -5903,6 +5917,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             self.send_response(code)
             self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
             self.send_header("Access-Control-Allow-Headers", "Content-Type, X-Dashboard, Authorization, X-App-Pin")
@@ -5973,6 +5988,9 @@ class Handler(BaseHTTPRequestHandler):
         if url.path == "/api/auth/status":
             return self._json({"authenticated": self._is_authenticated()})
 
+        if url.path == "/api/health":
+            return self._json({"ok": True, "time": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")})
+
         # Public dashboard read routes for Swinger Engine
         if url.path == "/api/swinger/portfolio":
             from swinger_engine import load_portfolio, load_config
@@ -6023,7 +6041,7 @@ class Handler(BaseHTTPRequestHandler):
             res = backtest_single_stock(raw_sym)
             return self._json(res)
 
-        if not self._is_authenticated():
+        if not self._is_authenticated() and not self._is_local_client():
             return self._json({"error": "unauthorized", "auth_required": True}, 401)
 
         if url.path == "/api/status":

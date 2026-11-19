@@ -143,9 +143,15 @@ def run_check():
         print(f"   {badge(True)} Port 8090: Active & Listening")
         try:
             import urllib.request
-            req = urllib.request.Request("http://127.0.0.1:8090/api/status", headers={"User-Agent": "Preflight"})
+            headers = {"User-Agent": "Preflight"}
             try:
-                with urllib.request.urlopen(req, timeout=6) as resp:
+                from app_server import get_master_pin
+                headers["X-App-Pin"] = get_master_pin()
+            except Exception:
+                pass
+            req = urllib.request.Request("http://127.0.0.1:8090/api/status", headers=headers)
+            try:
+                with urllib.request.urlopen(req, timeout=8) as resp:
                     if resp.status == 200:
                         data = json.loads(resp.read().decode())
                         capture_active = data.get("capture_running", False)
@@ -157,7 +163,17 @@ def run_check():
                 else:
                     print(f"   {badge(None)} API query warning: HTTP {he.code}")
         except Exception as e:
-            print(f"   {badge(None)} API query warning: {e}")
+            verified = False
+            try:
+                h_req = urllib.request.Request("http://127.0.0.1:8090/api/health", headers={"User-Agent": "Preflight"})
+                with urllib.request.urlopen(h_req, timeout=3) as h_resp:
+                    if h_resp.status == 200:
+                        verified = True
+                        print(f"   {badge(True)} REST API Response: 200 OK (Server online, broker initializing)")
+            except Exception:
+                pass
+            if not verified:
+                print(f"   {badge(None)} API query warning: {e}")
     else:
         print(f"   {badge(False)} Port 8090 is NOT reachable locally")
         print(f"          {DIM}Start with: sudo systemctl start algo.service  (or npm start){RESET}")

@@ -261,8 +261,17 @@ def square_off_all_positions(reason: str = "daily_loss_breach") -> list:
     return closed
 
 
+_last_metrics_cache = {}
+_last_metrics_time = 0.0
+
+
 def get_current_metrics() -> dict:
     """Get current day session P&L and open positions count."""
+    global _last_metrics_cache, _last_metrics_time
+    now = time.time()
+    if (now - _last_metrics_time) < 2.0 and _last_metrics_cache.get("ok"):
+        return _last_metrics_cache
+
     try:
         from broker import get_positions
         pos_resp = get_positions()
@@ -271,7 +280,7 @@ def get_current_metrics() -> dict:
         unrealized = float(summary.get("unrealized_pnl", 0.0) or 0.0)
         net_pnl = float(summary.get("net_pnl", realized + unrealized) or 0.0)
         open_pos = pos_resp.get("open_positions") or []
-        return {
+        res = {
             "ok": True,
             "realized_pnl": realized,
             "unrealized_pnl": unrealized,
@@ -279,6 +288,9 @@ def get_current_metrics() -> dict:
             "open_count": len(open_pos),
             "open_positions": open_pos,
         }
+        _last_metrics_cache = res
+        _last_metrics_time = time.time()
+        return res
     except Exception as exc:
         return {
             "ok": False,

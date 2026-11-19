@@ -72,9 +72,27 @@ interface PositionsResponse {
   }
 }
 
+// Check whether NSE/BSE markets are currently open (09:15 - 15:30 IST Mon-Fri)
+function isMarketHoursNow(): boolean {
+  try {
+    const now = new Date()
+    const utc = now.getTime() + now.getTimezoneOffset() * 60000
+    const ist = new Date(utc + 3600000 * 5.5)
+    const day = ist.getDay()
+    if (day === 0 || day === 6) return false
+    const mins = ist.getHours() * 60 + ist.getMinutes()
+    return mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30
+  } catch {
+    return false
+  }
+}
+
 export function ManualTradingPage() {
   const { status } = useStatus()
   const isKotakConnected = Boolean(status?.token.valid)
+
+  // Live market open status (IST 09:15 - 15:30 Mon-Fri)
+  const isMarketOpen = Boolean(status?.market_open_day ?? isMarketHoursNow())
 
   // Theme support (Light / Dark)
   const { resolvedTheme, setTheme } = useTheme()
@@ -83,9 +101,15 @@ export function ManualTradingPage() {
   // Instrument: NIFTY vs SENSEX
   const [indexSymbol, setIndexSymbol] = useState<"NIFTY" | "SENSEX">("NIFTY")
 
-  // Fast live polling: 1000ms for positions, 8000ms for funds/margin
-  const positionsPoll = usePoll<PositionsResponse>(isKotakConnected ? "/api/positions" : null, 1000)
-  const fundsPoll = usePoll<FundsStatus>(isKotakConnected ? "/api/funds" : null, 8000)
+  // Fast live polling during market hours (1000ms), relaxed when market is closed (30s)
+  const positionsPoll = usePoll<PositionsResponse>(
+    isKotakConnected ? "/api/positions" : null,
+    isMarketOpen ? 1000 : 30000
+  )
+  const fundsPoll = usePoll<FundsStatus>(
+    isKotakConnected ? "/api/funds" : null,
+    isMarketOpen ? 8000 : 60000
+  )
 
   // Track both NIFTY and SENSEX spot prices live (isolated per symbol to prevent cross-symbol flickers)
   const [spotMap, setSpotMap] = useState<Record<"NIFTY" | "SENSEX", number>>({
@@ -487,12 +511,18 @@ export function ManualTradingPage() {
     }
 
     void loadQuotes()
+    // When market is closed, exchange quotes do not change. Do not poll in a loop!
+    if (!isMarketOpen) {
+      return () => {
+        cancelled = true
+      }
+    }
     const timer = setInterval(() => void loadQuotes(), 3500)
     return () => {
       cancelled = true
       clearInterval(timer)
     }
-  }, [indexSymbol, currentExpiry, strike])
+  }, [indexSymbol, currentExpiry, strike, isMarketOpen])
 
   // Strike adjustment
   function stepStrike(dir: -1 | 1) {
