@@ -9,10 +9,14 @@ import {
   Shield,
   ArrowLeft,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   RefreshCw,
   Sun,
   Moon,
   Wallet,
+  XCircle,
+  AlertTriangle,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -433,22 +437,37 @@ export function ManualTradingPage() {
   // Demo Mode Preview (Enabled so user can see and test the active position HUD live)
   const [demoActive, setDemoActive] = useState<boolean>(true)
 
-  const mockDemoPosition: OpenPosition = {
-    symbol: "NIFTY 25250 CE",
-    net_qty: 65,
-    buy_avg: 124.5,
-    last_price: 142.0,
-    ltp: 142.0,
-    pnl: 1137.5,
-    unrealized_pnl: 1137.5,
-    lot_size: 65,
-    tl_pts: 10,
-    tp_pts: 15,
-  }
+  const DEFAULT_DEMO_POSITIONS: OpenPosition[] = [
+    {
+      symbol: "NIFTY 25250 CE",
+      net_qty: 65,
+      buy_avg: 124.5,
+      last_price: 142.0,
+      ltp: 142.0,
+      pnl: 1137.5,
+      unrealized_pnl: 1137.5,
+      lot_size: 65,
+      tl_pts: 10,
+      tp_pts: 15,
+    },
+    {
+      symbol: "SENSEX 82000 PE",
+      net_qty: 20,
+      buy_avg: 210.0,
+      last_price: 268.5,
+      ltp: 268.5,
+      pnl: 1170.0,
+      unrealized_pnl: 1170.0,
+      lot_size: 20,
+      tl_pts: 15,
+      tp_pts: 25,
+    },
+  ]
+  const [demoPositions, setDemoPositions] = useState<OpenPosition[]>(DEFAULT_DEMO_POSITIONS)
 
   // Active positions to display (Real positions take precedence, or Demo preview if demoActive is true)
   const displayPositions: OpenPosition[] =
-    openPositions.length > 0 ? openPositions : demoActive ? [mockDemoPosition] : []
+    openPositions.length > 0 ? openPositions : demoActive ? demoPositions : []
 
   const isDemo = openPositions.length === 0 && demoActive && displayPositions.length > 0
   const hasActivePosition = displayPositions.length > 0
@@ -456,6 +475,27 @@ export function ManualTradingPage() {
   const totalOpenPnl = displayPositions.reduce((acc, p) => acc + (p.unrealized_pnl ?? p.pnl ?? 0), 0)
   const realizedPnl = summary.realized_pnl ?? 0
   const overallPnl = realizedPnl + totalOpenPnl
+
+  // Carousel ref and scroll navigation for swipable cards
+  const carouselRef = useRef<HTMLDivElement>(null)
+
+  const handleCarouselScroll = useCallback(() => {
+    if (!carouselRef.current) return
+    const { scrollLeft, clientWidth } = carouselRef.current
+    if (clientWidth > 0) {
+      const newIdx = Math.round(scrollLeft / clientWidth)
+      if (newIdx !== selectedPosIdx && newIdx >= 0 && newIdx < displayPositions.length) {
+        setSelectedPosIdx(newIdx)
+      }
+    }
+  }, [displayPositions.length, selectedPosIdx])
+
+  const scrollToPosition = useCallback((idx: number) => {
+    if (!carouselRef.current) return
+    const width = carouselRef.current.clientWidth
+    carouselRef.current.scrollTo({ left: idx * width, behavior: "smooth" })
+    setSelectedPosIdx(idx)
+  }, [])
 
   // Strike offset relative to ATM / Spot (calculates how back or ahead the selected strike is)
   const selectedStrikeNum = Number(strike) || atmStrike
@@ -529,8 +569,15 @@ export function ManualTradingPage() {
 
     if (isDemo) {
       toast.success("Demo Position Squared Off!", { description: `Squared off ${pos.symbol} · Simulated Exit` })
-      setDemoActive(false)
-      setViewMode("ORDER")
+      const remaining = demoPositions.filter((p) => p.symbol !== pos.symbol)
+      setDemoPositions(remaining)
+      if (selectedPosIdx >= remaining.length) {
+        setSelectedPosIdx(Math.max(0, remaining.length - 1))
+      }
+      if (remaining.length === 0) {
+        setDemoActive(false)
+        setViewMode("ORDER")
+      }
       return
     }
 
@@ -562,6 +609,7 @@ export function ManualTradingPage() {
 
     if (isDemo) {
       toast.success("All Demo Positions Squared Off!")
+      setDemoPositions([])
       setDemoActive(false)
       setViewMode("ORDER")
       return
@@ -640,16 +688,11 @@ export function ManualTradingPage() {
       onTouchEnd={handleTouchEnd}
       style={{
         paddingTop: isPositionFocused
-          ? "max(env(safe-area-inset-top, 0px), 36px)"
-          : "max(env(safe-area-inset-top, 0px), 48px)",
-        paddingBottom: isPositionFocused
-          ? "max(env(safe-area-inset-bottom, 0px), 16px)"
-          : "max(env(safe-area-inset-bottom, 0px), 24px)",
+          ? "max(env(safe-area-inset-top, 0px), 24px)"
+          : "max(env(safe-area-inset-top, 0px), 36px)",
+        paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)",
       }}
-      className={cn(
-        "flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background",
-        isPositionFocused ? "overflow-y-hidden" : "overflow-y-auto"
-      )}
+      className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto"
     >
       {/* ─── PULL TO REFRESH INDICATOR ─── */}
       {(pullDistance > 0 || isRefreshing) && (
@@ -698,8 +741,10 @@ export function ManualTradingPage() {
                 const next = !demoActive
                 setDemoActive(next)
                 if (next) {
+                  setDemoPositions(DEFAULT_DEMO_POSITIONS)
+                  setSelectedPosIdx(0)
                   setViewMode("POSITION")
-                  toast.info("Demo Mode Active", { description: "Previewing Active Position HUD" })
+                  toast.info("Demo Mode Active", { description: "Previewing 2 Active Positions with Swiper" })
                 } else {
                   setViewMode("ORDER")
                   toast.info("Demo Mode Disabled")
@@ -857,41 +902,6 @@ export function ManualTradingPage() {
           </button>
         )}
 
-        {/* ─── MULTI-POSITION SWITCHER TABS (IF 2+ POSITIONS OPEN) ─── */}
-        {isPositionFocused && displayPositions.length > 1 && (
-          <div className="flex flex-col gap-1.5 p-2 rounded-2xl bg-card border border-border/60 shadow-2xs">
-            <div className="flex items-center justify-between text-[11px] font-mono font-bold px-1">
-              <span className="text-muted-foreground uppercase text-[10px]">Active Positions ({displayPositions.length})</span>
-              <span className={cn("font-black text-xs", totalOpenPnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                Total: {totalOpenPnl >= 0 ? "+" : ""}{fmtRs(totalOpenPnl)}
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5 scrollbar-none">
-              {displayPositions.map((pos, idx) => {
-                const isSelected = idx === selectedPosIdx
-                const pnl = pos.unrealized_pnl ?? pos.pnl ?? 0
-                return (
-                  <button
-                    key={`${pos.symbol}-${idx}`}
-                    type="button"
-                    onClick={() => setSelectedPosIdx(idx)}
-                    className={cn(
-                      "px-2.5 py-1.5 rounded-xl border text-xs font-mono font-bold flex items-center gap-2 shrink-0 transition-all cursor-pointer",
-                      isSelected
-                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                        : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
-                    )}
-                  >
-                    <span>{idx + 1}. {pos.symbol.replace("NIFTY ", "").replace("SENSEX ", "")}</span>
-                    <span className={cn("text-[10px]", isSelected ? "text-primary-foreground/90" : pnl >= 0 ? "text-emerald-500" : "text-rose-500")}>
-                      {pnl >= 0 ? "+" : ""}{fmtRs(pnl)}
-                    </span>
-                  </button>
-                )
-              })}
-            </div>
-          </div>
-        )}
 
         {/* ─── CONDITIONAL MAIN CONTENT AREA (Swaps in the exact same space) ─── */}
         {viewMode === "HISTORY" ? (
@@ -944,237 +954,315 @@ export function ManualTradingPage() {
           </div>
         ) : isPositionFocused ? (
           /* ══════════════════════════════════════════════════════════════════ */
-          /* VIEW A: ACTIVE TRADE HUD (Focused on running position)             */
+          /* VIEW A: ACTIVE TRADE HUD (Swipable Multiple Position Cards)        */
           /* ══════════════════════════════════════════════════════════════════ */
-          <div className="flex flex-col gap-2.5 animate-in fade-in duration-150">
-            {activePos && (() => {
-              const pos = activePos
-              const isLong = pos.net_qty > 0
-              const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
-              const entryAvg = pos.buy_avg || pos.average_price || 0
-              const ltp = pos.ltp || pos.last_price || 0
-              const ptsDiff = isLong ? ltp - entryAvg : entryAvg - ltp
-              const pnlPercent = entryAvg > 0 ? (ptsDiff / entryAvg) * 100 : 0
-              const posQty = Math.abs(pos.net_qty)
-              const investedCost = Math.round(entryAvg * posQty)
+          <div className="flex flex-col gap-2 animate-in fade-in duration-150">
+            {/* ─── TOP ACTIVE POSITIONS HEADER & SQUARE OFF ALL ACTION ─── */}
+            <div className="flex items-center justify-between gap-2 px-0.5">
+              <div className="flex items-center gap-1.5">
+                {displayPositions.length > 1 && (
+                  <div className="flex items-center gap-0.5 mr-0.5">
+                    <button
+                      type="button"
+                      disabled={selectedPosIdx === 0}
+                      onClick={() => scrollToPosition(Math.max(0, selectedPosIdx - 1))}
+                      className="size-7 rounded-lg bg-card border border-border/70 hover:bg-muted active:scale-90 disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-2xs"
+                      title="Previous position"
+                    >
+                      <ChevronLeft className="size-4 text-foreground" />
+                    </button>
+                    <button
+                      type="button"
+                      disabled={selectedPosIdx === displayPositions.length - 1}
+                      onClick={() => scrollToPosition(Math.min(displayPositions.length - 1, selectedPosIdx + 1))}
+                      className="size-7 rounded-lg bg-card border border-border/70 hover:bg-muted active:scale-90 disabled:opacity-25 disabled:pointer-events-none flex items-center justify-center cursor-pointer shadow-2xs"
+                      title="Next position"
+                    >
+                      <ChevronRight className="size-4 text-foreground" />
+                    </button>
+                  </div>
+                )}
 
-              const activeSl = riskMap[pos.symbol]?.sl ?? pos.tl_pts ?? 10
-              const activeTp = riskMap[pos.symbol]?.tp ?? pos.tp_pts ?? 15
-              const currentSlPrice = entryAvg > 0 && activeSl > 0
-                ? isLong ? entryAvg - activeSl : entryAvg + activeSl
-                : null
-              const currentTpPrice = entryAvg > 0 && activeTp > 0
-                ? isLong ? entryAvg + activeTp : entryAvg - activeTp
-                : null
-              const slRupeeImpact = Math.round(activeSl * posQty)
-              const tpRupeeImpact = Math.round(activeTp * posQty)
-
-              return (
-                <div key={pos.symbol} className="flex flex-col gap-2">
-                  {/* UNIFIED ACTIVE TRADE TERMINAL HERO (COMPACT & ZERO-SCROLL) */}
-                  <div className={cn(
-                    "p-2.5 rounded-2xl border-2 flex flex-col gap-1.5 shadow-sm transition-all",
-                    tradePnl >= 0 ? "bg-emerald-500/10 border-emerald-500/50" : "bg-rose-500/10 border-rose-500/50"
-                  )}>
-                    {/* Top Row: Symbol & Direction Badge */}
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className={cn(
-                          "text-[10px] px-2 py-0.5 rounded-md font-black tracking-wide",
-                          isLong ? "bg-emerald-500/25 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/25 text-rose-600 dark:text-rose-400"
-                        )}>
-                          {isLong ? "LONG ↗" : "SHORT ↘"}
-                        </span>
-                        <span className="text-xs sm:text-sm font-black font-mono text-foreground">{pos.symbol}</span>
-                      </div>
-                      <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-card/90 text-foreground border border-border/60">
-                        {posQty} Qty
+                <div className="flex flex-col">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs font-mono font-black text-foreground">
+                      {displayPositions.length > 1 ? `Pos ${selectedPosIdx + 1} of ${displayPositions.length}` : "Active Trade"}
+                    </span>
+                    {displayPositions.length > 1 && (
+                      <span className="text-[10px] text-muted-foreground font-mono">
+                        (swipe ⇄)
                       </span>
-                    </div>
-
-                    {/* Middle Row: Hero Running P&L */}
-                    <div className="flex flex-col items-center justify-center py-0.5">
-                      <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-0.5">
-                        RUNNING TRADE P&L
-                      </span>
-                      <div className={cn(
-                        "text-3xl sm:text-4xl font-black font-mono tracking-tight",
-                        tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"
-                      )}>
-                        {tradePnl >= 0 ? "+" : ""}{fmtRs(tradePnl)}
-                      </div>
-                      <div className="flex items-center gap-2 mt-0.5 font-mono text-xs font-bold text-muted-foreground">
-                        <span className={tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"}>
-                          {ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt
-                        </span>
-                        <span>•</span>
-                        <span className={tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"}>
-                          {pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%
-                        </span>
-                        <span className="size-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
-                      </div>
-                    </div>
-
-                    {/* Bottom Row: Key Metrics Strip */}
-                    <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-border/40 text-center font-mono">
-                      <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
-                        <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Avg Entry</span>
-                        <span className="text-xs font-black text-foreground block mt-0.5">₹{entryAvg.toFixed(1)}</span>
-                      </div>
-                      <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
-                        <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Live LTP</span>
-                        <span className="text-xs font-black text-foreground block mt-0.5">₹{ltp.toFixed(1)}</span>
-                      </div>
-                      <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
-                        <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Invested</span>
-                        <span className="text-xs font-black text-foreground block mt-0.5">{fmtRs(investedCost)}</span>
-                      </div>
-                    </div>
+                    )}
                   </div>
 
-                  {/* LIVE EDITABLE STOP LOSS & TARGET (COMPACT 2-COLUMN GRID) */}
-                  <div className="grid grid-cols-2 gap-2">
-                    {/* STOP LOSS LIVE EDITOR */}
-                    <div className="p-2 rounded-2xl bg-card border border-rose-500/35 flex flex-col justify-between gap-1 shadow-2xs">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-rose-500 uppercase flex items-center gap-1 text-[10px]">
-                          <Shield className="size-3" /> Stop Loss
-                        </span>
+                  {/* Dots Indicator for multiple positions */}
+                  {displayPositions.length > 1 && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      {displayPositions.map((_, i) => (
                         <button
+                          key={i}
                           type="button"
-                          onClick={() => moveToBreakeven(pos)}
-                          className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all cursor-pointer"
-                          title="Trail SL to Entry"
-                        >
-                          ⚡ BE
-                        </button>
-                      </div>
+                          onClick={() => scrollToPosition(i)}
+                          className={cn(
+                            "h-1.5 rounded-full transition-all cursor-pointer",
+                            selectedPosIdx === i ? "w-4 bg-primary" : "w-1.5 bg-muted-foreground/30 hover:bg-muted-foreground/60"
+                          )}
+                          title={`View position ${i + 1}`}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
 
-                      <div className="flex items-center justify-between gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(pos.symbol, Math.max(0, activeSl - 5), activeTp, pos)}
-                        >
-                          <Minus className="size-3 text-rose-500" />
-                        </Button>
+              {/* SQUARE OFF ALL BUTTON (PROMINENT TOP ACTION) */}
+              <Button
+                type="button"
+                variant="destructive"
+                size="sm"
+                disabled={actionBusy}
+                onClick={hitExitAll}
+                className="h-8 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 text-white font-mono font-black text-xs shadow-md shadow-rose-600/30 flex items-center gap-1.5 cursor-pointer ring-1 ring-rose-500/50"
+                title="Square off all open positions"
+              >
+                <AlertTriangle className="size-3.5 shrink-0" />
+                <span>SQUARE OFF ALL{displayPositions.length > 1 ? ` (${displayPositions.length})` : ""}</span>
+              </Button>
+            </div>
 
-                        <div className="relative flex-1">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="5"
-                            value={activeSl || ""}
-                            onChange={(e) => updateActiveRisk(pos.symbol, parseFloat(e.target.value) || 0, activeTp, pos)}
-                            className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
-                          />
+            {/* ─── SWIPABLE POSITIONS CAROUSEL ─── */}
+            <div
+              ref={carouselRef}
+              onScroll={handleCarouselScroll}
+              className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth gap-3 pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden touch-pan-x"
+            >
+              {displayPositions.map((pos, idx) => {
+                const isLong = pos.net_qty > 0
+                const tradePnl = pos.unrealized_pnl ?? pos.pnl ?? 0
+                const entryAvg = pos.buy_avg || pos.average_price || 0
+                const ltp = pos.ltp || pos.last_price || 0
+                const ptsDiff = isLong ? ltp - entryAvg : entryAvg - ltp
+                const pnlPercent = entryAvg > 0 ? (ptsDiff / entryAvg) * 100 : 0
+                const posQty = Math.abs(pos.net_qty)
+                const investedCost = Math.round(entryAvg * posQty)
+
+                const activeSl = riskMap[pos.symbol]?.sl ?? pos.tl_pts ?? 10
+                const activeTp = riskMap[pos.symbol]?.tp ?? pos.tp_pts ?? 15
+                const currentSlPrice = entryAvg > 0 && activeSl > 0
+                  ? isLong ? entryAvg - activeSl : entryAvg + activeSl
+                  : null
+                const currentTpPrice = entryAvg > 0 && activeTp > 0
+                  ? isLong ? entryAvg + activeTp : entryAvg - activeTp
+                  : null
+                const slRupeeImpact = Math.round(activeSl * posQty)
+                const tpRupeeImpact = Math.round(activeTp * posQty)
+
+                return (
+                  <div
+                    key={`${pos.symbol}-${idx}`}
+                    className="w-full min-w-full shrink-0 snap-center flex flex-col gap-2"
+                  >
+                    {/* UNIFIED ACTIVE TRADE TERMINAL HERO */}
+                    <div className={cn(
+                      "p-2.5 rounded-2xl border-2 flex flex-col gap-1.5 shadow-sm transition-all",
+                      tradePnl >= 0 ? "bg-emerald-500/10 border-emerald-500/50" : "bg-rose-500/10 border-rose-500/50"
+                    )}>
+                      {/* Top Row: Symbol & Direction Badge */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <span className={cn(
+                            "text-[10px] px-2 py-0.5 rounded-md font-black tracking-wide",
+                            isLong ? "bg-emerald-500/25 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/25 text-rose-600 dark:text-rose-400"
+                          )}>
+                            {isLong ? "LONG ↗" : "SHORT ↘"}
+                          </span>
+                          <span className="text-xs sm:text-sm font-black font-mono text-foreground">{pos.symbol}</span>
                         </div>
-
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(pos.symbol, activeSl + 5, activeTp, pos)}
-                        >
-                          <Plus className="size-3 text-rose-500" />
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-mono font-bold px-2 py-0.5 rounded-md bg-card/90 text-foreground border border-border/60">
+                            {posQty} Qty
+                          </span>
+                          {displayPositions.length > 1 && (
+                            <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-primary/20 text-primary">
+                              {idx + 1}/{displayPositions.length}
+                            </span>
+                          )}
+                        </div>
                       </div>
 
-                      <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
-                        {currentSlPrice != null ? `Exit: ₹${currentSlPrice.toFixed(1)}` : "SL Off"}
-                        {activeSl > 0 ? ` (-₹${slRupeeImpact})` : ""}
+                      {/* Middle Row: Hero Running P&L */}
+                      <div className="flex flex-col items-center justify-center py-0.5">
+                        <span className="text-[9px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-0.5">
+                          RUNNING TRADE P&L
+                        </span>
+                        <div className={cn(
+                          "text-3xl sm:text-4xl font-black font-mono tracking-tight",
+                          tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"
+                        )}>
+                          {tradePnl >= 0 ? "+" : ""}{fmtRs(tradePnl)}
+                        </div>
+                        <div className="flex items-center gap-2 mt-0.5 font-mono text-xs font-bold text-muted-foreground">
+                          <span className={tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                            {ptsDiff >= 0 ? "+" : ""}{ptsDiff.toFixed(1)} pt
+                          </span>
+                          <span>•</span>
+                          <span className={tradePnl >= 0 ? "text-emerald-500" : "text-rose-500"}>
+                            {pnlPercent >= 0 ? "+" : ""}{pnlPercent.toFixed(1)}%
+                          </span>
+                          <span className="size-2 rounded-full bg-emerald-500 animate-pulse ml-0.5" />
+                        </div>
+                      </div>
+
+                      {/* Bottom Row: Key Metrics Strip */}
+                      <div className="grid grid-cols-3 gap-1.5 pt-1.5 border-t border-border/40 text-center font-mono">
+                        <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
+                          <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Avg Entry</span>
+                          <span className="text-xs font-black text-foreground block mt-0.5">₹{entryAvg.toFixed(1)}</span>
+                        </div>
+                        <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
+                          <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Live LTP</span>
+                          <span className="text-xs font-black text-foreground block mt-0.5">₹{ltp.toFixed(1)}</span>
+                        </div>
+                        <div className="bg-card/80 py-1 px-1 rounded-lg border border-border/50">
+                          <span className="text-[9px] uppercase font-bold text-muted-foreground block leading-tight">Invested</span>
+                          <span className="text-xs font-black text-foreground block mt-0.5">{fmtRs(investedCost)}</span>
+                        </div>
                       </div>
                     </div>
 
-                    {/* TARGET LIVE EDITOR */}
-                    <div className="p-2 rounded-2xl bg-card border border-emerald-500/35 flex flex-col justify-between gap-1 shadow-2xs">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="font-bold text-emerald-500 uppercase flex items-center gap-1 text-[10px]">
-                          <Target className="size-3" /> Target
-                        </span>
-                        <span className="text-[10px] font-mono font-bold text-emerald-500">
-                          +{activeTp} pts
-                        </span>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-1">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(pos.symbol, activeSl, Math.max(0, activeTp - 5), pos)}
-                        >
-                          <Minus className="size-3 text-emerald-500" />
-                        </Button>
-
-                        <div className="relative flex-1">
-                          <Input
-                            type="number"
-                            min="0"
-                            step="5"
-                            value={activeTp || ""}
-                            onChange={(e) => updateActiveRisk(pos.symbol, activeSl, parseFloat(e.target.value) || 0, pos)}
-                            className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
-                          />
+                    {/* LIVE EDITABLE STOP LOSS & TARGET (COMPACT 2-COLUMN GRID) */}
+                    <div className="grid grid-cols-2 gap-2">
+                      {/* STOP LOSS LIVE EDITOR */}
+                      <div className="p-2 rounded-2xl bg-card border border-rose-500/35 flex flex-col justify-between gap-1 shadow-2xs">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-rose-500 uppercase flex items-center gap-1 text-[10px]">
+                            <Shield className="size-3" /> Stop Loss
+                          </span>
+                          <button
+                            type="button"
+                            onClick={() => moveToBreakeven(pos)}
+                            className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all cursor-pointer"
+                            title="Trail SL to Entry"
+                          >
+                            ⚡ BE
+                          </button>
                         </div>
 
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                          onClick={() => updateActiveRisk(pos.symbol, activeSl, activeTp + 5, pos)}
-                        >
-                          <Plus className="size-3 text-emerald-500" />
-                        </Button>
+                        <div className="flex items-center justify-between gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                            onClick={() => updateActiveRisk(pos.symbol, Math.max(0, activeSl - 5), activeTp, pos)}
+                          >
+                            <Minus className="size-3 text-rose-500" />
+                          </Button>
+
+                          <div className="relative flex-1">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="5"
+                              value={activeSl || ""}
+                              onChange={(e) => updateActiveRisk(pos.symbol, parseFloat(e.target.value) || 0, activeTp, pos)}
+                              className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
+                            />
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                            onClick={() => updateActiveRisk(pos.symbol, activeSl + 5, activeTp, pos)}
+                          >
+                            <Plus className="size-3 text-rose-500" />
+                          </Button>
+                        </div>
+
+                        <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
+                          {currentSlPrice != null ? `Exit: ₹${currentSlPrice.toFixed(1)}` : "SL Off"}
+                          {activeSl > 0 ? ` (-₹${slRupeeImpact})` : ""}
+                        </div>
                       </div>
 
-                      <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
-                        {currentTpPrice != null ? `Target: ₹${currentTpPrice.toFixed(1)}` : "TP Off"}
-                        {activeTp > 0 ? ` (+₹${tpRupeeImpact})` : ""}
+                      {/* TARGET LIVE EDITOR */}
+                      <div className="p-2 rounded-2xl bg-card border border-emerald-500/35 flex flex-col justify-between gap-1 shadow-2xs">
+                        <div className="flex items-center justify-between text-xs">
+                          <span className="font-bold text-emerald-500 uppercase flex items-center gap-1 text-[10px]">
+                            <Target className="size-3" /> Target
+                          </span>
+                          <span className="text-[10px] font-mono font-bold text-emerald-500">
+                            +{activeTp} pts
+                          </span>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                            onClick={() => updateActiveRisk(pos.symbol, activeSl, Math.max(0, activeTp - 5), pos)}
+                          >
+                            <Minus className="size-3 text-emerald-500" />
+                          </Button>
+
+                          <div className="relative flex-1">
+                            <Input
+                              type="number"
+                              min="0"
+                              step="5"
+                              value={activeTp || ""}
+                              onChange={(e) => updateActiveRisk(pos.symbol, activeSl, parseFloat(e.target.value) || 0, pos)}
+                              className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
+                            />
+                          </div>
+
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                            onClick={() => updateActiveRisk(pos.symbol, activeSl, activeTp + 5, pos)}
+                          >
+                            <Plus className="size-3 text-emerald-500" />
+                          </Button>
+                        </div>
+
+                        <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
+                          {currentTpPrice != null ? `Target: ₹${currentTpPrice.toFixed(1)}` : "TP Off"}
+                          {activeTp > 0 ? ` (+₹${tpRupeeImpact})` : ""}
+                        </div>
                       </div>
                     </div>
-                  </div>
 
-                  {/* ACTION BUTTONS: EXIT THIS POSITION + EXIT ALL BUTTON */}
-                  <div className="flex flex-col gap-1.5 mt-0.5">
+                    {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON (MASSIVE & UNMISSABLE) ─── */}
                     <Button
+                      type="button"
                       variant="destructive"
                       size="lg"
                       disabled={actionBusy}
                       onClick={() => hitExit(pos)}
-                      className="w-full h-11 text-sm font-black rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md tracking-wider cursor-pointer"
+                      className="w-full h-12 text-sm font-black rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-lg shadow-rose-600/30 tracking-wider cursor-pointer text-white flex items-center justify-center gap-2 border-2 border-rose-500 ring-2 ring-rose-500/20"
                     >
-                      SQUARE OFF {pos.symbol}
+                      <XCircle className="size-5 shrink-0" />
+                      <span>SQUARE OFF {pos.symbol}</span>
                     </Button>
-
-                    {displayPositions.length > 1 && (
-                      <button
-                        type="button"
-                        disabled={actionBusy}
-                        onClick={hitExitAll}
-                        className="w-full py-2 rounded-xl border border-rose-500/50 bg-rose-500/10 hover:bg-rose-500/20 text-xs font-mono font-bold text-rose-500 transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-xs active:scale-95"
-                      >
-                        <span>🚨 EXIT ALL ({displayPositions.length} POSITIONS)</span>
-                      </button>
-                    )}
                   </div>
+                )
+              })}
+            </div>
 
-                  {/* TRADE AGAIN / SWITCH TO ORDER DESK BUTTON */}
-                  <button
-                    type="button"
-                    onClick={() => setViewMode("ORDER")}
-                    className="w-full py-2 rounded-xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs"
-                  >
-                    <span>Trade Again / Place Another Order ➔</span>
-                  </button>
-                </div>
-              )
-            })()}
+            {/* ─── TRADE AGAIN / SWITCH TO ORDER DESK BUTTON ─── */}
+            <button
+              type="button"
+              onClick={() => setViewMode("ORDER")}
+              className="w-full py-2.5 rounded-xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98"
+            >
+              <span>Trade Again / Place Another Order ➔</span>
+            </button>
           </div>
         ) : (
           /* ══════════════════════════════════════════════════════════════════ */
