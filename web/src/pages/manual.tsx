@@ -216,12 +216,15 @@ export function ManualTradingPage() {
   // Ensure active expiry is valid when expiries load
   useEffect(() => {
     if (expiries.length > 0) {
-      const cur = expiryMap[indexSymbol]
-      if (!cur || !expiries.some((e) => e.expiry === cur)) {
-        setExpiryMap((prev) => ({ ...prev, [indexSymbol]: expiries[0].expiry }))
-      }
+      setExpiryMap((prev) => {
+        const cur = prev[indexSymbol]
+        if (!cur || !expiries.some((e) => e.expiry === cur)) {
+          return { ...prev, [indexSymbol]: expiries[0].expiry }
+        }
+        return prev
+      })
     }
-  }, [expiries, indexSymbol, expiryMap])
+  }, [expiries, indexSymbol])
 
   const selectedExpiryGroup = expiries.find((e) => e.expiry === currentExpiry) || expiries[0]
   const lotSize = selectedExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
@@ -316,9 +319,23 @@ export function ManualTradingPage() {
   // Screen View Mode: "POSITION" (Focus on active trade), "ORDER" (Strike & order entry), or "HISTORY" (Closed trades in same space)
   const [viewMode, setViewMode] = useState<"POSITION" | "ORDER" | "HISTORY">("POSITION")
 
+  function calcEstimatedOptionPrice(sym: "NIFTY" | "SENSEX", spot: number, k: number, optType: "CE" | "PE"): number {
+    const diff = optType === "CE" ? spot - k : k - spot
+    const intrinsic = Math.max(0, diff)
+    const dist = Math.abs(spot - k)
+    const baseTime = sym === "SENSEX" ? 320 : 140
+    const decay = sym === "SENSEX" ? 0.35 : 0.22
+    const timeVal = Math.max(15, baseTime - dist * decay)
+    return Math.round((intrinsic + timeVal) * 10) / 10
+  }
+
   // Quotes
-  const [cePrice, setCePrice] = useState<number | null>(null)
-  const [pePrice, setPePrice] = useState<number | null>(null)
+  const [cePrice, setCePrice] = useState<number>(() =>
+    calcEstimatedOptionPrice("NIFTY", 25227.95, 25250, "CE")
+  )
+  const [pePrice, setPePrice] = useState<number>(() =>
+    calcEstimatedOptionPrice("NIFTY", 25227.95, 25250, "PE")
+  )
   const [ceSymbol, setCeSymbol] = useState<string>("")
   const [peSymbol, setPeSymbol] = useState<string>("")
   const [quoteLoading, setQuoteLoading] = useState(false)
@@ -405,17 +422,24 @@ export function ManualTradingPage() {
           setCePrice(ceRes.value.last_price)
           setCeSymbol(ceRes.value.symbol || "")
         } else {
-          setCePrice((prev) => prev ?? (indexSymbol === "NIFTY" ? 115.0 : 185.0))
+          const curSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
+          setCePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "CE"))
         }
 
         if (peRes.status === "fulfilled" && peRes.value && peRes.value.last_price > 0) {
           setPePrice(peRes.value.last_price)
           setPeSymbol(peRes.value.symbol || "")
         } else {
-          setPePrice((prev) => prev ?? (indexSymbol === "NIFTY" ? 125.0 : 195.0))
+          const curSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
+          setPePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "PE"))
         }
       } catch (err) {
         console.warn("Quote fetch error", err)
+        if (!cancelled) {
+          const curSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
+          setCePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "CE"))
+          setPePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(strike), "PE"))
+        }
       } finally {
         if (!cancelled) setQuoteLoading(false)
       }
@@ -427,12 +451,16 @@ export function ManualTradingPage() {
       cancelled = true
       clearInterval(timer)
     }
-  }, [indexSymbol, currentExpiry, strike])
+  }, [indexSymbol, currentExpiry, strike, niftySpot, sensexSpot])
 
   // Strike adjustment
   function stepStrike(dir: -1 | 1) {
     const cur = Number(strike) || atmStrike
-    setStrike(String(cur + dir * strikeStep))
+    const nextStrike = String(cur + dir * strikeStep)
+    setStrike(nextStrike)
+    const curSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
+    setCePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(nextStrike), "CE"))
+    setPePrice(calcEstimatedOptionPrice(indexSymbol, curSpot, Number(nextStrike), "PE"))
   }
 
   const totalQty = lots * lotSize
@@ -1280,6 +1308,9 @@ export function ManualTradingPage() {
                 onClick={() => {
                   if (indexSymbol !== "NIFTY") {
                     setIndexSymbol("NIFTY")
+                    const nextStrike = strikeMap.NIFTY || "25250"
+                    setCePrice(calcEstimatedOptionPrice("NIFTY", niftySpot, Number(nextStrike), "CE"))
+                    setPePrice(calcEstimatedOptionPrice("NIFTY", niftySpot, Number(nextStrike), "PE"))
                   }
                 }}
                 className={cn(
@@ -1322,6 +1353,9 @@ export function ManualTradingPage() {
                 onClick={() => {
                   if (indexSymbol !== "SENSEX") {
                     setIndexSymbol("SENSEX")
+                    const nextStrike = strikeMap.SENSEX || "82000"
+                    setCePrice(calcEstimatedOptionPrice("SENSEX", sensexSpot, Number(nextStrike), "CE"))
+                    setPePrice(calcEstimatedOptionPrice("SENSEX", sensexSpot, Number(nextStrike), "PE"))
                   }
                 }}
                 className={cn(
