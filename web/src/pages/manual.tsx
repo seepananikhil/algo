@@ -453,7 +453,7 @@ export function ManualTradingPage() {
     closed_count: closedPositions.length,
   }
 
-  // Only enable Demo mode when running on localhost
+  // Only enable Demo mode when running on localhost (defaults to false so it never shows demo on refresh)
   const isLocalhost =
     typeof window !== "undefined" &&
     (window.location.hostname === "localhost" ||
@@ -461,7 +461,7 @@ export function ManualTradingPage() {
       window.location.hostname === "0.0.0.0" ||
       window.location.hostname.endsWith(".local"))
 
-  const [demoActive, setDemoActive] = useState<boolean>(isLocalhost)
+  const [demoActive, setDemoActive] = useState<boolean>(false)
 
   const DEFAULT_DEMO_POSITIONS: OpenPosition[] = [
     {
@@ -1193,18 +1193,16 @@ export function ManualTradingPage() {
                       </div>
                     </div>
 
-                    {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON (MASSIVE & UNMISSABLE) ─── */}
-                    <Button
+                    {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON (SLEEK BLACK TERMINAL STYLE) ─── */}
+                    <button
                       type="button"
-                      variant="destructive"
-                      size="lg"
                       disabled={actionBusy}
                       onClick={() => hitExit(pos)}
-                      className="w-full h-12 text-sm font-black rounded-2xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-lg shadow-rose-600/30 tracking-wider cursor-pointer text-white flex items-center justify-center gap-2 border-2 border-rose-500 ring-2 ring-rose-500/20"
+                      className="w-full h-12 text-sm font-black rounded-2xl bg-zinc-950 dark:bg-black hover:bg-zinc-900 active:scale-95 shadow-md border-2 border-zinc-800 hover:border-zinc-700 tracking-wider cursor-pointer text-white flex items-center justify-center gap-2 transition-all font-mono"
                     >
-                      <XCircle className="size-5 shrink-0" />
+                      <XCircle className="size-5 shrink-0 text-rose-500" />
                       <span>SQUARE OFF {pos.symbol}</span>
-                    </Button>
+                    </button>
                   </div>
                 )
               })}
@@ -1230,18 +1228,16 @@ export function ManualTradingPage() {
 
             {/* ─── BOTTOM ACTIONS: SQUARE OFF ALL + TRADE AGAIN ─── */}
             <div className="flex items-center gap-2 mt-0.5">
-              <Button
+              <button
                 type="button"
-                variant="destructive"
-                size="lg"
                 disabled={actionBusy}
                 onClick={hitExitAll}
-                className="flex-1 h-11 text-xs font-black rounded-xl bg-rose-600 hover:bg-rose-700 active:scale-95 shadow-md shadow-rose-600/30 font-mono flex items-center justify-center gap-1.5 cursor-pointer ring-1 ring-rose-500/50"
+                className="flex-1 h-11 text-xs font-black rounded-xl bg-zinc-950 dark:bg-black hover:bg-zinc-900 active:scale-95 shadow-md border border-zinc-800 hover:border-zinc-700 font-mono text-white flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                 title="Square off all open positions"
               >
-                <AlertTriangle className="size-4 shrink-0" />
+                <AlertTriangle className="size-4 shrink-0 text-rose-500" />
                 <span>SQUARE OFF ALL{displayPositions.length > 1 ? ` (${displayPositions.length})` : ""}</span>
-              </Button>
+              </button>
 
               <button
                 type="button"
