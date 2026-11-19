@@ -12,6 +12,7 @@ import {
   RefreshCw,
   Sun,
   Moon,
+  Wallet,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -429,12 +430,32 @@ export function ManualTradingPage() {
     closed_count: closedPositions.length,
   }
 
-  // Active positions to display (Real positions only)
-  const displayPositions: OpenPosition[] = openPositions
+  // Demo Mode Preview (Enabled so user can see and test the active position HUD live)
+  const [demoActive, setDemoActive] = useState<boolean>(true)
 
+  const mockDemoPosition: OpenPosition = {
+    symbol: "NIFTY 25250 CE",
+    net_qty: 65,
+    buy_avg: 124.5,
+    last_price: 142.0,
+    ltp: 142.0,
+    pnl: 1137.5,
+    unrealized_pnl: 1137.5,
+    lot_size: 65,
+    tl_pts: 10,
+    tp_pts: 15,
+  }
+
+  // Active positions to display (Real positions take precedence, or Demo preview if demoActive is true)
+  const displayPositions: OpenPosition[] =
+    openPositions.length > 0 ? openPositions : demoActive ? [mockDemoPosition] : []
+
+  const isDemo = openPositions.length === 0 && demoActive && displayPositions.length > 0
   const hasActivePosition = displayPositions.length > 0
   const activePos = displayPositions[selectedPosIdx] || displayPositions[0]
   const totalOpenPnl = displayPositions.reduce((acc, p) => acc + (p.unrealized_pnl ?? p.pnl ?? 0), 0)
+  const realizedPnl = summary.realized_pnl ?? 0
+  const overallPnl = realizedPnl + totalOpenPnl
 
   // 1-TAP INSTANT BUY ORDER
   async function hitOrder(optionType: "CE" | "PE") {
@@ -501,6 +522,13 @@ export function ManualTradingPage() {
       navigator.vibrate([40, 40])
     }
 
+    if (isDemo) {
+      toast.success("Demo Position Squared Off!", { description: `Squared off ${pos.symbol} · Simulated Exit` })
+      setDemoActive(false)
+      setViewMode("ORDER")
+      return
+    }
+
     setActionBusy(true)
     try {
       await postJSON("/api/exit-position", {
@@ -525,6 +553,13 @@ export function ManualTradingPage() {
     if (actionBusy) return
     if (typeof navigator !== "undefined" && navigator.vibrate) {
       navigator.vibrate([50, 50, 50])
+    }
+
+    if (isDemo) {
+      toast.success("All Demo Positions Squared Off!")
+      setDemoActive(false)
+      setViewMode("ORDER")
+      return
     }
 
     setActionBusy(true)
@@ -555,6 +590,13 @@ export function ManualTradingPage() {
     // Also carry forward user's live adjusted risk preference for future trades
     setSlPts(validSl)
     setTpPts(validTp)
+
+    if (isDemo) {
+      toast.success("Demo Risk Updated Live", {
+        description: `SL: ${validSl} pt · Target: ${validTp} pt`,
+      })
+      return
+    }
 
     const entry = pos.buy_avg || pos.average_price || 0
     try {
@@ -644,6 +686,32 @@ export function ManualTradingPage() {
           </div>
 
           <div className="flex items-center gap-1.5">
+            {/* Demo Mode Toggle Button */}
+            <button
+              type="button"
+              onClick={() => {
+                const next = !demoActive
+                setDemoActive(next)
+                if (next) {
+                  setViewMode("POSITION")
+                  toast.info("Demo Mode Active", { description: "Previewing Active Position HUD" })
+                } else {
+                  setViewMode("ORDER")
+                  toast.info("Demo Mode Disabled")
+                }
+              }}
+              className={cn(
+                "text-[10px] font-mono font-bold px-2 py-1 rounded-xl border transition-all cursor-pointer flex items-center gap-1 shadow-2xs active:scale-95",
+                demoActive
+                  ? "bg-amber-500/15 text-amber-500 border-amber-500/40 shadow-xs"
+                  : "bg-card text-muted-foreground border-border/60 hover:text-foreground"
+              )}
+              title={demoActive ? "Turn off demo preview" : "Show demo trade in active position HUD"}
+            >
+              <span className={cn("size-1.5 rounded-full", demoActive ? "bg-amber-500 animate-pulse" : "bg-muted-foreground")} />
+              <span>{demoActive ? "Demo ON" : "Demo"}</span>
+            </button>
+
             {/* Quick Reload Button */}
             <Button
               type="button"
@@ -678,56 +746,91 @@ export function ManualTradingPage() {
           </div>
         </header>
 
-        {/* ─── 1. TOPMOST HEADER: DAY P&L + AVAILABLE BALANCE + HISTORY ─── */}
-        <div className={cn("flex items-center justify-between rounded-2xl bg-card border border-border/60 shadow-2xs", isPositionFocused ? "p-2" : "p-2.5")}>
-          {/* Day P&L */}
-          <div className="flex flex-col">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
-              DAY'S P&L {closedPositions.length > 0 ? `(${closedPositions.length})` : ""}
-            </span>
-            <div
-              className={cn(
-                "font-black font-mono tracking-tight mt-0.5",
-                isPositionFocused ? "text-xl sm:text-2xl" : "text-2xl",
-                summary.net_pnl > 0 ? "text-emerald-500" : summary.net_pnl < 0 ? "text-rose-500" : "text-muted-foreground"
+        {/* ─── 1. DUAL FINANCIAL METRICS: OVERALL P&L & AVAILABLE BALANCE ─── */}
+        <div className="grid grid-cols-2 gap-2">
+          {/* Card A: OVERALL P&L */}
+          <div className={cn(
+            "p-2.5 rounded-2xl border transition-all flex flex-col justify-between shadow-2xs relative overflow-hidden",
+            overallPnl > 0
+              ? "bg-gradient-to-br from-emerald-500/10 via-card to-card border-emerald-500/35"
+              : overallPnl < 0
+              ? "bg-gradient-to-br from-rose-500/10 via-card to-card border-rose-500/35"
+              : "bg-card border-border/60"
+          )}>
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5 leading-none">
+                <span className={cn(
+                  "size-1.5 rounded-full",
+                  hasActivePosition ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground"
+                )} />
+                OVERALL P&L
+              </span>
+              {closedPositions.length > 0 && (
+                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-md bg-muted/60 text-muted-foreground">
+                  {closedPositions.length} done
+                </span>
               )}
-            >
-              {summary.net_pnl > 0 ? "+" : ""}
-              {fmtRs(summary.net_pnl)}
+            </div>
+
+            <div className={cn(
+              "font-black font-mono tracking-tight mt-1",
+              isPositionFocused ? "text-xl sm:text-2xl" : "text-2xl",
+              overallPnl > 0 ? "text-emerald-500" : overallPnl < 0 ? "text-rose-500" : "text-muted-foreground"
+            )}>
+              {overallPnl > 0 ? "+" : ""}
+              {fmtRs(overallPnl)}
+            </div>
+
+            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground mt-1 pt-1 border-t border-border/30">
+              <span>Realized: {realizedPnl >= 0 ? "+" : ""}{fmtRs(realizedPnl)}</span>
+              {hasActivePosition && (
+                <span className={totalOpenPnl >= 0 ? "text-emerald-500 font-bold" : "text-rose-500 font-bold"}>
+                  {totalOpenPnl >= 0 ? "+" : ""}{fmtRs(totalOpenPnl)}
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Available Trading Margin */}
-          <div className="flex flex-col items-center">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none">
-              AVAIL BALANCE
-            </span>
-            <div className={cn("font-black font-mono text-foreground mt-0.5", isPositionFocused ? "text-sm sm:text-base" : "text-base")}>
+          {/* Card B: AVAILABLE BALANCE */}
+          <div className="p-2.5 rounded-2xl bg-card border border-border/60 transition-all flex flex-col justify-between shadow-2xs relative overflow-hidden">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1 leading-none">
+                <Wallet className="size-3 text-primary" /> AVAIL MARGIN
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (viewMode === "HISTORY") {
+                    setViewMode(hasActivePosition ? "POSITION" : "ORDER")
+                  } else {
+                    setViewMode("HISTORY")
+                  }
+                }}
+                className={cn(
+                  "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md border cursor-pointer transition-all active:scale-95 flex items-center gap-1",
+                  viewMode === "HISTORY"
+                    ? "bg-primary text-primary-foreground border-primary"
+                    : "bg-muted/60 text-muted-foreground border-border/60 hover:text-foreground"
+                )}
+                title="View today's closed trades"
+              >
+                <Clock className="size-2.5" />
+                <span>{viewMode === "HISTORY" ? "Close" : `Log (${closedPositions.length})`}</span>
+              </button>
+            </div>
+
+            <div className={cn(
+              "font-black font-mono tracking-tight text-foreground mt-1",
+              isPositionFocused ? "text-xl sm:text-2xl" : "text-2xl"
+            )}>
               {availableFunds != null ? fmtRs(availableFunds) : isKotakConnected ? "₹37,258" : "—"}
             </div>
-          </div>
 
-          {/* History Switcher Button (Shows closed trades in this exact same space) */}
-          <button
-            type="button"
-            onClick={() => {
-              if (viewMode === "HISTORY") {
-                setViewMode(hasActivePosition ? "POSITION" : "ORDER")
-              } else {
-                setViewMode("HISTORY")
-              }
-            }}
-            className={cn(
-              "text-[11px] font-mono px-2.5 py-1.5 rounded-xl border font-bold cursor-pointer transition-all active:scale-95 flex items-center gap-1.5",
-              viewMode === "HISTORY"
-                ? "bg-primary text-primary-foreground border-primary shadow-xs"
-                : "border-border/60 bg-muted/40 text-muted-foreground hover:text-foreground"
-            )}
-            title={viewMode === "HISTORY" ? "Return to trading" : "View today's closed trades in this space"}
-          >
-            <Clock className="size-3" />
-            <span>{viewMode === "HISTORY" ? "Close" : `History (${closedPositions.length})`}</span>
-          </button>
+            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground mt-1 pt-1 border-t border-border/30">
+              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₹0 Brokerage</span>
+              <span>Kotak Neo</span>
+            </div>
+          </div>
         </div>
 
         {/* ─── SWITCHER BANNER WHEN IN ORDER VIEW WITH ACTIVE POSITIONS ─── */}
