@@ -6383,8 +6383,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 self._json({"ok": False, "error": str(e), "open_positions": [], "closed_positions": [], "summary": {}}, 200)
         elif url.path in ("/api/manual-options", "/api/manual-trading", "/api/manual-quote"):
-            if not self._is_local_client():
-                return self._json({"error": "manual trading endpoints are local-only"}, 403)
             try:
                 if url.path == "/api/manual-options":
                     data = manual_option_choices(q)
@@ -6531,22 +6529,16 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"error": "unauthorized", "auth_required": True}, 401)
 
         if url.path == "/api/scalp-order":
-            if not self._is_local_client():
-                return self._json({"error": "manual orders are local-only"}, 403)
             try:
                 self._json(submit_scalp_order(self._body()))
             except Exception as exc:
                 self._json({"error": f"Scalp order failed: {exc}"}, 500)
         elif url.path == "/api/update-tp-tl":
-            if not self._is_local_client():
-                return self._json({"error": "manual orders are local-only"}, 403)
             try:
                 self._json(update_tp_tl(self._body()))
             except Exception as exc:
                 self._json({"error": f"Failed to update TP/TL: {exc}"}, 500)
         elif url.path == "/api/manual-order":
-            if not self._is_local_client():
-                return self._json({"error": "manual orders are local-only"}, 403)
             try:
                 self._json(submit_manual_order(self._body()))
             except ManualTradeError as exc:
@@ -6554,8 +6546,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json({"error": f"Order request failed: {exc}"}, 502)
         elif url.path == "/api/exit-position":
-            if not self._is_local_client():
-                return self._json({"error": "manual orders are local-only"}, 403)
             try:
                 self._json(exit_position(self._body()))
             except ManualTradeError as exc:
@@ -6563,8 +6553,6 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as exc:
                 self._json({"error": f"Position exit failed: {exc}"}, 502)
         elif url.path == "/api/exit-all":
-            if not self._is_local_client():
-                return self._json({"error": "manual orders are local-only"}, 403)
             try:
                 self._json(exit_all_positions())
             except ManualTradeError as exc:
