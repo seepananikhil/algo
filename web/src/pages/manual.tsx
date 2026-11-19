@@ -1210,14 +1210,14 @@ export function ManualTradingPage() {
                       </div>
                     </div>
 
-                    {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON (MIMICKING PUT BUTTON STYLE) ─── */}
+                    {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON ─── */}
                     <button
                       type="button"
                       disabled={actionBusy}
                       onClick={() => hitExit(pos)}
-                      className="w-full h-12 text-sm font-black rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 shadow-md shadow-rose-950/20 border border-rose-400/30 tracking-wider cursor-pointer text-white flex items-center justify-center gap-2 transition-all font-mono"
+                      className="w-full h-12 text-sm font-bold rounded-2xl bg-rose-500/10 dark:bg-rose-950/40 hover:bg-rose-500/20 dark:hover:bg-rose-900/50 active:scale-95 shadow-xs border border-rose-500/40 tracking-wider cursor-pointer text-rose-600 dark:text-rose-300 flex items-center justify-center gap-2 transition-all font-mono"
                     >
-                      <XCircle className="size-5 shrink-0 text-white" />
+                      <XCircle className="size-5 shrink-0 text-rose-500" />
                       <span>SQUARE OFF {pos.symbol}</span>
                     </button>
                   </div>
@@ -1249,10 +1249,10 @@ export function ManualTradingPage() {
                 type="button"
                 disabled={actionBusy}
                 onClick={hitExitAll}
-                className="flex-1 h-11 text-xs font-black rounded-xl bg-rose-600 hover:bg-rose-500 active:scale-95 shadow-md shadow-rose-950/20 border border-rose-400/30 font-mono text-white flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                className="flex-1 h-11 text-xs font-bold rounded-xl bg-rose-500/10 dark:bg-rose-950/40 hover:bg-rose-500/20 dark:hover:bg-rose-900/50 active:scale-95 shadow-xs border border-rose-500/40 font-mono text-rose-600 dark:text-rose-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                 title="Square off all open positions"
               >
-                <AlertTriangle className="size-4 shrink-0 text-white" />
+                <AlertTriangle className="size-4 shrink-0 text-rose-500" />
                 <span>SQUARE OFF ALL{displayPositions.length > 1 ? ` (${displayPositions.length})` : ""}</span>
               </button>
 
