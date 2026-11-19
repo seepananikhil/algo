@@ -367,7 +367,6 @@ export function ManualTradingPage() {
           optionsPoll.reload(),
           fundsPoll.reload(),
         ])
-        toast.success("Live data refreshed", { duration: 1500 })
       } finally {
         setTimeout(() => {
           setIsRefreshing(false)
@@ -699,9 +698,6 @@ export function ManualTradingPage() {
     setTpPts(validTp)
 
     if (isDemo) {
-      toast.success("Demo Risk Updated Live", {
-        description: `SL: ${validSl} pt · Target: ${validTp} pt`,
-      })
       return
     }
 
@@ -714,12 +710,9 @@ export function ManualTradingPage() {
         entry_price: entry,
         qty: Math.abs(pos.net_qty),
       })
-      toast.success("Risk Updated Live", {
-        description: `SL: ${validSl} pt · Target: ${validTp} pt`,
-      })
       await positionsPoll.reload()
     } catch (err: any) {
-      toast.error("Failed to update risk", { description: String(err?.message || err) })
+      console.warn("Failed to update risk", err)
     }
   }
 
@@ -729,7 +722,6 @@ export function ManualTradingPage() {
     if (entry <= 0) return
     const curTp = riskMap[pos.symbol]?.tp ?? pos.tp_pts ?? 15
     await updateActiveRisk(pos.symbol, 0.5, curTp, pos)
-    toast.success("SL Moved to Breakeven!", { description: `Protected entry @ ₹${entry.toFixed(1)}` })
   }
 
   const isPositionFocused = hasActivePosition && viewMode === "POSITION"
@@ -799,10 +791,8 @@ export function ManualTradingPage() {
                     setDemoPositions(DEFAULT_DEMO_POSITIONS)
                     setSelectedPosIdx(0)
                     setViewMode("POSITION")
-                    toast.info("Demo Mode Active", { description: "Previewing Active Positions" })
                   } else {
                     setViewMode("ORDER")
-                    toast.info("Demo Mode Disabled")
                   }
                 }}
                 className={cn(
@@ -827,7 +817,6 @@ export function ManualTradingPage() {
                 setIsRefreshing(true)
                 try {
                   await Promise.allSettled([positionsPoll.reload(), optionsPoll.reload(), fundsPoll.reload()])
-                  toast.success("Live data refreshed", { duration: 1500 })
                 } finally {
                   setIsRefreshing(false)
                 }
