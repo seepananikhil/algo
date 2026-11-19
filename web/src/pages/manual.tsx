@@ -1623,20 +1623,22 @@ export function ManualTradingPage() {
                 type="button"
                 disabled={!strike || actionBusy}
                 onClick={() => hitOrder("CE")}
-                className="h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-center items-center gap-0.5 p-2 shadow-md transition-all cursor-pointer text-center"
+                className="h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-md transition-all cursor-pointer text-left"
               >
-                <span className="text-lg font-black tracking-wide leading-tight">
-                  CALL ↗
-                </span>
-                <span className="text-xs font-mono font-bold leading-tight flex items-center justify-center gap-1.5">
-                  <span>{strike} CE</span>
-                  <span className="text-[11px] font-black px-1.5 py-0.2 rounded bg-black/25 text-white shadow-2xs">
-                    {cePrice != null ? `₹${cePrice.toFixed(1)}` : quoteLoading ? "…" : "—"}
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-lg font-black tracking-wide leading-none">
+                    CALL ↗
                   </span>
-                </span>
-                <span className="text-[11px] font-semibold font-mono leading-tight opacity-95">
-                  Cost: {ceCost != null ? fmtRs(ceCost) : quoteLoading ? "…" : "—"} ({lots}L)
-                </span>
+                  <span className="text-xs sm:text-sm font-mono font-black leading-none bg-black/25 px-2 py-1 rounded-lg shadow-2xs">
+                    {ceCost != null ? fmtRs(ceCost) : quoteLoading ? "…" : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between w-full text-xs font-mono font-bold leading-none opacity-95 mt-1">
+                  <span>{strike} CE</span>
+                  <span className="text-[11px] opacity-90">
+                    {cePrice != null ? `@ ₹${cePrice.toFixed(1)}` : ""}
+                  </span>
+                </div>
               </button>
 
               {/* PUT BUTTON */}
@@ -1644,20 +1646,22 @@ export function ManualTradingPage() {
                 type="button"
                 disabled={!strike || actionBusy}
                 onClick={() => hitOrder("PE")}
-                className="h-16 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-center items-center gap-0.5 p-2 shadow-md transition-all cursor-pointer text-center"
+                className="h-16 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-md transition-all cursor-pointer text-left"
               >
-                <span className="text-lg font-black tracking-wide leading-tight">
-                  PUT ↘
-                </span>
-                <span className="text-xs font-mono font-bold leading-tight flex items-center justify-center gap-1.5">
-                  <span>{strike} PE</span>
-                  <span className="text-[11px] font-black px-1.5 py-0.2 rounded bg-black/25 text-white shadow-2xs">
-                    {pePrice != null ? `₹${pePrice.toFixed(1)}` : quoteLoading ? "…" : "—"}
+                <div className="flex items-center justify-between w-full">
+                  <span className="text-lg font-black tracking-wide leading-none">
+                    PUT ↘
                   </span>
-                </span>
-                <span className="text-[11px] font-semibold font-mono leading-tight opacity-95">
-                  Cost: {peCost != null ? fmtRs(peCost) : quoteLoading ? "…" : "—"} ({lots}L)
-                </span>
+                  <span className="text-xs sm:text-sm font-mono font-black leading-none bg-black/25 px-2 py-1 rounded-lg shadow-2xs">
+                    {peCost != null ? fmtRs(peCost) : quoteLoading ? "…" : "—"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between w-full text-xs font-mono font-bold leading-none opacity-95 mt-1">
+                  <span>{strike} PE</span>
+                  <span className="text-[11px] opacity-90">
+                    {pePrice != null ? `@ ₹${pePrice.toFixed(1)}` : ""}
+                  </span>
+                </div>
               </button>
             </div>
 
