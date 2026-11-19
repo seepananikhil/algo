@@ -145,7 +145,7 @@ def run_check():
             import urllib.request
             req = urllib.request.Request("http://127.0.0.1:8090/api/status", headers={"User-Agent": "Preflight"})
             try:
-                with urllib.request.urlopen(req, timeout=3) as resp:
+                with urllib.request.urlopen(req, timeout=6) as resp:
                     if resp.status == 200:
                         data = json.loads(resp.read().decode())
                         capture_active = data.get("capture_running", False)
@@ -165,19 +165,30 @@ def run_check():
 
     # 5. Live Market Feed Capture
     print(f"\n{BOLD}4. Market Data Engine (kotak_capture.py){RESET}")
+    market_open = is_market_hours()
     nifty_1s = live_dir / f"nifty_1s_{TODAY}.csv"
     sensex_1s = live_dir / f"sensex_1s_{TODAY}.csv"
     if nifty_1s.exists() and nifty_1s.stat().st_size > 0:
         age_sec = (NOW - datetime.fromtimestamp(nifty_1s.stat().st_mtime, tz=IST)).total_seconds()
-        status_color = True if age_sec < 60 else (None if age_sec < 300 else False)
-        print(f"   {badge(status_color)} Nifty 1-Sec Feed: Active (updated {int(age_sec)}s ago, {nifty_1s.stat().st_size // 1024} KB)")
+        if market_open:
+            status_color = True if age_sec < 60 else (None if age_sec < 300 else False)
+            status_lbl = "Active"
+        else:
+            status_color = True
+            status_lbl = "Market Closed (Recorded for Day)"
+        print(f"   {badge(status_color)} Nifty 1-Sec Feed: {status_lbl} (updated {int(age_sec)}s ago, {nifty_1s.stat().st_size // 1024} KB)")
     else:
         print(f"   {badge(None)} Nifty 1-Sec Feed: No ticks recorded yet for {TODAY}")
 
     if sensex_1s.exists() and sensex_1s.stat().st_size > 0:
         age_sec = (NOW - datetime.fromtimestamp(sensex_1s.stat().st_mtime, tz=IST)).total_seconds()
-        status_color = True if age_sec < 60 else (None if age_sec < 300 else False)
-        print(f"   {badge(status_color)} Sensex 1-Sec Feed: Active (updated {int(age_sec)}s ago, {sensex_1s.stat().st_size // 1024} KB)")
+        if market_open:
+            status_color = True if age_sec < 60 else (None if age_sec < 300 else False)
+            status_lbl = "Active"
+        else:
+            status_color = True
+            status_lbl = "Market Closed (Recorded for Day)"
+        print(f"   {badge(status_color)} Sensex 1-Sec Feed: {status_lbl} (updated {int(age_sec)}s ago, {sensex_1s.stat().st_size // 1024} KB)")
     else:
         print(f"   {badge(None)} Sensex 1-Sec Feed: No ticks recorded yet for {TODAY}")
 
@@ -236,7 +247,8 @@ def run_check():
 def is_market_hours() -> bool:
     if NOW.weekday() >= 5:
         return False
-    return 9 <= NOW.hour < 16
+    t_val = NOW.hour * 60 + NOW.minute
+    return (9 * 60 + 15) <= t_val <= (15 * 60 + 30)
 
 
 if __name__ == "__main__":
