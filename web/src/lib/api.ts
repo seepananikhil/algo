@@ -500,11 +500,11 @@ export type ManualOptionContract = {
 
 export type ManualExpiryGroup = {
   expiry: string
-  label: string
-  days_to_expiry: number
+  label?: string
+  days_to_expiry?: number
   lot_size: number
   strikes: number[]
-  contracts: ManualOptionContract[]
+  contracts?: ManualOptionContract[]
 }
 
 export type ManualOptionChoices = {

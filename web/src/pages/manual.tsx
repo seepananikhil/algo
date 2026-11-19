@@ -23,7 +23,6 @@ import {
   pnlClass,
   postJSON,
   usePoll,
-  type ManualOptionChoices,
   type ManualExpiryGroup,
   type FundsStatus,
 } from "@/lib/api"
@@ -128,10 +127,29 @@ export function ManualTradingPage() {
     NIFTY: "",
     SENSEX: "",
   })
-  const [expiriesMap, setExpiriesMap] = useState<Record<"NIFTY" | "SENSEX", ManualExpiryGroup[]>>({
-    NIFTY: [],
-    SENSEX: [],
-  })
+  // Fallback weekly expiries so the dropdown is NEVER empty or stuck on "Loading expiries..."
+  const getDefaultExpiries = (sym: "NIFTY" | "SENSEX"): ManualExpiryGroup[] => {
+    const d = new Date()
+    const res: ManualExpiryGroup[] = []
+    const baseDay = sym === "SENSEX" ? 5 : 4
+    for (let i = 0; i < 4; i++) {
+      const dt = new Date(d)
+      const diff = ((baseDay - dt.getDay() + 7) % 7) + i * 7
+      dt.setDate(dt.getDate() + (diff === 0 && d.getHours() >= 15 ? 7 : diff))
+      const iso = dt.toISOString().split("T")[0]
+      res.push({
+        expiry: iso,
+        lot_size: sym === "SENSEX" ? 20 : 65,
+        strikes: [],
+      })
+    }
+    return res
+  }
+
+  const [expiriesMap, setExpiriesMap] = useState<Record<"NIFTY" | "SENSEX", ManualExpiryGroup[]>>(() => ({
+    NIFTY: getDefaultExpiries("NIFTY"),
+    SENSEX: getDefaultExpiries("SENSEX"),
+  }))
 
   // Helper to determine symbol from API response
   const parseSymbol = (sym?: string): "NIFTY" | "SENSEX" | null => {
@@ -144,8 +162,8 @@ export function ManualTradingPage() {
   const fetchOptionsFor = useCallback((targetSymbol: "NIFTY" | "SENSEX") => {
     fetch(`/api/manual-options?symbol=${targetSymbol}`)
       .then((r) => r.json())
-      .then((data: ManualOptionChoices) => {
-        if (!data?.ok) return
+      .then((data: any) => {
+        if (!data) return
         const sym = parseSymbol(data.symbol) || targetSymbol
         if (data.spot && data.spot > 0) {
           setSpotMap((prev) => ({ ...prev, [sym]: data.spot }))
@@ -153,17 +171,26 @@ export function ManualTradingPage() {
         if (data.atm && data.atm > 0) {
           setAtmMap((prev) => ({ ...prev, [sym]: data.atm }))
           setStrikeMap((prev) => {
-            if (!prev[sym] || prev[sym] === "0") {
+            if (!prev[sym] || prev[sym] === "0" || prev[sym] === "25250" || prev[sym] === "82000") {
               return { ...prev, [sym]: String(data.atm) }
             }
             return prev
           })
         }
-        if (data.expiries && data.expiries.length > 0) {
-          setExpiriesMap((prev) => ({ ...prev, [sym]: data.expiries }))
+        const expList = Array.isArray(data.expiries) && data.expiries.length > 0 ? data.expiries : []
+        if (expList.length > 0) {
+          setExpiriesMap((prev) => ({ ...prev, [sym]: expList }))
+          setExpiryMap((prev) => {
+            if (!prev[sym] || !expList.some((e: any) => e.expiry === prev[sym])) {
+              return { ...prev, [sym]: expList[0].expiry }
+            }
+            return prev
+          })
         }
       })
-      .catch(() => {})
+      .catch((err) => {
+        console.warn("fetchOptionsFor error", err)
+      })
   }, [])
 
   // Fetch on mount and when indexSymbol changes
@@ -174,7 +201,8 @@ export function ManualTradingPage() {
   }, [indexSymbol, fetchOptionsFor])
 
   // Active expiries for current indexSymbol
-  const expiries = expiriesMap[indexSymbol]?.length ? expiriesMap[indexSymbol] : []
+  const expList = expiriesMap[indexSymbol]?.length ? expiriesMap[indexSymbol] : []
+  const expiries = expList.length > 0 ? expList : getDefaultExpiries(indexSymbol)
 
   const currentExpiry = expiryMap[indexSymbol] || expiries[0]?.expiry || ""
 
@@ -199,6 +227,7 @@ export function ManualTradingPage() {
   const lotSize = selectedExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
   const atmStrike = atmMap[indexSymbol] || (indexSymbol === "SENSEX" ? 82000 : 25250)
   const strikeStep = indexSymbol === "SENSEX" ? 100 : 50
+  const riskStep = indexSymbol === "SENSEX" ? 10 : 5
 
   // Format expiry label nicely: e.g. "23 Nov", "01 Dec"
   function formatExpiryLabel(expStr: string) {
@@ -1028,112 +1057,117 @@ export function ManualTradingPage() {
                     </div>
 
                     {/* LIVE EDITABLE STOP LOSS & TARGET (COMPACT 2-COLUMN GRID) */}
-                    <div className="grid grid-cols-2 gap-2">
-                      {/* STOP LOSS LIVE EDITOR */}
-                      <div className="p-2 rounded-2xl bg-card border border-rose-500/35 flex flex-col justify-between gap-1 shadow-2xs">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-rose-500 uppercase flex items-center gap-1 text-[10px]">
-                            <Shield className="size-3" /> Stop Loss
-                          </span>
-                          <button
-                            type="button"
-                            onClick={() => moveToBreakeven(pos)}
-                            className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all cursor-pointer"
-                            title="Trail SL to Entry"
-                          >
-                            ⚡ BE
-                          </button>
-                        </div>
+                    {(() => {
+                      const posStep = String(pos.symbol || "").toUpperCase().includes("SENSEX") ? 10 : 5
+                      return (
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* STOP LOSS LIVE EDITOR */}
+                          <div className="p-2 rounded-2xl bg-card border border-rose-500/35 flex flex-col justify-between gap-1 shadow-2xs">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-bold text-rose-500 uppercase flex items-center gap-1 text-[10px]">
+                                <Shield className="size-3" /> Stop Loss
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => moveToBreakeven(pos)}
+                                className="px-1.5 py-0.5 rounded text-[9px] font-mono font-bold bg-amber-500/15 border border-amber-500/30 text-amber-500 hover:bg-amber-500/25 active:scale-95 transition-all cursor-pointer"
+                                title="Trail SL to Entry"
+                              >
+                                ⚡ BE
+                              </button>
+                            </div>
 
-                        <div className="flex items-center justify-between gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                            onClick={() => updateActiveRisk(pos.symbol, Math.max(0, activeSl - 5), activeTp, pos)}
-                          >
-                            <Minus className="size-3 text-rose-500" />
-                          </Button>
+                            <div className="flex items-center justify-between gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                                onClick={() => updateActiveRisk(pos.symbol, Math.max(0, activeSl - posStep), activeTp, pos)}
+                              >
+                                <Minus className="size-3 text-rose-500" />
+                              </Button>
 
-                          <div className="relative flex-1">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="5"
-                              value={activeSl || ""}
-                              onChange={(e) => updateActiveRisk(pos.symbol, parseFloat(e.target.value) || 0, activeTp, pos)}
-                              className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
-                            />
+                              <div className="relative flex-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step={String(posStep)}
+                                  value={activeSl || ""}
+                                  onChange={(e) => updateActiveRisk(pos.symbol, parseFloat(e.target.value) || 0, activeTp, pos)}
+                                  className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
+                                />
+                              </div>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                                onClick={() => updateActiveRisk(pos.symbol, activeSl + posStep, activeTp, pos)}
+                              >
+                                <Plus className="size-3 text-rose-500" />
+                              </Button>
+                            </div>
+
+                            <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
+                              {currentSlPrice != null ? `Exit: ₹${currentSlPrice.toFixed(1)}` : "SL Off"}
+                              {activeSl > 0 ? ` (-₹${slRupeeImpact})` : ""}
+                            </div>
                           </div>
 
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                            onClick={() => updateActiveRisk(pos.symbol, activeSl + 5, activeTp, pos)}
-                          >
-                            <Plus className="size-3 text-rose-500" />
-                          </Button>
-                        </div>
+                          {/* TARGET LIVE EDITOR */}
+                          <div className="p-2 rounded-2xl bg-card border border-emerald-500/35 flex flex-col justify-between gap-1 shadow-2xs">
+                            <div className="flex items-center justify-between text-xs">
+                              <span className="font-bold text-emerald-500 uppercase flex items-center gap-1 text-[10px]">
+                                <Target className="size-3" /> Target
+                              </span>
+                              <span className="text-[10px] font-mono font-bold text-emerald-500">
+                                +{activeTp} pts
+                              </span>
+                            </div>
 
-                        <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
-                          {currentSlPrice != null ? `Exit: ₹${currentSlPrice.toFixed(1)}` : "SL Off"}
-                          {activeSl > 0 ? ` (-₹${slRupeeImpact})` : ""}
-                        </div>
-                      </div>
+                            <div className="flex items-center justify-between gap-1">
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                                onClick={() => updateActiveRisk(pos.symbol, activeSl, Math.max(0, activeTp - posStep), pos)}
+                              >
+                                <Minus className="size-3 text-emerald-500" />
+                              </Button>
 
-                      {/* TARGET LIVE EDITOR */}
-                      <div className="p-2 rounded-2xl bg-card border border-emerald-500/35 flex flex-col justify-between gap-1 shadow-2xs">
-                        <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-emerald-500 uppercase flex items-center gap-1 text-[10px]">
-                            <Target className="size-3" /> Target
-                          </span>
-                          <span className="text-[10px] font-mono font-bold text-emerald-500">
-                            +{activeTp} pts
-                          </span>
-                        </div>
+                              <div className="relative flex-1">
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step={String(posStep)}
+                                  value={activeTp || ""}
+                                  onChange={(e) => updateActiveRisk(pos.symbol, activeSl, parseFloat(e.target.value) || 0, pos)}
+                                  className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
+                                />
+                              </div>
 
-                        <div className="flex items-center justify-between gap-1">
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                            onClick={() => updateActiveRisk(pos.symbol, activeSl, Math.max(0, activeTp - 5), pos)}
-                          >
-                            <Minus className="size-3 text-emerald-500" />
-                          </Button>
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
+                                onClick={() => updateActiveRisk(pos.symbol, activeSl, activeTp + posStep, pos)}
+                              >
+                                <Plus className="size-3 text-emerald-500" />
+                              </Button>
+                            </div>
 
-                          <div className="relative flex-1">
-                            <Input
-                              type="number"
-                              min="0"
-                              step="5"
-                              value={activeTp || ""}
-                              onChange={(e) => updateActiveRisk(pos.symbol, activeSl, parseFloat(e.target.value) || 0, pos)}
-                              className="h-7 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg px-1"
-                            />
+                            <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
+                              {currentTpPrice != null ? `Target: ₹${currentTpPrice.toFixed(1)}` : "TP Off"}
+                              {activeTp > 0 ? ` (+₹${tpRupeeImpact})` : ""}
+                            </div>
                           </div>
-
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="icon"
-                            className="size-7 rounded-lg bg-muted/60 border border-border/60 hover:bg-muted active:scale-90"
-                            onClick={() => updateActiveRisk(pos.symbol, activeSl, activeTp + 5, pos)}
-                          >
-                            <Plus className="size-3 text-emerald-500" />
-                          </Button>
                         </div>
-
-                        <div className="text-[10px] font-mono font-bold text-muted-foreground text-center">
-                          {currentTpPrice != null ? `Target: ₹${currentTpPrice.toFixed(1)}` : "TP Off"}
-                          {activeTp > 0 ? ` (+₹${tpRupeeImpact})` : ""}
-                        </div>
-                      </div>
-                    </div>
+                      )
+                    })()}
 
                     {/* ─── DEDICATED INDIVIDUAL SQUARE OFF BUTTON ─── */}
                     <button
@@ -1421,7 +1455,7 @@ export function ManualTradingPage() {
                     variant="ghost"
                     size="icon"
                     className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
-                    onClick={() => setSlPts((s) => Math.max(0, s - 5))}
+                    onClick={() => setSlPts((s) => Math.max(0, s - riskStep))}
                     disabled={slPts <= 0}
                   >
                     <Minus className="size-3.5 text-rose-500" />
@@ -1431,7 +1465,7 @@ export function ManualTradingPage() {
                     <Input
                       type="number"
                       min="0"
-                      step="5"
+                      step={String(riskStep)}
                       value={slPts || ""}
                       onChange={(e) => setSlPts(Math.max(0, parseFloat(e.target.value) || 0))}
                       className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
@@ -1446,7 +1480,7 @@ export function ManualTradingPage() {
                     variant="ghost"
                     size="icon"
                     className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
-                    onClick={() => setSlPts((s) => s + 5)}
+                    onClick={() => setSlPts((s) => s + riskStep)}
                   >
                     <Plus className="size-3.5 text-rose-500" />
                   </Button>
@@ -1470,7 +1504,7 @@ export function ManualTradingPage() {
                     variant="ghost"
                     size="icon"
                     className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
-                    onClick={() => setTpPts((t) => Math.max(0, t - 5))}
+                    onClick={() => setTpPts((t) => Math.max(0, t - riskStep))}
                     disabled={tpPts <= 0}
                   >
                     <Minus className="size-3.5 text-emerald-500" />
@@ -1480,7 +1514,7 @@ export function ManualTradingPage() {
                     <Input
                       type="number"
                       min="0"
-                      step="5"
+                      step={String(riskStep)}
                       value={tpPts || ""}
                       onChange={(e) => setTpPts(Math.max(0, parseFloat(e.target.value) || 0))}
                       className="h-8 text-center text-xs font-mono font-bold bg-background border border-border/70 rounded-lg pr-7"
@@ -1495,7 +1529,7 @@ export function ManualTradingPage() {
                     variant="ghost"
                     size="icon"
                     className="size-8 rounded-lg bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
-                    onClick={() => setTpPts((t) => t + 5)}
+                    onClick={() => setTpPts((t) => t + riskStep)}
                   >
                     <Plus className="size-3.5 text-emerald-500" />
                   </Button>

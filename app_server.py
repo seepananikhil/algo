@@ -1756,6 +1756,7 @@ def manual_option_choices(query: dict | None = None) -> dict:
             })
         sx_tick = st.get("sensex_last_tick") or {}
         result = {
+            "ok": True,
             "symbol": "SENSEX",
             "spot": spot,
             "change": sx_tick.get("change"),
@@ -1801,6 +1802,7 @@ def manual_option_choices(query: dict | None = None) -> dict:
         })
     n_tick = st.get("last_tick") or {}
     result = {
+        "ok": True,
         "symbol": "NIFTY",
         "spot": spot,
         "change": n_tick.get("change"),
