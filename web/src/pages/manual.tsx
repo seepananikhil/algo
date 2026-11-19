@@ -111,6 +111,9 @@ export function ManualTradingPage() {
   const sensexChange = sensexTick?.change ?? (sensexTick?.prev_close ? sensexSpot - sensexTick.prev_close : null)
   const sensexPerChange = sensexTick?.per_change ?? (sensexTick?.prev_close && sensexChange != null ? (sensexChange / sensexTick.prev_close) * 100 : null)
 
+  const currentSpot = indexSymbol === "NIFTY" ? niftySpot : sensexSpot
+  const currentChange = indexSymbol === "NIFTY" ? niftyChange : sensexChange
+
   useEffect(() => {
     if (niftyTick?.ltp && niftyTick.ltp > 0) {
       setSpotMap((prev) => ({ ...prev, NIFTY: niftyTick.ltp }))
@@ -1243,25 +1246,26 @@ export function ManualTradingPage() {
               </div>
             )}
 
-            {/* ─── BOTTOM ACTIONS: SQUARE OFF ALL + TRADE AGAIN ─── */}
+            {/* ─── BOTTOM ACTIONS: SQUARE OFF ALL (BIGGER PRIMARY) + TRADE AGAIN (COMPACT SECONDARY) ─── */}
             <div className="flex items-center gap-2 mt-0.5">
               <button
                 type="button"
                 disabled={actionBusy}
                 onClick={hitExitAll}
-                className="flex-1 h-11 text-xs font-bold rounded-xl bg-rose-500/10 dark:bg-rose-950/40 hover:bg-rose-500/20 dark:hover:bg-rose-900/50 active:scale-95 shadow-xs border border-rose-500/40 font-mono text-rose-600 dark:text-rose-300 flex items-center justify-center gap-1.5 cursor-pointer transition-all"
+                className="flex-[2] h-12 text-sm font-black rounded-xl bg-rose-500/10 dark:bg-rose-950/40 hover:bg-rose-500/20 dark:hover:bg-rose-900/50 active:scale-95 shadow-xs border border-rose-500/40 font-mono text-rose-600 dark:text-rose-300 flex items-center justify-center gap-2 cursor-pointer transition-all tracking-wide"
                 title="Square off all open positions"
               >
-                <AlertTriangle className="size-4 shrink-0 text-rose-500" />
+                <AlertTriangle className="size-4.5 shrink-0 text-rose-500" />
                 <span>SQUARE OFF ALL{displayPositions.length > 1 ? ` (${displayPositions.length})` : ""}</span>
               </button>
 
               <button
                 type="button"
                 onClick={() => setViewMode("ORDER")}
-                className="flex-1 h-11 rounded-xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-bold text-foreground transition-all flex items-center justify-center gap-1.5 cursor-pointer shadow-2xs active:scale-98"
+                className="flex-1 h-12 rounded-xl border border-border/70 bg-card hover:bg-muted/40 text-xs font-mono font-semibold text-muted-foreground hover:text-foreground transition-all flex items-center justify-center gap-1 cursor-pointer shadow-2xs active:scale-98 px-2 text-center"
+                title="Enter new trade order desk"
               >
-                <span>Trade Again ➔</span>
+                <span>Trade ➔</span>
               </button>
             </div>
           </div>
@@ -1395,9 +1399,17 @@ export function ManualTradingPage() {
                 </Button>
 
                 <div className="text-center flex flex-col items-center">
-                  <div className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1 flex items-center gap-1.5">
+                  <div className="text-[11px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1 flex items-center gap-1.5 flex-wrap justify-center">
                     <span>STRIKE PRICE</span>
-                    <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-muted/80 text-muted-foreground">
+                    <span className="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-muted/80 text-foreground">
+                      Spot: {Number(currentSpot).toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })}
+                      {currentChange != null && (
+                        <span className={cn("ml-1 text-[9px]", currentChange >= 0 ? "text-emerald-500" : "text-rose-500")}>
+                          {currentChange >= 0 ? "+" : ""}{currentChange.toFixed(1)}
+                        </span>
+                      )}
+                    </span>
+                    <span className="text-[9px] font-mono font-semibold px-1 py-0.2 rounded bg-muted/60 text-muted-foreground">
                       ATM {atmStrike}
                     </span>
                   </div>
@@ -1425,6 +1437,27 @@ export function ManualTradingPage() {
                         </span>
                       </span>
                     )}
+                  </div>
+
+                  {/* Selected Strike Option Live Prices */}
+                  <div className="flex items-center justify-center gap-4 mt-2 pt-1.5 border-t border-border/40 w-full text-xs font-mono">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        CALL CE
+                      </span>
+                      <span className="font-black text-foreground text-sm">
+                        {cePrice != null ? `₹${cePrice.toFixed(1)}` : quoteLoading ? "…" : "—"}
+                      </span>
+                    </div>
+                    <span className="text-border text-xs">|</span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-rose-500/15 text-rose-600 dark:text-rose-400">
+                        PUT PE
+                      </span>
+                      <span className="font-black text-foreground text-sm">
+                        {pePrice != null ? `₹${pePrice.toFixed(1)}` : quoteLoading ? "…" : "—"}
+                      </span>
+                    </div>
                   </div>
                 </div>
 
@@ -1595,11 +1628,14 @@ export function ManualTradingPage() {
                 <span className="text-lg font-black tracking-wide leading-tight">
                   CALL ↗
                 </span>
-                <span className="text-xs font-mono font-bold leading-tight">
-                  {strike} CE
+                <span className="text-xs font-mono font-bold leading-tight flex items-center justify-center gap-1.5">
+                  <span>{strike} CE</span>
+                  <span className="text-[11px] font-black px-1.5 py-0.2 rounded bg-black/25 text-white shadow-2xs">
+                    {cePrice != null ? `₹${cePrice.toFixed(1)}` : quoteLoading ? "…" : "—"}
+                  </span>
                 </span>
-                <span className="text-xs font-semibold font-mono leading-tight opacity-95">
-                  Cost: {ceCost != null ? fmtRs(ceCost) : quoteLoading ? "…" : "—"}
+                <span className="text-[11px] font-semibold font-mono leading-tight opacity-95">
+                  Cost: {ceCost != null ? fmtRs(ceCost) : quoteLoading ? "…" : "—"} ({lots}L)
                 </span>
               </button>
 
@@ -1613,11 +1649,14 @@ export function ManualTradingPage() {
                 <span className="text-lg font-black tracking-wide leading-tight">
                   PUT ↘
                 </span>
-                <span className="text-xs font-mono font-bold leading-tight">
-                  {strike} PE
+                <span className="text-xs font-mono font-bold leading-tight flex items-center justify-center gap-1.5">
+                  <span>{strike} PE</span>
+                  <span className="text-[11px] font-black px-1.5 py-0.2 rounded bg-black/25 text-white shadow-2xs">
+                    {pePrice != null ? `₹${pePrice.toFixed(1)}` : quoteLoading ? "…" : "—"}
+                  </span>
                 </span>
-                <span className="text-xs font-semibold font-mono leading-tight opacity-95">
-                  Cost: {peCost != null ? fmtRs(peCost) : quoteLoading ? "…" : "—"}
+                <span className="text-[11px] font-semibold font-mono leading-tight opacity-95">
+                  Cost: {peCost != null ? fmtRs(peCost) : quoteLoading ? "…" : "—"} ({lots}L)
                 </span>
               </button>
             </div>
