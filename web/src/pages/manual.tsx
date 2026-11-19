@@ -1204,56 +1204,61 @@ export function ManualTradingPage() {
               </Button>
             </div>
 
-            {/* ─── 4. LOTS PICKER ─── */}
-            <div className="flex flex-col gap-1.5 p-2 rounded-2xl bg-card border border-border/60 shadow-2xs">
-              <div className="flex items-center justify-between px-1">
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-                    onClick={() => setLots((l) => Math.max(1, l - 1))}
-                    disabled={lots <= 1}
-                  >
-                    <Minus className="size-3" />
-                  </Button>
+            {/* ─── 4. LOTS PICKER (BIGGER & PROMINENT LIKE SPOT/STRIKE) ─── */}
+            <div className="flex flex-col gap-2 p-2.5 rounded-2xl bg-card border border-border/60 shadow-xs">
+              <div className="flex items-center justify-between">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-10 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                  onClick={() => setLots((l) => Math.max(1, l - 1))}
+                  disabled={lots <= 1}
+                >
+                  <Minus className="size-4" />
+                </Button>
 
-                  <span className="text-xs font-black font-mono text-foreground">
-                    {lots} {lots === 1 ? "Lot" : "Lots"}
-                  </span>
-
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon"
-                    className="size-7 rounded-lg bg-muted/40 border border-border/60 hover:bg-muted active:scale-90"
-                    onClick={() => setLots((l) => Math.min(20, l + 1))}
-                  >
-                    <Plus className="size-3" />
-                  </Button>
+                <div className="text-center">
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground leading-none mb-1">
+                    LOTS & QUANTITY
+                  </div>
+                  <div className="text-2xl font-black font-mono tracking-tight text-foreground flex items-center justify-center gap-1.5">
+                    <span>{lots}</span>
+                    <span className="text-sm font-bold text-muted-foreground">
+                      {lots === 1 ? "Lot" : "Lots"}
+                    </span>
+                    <span className="text-xs font-mono font-bold px-1.5 py-0.5 rounded-md bg-primary/10 text-primary border border-primary/20">
+                      {totalQty} Qty
+                    </span>
+                  </div>
                 </div>
 
-                <span className="text-[11px] font-mono font-bold text-muted-foreground">
-                  Total: <strong className="text-primary">{totalQty} Qty</strong>
-                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-10 rounded-xl bg-muted/60 border border-border/70 hover:bg-muted active:scale-90"
+                  onClick={() => setLots((l) => Math.min(20, l + 1))}
+                >
+                  <Plus className="size-4" />
+                </Button>
               </div>
 
-              {/* Quick Lots Chips */}
-              <div className="grid grid-cols-5 gap-1 pt-1 border-t border-border/40">
+              {/* Quick Lots Chips - Big Thumb-friendly Pills */}
+              <div className="grid grid-cols-5 gap-1.5 pt-1.5 border-t border-border/40">
                 {[1, 2, 3, 5, 10].map((l) => (
                   <button
                     key={l}
                     type="button"
                     onClick={() => setLots(l)}
                     className={cn(
-                      "py-1 rounded-lg text-[11px] font-mono font-bold border transition-all cursor-pointer text-center",
+                      "py-2 rounded-xl text-xs sm:text-sm font-mono font-black border transition-all cursor-pointer text-center active:scale-95",
                       lots === l
-                        ? "bg-foreground text-background border-foreground shadow-xs"
-                        : "bg-muted/40 border-border/50 text-muted-foreground hover:text-foreground"
+                        ? "bg-primary text-primary-foreground border-primary shadow-xs"
+                        : "bg-muted/40 border-border/60 text-muted-foreground hover:text-foreground"
                     )}
                   >
-                    {l}L
+                    {l} {l === 1 ? "Lot" : "L"}
                   </button>
                 ))}
               </div>
