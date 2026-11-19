@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from "react"
+import { useTheme } from "next-themes"
 import { toast } from "sonner"
 import {
   Plus,
@@ -9,6 +10,8 @@ import {
   ArrowLeft,
   ChevronDown,
   RefreshCw,
+  Sun,
+  Moon,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -71,6 +74,10 @@ export function ManualTradingPage() {
   const { status } = useStatus()
   const isKotakConnected = Boolean(status?.token.valid)
 
+  // Theme support (Light / Dark)
+  const { resolvedTheme, setTheme } = useTheme()
+  const isDark = resolvedTheme !== "light"
+
   // Instrument: NIFTY vs SENSEX
   const [indexSymbol, setIndexSymbol] = useState<"NIFTY" | "SENSEX">("NIFTY")
 
@@ -83,42 +90,146 @@ export function ManualTradingPage() {
   // Poll funds/margin every 8 seconds
   const fundsPoll = usePoll<FundsStatus>(isKotakConnected ? "/api/funds" : null, 8000)
 
-  // Track both NIFTY and SENSEX spot prices live
+  // Track both NIFTY and SENSEX spot prices live (isolated per symbol to prevent cross-symbol flickers)
   const [spotMap, setSpotMap] = useState<Record<"NIFTY" | "SENSEX", number>>({
     NIFTY: 25228,
     SENSEX: 82031,
   })
 
-  // Update active index spot from polling
-  useEffect(() => {
-    const s = optionsPoll.data?.spot
-    if (s && s > 0) {
-      setSpotMap((prev) => ({
-        ...prev,
-        [indexSymbol]: s,
-      }))
-    }
-  }, [optionsPoll.data?.spot, indexSymbol])
+  // Per-symbol caches for ATM, strikes, and expiries so switching symbols is instant with zero glitch or stale flash
+  const [atmMap, setAtmMap] = useState<Record<"NIFTY" | "SENSEX", number>>({
+    NIFTY: 25250,
+    SENSEX: 82000,
+  })
+  const [strikeMap, setStrikeMap] = useState<Record<"NIFTY" | "SENSEX", string>>({
+    NIFTY: "25250",
+    SENSEX: "82000",
+  })
+  const [expiryMap, setExpiryMap] = useState<Record<"NIFTY" | "SENSEX", string>>({
+    NIFTY: "",
+    SENSEX: "",
+  })
+  const [expiriesMap, setExpiriesMap] = useState<Record<"NIFTY" | "SENSEX", ManualExpiryGroup[]>>({
+    NIFTY: [],
+    SENSEX: [],
+  })
 
-  // Also fetch alt index spot in background so both cards always display live spot values
+  // Helper to determine symbol from API response
+  const parseSymbol = (sym?: string): "NIFTY" | "SENSEX" | null => {
+    if (!sym) return null
+    return sym.toUpperCase().includes("SENSEX") ? "SENSEX" : "NIFTY"
+  }
+
+  // Update active index spot, atm, and expiries ONLY when response actually matches its symbol!
+  useEffect(() => {
+    const d = optionsPoll.data
+    if (!d || !d.ok) return
+    const sym = parseSymbol(d.symbol)
+    if (!sym) return
+
+    if (d.spot && d.spot > 0) {
+      setSpotMap((prev) => ({ ...prev, [sym]: d.spot }))
+    }
+    if (d.atm && d.atm > 0) {
+      setAtmMap((prev) => ({ ...prev, [sym]: d.atm }))
+      setStrikeMap((prev) => {
+        if (!prev[sym] || prev[sym] === "0") {
+          return { ...prev, [sym]: String(d.atm) }
+        }
+        return prev
+      })
+    }
+    if (d.expiries && d.expiries.length > 0) {
+      setExpiriesMap((prev) => ({ ...prev, [sym]: d.expiries }))
+    }
+  }, [optionsPoll.data])
+
+  // Also fetch alt index spot & options in background so both cards always display live spot values
   useEffect(() => {
     if (!isKotakConnected) return
-    const altSymbol = indexSymbol === "NIFTY" ? "SENSEX" : "NIFTY"
+    const altSymbol: "NIFTY" | "SENSEX" = indexSymbol === "NIFTY" ? "SENSEX" : "NIFTY"
     fetch(`/api/manual-options?symbol=${altSymbol}`)
       .then((r) => r.json())
       .then((data: ManualOptionChoices) => {
-        if (data?.ok && data?.spot) {
-          setSpotMap((prev) => ({ ...prev, [altSymbol]: data.spot }))
+        if (!data?.ok) return
+        const sym = parseSymbol(data.symbol) || altSymbol
+        if (data.spot && data.spot > 0) {
+          setSpotMap((prev) => ({ ...prev, [sym]: data.spot }))
+        }
+        if (data.atm && data.atm > 0) {
+          setAtmMap((prev) => ({ ...prev, [sym]: data.atm }))
+          setStrikeMap((prev) => {
+            if (!prev[sym] || prev[sym] === "0") {
+              return { ...prev, [sym]: String(data.atm) }
+            }
+            return prev
+          })
+        }
+        if (data.expiries && data.expiries.length > 0) {
+          setExpiriesMap((prev) => ({ ...prev, [sym]: data.expiries }))
         }
       })
       .catch(() => {})
   }, [indexSymbol, isKotakConnected])
 
-  // Expiry selection
-  const [expiry, setExpiry] = useState<string>("")
+  // Active expiries for current indexSymbol
+  const isDataForCurrentIndex = Boolean(
+    optionsPoll.data?.symbol && parseSymbol(optionsPoll.data.symbol) === indexSymbol
+  )
 
-  // Trading parameters
-  const [strike, setStrike] = useState("")
+  const expiries =
+    isDataForCurrentIndex && optionsPoll.data?.expiries && optionsPoll.data.expiries.length > 0
+      ? optionsPoll.data.expiries
+      : expiriesMap[indexSymbol]?.length
+      ? expiriesMap[indexSymbol]
+      : []
+
+  const currentExpiry = expiryMap[indexSymbol] || expiries[0]?.expiry || ""
+
+  const setExpiry = (exp: string) => {
+    setExpiryMap((prev) => ({ ...prev, [indexSymbol]: exp }))
+  }
+
+  // Ensure active expiry is valid when expiries load
+  useEffect(() => {
+    if (expiries.length > 0) {
+      const cur = expiryMap[indexSymbol]
+      if (!cur || !expiries.some((e) => e.expiry === cur)) {
+        setExpiryMap((prev) => ({ ...prev, [indexSymbol]: expiries[0].expiry }))
+      }
+    }
+  }, [expiries, indexSymbol, expiryMap])
+
+  const selectedExpiryGroup = expiries.find((e) => e.expiry === currentExpiry) || expiries[0]
+  const lotSize = selectedExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
+  const atmStrike =
+    isDataForCurrentIndex && (optionsPoll.data?.atm ?? 0) > 0
+      ? optionsPoll.data!.atm
+      : atmMap[indexSymbol] || (indexSymbol === "SENSEX" ? 82000 : 25250)
+  const strikeStep = indexSymbol === "SENSEX" ? 100 : 50
+
+  // Format expiry label nicely: e.g. "23 Nov", "01 Dec"
+  function formatExpiryLabel(expStr: string) {
+    if (!expStr) return "Expiry"
+    try {
+      const parts = expStr.split("-")
+      if (parts.length === 3) {
+        const monthNames = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+        const day = parts[2]
+        const month = monthNames[parseInt(parts[1], 10)] || parts[1]
+        return `${day} ${month}`
+      }
+      return expStr
+    } catch {
+      return expStr
+    }
+  }
+
+  const strike = strikeMap[indexSymbol] || String(atmStrike)
+  const setStrike = (val: string) => {
+    setStrikeMap((prev) => ({ ...prev, [indexSymbol]: val }))
+  }
+
   const [lots, setLots] = useState(1)
   const [product] = useState<"NRML" | "MIS">("NRML")
 
@@ -246,55 +357,6 @@ export function ManualTradingPage() {
       touchStartY.current = null
     }
   }
-
-  // Expiries with cache so dropdown never flashes off/on during polling
-  const [cachedExpiries, setCachedExpiries] = useState<ManualExpiryGroup[]>([])
-  useEffect(() => {
-    if (optionsPoll.data?.expiries && optionsPoll.data.expiries.length > 0) {
-      setCachedExpiries(optionsPoll.data.expiries)
-    }
-  }, [optionsPoll.data?.expiries])
-
-  const expiries = optionsPoll.data?.expiries?.length ? optionsPoll.data.expiries : cachedExpiries
-
-  // Always default to current week expiry (first item) whenever expiries load or index switches
-  useEffect(() => {
-    if (expiries.length > 0) {
-      if (!expiry || !expiries.some((e) => e.expiry === expiry)) {
-        setExpiry(expiries[0].expiry)
-      }
-    }
-  }, [expiries, indexSymbol])
-
-  const selectedExpiryGroup = expiries.find((e) => e.expiry === expiry) || expiries[0]
-  const currentExpiry = selectedExpiryGroup?.expiry ?? ""
-  const lotSize = selectedExpiryGroup?.lot_size ?? (indexSymbol === "SENSEX" ? 20 : 65)
-  const atmStrike = optionsPoll.data?.atm ?? (indexSymbol === "SENSEX" ? 82000 : 25250)
-  const strikeStep = indexSymbol === "SENSEX" ? 100 : 50
-
-  // Format expiry label nicely: e.g. "23 Nov", "01 Dec"
-  function formatExpiryLabel(expStr: string) {
-    if (!expStr) return "Expiry"
-    try {
-      const parts = expStr.split("-")
-      if (parts.length === 3) {
-        const monthNames = ["", "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-        const day = parts[2]
-        const month = monthNames[parseInt(parts[1], 10)] || parts[1]
-        return `${day} ${month}`
-      }
-      return expStr
-    } catch {
-      return expStr
-    }
-  }
-
-  // Automatically default strike to ATM on load or instrument switch
-  useEffect(() => {
-    if (atmStrike > 0) {
-      setStrike(String(atmStrike))
-    }
-  }, [atmStrike, indexSymbol])
 
   // Fetch Quotes for both CE and PE continuously in real-time
   useEffect(() => {
@@ -530,7 +592,7 @@ export function ManualTradingPage() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
       style={{
-        paddingTop: "max(env(safe-area-inset-top, 0px), 64px)",
+        paddingTop: "max(env(safe-area-inset-top, 0px), 48px)",
         paddingBottom: "max(env(safe-area-inset-bottom, 0px), 24px)",
       }}
       className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto"
@@ -552,7 +614,63 @@ export function ManualTradingPage() {
       )}
       
       {/* ─── TOP & MIDDLE SECTION ─── */}
-      <div className="flex flex-col gap-2.5">
+      <div className="flex flex-col gap-2">
+        {/* ─── 0. APP BRANDING & THEME HEADER ─── */}
+        <header className="flex items-center justify-between px-1 py-1 shrink-0 select-none">
+          <div className="flex items-center gap-2">
+            <div className="grid size-7 place-items-center rounded-xl bg-primary text-primary-foreground font-black text-xs shadow-xs">
+              A
+            </div>
+            <div className="flex flex-col">
+              <div className="flex items-center gap-1.5 leading-none">
+                <span className="text-xs font-black tracking-tight text-foreground">
+                  AlgoNeo Scalper
+                </span>
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  • LIVE
+                </span>
+              </div>
+              <span className="text-[10px] font-mono text-muted-foreground leading-none mt-1">
+                Kotak Neo · ₹0 Brokerage
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5">
+            {/* Quick Reload Button */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={async () => {
+                setIsRefreshing(true)
+                try {
+                  await Promise.allSettled([positionsPoll.reload(), optionsPoll.reload(), fundsPoll.reload()])
+                  toast.success("Live data refreshed", { duration: 1500 })
+                } finally {
+                  setIsRefreshing(false)
+                }
+              }}
+              className="size-8 rounded-xl border border-border/60 bg-card text-muted-foreground hover:text-foreground active:scale-95 cursor-pointer shadow-2xs"
+              title="Refresh Live Data"
+            >
+              <RefreshCw className={cn("size-3.5", isRefreshing && "animate-spin")} />
+            </Button>
+
+            {/* Theme Toggler (Light / Dark) */}
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={() => setTheme(isDark ? "light" : "dark")}
+              className="size-8 rounded-xl border border-border/60 bg-card text-muted-foreground hover:text-foreground active:scale-95 cursor-pointer shadow-2xs"
+              title={isDark ? "Switch to Light Theme" : "Switch to Dark Theme"}
+            >
+              {isDark ? <Sun className="size-4 text-amber-500" /> : <Moon className="size-4 text-indigo-500" />}
+            </Button>
+          </div>
+        </header>
+
         {/* ─── 1. TOPMOST HEADER: DAY P&L + AVAILABLE BALANCE + HISTORY ─── */}
         <div className="flex items-center justify-between p-2.5 rounded-2xl bg-card border border-border/60 shadow-2xs">
           {/* Day P&L */}
@@ -970,7 +1088,6 @@ export function ManualTradingPage() {
                 onClick={() => {
                   if (indexSymbol !== "NIFTY") {
                     setIndexSymbol("NIFTY")
-                    setStrike("")
                   }
                 }}
                 className={cn(
@@ -1002,7 +1119,6 @@ export function ManualTradingPage() {
                 onClick={() => {
                   if (indexSymbol !== "SENSEX") {
                     setIndexSymbol("SENSEX")
-                    setStrike("")
                   }
                 }}
                 className={cn(
@@ -1032,7 +1148,7 @@ export function ManualTradingPage() {
             {/* ─── EXPIRY SELECTOR (FULL-WIDTH, ZERO FLICKER, NO 'EXPIRY' TEXT) ─── */}
             <div className="relative w-full">
               <select
-                value={expiry}
+                value={currentExpiry}
                 onChange={(e) => setExpiry(e.target.value)}
                 className="w-full h-11 px-3.5 pr-9 rounded-2xl bg-card border border-border/70 text-xs sm:text-sm font-mono font-bold text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer shadow-2xs transition-all"
               >
@@ -1256,11 +1372,11 @@ export function ManualTradingPage() {
                 <span className="text-lg font-black tracking-wide leading-tight">
                   CALL ↗
                 </span>
-                <span className="text-[11px] font-mono opacity-90 font-bold leading-tight">
-                  {strike} CE {cePrice != null ? `• ${fmtRs(cePrice)}` : quoteLoading ? "• …" : ""}
+                <span className="text-xs font-mono font-bold leading-tight">
+                  {strike} CE
                 </span>
-                <span className="text-xs font-semibold font-mono leading-tight">
-                  Cost: {ceCost != null ? fmtRs(ceCost) : "—"}
+                <span className="text-xs font-semibold font-mono leading-tight opacity-95">
+                  Cost: {ceCost != null ? fmtRs(ceCost) : quoteLoading ? "…" : "—"}
                 </span>
               </button>
 
@@ -1274,11 +1390,11 @@ export function ManualTradingPage() {
                 <span className="text-lg font-black tracking-wide leading-tight">
                   PUT ↘
                 </span>
-                <span className="text-[11px] font-mono opacity-90 font-bold leading-tight">
-                  {strike} PE {pePrice != null ? `• ${fmtRs(pePrice)}` : quoteLoading ? "• …" : ""}
+                <span className="text-xs font-mono font-bold leading-tight">
+                  {strike} PE
                 </span>
-                <span className="text-xs font-semibold font-mono leading-tight">
-                  Cost: {peCost != null ? fmtRs(peCost) : "—"}
+                <span className="text-xs font-semibold font-mono leading-tight opacity-95">
+                  Cost: {peCost != null ? fmtRs(peCost) : quoteLoading ? "…" : "—"}
                 </span>
               </button>
             </div>
