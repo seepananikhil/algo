@@ -6265,54 +6265,60 @@ class Handler(BaseHTTPRequestHandler):
             return self._json({"ok": True, "time": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S")})
 
         # Public dashboard read routes for Swinger Engine
-        if url.path == "/api/swinger/portfolio":
-            from swinger_engine import load_portfolio, load_config
-            return self._json({"portfolio": load_portfolio(), "config": load_config()})
-        elif url.path == "/api/swinger/trades":
-            from swinger_engine import load_trades
-            return self._json(load_trades())
-        elif url.path == "/api/swinger/status":
-            from swinger_engine import load_config, load_portfolio
-            p = load_portfolio()
-            return self._json({"status": "running", "active_positions": len(p.get("positions", [])), "last_updated": p.get("last_updated")})
-        elif url.path == "/api/swinger/daily-signals":
-            from swinger_engine import load_daily_signals
-            return self._json(load_daily_signals())
-        elif url.path == "/api/swinger/watchlist":
-            from swinger_engine import load_watchlist
-            return self._json(load_watchlist())
-        elif url.path == "/api/swinger/config":
-            from swinger_engine import load_config
-            return self._json(load_config())
-        elif url.path == "/api/swinger/candles":
-            from swinger_engine import get_stock_candles, get_stock_trade_context, resolve_symbol
-            raw_sym = q.get("symbol", [""])[0]
-            if not raw_sym:
-                return self._json({"error": "symbol required"}, 400)
-            sym = resolve_symbol(raw_sym)
-            from_dt = q.get("from", [None])[0]
-            to_dt = q.get("to", [None])[0]
-            stock_candles = get_stock_candles(sym, from_dt, to_dt)
-            ctx = get_stock_trade_context(sym)
-            return self._json({
-                "ok": True,
-                "symbol": sym,
-                "requested_symbol": raw_sym,
-                "candles": stock_candles,
-                "radar_triggers": ctx["radar_triggers"],
-                "first_radar_date": ctx["first_radar_date"],
-                "trades": ctx["trades"],
-                "is_on_radar": ctx["is_on_radar"],
-                "radar_info": ctx["radar_info"],
-                "market_cap_cr": ctx.get("market_cap_cr")
-            })
-        elif url.path in ["/api/swinger/backtest-stock", "/api/swinger/backtest"]:
-            from swinger_engine import backtest_single_stock
-            raw_sym = q.get("symbol", [""])[0]
-            if not raw_sym:
-                return self._json({"error": "symbol required"}, 400)
-            res = backtest_single_stock(raw_sym)
-            return self._json(res)
+        if url.path.startswith("/api/swinger/"):
+            try:
+                if url.path == "/api/swinger/portfolio":
+                    from swinger_engine import load_portfolio, load_config
+                    return self._json({"portfolio": load_portfolio(), "config": load_config()})
+                elif url.path == "/api/swinger/trades":
+                    from swinger_engine import load_trades
+                    return self._json(load_trades())
+                elif url.path == "/api/swinger/status":
+                    from swinger_engine import load_config, load_portfolio
+                    p = load_portfolio()
+                    return self._json({"status": "running", "active_positions": len(p.get("positions", [])), "last_updated": p.get("last_updated")})
+                elif url.path == "/api/swinger/daily-signals":
+                    from swinger_engine import load_daily_signals
+                    return self._json(load_daily_signals())
+                elif url.path == "/api/swinger/watchlist":
+                    from swinger_engine import load_watchlist
+                    return self._json(load_watchlist())
+                elif url.path == "/api/swinger/config":
+                    from swinger_engine import load_config
+                    return self._json(load_config())
+                elif url.path == "/api/swinger/candles":
+                    from swinger_engine import get_stock_candles, get_stock_trade_context, resolve_symbol
+                    raw_sym = q.get("symbol", [""])[0]
+                    if not raw_sym:
+                        return self._json({"error": "symbol required"}, 400)
+                    sym = resolve_symbol(raw_sym)
+                    from_dt = q.get("from", [None])[0]
+                    to_dt = q.get("to", [None])[0]
+                    stock_candles = get_stock_candles(sym, from_dt, to_dt)
+                    ctx = get_stock_trade_context(sym)
+                    return self._json({
+                        "ok": True,
+                        "symbol": sym,
+                        "requested_symbol": raw_sym,
+                        "candles": stock_candles,
+                        "radar_triggers": ctx["radar_triggers"],
+                        "first_radar_date": ctx["first_radar_date"],
+                        "trades": ctx["trades"],
+                        "is_on_radar": ctx["is_on_radar"],
+                        "radar_info": ctx["radar_info"],
+                        "market_cap_cr": ctx.get("market_cap_cr")
+                    })
+                elif url.path in ["/api/swinger/backtest-stock", "/api/swinger/backtest"]:
+                    from swinger_engine import backtest_single_stock
+                    raw_sym = q.get("symbol", [""])[0]
+                    if not raw_sym:
+                        return self._json({"error": "symbol required"}, 400)
+                    res = backtest_single_stock(raw_sym)
+                    return self._json(res)
+            except Exception as e:
+                import traceback
+                print(f"[Swinger Route Error]: {traceback.format_exc()}")
+                return self._json({"error": str(e), "positions": [], "portfolio": {"positions": []}}, 500)
 
         if not self._is_authenticated() and not self._is_local_client():
             return self._json({"error": "unauthorized", "auth_required": True}, 401)

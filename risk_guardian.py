@@ -101,6 +101,32 @@ def is_risk_locked() -> tuple[bool, dict | None]:
     try:
         data = json.loads(RISK_LOCK_FILE.read_text(encoding="utf-8"))
         if str(data.get("date")) == today:
+            # Check if there is an active reset today that supersedes this lock
+            if RISK_RESET_FILE.exists():
+                try:
+                    rdata = json.loads(RISK_RESET_FILE.read_text(encoding="utf-8"))
+                    if str(rdata.get("date")) == today:
+                        r_time = str(rdata.get("reset_at", ""))
+                        b_time = str(data.get("breached_at", ""))
+                        if r_time and b_time and r_time >= b_time:
+                            RISK_LOCK_FILE.unlink(missing_ok=True)
+                            STOP_FILE.unlink(missing_ok=True)
+                            logger.info(f"🛡️ RISK_LOCK superseded by manual reset at {r_time} (breached at {b_time}). Unlocked.")
+                            return False, None
+                        baseline = float(rdata.get("baseline_pnl", 0.0) or 0.0)
+                        cfg = get_guardian_config()
+                        limit = float(cfg.get("daily_loss_limit", 2500.0) or 2500.0)
+                        metrics = get_current_metrics()
+                        net_pnl = float(metrics.get("net_pnl", 0.0) or 0.0)
+                        effective_pnl = net_pnl - baseline
+                        if effective_pnl > -limit:
+                            RISK_LOCK_FILE.unlink(missing_ok=True)
+                            STOP_FILE.unlink(missing_ok=True)
+                            logger.info(f"🛡️ Effective P&L Rs. {effective_pnl:+,.2f} > -Rs. {limit:,.2f}. Clearing superseded lock.")
+                            return False, None
+                except Exception as ex:
+                    logger.error(f"Error checking reset supersede: {ex}")
+
             return True, data
         else:
             # Stale lock from previous day, auto-clear
@@ -152,9 +178,47 @@ def get_reset_baseline() -> float:
 
 
 def reset_risk_lock() -> dict:
-    """Manual reset is strictly disabled by policy to prevent revenge trading after daily loss breach."""
-    logger.warning("🛡️ [RISK GUARDIAN] Manual reset attempted, but resets are disabled by policy.")
-    return {"ok": False, "error": "Risk Guardian manual reset is disabled by policy. Locks cannot be cleared mid-day."}
+    """Manually clear daily risk lock and anchor a new baseline P&L for fresh trading buffer."""
+    global _guardian_cached_state, _last_square_off_failed, _last_square_off_attempt
+    now_ist = datetime.now(IST)
+    today = today_str()
+
+    # 1. First get current net PnL from broker/cache to anchor as new baseline
+    metrics = get_current_metrics()
+    current_net_pnl = float(metrics.get("net_pnl", 0.0) or 0.0)
+
+    # 2. Write RISK_RESET.json anchoring the baseline FIRST so any concurrent watcher check sees it
+    reset_data = {
+        "date": today,
+        "baseline_pnl": current_net_pnl,
+        "reset_at": now_ist.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    try:
+        RISK_RESET_FILE.write_text(json.dumps(reset_data, indent=2), encoding="utf-8")
+        logger.warning(f"🛡️ [RISK GUARDIAN] Manual reset successful! Baseline anchored at Rs. {current_net_pnl:+,.2f}")
+    except Exception as e:
+        logger.error(f"Failed to write RISK_RESET_FILE: {e}")
+
+    # 3. Now remove RISK_LOCK.json and STOP_TRADING
+    try:
+        RISK_LOCK_FILE.unlink(missing_ok=True)
+    except Exception as e:
+        logger.error(f"Failed to remove RISK_LOCK_FILE: {e}")
+    try:
+        STOP_FILE.unlink(missing_ok=True)
+    except Exception as e:
+        logger.error(f"Failed to remove STOP_FILE: {e}")
+
+    # 4. Clear memory flags and cache
+    _last_square_off_failed = False
+    _last_square_off_attempt = 0.0
+    _guardian_cached_state = {}
+
+    return {
+        "ok": True,
+        "baseline_pnl": current_net_pnl,
+        "message": f"Risk Guardian reset! Baseline anchored at Rs. {current_net_pnl:+,.2f}. Fresh buffer active.",
+    }
 
 
 def cancel_all_pending_orders() -> list:

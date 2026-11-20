@@ -1022,9 +1022,23 @@ export function LivePage() {
             >
               <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0 animate-pulse" />
               <span>GUARDIAN LOCKED (-Rs. {(status?.risk_guardian?.daily_loss_limit || status?.daily_loss_limit || 2000).toLocaleString('en-IN')})</span>
-              <span className="ml-1 px-1.5 py-0.5 rounded bg-rose-600/30 text-rose-300 font-semibold text-[10px] tracking-wide">
-                Trading Halted
-              </span>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (confirm("Reset Risk Guardian? This will anchor your current P&L as the baseline and give you a fresh loss buffer.")) {
+                    try {
+                      const res = await postJSON<{ ok: boolean; message: string }>("/api/risk-guardian/reset", {})
+                      toast.success(res.message || "Risk Guardian reset successfully!")
+                      reloadStatus()
+                    } catch (err: any) {
+                      toast.error(err?.message || "Failed to reset Risk Guardian")
+                    }
+                  }
+                }}
+                className="ml-1 px-2 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide cursor-pointer shadow-xs transition"
+              >
+                Reset & Unlock
+              </button>
             </div>
           ) : status?.risk_guardian?.enabled ? (
             <div 
@@ -1407,9 +1421,23 @@ export function LivePage() {
                       <div className="text-[10px] font-normal opacity-90">Auto-closing active. Trading halted for the day.</div>
                     </div>
                   </div>
-                  <span className="px-2 py-0.5 rounded bg-rose-600/30 border border-rose-500/40 text-rose-300 font-bold text-[10px] tracking-wide shrink-0">
-                    Locked
-                  </span>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (confirm("Reset Risk Guardian? This will anchor your current P&L as the baseline and give you a fresh loss buffer.")) {
+                        try {
+                          const res = await postJSON<{ ok: boolean; message: string }>("/api/risk-guardian/reset", {})
+                          toast.success(res.message || "Risk Guardian reset successfully!")
+                          reloadStatus()
+                        } catch (err: any) {
+                          toast.error(err?.message || "Failed to reset Risk Guardian")
+                        }
+                      }
+                    }}
+                    className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide shrink-0 cursor-pointer shadow-xs transition"
+                  >
+                    Reset & Unlock
+                  </button>
                 </div>
               ) : (
                 <div className="px-2 py-1 rounded bg-muted/40 border border-border/40 text-[10px] text-muted-foreground flex items-center justify-between">

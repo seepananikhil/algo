@@ -21,7 +21,10 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-import yfinance as yf
+try:
+    import yfinance as yf
+except Exception:
+    yf = None
 
 ROOT = Path(__file__).resolve().parent
 DATA_DIR = ROOT / "paper" / "swinger"

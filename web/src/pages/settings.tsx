@@ -513,9 +513,26 @@ export function SettingsPage() {
                     <div className="font-bold">⚠️ Trading Halted: Daily Loss Limit Breached</div>
                     <div className="text-[11px] opacity-85 mt-0.5">{status.status?.risk_guardian?.lock_info?.reason || "Max daily loss limit reached. All trades squared off."}</div>
                   </div>
-                  <span className="px-2.5 py-1 rounded bg-rose-600/30 border border-rose-500/40 text-rose-300 font-bold text-xs tracking-wide shrink-0">
-                    Locked For Today
-                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="text-xs font-bold cursor-pointer bg-rose-600 hover:bg-rose-700 text-white shadow-xs"
+                      onClick={async () => {
+                        if (confirm("Reset Risk Guardian? This will unlock trading and anchor your current P&L as the baseline with a fresh buffer.")) {
+                          try {
+                            const res = await postJSON<{ ok: boolean; message: string }>("/api/risk-guardian/reset", {})
+                            toast.success(res.message || "Risk Guardian reset successfully!")
+                            status.reload()
+                          } catch (err: any) {
+                            toast.error(err?.message || "Failed to reset Risk Guardian")
+                          }
+                        }
+                      }}
+                    >
+                      Reset & Unlock
+                    </Button>
+                  </div>
                 </div>
               ) : (
                 <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20 text-xs">
