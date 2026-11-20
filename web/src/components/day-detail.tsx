@@ -465,7 +465,7 @@ export function DayDetail({
   }
 
   return (
-    <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-2.5">
+    <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-5 pb-20">
       {/* Sleek Action / Header Bar with plenty of breathing space */}
       <div className="flex items-center justify-between gap-3 rounded-lg border border-border/40 bg-card/80 px-3 py-1.5 text-xs shadow-2xs backdrop-blur shrink-0">
         <div className="flex items-center gap-2.5 flex-wrap min-w-0">

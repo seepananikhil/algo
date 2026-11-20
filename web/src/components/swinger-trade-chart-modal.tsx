@@ -31,6 +31,7 @@ export interface SwingerTradeTarget {
   trade_id?: string
   symbol: string
   name?: string
+  type?: string
   entry_date?: string
   exit_date?: string
   entry_price?: number
@@ -156,6 +157,32 @@ function fmtVol(vol?: number | null): string {
   return vol.toLocaleString("en-IN")
 }
 
+function findInitialTradeIndex(trades: SwingerTradeTarget[], target?: SwingerTradeTarget | null): number {
+  if (!trades || trades.length === 0) return 0
+  if (target) {
+    if (target.trade_id) {
+      const idx = trades.findIndex((t) => t.trade_id === target.trade_id)
+      if (idx !== -1) return idx
+    }
+    if (target.entry_date) {
+      const targetDate = target.entry_date.slice(0, 10)
+      const idx = trades.findIndex((t) => t.entry_date && t.entry_date.slice(0, 10) === targetDate)
+      if (idx !== -1) return idx
+    }
+    const isTargetOpen = target.status === "ACTIVE" || target.status === "SHIELDED" || target.status === "RUNNER" || target.type === "OPEN" || !target.exit_date
+    if (isTargetOpen) {
+      const openIdx = trades.findIndex((t) => t.type === "OPEN" || t.status === "ACTIVE" || t.status === "SHIELDED" || t.status === "RUNNER" || !t.exit_date)
+      if (openIdx !== -1) return openIdx
+    }
+  }
+  // Default to active open position if one exists
+  const activeIdx = trades.findIndex((t) => t.type === "OPEN" || t.status === "ACTIVE" || t.status === "SHIELDED" || t.status === "RUNNER" || !t.exit_date)
+  if (activeIdx !== -1) return activeIdx
+
+  // Otherwise default to the most recent trade (last chronological)
+  return trades.length - 1
+}
+
 export function SwingerTradeChartModal({
   trade,
   allTrades,
@@ -231,7 +258,8 @@ export function SwingerTradeChartModal({
       setBacktestSummary((trade as any)?.backtestSummary || null)
       setIsBacktestMode(Boolean((trade as any)?.isBacktest))
       setMarketCapCr((trade as any)?.market_cap_cr || null)
-      setActiveTradeIndex(0)
+      const initialList = (trade as any).stockTrades || (trade as any).trades || []
+      setActiveTradeIndex(findInitialTradeIndex(initialList, trade))
     }
   }, [trade?.symbol, (trade as any)?.isBacktest])
 
@@ -349,7 +377,11 @@ export function SwingerTradeChartModal({
           setCandles(sorted)
           setRadarTriggers(Array.isArray(d.radar_triggers) ? d.radar_triggers : [])
           setFirstRadarDate(d.first_radar_date || null)
-          setServerTrades(Array.isArray(d.trades) ? d.trades : [])
+          const sTrades = Array.isArray(d.trades) ? d.trades : []
+          setServerTrades(sTrades)
+          if (sTrades.length > 0) {
+            setActiveTradeIndex(findInitialTradeIndex(sTrades, trade))
+          }
           setIsOnRadar(Boolean(d.is_on_radar))
           if (d.market_cap_cr) {
             setMarketCapCr(d.market_cap_cr)
@@ -652,7 +684,7 @@ export function SwingerTradeChartModal({
 
     // B. Buy & Exit Arrows for ALL actual trades of this stock
     symbolTrades.forEach((st, idx) => {
-      const tradeNum = symbolTrades.length - idx
+      const tradeNum = idx + 1
       const stEntryPrice = st.avg_price ?? st.entry_price
       const validEntryTime = sanitizeDateToCandleTime(st.entry_date, candles)
       if (validEntryTime && stEntryPrice && stEntryPrice > 0) {
@@ -1011,7 +1043,7 @@ export function SwingerTradeChartModal({
 
             {/* Direct TradingView Link (Icon only) */}
             <a
-              href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(currentSymbol || trade.symbol)}`}
+              href={`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(currentSymbol || trade.symbol)}`}
               target="_blank"
               rel="noopener noreferrer"
               className="size-6 inline-flex items-center justify-center rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/80 transition shadow-2xs shrink-0"
@@ -1048,14 +1080,10 @@ export function SwingerTradeChartModal({
                     <strong className="font-mono mr-1 text-[10px] opacity-75">{targetTradeForHeader.trade_id} ·</strong>
                   ) : null}
                   {isOpen
-                    ? targetTradeForHeader.status === "RUNNER"
-                      ? "Active · Runner"
-                      : targetTradeForHeader.status === "SHIELDED"
-                      ? "Active · BE Shielded"
-                      : "Active Position"
+                    ? "Active Position"
                     : isWin
                     ? "Closed Winner"
-                    : "Stopped Out"}
+                    : "Closed Trade"}
                 </span>
                 <span className="font-mono font-black">
                   ({isWin ? "+" : ""}{pnlPct.toFixed(1)}% · {isWin ? "+" : ""}₹{Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })})
@@ -1151,8 +1179,8 @@ export function SwingerTradeChartModal({
 
         {/* ================= 2. FIXED SLIM CONTROLS TOOLBAR ================= */}
         <div className="px-5 py-1.5 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between gap-3 text-xs">
-          {/* Left: Ledger Toggle */}
-          <div className="flex items-center gap-1.5">
+          {/* Left: Ledger Toggle & Multi-Trade Switcher */}
+          <div className="flex items-center gap-2 flex-wrap">
             {symbolTrades.length > 0 && (
               <button
                 type="button"
@@ -1167,6 +1195,41 @@ export function SwingerTradeChartModal({
                 <Table className="size-3" />
                 <span>Ledger ({symbolTrades.length})</span>
               </button>
+            )}
+
+            {symbolTrades.length > 1 && (
+              <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg border border-slate-200">
+                {symbolTrades.map((st, idx) => {
+                  const isSel = idx === activeTradeIndex
+                  const isOpenTrade = !st.exit_date || st.status === "ACTIVE" || st.status === "SHIELDED" || st.status === "RUNNER"
+                  const isWin = (st.pnl ?? 0) >= 0
+                  const ret = st.pnl_pct ?? st.pct_return ?? 0
+                  return (
+                    <button
+                      key={idx}
+                      type="button"
+                      onClick={() => setActiveTradeIndex(idx)}
+                      className={`px-2 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1.5 ${
+                        isSel
+                          ? "bg-white text-slate-900 shadow-2xs font-extrabold border border-slate-200/80"
+                          : "text-slate-600 hover:text-slate-900"
+                      }`}
+                      title={isOpenTrade ? `Trade #${idx + 1}: Currently Holding (${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%)` : `Trade #${idx + 1}: Closed (${isWin ? "+" : ""}${ret.toFixed(1)}%)`}
+                    >
+                      <span>Trade #{idx + 1}</span>
+                      {isOpenTrade ? (
+                        <span className="px-1.5 py-0.2 rounded text-[9px] bg-sky-100 text-sky-800 font-black">
+                          Active {ret >= 0 ? "+" : ""}{ret.toFixed(0)}%
+                        </span>
+                      ) : (
+                        <span className={`text-[9px] font-black ${isWin ? "text-emerald-600" : "text-rose-600"}`}>
+                          {isWin ? "+" : ""}{ret.toFixed(0)}%
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
             )}
           </div>
 
@@ -1458,7 +1521,7 @@ export function SwingerTradeChartModal({
                     const isSel = i === activeTradeIndex
                     const isTradeWin = (st.pnl ?? 0) >= 0
                     const isOpenTrade = !st.exit_date || st.status === "ACTIVE" || st.status === "SHIELDED" || st.status === "RUNNER"
-                    const tradeNum = symbolTrades.length - i
+                    const tradeNum = i + 1
                     return (
                       <tr
                         key={i}

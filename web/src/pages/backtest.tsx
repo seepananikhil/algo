@@ -10,7 +10,7 @@ import { StrategyStreakSummary } from "@/components/strategy-streak-summary"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { Activity, ArrowDown, ArrowUp, ArrowUpDown, Calendar, Flame, RefreshCw, TrendingUp, X } from "lucide-react"
+import { Activity, ArrowDown, ArrowUp, ArrowUpDown, Calendar, ChevronLeft, ChevronRight, Flame, RefreshCw, TrendingUp, X } from "lucide-react"
 import { toast } from "sonner"
 import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, postJSON, getJSON, type Backtest } from "@/lib/api"
 
@@ -72,7 +72,7 @@ const tooltip = {
   labelStyle: { color: "var(--muted-foreground)" },
 }
 
-type MainStrategy = "master_portfolio" | "trend_runner" | "vix_trap"
+type MainStrategy = "master_portfolio" | "trend_runner" | "vix_trap" | "the_scalper"
 type SubSymbol = "all" | "nifty" | "sensex"
 type AnalyticsView = "curve" | "calendar" | "streaks"
 type TradeSort = "date-desc" | "date-asc" | "pnl-desc" | "pnl-asc"
@@ -80,7 +80,7 @@ type TradeSort = "date-desc" | "date-asc" | "pnl-desc" | "pnl-asc"
 export function BacktestPage() {
   const [mainStrategy, setMainStrategy] = useState<MainStrategy>(() => {
     const saved = localStorage.getItem("backtest_main_strategy") as MainStrategy
-    if (saved === "master_portfolio" || saved === "trend_runner" || saved === "vix_trap") return saved
+    if (saved === "master_portfolio" || saved === "trend_runner" || saved === "vix_trap" || saved === "the_scalper") return saved
     return "master_portfolio"
   })
 
@@ -103,6 +103,10 @@ export function BacktestPage() {
       if (subSymbol === "nifty") return "/api/backtest?strategy=trend_runner"
       if (subSymbol === "sensex") return "/api/backtest?strategy=sensex_runner"
       return "/api/backtest?strategy=trend_runner_all"
+    } else if (mainStrategy === "the_scalper") {
+      if (subSymbol === "nifty") return "/api/backtest?strategy=the_scalper_nifty"
+      if (subSymbol === "sensex") return "/api/backtest?strategy=the_scalper_sensex"
+      return "/api/backtest?strategy=the_scalper_all"
     } else {
       if (subSymbol === "nifty") return "/api/backtest?strategy=vix_divergence"
       if (subSymbol === "sensex") return "/api/backtest?strategy=sensex_vix_divergence"
@@ -119,6 +123,10 @@ export function BacktestPage() {
       if (subSymbol === "sensex") return "sensex_runner"
       if (subSymbol === "all") return "trend_runner_all"
       return "trend_runner"
+    } else if (mainStrategy === "the_scalper") {
+      if (subSymbol === "sensex") return "the_scalper_sensex"
+      if (subSymbol === "all") return "the_scalper_all"
+      return "the_scalper_nifty"
     } else {
       if (subSymbol === "sensex") return "sensex_vix_divergence"
       if (subSymbol === "all") return "vix_trap_all"
@@ -164,6 +172,7 @@ export function BacktestPage() {
   const years = useMemo(() => [...new Set((raw?.daily ?? []).map((d) => d.date.slice(0, 4)))].sort(), [raw])
   const year = yearPick ?? "all"
   const data = useMemo(() => (raw ? forYear(raw, year) : null), [raw, year])
+  const availableDays = useMemo(() => (data?.daily ?? []).map((d) => d.date).sort(), [data?.daily])
 
   const trades = useMemo(() => {
     const t = data?.trades ?? []
@@ -204,7 +213,7 @@ export function BacktestPage() {
   }, [data?.trades])
 
   return (
-    <div className="flex flex-col gap-4 w-full">
+    <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-5 pb-20">
       {/* 1. UNIFIED COMMAND TOOLBAR (Combines Title, Strategy, Index, Year & Sync) */}
       <div className="flex flex-col gap-3 rounded-2xl border border-border/60 bg-card/75 p-3.5 sm:p-4 shadow-xs backdrop-blur-md">
         {/* Top Tier: Strategy Label, Details Pill & Sync Button */}
@@ -212,13 +221,15 @@ export function BacktestPage() {
           <div className="flex flex-wrap items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">
               <span className="text-xl shrink-0">
-                {mainStrategy === "master_portfolio" ? "👑" : mainStrategy === "trend_runner" ? "⚡" : "🪤"}
+                {mainStrategy === "master_portfolio" ? "👑" : mainStrategy === "trend_runner" ? "⚡" : mainStrategy === "the_scalper" ? "🎯" : "🪤"}
               </span>
               <h1 className="text-lg sm:text-xl font-bold tracking-tight">
                 {mainStrategy === "master_portfolio"
                   ? "Apex Duo (Trend + Trap)"
                   : mainStrategy === "trend_runner"
                   ? "Trend Runner (15m ORB)"
+                  : mainStrategy === "the_scalper"
+                  ? "The Scalper (CMS + ORB Multi-Strategy)"
                   : "VIX Trap (Divergence)"}
               </h1>
             </div>
@@ -295,6 +306,25 @@ export function BacktestPage() {
               >
                 <span>🪤</span>
                 <span>VIX Trap</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  setPicked(null)
+                  setMainStrategy("the_scalper")
+                  setSubSymbol("sensex")
+                  localStorage.setItem("backtest_main_strategy", "the_scalper")
+                  localStorage.setItem("backtest_sub_symbol", "sensex")
+                }}
+                className={cn(
+                  "px-3 py-1.5 text-xs font-semibold rounded-lg transition-all cursor-pointer flex items-center gap-1.5",
+                  mainStrategy === "the_scalper"
+                    ? "bg-emerald-600 text-white shadow-xs font-semibold"
+                    : "text-muted-foreground hover:text-foreground font-semibold"
+                )}
+              >
+                <span>🎯</span>
+                <span>The Scalper</span>
               </button>
             </div>
 
@@ -491,7 +521,83 @@ export function BacktestPage() {
               </div>
             </CardHeader>
 
-            <CardContent className="p-3 sm:p-5 min-h-[380px]">
+            <CardContent className="p-3 sm:p-5 min-h-[380px] flex flex-col gap-5">
+              {/* FAST 1-MINUTE DAY CHART & TRADE LOG: Visible on any tab when a session is picked */}
+              {picked && (
+                <div id="quick-day-chart" className="rounded-xl border border-primary/40 bg-card p-3 sm:p-4 shadow-md animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between pb-2 mb-3 border-b border-border/40">
+                    <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+                      <span className="text-sm font-bold text-foreground flex items-center gap-1.5">
+                        <span>🕯️</span>
+                        <span>1-Min Session Chart &amp; Trade Log: <span className="font-mono text-primary font-bold">{picked}</span></span>
+                      </span>
+                      {(() => {
+                        const d = (data?.daily ?? []).find((x) => x.date === picked)
+                        if (!d) return null
+                        return (
+                          <Badge variant="outline" className={cn("text-xs font-mono font-bold", pnlClass(d.points))}>
+                            {fmtPts(d.points)} ({d.trades} trade{d.trades === 1 ? "" : "s"})
+                          </Badge>
+                        )
+                      })()}
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      {availableDays.length > 0 && (() => {
+                        const curIdx = availableDays.indexOf(picked)
+                        const prevDay = curIdx > 0 ? availableDays[curIdx - 1] : null
+                        const nextDay = curIdx >= 0 && curIdx < availableDays.length - 1 ? availableDays[curIdx + 1] : null
+                        return (
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!prevDay}
+                              onClick={() => prevDay && setPicked(prevDay)}
+                              className="h-7 px-2 text-xs gap-1 cursor-pointer"
+                              title={prevDay ? `Previous session: ${prevDay}` : "No earlier session"}
+                            >
+                              <ChevronLeft className="h-3.5 w-3.5" />
+                              <span className="hidden sm:inline">Prev Day</span>
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!nextDay}
+                              onClick={() => nextDay && setPicked(nextDay)}
+                              className="h-7 px-2 text-xs gap-1 cursor-pointer"
+                              title={nextDay ? `Next session: ${nextDay}` : "No later session"}
+                            >
+                              <span className="hidden sm:inline">Next Day</span>
+                              <ChevronRight className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        )
+                      })()}
+
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setPicked(null)}
+                        className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                        <span>Close Chart</span>
+                      </Button>
+                    </div>
+                  </div>
+
+                  <DayDetail
+                    key={`${picked}-${strategy}`}
+                    date={picked}
+                    mode="backtest"
+                    strategy={strategy}
+                    compact={true}
+                    allowTimeframeSwitch={true}
+                  />
+                </div>
+              )}
+
               {/* TAB 1: EQUITY CURVE */}
               {analyticsView === "curve" && (
                 <div className="flex flex-col gap-2">
@@ -524,49 +630,9 @@ export function BacktestPage() {
                 </div>
               )}
 
-              {/* TAB 2: MONTHLY & DAILY CALENDAR (Clubbed + Instant Fast Chart Viewer) */}
+              {/* TAB 2: MONTHLY & DAILY CALENDAR */}
               {analyticsView === "calendar" && (
                 <div className="flex flex-col gap-5">
-                  {/* FAST 1-MINUTE DAY CHART: Opens instantly right here when any day is clicked! */}
-                  {picked && (
-                    <div id="quick-day-chart" className="rounded-xl border border-primary/30 bg-card p-3 sm:p-4 shadow-sm animate-in fade-in duration-200">
-                      <div className="flex items-center justify-between pb-2 mb-3 border-b border-border/40">
-                        <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
-                          <span className="text-sm font-bold text-foreground flex items-center gap-1.5">
-                            <span>🕯️</span>
-                            <span>1-Min Session Chart: <span className="font-mono text-primary font-bold">{picked}</span></span>
-                          </span>
-                          {(() => {
-                            const d = (data?.daily ?? []).find((x) => x.date === picked)
-                            if (!d) return null
-                            return (
-                              <Badge variant="outline" className={cn("text-xs font-mono font-bold", pnlClass(d.points))}>
-                                {fmtPts(d.points)} ({d.trades} trade{d.trades === 1 ? "" : "s"})
-                              </Badge>
-                            )
-                          })()}
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setPicked(null)}
-                          className="h-7 text-xs gap-1.5 text-muted-foreground hover:text-foreground cursor-pointer"
-                        >
-                          <X className="h-3.5 w-3.5" />
-                          <span>Close Chart</span>
-                        </Button>
-                      </div>
-
-                      <DayDetail
-                        key={`${picked}-${strategy}`}
-                        date={picked}
-                        mode="backtest"
-                        strategy={strategy}
-                        compact={true}
-                        allowTimeframeSwitch={true}
-                      />
-                    </div>
-                  )}
 
                   {/* Top Part: Monthly Breakdown Bar Chart */}
                   <div className="flex flex-col gap-2 rounded-xl border border-border/40 bg-muted/20 p-3 sm:p-4">
@@ -764,16 +830,23 @@ export function BacktestPage() {
                   {sortedTrades.map((t, i) => (
                     <TableRow
                       key={i}
-                      className="cursor-pointer hover:bg-muted/40 transition-colors"
+                      className={cn(
+                        "cursor-pointer hover:bg-muted/40 transition-colors",
+                        picked === t.date && "bg-primary/10 border-l-2 border-l-primary font-medium"
+                      )}
                       onClick={() => {
                         setPicked(t.date)
-                        setAnalyticsView("calendar")
-                        const hub = document.getElementById("analytics-hub-card")
-                        if (hub) hub.scrollIntoView({ behavior: "smooth", block: "start" })
+                        const chartEl = document.getElementById("quick-day-chart") || document.getElementById("analytics-hub-card")
+                        if (chartEl) chartEl.scrollIntoView({ behavior: "smooth", block: "start" })
                       }}
-                      title="Click to view 1-minute chart in the Analytics Hub"
+                      title="Click to view 1-minute chart & trade log"
                     >
-                      <TableCell className="tabular-nums font-mono text-xs w-[105px]">{t.date}</TableCell>
+                      <TableCell className="tabular-nums font-mono text-xs w-[105px]">
+                        <div className="flex items-center gap-1.5">
+                          <span>{t.date}</span>
+                          {picked === t.date && <span className="text-primary text-[10px] font-bold">🕯️</span>}
+                        </div>
+                      </TableCell>
                       <TableCell className="w-[150px]">
                         <div className="flex flex-col gap-0.5 max-w-[140px]">
                           <SideBadge side={t.side} />
@@ -794,7 +867,14 @@ export function BacktestPage() {
                       <TableCell className="tabular-nums text-xs w-[65px]">{t.exit}</TableCell>
                       <TableCell className="text-right tabular-nums text-xs font-mono w-[85px]">{fmtNum(t.exit_price)}</TableCell>
                       <TableCell className="text-xs text-muted-foreground truncate max-w-0" title={t.lots && t.lots > 1 ? `${t.setup || "VIX TRAP"} (${t.lots}L) · ${prettyReason(t.reason)}` : t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}>
-                        {t.lots && t.lots > 1 ? `${t.setup || "VIX TRAP"} (${t.lots}L) · ${prettyReason(t.reason)}` : t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}
+                        <div className="flex items-center justify-between gap-1">
+                          <span className="truncate">
+                            {t.lots && t.lots > 1 ? `${t.setup || "VIX TRAP"} (${t.lots}L) · ${prettyReason(t.reason)}` : t.setup ? `${t.setup} · ${prettyReason(t.reason)}` : prettyReason(t.reason)}
+                          </span>
+                          <span className="text-[10px] text-primary/80 shrink-0 font-medium px-1 rounded bg-primary/5 hover:bg-primary/20">
+                            Chart ↗
+                          </span>
+                        </div>
                       </TableCell>
                       <TableCell className={cn("text-right font-semibold tabular-nums text-xs font-mono w-[95px]", pnlClass(t.pnl_points))}>
                         {fmtPts(t.pnl_points)}

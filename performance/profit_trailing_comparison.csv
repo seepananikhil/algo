@@ -1,0 +1,10 @@
+name,trades,win_rate,net_pts,pf,max_dd,green_years,runners_100,runners_200,avg_trade
+"1. Baseline (Current 6-Tier: 70/20, 130/60, 180/110, 230/165, 280/220, 330/270)",1320,41.7,21500.8,1.95,-520.0,10/10,179,44,16.3
+2. Early BE Lock: +40 -> Lock +5 pts (then baseline 6-tier),1369,50.1,18178.2,1.9,-501.9,10/10,148,41,13.3
+3. Early Lock: +50 -> Lock +15 pts (then baseline 6-tier),1358,45.7,18482.6,1.85,-552.8,10/10,156,37,13.6
+"4. Tighter Progressive: 60/30, 100/70, 150/115, 200/165, 250/215, 300/265",1360,43.2,15626.7,1.69,-600.0,10/10,127,24,11.5
+"5. Wider Breathing Room: 80/20, 140/50, 200/100, 260/160, 320/220",1316,40.6,21956.7,1.96,-551.9,10/10,179,47,16.7
+6. Fixed Target Capped at +150 pts (with baseline ratchets),1320,41.7,18548.1,1.82,-520.0,10/10,193,0,14.1
+7. Fixed Target Capped at +200 pts (with baseline ratchets),1320,41.7,20345.5,1.9,-520.0,10/10,179,81,15.4
+8. Fixed Target Capped at +250 pts (with baseline ratchets),1320,41.7,21205.2,1.94,-520.0,10/10,179,51,16.1
+9. Pure Ride: No Ratchets (30 pt Initial SL only -> Ride to 15:15),1310,36.3,22786.0,1.93,-572.8,10/10,187,58,17.4

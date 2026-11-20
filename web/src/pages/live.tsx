@@ -549,29 +549,6 @@ export function LivePage() {
   const [dragOffset, setDragOffset] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
   const [isScalpMinimized, setIsScalpMinimized] = useState(true)
 
-  // Risk Guardian Manual Reset State
-  const [resettingGuardian, setResettingGuardian] = useState(false)
-
-  async function handleResetGuardian() {
-    if (!window.confirm("Reset the Risk Guardian circuit breaker and resume trading for today?")) return
-    setResettingGuardian(true)
-    try {
-      const res = await postJSON<{ ok: boolean; message?: string }>("/api/risk-guardian/reset", {})
-      if (res.ok) {
-        toast.success(res.message || "Risk Guardian lock reset! Trading resumed.")
-        await Promise.all([reloadStatus(), liveTradesPoll.reload()])
-      } else {
-        toast.error("Failed to reset Risk Guardian lock")
-      }
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : String(e))
-    } finally {
-      setResettingGuardian(false)
-    }
-  }
-
-
-
   // Drag handlers for floating scalper
   const handleDragStart = (e: React.MouseEvent) => {
     setIsDraggingScalp(true)
@@ -1041,19 +1018,13 @@ export function LivePage() {
           {status?.risk_guardian?.is_locked ? (
             <div 
               className="flex items-center space-x-1.5 px-2.5 py-0.5 rounded-md bg-rose-500/15 border border-rose-500/40 text-rose-600 dark:text-rose-400 font-bold text-xs shadow-xs"
-              title={status?.risk_guardian?.lock_info?.reason || 'Max daily loss limit breached. All trades locked.'}
+              title={status?.risk_guardian?.lock_info?.reason || 'Max daily loss limit breached. All trades locked for today.'}
             >
               <ShieldAlert className="w-3.5 h-3.5 text-rose-500 shrink-0 animate-pulse" />
               <span>GUARDIAN LOCKED (-Rs. {(status?.risk_guardian?.daily_loss_limit || status?.daily_loss_limit || 2000).toLocaleString('en-IN')})</span>
-              <button
-                type="button"
-                onClick={handleResetGuardian}
-                disabled={resettingGuardian}
-                className="ml-1 px-1.5 py-0.5 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide cursor-pointer transition-all active:scale-95 shadow-2xs"
-                title="Click to reset the daily loss circuit breaker and resume trading"
-              >
-                {resettingGuardian ? "…" : "Reset"}
-              </button>
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-rose-600/30 text-rose-300 font-semibold text-[10px] tracking-wide">
+                Trading Halted
+              </span>
             </div>
           ) : status?.risk_guardian?.enabled ? (
             <div 
@@ -1433,18 +1404,12 @@ export function LivePage() {
                     <ShieldAlert className="w-4 h-4 shrink-0 text-rose-500 animate-pulse" />
                     <div className="leading-tight">
                       <div>Daily Loss Limit Breached (-Rs. {(status?.risk_guardian?.daily_loss_limit || status?.daily_loss_limit || 2000).toLocaleString('en-IN')})</div>
-                      <div className="text-[10px] font-normal opacity-90">Auto-closing active. New buys blocked.</div>
+                      <div className="text-[10px] font-normal opacity-90">Auto-closing active. Trading halted for the day.</div>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={handleResetGuardian}
-                    disabled={resettingGuardian}
-                    className="px-2 py-1 rounded bg-rose-600 hover:bg-rose-700 text-white font-bold text-[10px] tracking-wide cursor-pointer shrink-0 transition-all active:scale-95"
-                    title="Reset lock and resume trading"
-                  >
-                    {resettingGuardian ? "…" : "Reset Lock"}
-                  </button>
+                  <span className="px-2 py-0.5 rounded bg-rose-600/30 border border-rose-500/40 text-rose-300 font-bold text-[10px] tracking-wide shrink-0">
+                    Locked
+                  </span>
                 </div>
               ) : (
                 <div className="px-2 py-1 rounded bg-muted/40 border border-border/40 text-[10px] text-muted-foreground flex items-center justify-between">

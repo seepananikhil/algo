@@ -733,7 +733,7 @@ def get_stock_trade_context(symbol: str):
 
     # 2. Raw triggers from CSV & Watchlist
     triggers = set()
-    for csv_name in ["chartink_pure_triggers.csv", "chartink_swingernew_triggers.csv"]:
+    for csv_name in ["chartink_verified_triggers.csv", "chartink_pure_triggers.csv", "chartink_swingernew_triggers.csv"]:
         csv_p = ROOT / "scratch" / csv_name
         if csv_p.exists():
             try:
@@ -801,13 +801,13 @@ def get_stock_triggers(symbol: str):
     ctx = get_stock_trade_context(symbol)
     return ctx["radar_triggers"], ctx["first_radar_date"]
 
-def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_consol_days=250, min_vol_ratio=1.5, eligible_symbols=None):
+def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=8, max_consol_days=45, min_vol_ratio=1.5, eligible_symbols=None):
     """
-    Scans tracked universe for Leg 2 Base Breakout setups:
-    1. Institutional Footprint: Prior volume surge (3dRet >= 15% on vol >= 2.0x SMA50) in the past 15 to 250 trading days.
-    2. Consolidation: Stock coils in a multi-week or multi-month base (>= 15 days) with volume contraction.
-    3. Breakout Trigger: Today's Close breaks above the 20-30 day consolidation ceiling with volume >= 1.5x (or 2.0x) 50-day average.
-    Restricted strictly to confirmed Phoenix Swinger stocks that have completed their Leg 1 turnaround!
+    Scans tracked universe for Leg 2 Post-Blast Consolidation Pullback setups:
+    1. Institutional Footprint: Prior massive blast (+15% 3dRet or +7% 1dRet) with HUGE volume >= 3.0x SMA50 in past 10 to 45 trading days.
+    2. Consolidation & Pullback: Stock pulls back / retraces by 30% to 45% of the blast move (or 10% to 25% from peak) over >= 8 trading days.
+    3. Volume Dry-Up: During consolidation, average daily volume contracts significantly (< 0.85x SMA50).
+    4. Entry Trigger: Today's candle is a Volume Green Candle (Close > Open, Close >= Close[-1], Volume >= 1.5x SMA50) bouncing off 20 EMA / 50 EMA.
     """
     cfg = load_config()
     blacklist = set(cfg.get("blacklist", ["V2RETAIL"]))
@@ -829,121 +829,107 @@ def scan_leg2_breakouts(price_data, held_symbols=None, min_consol_days=15, max_c
                     eligible_symbols.add(w_item.get('symbol'))
         except Exception:
             eligible_symbols = None
-    
+
     for s, df in price_data.items():
-        if s in held_symbols or len(df) < 120 or s in ['^NSEI', 'NIFTY']:
+        if s in held_symbols or len(df) < 100 or s in ['^NSEI', 'NIFTY']:
             continue
         if eligible_symbols and s not in eligible_symbols:
             continue
-        c = df['Close'].values; h = df['High'].values; l = df['Low'].values; o = df['Open'].values; v = df['Volume'].values
+            
+        c = df['Close'].values.astype(float)
+        h = df['High'].values.astype(float)
+        l = df['Low'].values.astype(float)
+        o = df['Open'].values.astype(float)
+        v = df['Volume'].values.astype(float)
         n = len(df)
         
-        vol_sma50 = pd.Series(v).rolling(50).mean().values
-        vol_ratio = np.where(vol_sma50 > 0, v / vol_sma50, 0.0)
-        ret_3d = np.zeros(n)
-        ret_3d[3:] = (c[3:] - c[:-3]) / c[:-3] * 100.0
+        vol_sma50 = pd.Series(v).rolling(50, min_periods=20).mean().values
+        ema20 = pd.Series(c).ewm(span=20, adjust=False).mean().values
+        ema50 = pd.Series(c).ewm(span=50, adjust=False).mean().values
         
-        lookback = max(50, n - max_consol_days)
-        surges = np.where((ret_3d[lookback:n-min_consol_days] >= 15.0) & (vol_ratio[lookback:n-min_consol_days] >= 2.0) & (c[lookback:n-min_consol_days] >= 20.0))[0]
-        if len(surges) == 0:
+        # Turnaround Stair-Step: Must still be on the lower side (<= 65% of 500-1000 bar ATH)
+        ath_lookback = min(n, 1000)
+        ath_h = np.max(h[-ath_lookback:])
+        cur_c = c[-1]
+        if cur_c > ath_h * 0.65:
             continue
             
-        s_idx = lookback + surges[-1]
-        surge_dt = df.index[s_idx]
-        surge_orig = l[max(0, s_idx-3)]
-        
-        consol_len = (n - 1) - s_idx
-        if consol_len < min_consol_days:
-            continue
+        # 1. Look for huge blast (>= 3.0x volume) in past 10 to 45 days
+        for s_idx in range(n - 45, n - min_consol_days):
+            if s_idx < 50:
+                continue
+            vsma = vol_sma50[s_idx]
+            if vsma <= 0:
+                continue
+                
+            is_blast_1d = (c[s_idx] / c[s_idx-1] - 1.0 >= 0.07) and (v[s_idx] >= 3.0 * vsma)
+            is_blast_3d = (c[s_idx] / c[s_idx-3] - 1.0 >= 0.15) and (v[s_idx] >= 2.5 * vsma)
             
-        # Consolidation ceiling: 20-25 day base resistance of the recent coil (not ancient euphoric spikes)
-        base_window_start = max(s_idx + 1, n - 25)
-        base_h = np.max(h[base_window_start:n-1]) if n - 1 > base_window_start else h[-2]
-        base_l = np.min(l[base_window_start:n-1]) if n - 1 > base_window_start else l[-2]
-        
-        if base_l < surge_orig * 0.90 and cur_c < ema200:
-            continue
+            if not (is_blast_1d or is_blast_3d):
+                continue
+                
+            blast_peak = np.max(h[s_idx:min(s_idx+5, n-5)])
+            blast_base = c[s_idx-1] if is_blast_1d else c[s_idx-3]
+            blast_move = blast_peak - blast_base
+            if blast_move <= 0:
+                continue
+                
+            peak_idx = s_idx + int(np.argmax(h[s_idx:min(s_idx+5, n-5)]))
+            consol_len = (n - 1) - peak_idx
+            if consol_len < min_consol_days:
+                continue
+                
+            consol_l = np.min(l[peak_idx+1:n-1])
+            consol_h = np.max(h[peak_idx+1:n-1])
+            consol_v_avg = np.mean(v[peak_idx+1:n-1])
+            consol_vsma_avg = np.mean(vol_sma50[peak_idx+1:n-1])
             
-        cur_c = c[-1]; cur_v = v[-1]; cur_vr = vol_ratio[-1]; cur_o = o[-1]
-        dist_to_ceiling = (cur_c - base_h) / base_h * 100.0 if base_h > 0 else 0.0
-        
-        cur_dt_str = df.index[-1].strftime('%Y-%m-%d') if hasattr(df.index[-1], 'strftime') else str(df.index[-1])[:10]
-        setup_dict = {
-            'symbol': s,
-            'name': s,
-            'date': cur_dt_str,
-            'leg': 2,
-            'strategy_leg': 'LEG2_BREAKOUT',
-            'current_price': round(float(cur_c), 2),
-            'base_high': round(float(base_h), 2),
-            'base_low': round(float(base_l), 2),
-            'surge_date': surge_dt.strftime('%Y-%m-%d') if hasattr(surge_dt, 'strftime') else str(surge_dt)[:10],
-            'consol_days': int(consol_len),
-            'today_vol_mult': round(float(cur_vr), 1),
-            'dist_to_ceiling': round(float(dist_to_ceiling), 1),
-            'trigger_sl': round(float(l[-1]), 2)
-        }
-        
-        # EMA calculations
-        ema20 = pd.Series(c).ewm(span=20, adjust=False).mean().values[-1]
-        ema50 = pd.Series(c).ewm(span=50, adjust=False).mean().values[-1]
-        ema200 = pd.Series(c).ewm(span=200, adjust=False).mean().values[-1]
-        
-        # RSI 14
-        delta = pd.Series(c).diff()
-        gain = delta.clip(lower=0)
-        loss = -delta.clip(upper=0)
-        avg_gain = gain.ewm(com=13, min_periods=14).mean()
-        avg_loss = loss.ewm(com=13, min_periods=14).mean()
-        rsi_series = 100 - (100 / (1 + avg_gain / (avg_loss + 1e-9)))
-        rsi_val = float(rsi_series.values[-1])
-        surge_rsi = float(rsi_series.values[s_idx]) if s_idx < len(rsi_series) else 72.0
-        
-        cur_pct_gain = (cur_c - c[-2]) / c[-2] * 100.0 if c[-2] > 0 else 0.0
-        cur_range = h[-1] - l[-1]
-        upper_wick_ratio = ((h[-1] - cur_c) / cur_range) if cur_range > 0 else 0.0
-        dist_ema20 = (cur_c - ema20) / ema20 * 100.0 if ema20 > 0 else 0.0
-        is_at_ema200_wall = abs(cur_c - ema200) / ema200 < 0.01 and cur_c < ema200 * 1.005
-
-        # 1. Pure RSI Cool-off 20 EMA Pullback Bounce (Stage-2 Base Accumulation)
-        # Enters strictly when RSI has cooled down into neutral territory (40-60) right at the 20 EMA support
-        is_ema_pullback = (
-            (-3.0 <= dist_ema20 <= 3.5) and 
-            (cur_c >= ema50 * 0.97) and 
-            (cur_c >= cur_o) and 
-            (0.8 <= cur_pct_gain <= 5.5) and 
-            (40.0 <= rsi_val <= 60.0) and  # Strict RSI Cool-down Reset
-            (cur_vr >= 0.40) and 
-            (upper_wick_ratio <= 0.45)
-        )
-
-        setup_dict['dist_ema20'] = round(float(dist_ema20), 1)
-        setup_dict['rsi'] = round(float(rsi_val), 1)
-        setup_dict['surge_rsi'] = round(float(surge_rsi), 1)
-        setup_dict['candle_pct'] = round(float(cur_pct_gain), 2)
-        setup_dict['ema20'] = round(float(ema20), 2)
-        setup_dict['surge_price'] = round(float(c[s_idx]), 2)
-        setup_dict['pullback_pct'] = round(float((cur_c / c[s_idx] - 1) * 100.0), 1) if c[s_idx] > 0 else 0.0
-
-        # Trigger strictly on true 20 EMA RSI Pullback Bounces (Rejects high-RSI momentum ceiling breakouts)
-        if is_ema_pullback and not is_at_ema200_wall:
-            setup_dict['status'] = 'PULLBACK BOUNCE TRIGGERED'
-            setup_dict['setup_type'] = 'MA_PULLBACK'
-            setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
-            triggered.append(setup_dict)
-        elif -2.0 <= dist_ema20 <= 2.5 and 40.0 <= rsi_val <= 60.0 and cur_c >= ema50 * 0.98:
-            setup_dict['status'] = 'RESTING AT 20 EMA'
-            setup_dict['setup_type'] = 'MA_PULLBACK'
-            setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
-            coiled.append(setup_dict)
-        elif -5.0 <= dist_to_ceiling <= 0.0 and 40.0 <= rsi_val <= 60.0:
-            setup_dict['status'] = 'COOLING IN BASE'
-            setup_dict['setup_type'] = 'MA_PULLBACK'
-            setup_dict['strategy_leg'] = 'LEG2_MA_PULLBACK'
-            coiled.append(setup_dict)
+            retrace_pct = (blast_peak - consol_l) / blast_move
+            pullback_from_peak = (blast_peak - consol_l) / blast_peak
+            vol_dryup = (consol_v_avg < 0.85 * consol_vsma_avg) if consol_vsma_avg > 0 else False
             
+            cur_c = c[-1]; cur_o = o[-1]; cur_v = v[-1]; cur_vsma = vol_sma50[-1]
+            cur_vr = cur_v / cur_vsma if cur_vsma > 0 else 1.0
+            
+            is_green = (cur_c > cur_o) and (cur_c >= c[-2])
+            is_vol_surge = (cur_v >= min_vol_ratio * cur_vsma) if cur_vsma > 0 else False
+            holds_support = (cur_c >= ema20[-1] * 0.98) and (cur_c >= ema50[-1] * 0.95)
+            
+            valid_retrace = (0.25 <= retrace_pct <= 0.50) or (0.10 <= pullback_from_peak <= 0.28)
+            
+            cur_dt_str = df.index[-1].strftime('%Y-%m-%d') if hasattr(df.index[-1], 'strftime') else str(df.index[-1])[:10]
+            surge_dt_str = df.index[s_idx].strftime('%Y-%m-%d') if hasattr(df.index[s_idx], 'strftime') else str(df.index[s_idx])[:10]
+            
+            setup_dict = {
+                'symbol': s,
+                'name': s,
+                'date': cur_dt_str,
+                'leg': 2,
+                'strategy_leg': 'LEG2_POST_BLAST_PULLBACK',
+                'current_price': round(float(cur_c), 2),
+                'base_high': round(float(consol_h), 2),
+                'base_low': round(float(consol_l), 2),
+                'surge_date': surge_dt_str,
+                'consol_days': int(consol_len),
+                'blast_vol_mult': round(float(v[s_idx] / vsma), 1),
+                'retrace_pct': round(float(retrace_pct * 100), 1),
+                'vol_dryup_ratio': round(float(consol_v_avg / (consol_vsma_avg or 1.0)), 2),
+                'today_vol_mult': round(float(cur_vr), 1),
+                'trigger_sl': round(float(l[-1]), 2),
+                'status': 'TRIGGERED'
+            }
+            
+            if valid_retrace and vol_dryup and is_green and is_vol_surge and holds_support:
+                setup_dict['status'] = 'VOLUME GREEN TRIGGER'
+                triggered.append(setup_dict)
+                break
+            elif valid_retrace and vol_dryup and holds_support:
+                setup_dict['status'] = 'DRYING IN BASE'
+                coiled.append(setup_dict)
+                break
+                
     triggered.sort(key=lambda x: x['today_vol_mult'], reverse=True)
-    coiled.sort(key=lambda x: x['dist_to_ceiling'], reverse=True)
+    coiled.sort(key=lambda x: x['vol_dryup_ratio'])
     return triggered, coiled
 
 def scan_cooldown_radar(price_data, held_symbols=None):
@@ -1216,6 +1202,32 @@ def update_positions_and_scan():
                 })
                 continue
 
+            # Universal 10-Day 20 EMA Momentum Eject (Universal 20 EMA Cut)
+            ema20_val = float(df["EMA20"].iloc[-1]) if "EMA20" in df else 0.0
+            vol_ratio = float(df["VolRatio"].iloc[-1]) if "VolRatio" in df else 1.0
+            if 3 <= days_held <= 12 and cmp_price < ema20_val and vol_ratio >= 1.0:
+                exit_price = cmp_price
+                trade_pnl = round((exit_price - avg_price) * current_qty, 2)
+                reason = "10-Day 20 EMA Momentum Eject"
+                print(f"[Swinger Paper] 10-DAY 20 EMA MOMENTUM EJECT for {sym} @ Rs.{exit_price} ({reason}). PnL: Rs.{trade_pnl}")
+                closed_this_cycle.append({
+                    "symbol": sym,
+                    "name": pos.get("name", sym),
+                    "leg": pos.get("leg", 1),
+                    "strategy_leg": pos.get("strategy_leg", "LEG1_TURNAROUND"),
+                    "entry_date": pos["entry_date"],
+                    "exit_date": datetime.now(IST).strftime("%Y-%m-%d"),
+                    "entry_price": entry_price,
+                    "avg_price": avg_price,
+                    "exit_price": exit_price,
+                    "qty": current_qty,
+                    "reason": reason,
+                    "days_held": days_held,
+                    "pnl": trade_pnl,
+                    "pnl_pct": round(((exit_price / avg_price) - 1) * 100, 2)
+                })
+                continue
+
             sl = float(pos.get("sl_price", avg_price * 0.88))
             # Evaluated on Daily Candle Close to avoid intraday wick shakeouts
             if cmp_price <= sl:
@@ -1435,8 +1447,9 @@ def update_positions_and_scan():
                 print(f"[Swinger Paper] Radar stock {w_sym} broke below blast low (Rs.{blast_low:.2f}). Dropping from radar.")
                 continue
 
-            # 2. Retracement Check: Did it reach pullback zone (target_pb or 20 EMA) while holding blast low?
-            retrace_hit = (w_low <= target_pb or (w_ema20 > 0 and w_low <= w_ema20 * 1.01)) and (w_close >= blast_low)
+            # 2. Retracement Check: Did it reach pullback zone (target_pb with buffer or 20 EMA) while holding blast low?
+            entry_buf = 1.0 + float(cfg.get("cooldown_entry_buffer_pct", 1.5)) / 100.0
+            retrace_hit = (w_low <= target_pb * entry_buf or (w_ema20 > 0 and w_low <= w_ema20 * (entry_buf + 0.005))) and (w_close >= blast_low)
 
             if retrace_hit and available_slots > 0:
                 stars, star_details = calculate_setup_star_rating(w_df, w_sym)
@@ -1525,7 +1538,8 @@ def update_positions_and_scan():
                     cur_c_dt = (df.index[-1].strftime("%Y-%m-%d") if hasattr(df.index[-1], "strftime") else str(df.index[-1])[:10]) if not df.empty else datetime.now(IST).strftime("%Y-%m-%d")
                     b_open = float(df["Open"].iloc[-1]) if "Open" in df else last_close
                     b_low = float(df["Low"].iloc[-1]) if "Low" in df else round(last_close * 0.90, 2)
-                    target_pb = round(last_close - 0.40 * (last_close - b_open), 2)
+                    retrace_frac = float(cfg.get("cooldown_target_retrace_pct", 30.0)) / 100.0
+                    target_pb = round(last_close - retrace_frac * (last_close - b_open), 2)
                     cur_wl.append({
                         "symbol": sym,
                         "name": cand.get("name", sym),
@@ -2102,9 +2116,9 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
         "market_cap_cr": get_stock_market_cap_cr(resolved_sym)
     }
 
-def generate_backtest_ledger():
+def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
     """
-    Generates the complete authoritative Swinger backtest ledger over all 133 Chartink triggers.
+    Generates the complete authoritative Swinger backtest ledger over Chartink triggers.
     Enforces UNLIMITED slots and strict >10% cooldown radar retracement with green stabilization.
     Saves to paper/swinger/trades.json and paper/swinger/portfolio.json.
     """
@@ -2112,9 +2126,9 @@ def generate_backtest_ledger():
     import csv
 
     # 1. Load Ground-Truth Chartink Triggers
-    trigs_csv = ROOT / "scratch" / "chartink_pure_triggers.csv"
+    trigs_csv = ROOT / "scratch" / trigs_filename
     if not trigs_csv.exists():
-        print("[Swinger Backtest] chartink_pure_triggers.csv not found!")
+        print(f"[Swinger Backtest] {trigs_filename} not found!")
         return None
 
     df_trigs = pd.read_csv(trigs_csv)
@@ -2230,7 +2244,14 @@ def generate_backtest_ledger():
                 
             # Exit checks
             if not pos["runner_mode"]:
-                if l <= pos["sl_price"]:
+                # Universal 10-Day 20 EMA Momentum Eject (Universal 20 EMA Cut)
+                # If closed below 20 EMA on above-average volume within first 12 sessions, eject early
+                e20 = float(b["ema20"][i])
+                if pos["bars_held"] >= 3 and pos["bars_held"] <= 12 and c < e20 and vsma50 > 0 and v >= 1.0 * vsma50:
+                    exited = True
+                    exit_p = c
+                    exit_reason = "10-Day 20 EMA Momentum Eject"
+                elif l <= pos["sl_price"]:
                     exited = True
                     exit_p = min(o, pos["sl_price"]) if o < pos["sl_price"] else pos["sl_price"]
                     exit_reason = "BE Shield (+0.5%)" if pos["be_active"] else f"Initial SL ({INITIAL_SL_PCT:.0f}%)"
@@ -2312,12 +2333,13 @@ def generate_backtest_ledger():
             if r_c < r_item["blast_low"] or days_since > 8:
                 continue
                 
-            # Retracement check: Touches 40% retrace or 20 EMA AND stabilizes (green candle or holding 20 EMA)
-            retrace_touched = (r_l <= r_item["target_pb"] or r_l <= r_e20 * 1.01)
+            # Retracement check: Touches pullback zone (with buffer) or 20 EMA AND stabilizes
+            entry_buf = 1.0 + float(cfg.get("cooldown_entry_buffer_pct", 1.5)) / 100.0
+            retrace_touched = (r_l <= r_item["target_pb"] * entry_buf or r_l <= r_e20 * (entry_buf + 0.005))
             stabilized = (r_c >= r_o or r_c >= r_e20) and (r_c >= r_item["blast_low"])
             
             if retrace_touched and stabilized and r_s not in held_syms:
-                entry_p = min(r_c, r_item["target_pb"])
+                entry_p = min(r_c, r_item["target_pb"] * entry_buf)
                 qty = int(SLOT_SIZE // entry_p) if entry_p > 0 else 0
                 if qty > 0:
                     sl_initial = round(entry_p * (1.0 + INITIAL_SL_PCT / 100.0), 2)
@@ -2382,7 +2404,8 @@ def generate_backtest_ledger():
             # Option B Gate Enforcement:
             if day_gain_pct > MAX_DIRECT_GAIN:
                 # Overextended Blast (> 10% gain): DO NOT buy at top; route to Cooldown Radar!
-                target_pb = round(c - 0.40 * (c - o), 2)
+                retrace_frac = float(cfg.get("cooldown_target_retrace_pct", 30.0)) / 100.0
+                target_pb = round(c - retrace_frac * (c - o), 2)
                 if not any(r["symbol"] == s for r in cooldown_radar):
                     cooldown_radar.append({
                         "symbol": s,

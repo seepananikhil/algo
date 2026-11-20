@@ -496,3 +496,100 @@ def cancel_kotak_order(order_id: str) -> dict:
         return client.cancel_order(order_id=str(order_id))
     except Exception as exc:
         return {"error": str(exc)}
+
+
+def get_kotak_holdings() -> dict:
+    """Fetch live Demat equity holdings from Kotak Neo with formatted metrics."""
+    client = get_kotak_client()
+    if client is None:
+        return {"ok": False, "error": "Kotak Neo client not initialized."}
+    status = kotak_token_status()
+    if not status.get("valid"):
+        return {"ok": False, "error": "Kotak Neo session expired or missing."}
+
+    try:
+        resp = client.holdings()
+        if not isinstance(resp, dict):
+            return {"ok": False, "error": f"Unexpected response from Kotak: {resp}"}
+        if resp.get("stat") == "Not_Ok" or resp.get("error"):
+            return {"ok": False, "error": resp.get("errMsg") or resp.get("error")}
+
+        raw_list = resp.get("data") or []
+        holdings = []
+        tot_val = 0.0
+        tot_cost = 0.0
+        tot_pnl = 0.0
+        gainers = 0
+        losers = 0
+
+        for r in raw_list:
+            sym = str(r.get("symbol") or r.get("displaySymbol") or "").strip().upper()
+            if not sym:
+                continue
+            qty = int(r.get("quantity") or 0)
+            sellable_qty = int(r.get("sellableQuantity") or qty)
+            avg_prc = round(float(r.get("averagePrice") or 0.0), 2)
+            cost = round(float(r.get("holdingCost") or (qty * avg_prc)), 2)
+            cmp = round(float(r.get("closingPrice") or 0.0), 2)
+            mkt_val = round(float(r.get("mktValue") or (qty * cmp)), 2)
+            pnl = round(float(r.get("unrealisedGainLoss") or (mkt_val - cost)), 2)
+            pnl_pct = round((pnl / cost * 100.0), 2) if cost > 0 else 0.0
+
+            prev_close = float(r.get("prevDayLtp") or 0.0)
+            day_chg = round(cmp - prev_close, 2) if (cmp > 0 and prev_close > 0) else 0.0
+            day_chg_pct = round((day_chg / prev_close * 100.0), 2) if prev_close > 0 else 0.0
+
+            if pnl >= 0:
+                gainers += 1
+            else:
+                losers += 1
+
+            tot_val += mkt_val
+            tot_cost += cost
+            tot_pnl += pnl
+
+            holdings.append({
+                "symbol": sym,
+                "display_name": str(r.get("instrumentName") or sym),
+                "sector": str(r.get("sector") or "Equity"),
+                "quantity": qty,
+                "sellable_quantity": sellable_qty,
+                "buy_avg": avg_prc,
+                "cmp": cmp,
+                "invested_value": cost,
+                "current_value": mkt_val,
+                "pnl": pnl,
+                "pnl_pct": pnl_pct,
+                "prev_close": prev_close,
+                "day_change": day_chg,
+                "day_change_pct": day_chg_pct,
+                "exchange": str(r.get("exchangeSegment") or "nse_cm").upper(),
+                "tag": "MANUAL_PROTECTED",
+            })
+
+        # Sort holdings by current market value descending
+        holdings.sort(key=lambda h: h["current_value"], reverse=True)
+
+        # Fetch available cash balance
+        funds_resp = available_kotak_funds()
+        avail_cash = funds_resp.get("available_equity_funds", 0.0) if funds_resp.get("ok") else 0.0
+
+        tot_pnl_pct = round((tot_pnl / tot_cost * 100.0), 2) if tot_cost > 0 else 0.0
+
+        return {
+            "ok": True,
+            "summary": {
+                "total_portfolio_value": round(tot_val, 2),
+                "total_invested": round(tot_cost, 2),
+                "total_unrealized_pnl": round(tot_pnl, 2),
+                "total_unrealized_pnl_pct": tot_pnl_pct,
+                "available_cash": round(avail_cash, 2),
+                "total_holdings_count": len(holdings),
+                "gainers_count": gainers,
+                "losers_count": losers,
+            },
+            "holdings": holdings,
+        }
+    except Exception as exc:
+        return {"ok": False, "error": f"Failed to fetch Kotak holdings: {exc}"}
+

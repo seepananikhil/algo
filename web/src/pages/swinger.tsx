@@ -165,14 +165,11 @@ export function SwingerPage() {
   const [tradeLogFilter, setTradeLogFilter] = useState<"ALL" | "LEG1" | "LEG2" | "MULTIBAGGER" | "WIN" | "LOSS">("ALL")
   const [tradeLogLimit, setTradeLogLimit] = useState(50)
 
-  // Filters for 'all' triggers tab
-  const [filterType, setFilterType] = useState<"ALL" | "TODAY" | "ACTIVE" | "WIN" | "LOSS" | "RADAR">("ALL")
+  // Search & Distinct Stocks Controls
   const [searchQuery, setSearchQuery] = useState("")
-  const [displayLimit, setDisplayLimit] = useState(30)
   const [yearGrouping, setYearGrouping] = useState<"entry" | "exit">("entry")
 
-  // Distinct Stocks & Review Controls
-  const [feedViewMode, setFeedViewMode] = useState<"stocks" | "stream">("stocks")
+  // Distinct Stocks Filter & Sort
   const [distinctFilter, setDistinctFilter] = useState<"ALL" | "PORTFOLIO" | "WINNERS" | "MULTIBAGGER" | "LOSSES" | "MULTITRADE">("ALL")
   const [distinctSort, setDistinctSort] = useState<"pnl" | "trades" | "winrate" | "alpha">("pnl")
   const [selectedMonthlyYear, setSelectedMonthlyYear] = useState<string>("2026")
@@ -358,175 +355,12 @@ export function SwingerPage() {
   const totalUnrealizedPnl = positions.reduce((acc, p) => acc + (p.unrealized_pnl ?? 0), 0)
   const totalBookedPnl = positions.reduce((acc, p) => acc + (p.booked_pnl ?? 0), 0)
 
-  // Master Unified Triggers Stream
-  const unifiedTriggers = useMemo(() => {
-    const list: any[] = []
-    const todayIso = new Date().toISOString().slice(0, 10)
-
-    // 1. Today's Fresh Scanner Signals
-    dailySignals.signals.forEach((sig) => {
-      const alreadyHeld = positions.some((p) => p.symbol === sig.nsecode)
-      const scanDate = dailySignals.last_scan_time ? dailySignals.last_scan_time.slice(0, 10) : todayIso
-      list.push({
-        id: `sig-${sig.nsecode}`,
-        type: "TODAY",
-        subType: alreadyHeld ? "HELD" : "NEW",
-        symbol: sig.nsecode,
-        name: sig.name || sig.nsecode,
-        date: scanDate,
-        entryPrice: sig.close ?? 0,
-        currentPrice: sig.close ?? 0,
-        exitPrice: null,
-        pnl: 0,
-        pnlPct: sig.per_chg ?? 0,
-        bookedPnl: 0,
-        daysHeld: 0,
-        statusLabel: alreadyHeld ? "Already in Portfolio" : "Today's Screener Hit",
-        ruleDetails: `Volume: ${(sig.volume || 0).toLocaleString("en-IN")} · Gain: +${(sig.per_chg || 0).toFixed(1)}%`,
-        raw: {
-          symbol: sig.nsecode,
-          name: sig.name,
-          entry_date: scanDate,
-          entry_price: sig.close,
-          cmp: sig.close,
-          exit_price: sig.close,
-          status: "ACTIVE",
-          reason: "Today Screener Trigger",
-          pnl: 0,
-          pct_return: sig.per_chg || 0,
-          holding_days: 0
-        }
-      })
-    })
-
-    // 2. Active Positions
-    positions.forEach((p) => {
-      const avgCost = p.avg_price ?? p.entry_price
-      list.push({
-        id: `pos-${p.symbol}`,
-        type: "ACTIVE",
-        subType: p.runner_mode ? "RUNNER" : p.be_active ? "SHIELDED" : "ACTIVE",
-        symbol: p.symbol,
-        name: p.name || p.symbol,
-        date: p.entry_date,
-        entryPrice: avgCost,
-        currentPrice: p.cmp,
-        exitPrice: null,
-        pnl: p.unrealized_pnl ?? 0,
-        pnlPct: p.unrealized_pnl_pct ?? p.unrealized_pct ?? 0,
-        bookedPnl: p.booked_pnl ?? 0,
-        daysHeld: p.days_held,
-        statusLabel: p.runner_mode
-          ? "Runner Trailing 20%"
-          : p.be_active
-          ? "Shield Active (Cost Protected)"
-          : "Holding Active",
-        ruleDetails: `SL: ₹${(p.sl_price ?? avgCost * 0.75).toFixed(1)} · Target: ₹${(
-          p.tp_target_price ?? avgCost * 1.3
-        ).toFixed(1)}`,
-        raw: p
-      })
-    })
-
-    // 3. Historical Closed Trades
-    trades.forEach((t) => {
-      const isWin = (t.pnl || 0) > 0
-      const entryPrice = t.avg_price ?? t.entry_price
-      list.push({
-        id: `trade-${t.symbol}-${t.exit_date}`,
-        type: "CLOSED",
-        subType: isWin ? "WIN" : "LOSS",
-        symbol: t.symbol,
-        name: t.name || t.symbol,
-        date: t.entry_date,
-        exitDate: t.exit_date,
-        entryPrice: entryPrice,
-        currentPrice: t.exit_price,
-        exitPrice: t.exit_price,
-        pnl: t.pnl,
-        pnlPct: t.pnl_pct ?? t.pct_return ?? 0,
-        bookedPnl: 0,
-        daysHeld: t.days_held ?? (t as any).holding_days ?? 0,
-        statusLabel: isWin ? "Closed Winner" : "Stopped Out",
-        ruleDetails: formatExitReason(t.reason || (t as any).exit_reason),
-        raw: t
-      })
-    })
-
-    // 4. Radar Watchlist (Exclude active holdings and duplicate symbols)
-    const heldSymbolsSet = new Set(positions.map((p) => p.symbol))
-    const seenRadarSymbols = new Set<string>()
-
-    watchlist.forEach((w) => {
-      if (heldSymbolsSet.has(w.symbol) || seenRadarSymbols.has(w.symbol)) {
-        return // Skip radar when an active position is already open or symbol is duplicated
-      }
-      seenRadarSymbols.add(w.symbol)
-      list.push({
-        id: `radar-${w.symbol}`,
-        type: "RADAR",
-        subType: w.status === "ENTERED" ? "ENTERED" : w.cooldown_ready ? "READY" : "MONITORING",
-        symbol: w.symbol,
-        name: w.name || w.symbol,
-        date: w.alert_date,
-        entryPrice: w.alert_price,
-        currentPrice: w.current_price,
-        exitPrice: null,
-        pnl: 0,
-        pnlPct: w.pullback_pct ?? 0,
-        bookedPnl: 0,
-        daysHeld: 0,
-        statusLabel: w.status === "ENTERED" ? "Entry Executed" : w.cooldown_ready ? "Stage-2 Ready" : "Cooling Down",
-        ruleDetails: `RSI: ${w.current_rsi?.toFixed(1)} · EMA20: ₹${w.ema20?.toFixed(1)} (${w.distance_to_ema20_pct ?? 0}%)`,
-        raw: {
-          symbol: w.symbol,
-          name: w.name,
-          alert_date: w.alert_date,
-          alert_price: w.alert_price,
-          cmp: w.current_price,
-          status: "RADAR",
-          reason: w.notes,
-          pnl: 0,
-          pct_return: w.pullback_pct || 0,
-          holding_days: 0
-        }
-      })
-    })
-
-    // Sort by date descending
-    return list.sort((a, b) => (b.date || "").localeCompare(a.date || ""))
-  }, [positions, trades, watchlist, dailySignals])
-
   // Filter out any symbols that already have open active positions so they never appear on Radar
   const heldSymbolSet = useMemo(() => new Set(positions.map((p) => p.symbol)), [positions])
   const activeRadarList = useMemo(
     () => watchlist.filter((w) => !heldSymbolSet.has(w.symbol)),
     [watchlist, heldSymbolSet]
   )
-
-  // Filtered triggers based on active category and search
-  const filteredUnifiedTriggers = useMemo(() => {
-    return unifiedTriggers.filter((item) => {
-      if (filterType === "TODAY" && item.type !== "TODAY") return false
-      if (filterType === "ACTIVE" && item.type !== "ACTIVE") return false
-      if (filterType === "WIN" && !(item.type === "CLOSED" && item.subType === "WIN")) return false
-      if (filterType === "LOSS" && !(item.type === "CLOSED" && item.subType === "LOSS")) return false
-      if (filterType === "RADAR" && item.type !== "RADAR") return false
-
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim()
-        const matchesSym = item.symbol.toLowerCase().includes(q)
-        const matchesName = item.name.toLowerCase().includes(q)
-        if (!matchesSym && !matchesName) return false
-      }
-      return true
-    })
-  }, [unifiedTriggers, filterType, searchQuery])
-
-  // Paginated visible triggers for smooth rendering
-  const visibleTriggers = useMemo(() => {
-    return filteredUnifiedTriggers.slice(0, displayLimit)
-  }, [filteredUnifiedTriggers, displayLimit])
 
   // Master Trade Log Filtered by Year, Outcome and Search
   const filteredTradeLog = useMemo(() => {
@@ -709,22 +543,19 @@ export function SwingerPage() {
     if (activeTab === "holdings") {
       return positions as any[]
     }
-    if (activeTab === "all" && feedViewMode === "stocks") {
-      return filteredDistinctStocks.map((s) => {
-        const primary = (s.activePosition as any) || s.trades[0]
-        return {
-          ...primary,
-          symbol: s.symbol,
-          name: s.name,
-          stockTrades: [
-            ...(s.activePosition ? [s.activePosition as any] : []),
-            ...s.trades
-          ]
-        }
-      })
-    }
-    return filteredUnifiedTriggers.map((t) => t.raw)
-  }, [activeTab, calendarSelectedTrades, positions, feedViewMode, filteredDistinctStocks, filteredUnifiedTriggers])
+    return filteredDistinctStocks.map((s) => {
+      const primary = (s.activePosition as any) || s.trades[0]
+      return {
+        ...primary,
+        symbol: s.symbol,
+        name: s.name,
+        stockTrades: [
+          ...(s.activePosition ? [s.activePosition as any] : []),
+          ...s.trades
+        ]
+      }
+    })
+  }, [activeTab, calendarSelectedTrades, positions, filteredDistinctStocks])
 
   // Cumulative Equity & Drawdown Curve Data
   const equityCurveData = useMemo(() => {
@@ -887,7 +718,7 @@ export function SwingerPage() {
   }, [trades])
 
   return (
-    <div className="flex-1 space-y-5 p-4 sm:p-6 bg-slate-50 min-h-screen text-slate-900 font-sans">
+    <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-5 pb-20">
       {/* ================= 1. SWINGER 2.0 HERO & ACTION BAR ================= */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
         <div>
@@ -906,18 +737,18 @@ export function SwingerPage() {
             <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Enforces institutional quality: Market Cap >= Rs.2,000 Cr and High-Velocity Swing ATR >= 3.2%">
               Mcap ≥ ₹2k Cr · ATR ≥ 3.2%
             </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200" title="Protects profits by moving stop to Cost+0.5% once gain reaches +25%">
-              BE Shield @ +25%
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
+              Break-Even Shield (+15%)
             </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200" title="15% Initial Protective Stop Loss with 25% Runner Trailing Stop">
-              15% SL · 25% Runner Trail
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+              Trailing Stop Lock
             </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-200" title="Excluding outlier V2RETAIL to reflect true strategy edge">
-              Blacklist: V2RETAIL
+            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Cooldown Retracement
             </span>
           </div>
           <p className="text-xs text-slate-500 mt-1 font-medium">
-            Phoenix Breakout Swinger · Direct Trigger EOD Entry · 15% SL · BE Shield @ +25% · 25% Runner Trail · 1000d Trough Memory · Mcap ≥ ₹2k Cr · ATR ≥ 3.2% · Excl. Blacklist
+            Phoenix Breakout Swinger · High-Probability Deep Base Breakouts & Swing Portfolio
           </p>
         </div>
 
@@ -1092,7 +923,7 @@ export function SwingerPage() {
             }`}
           >
             <Layers className="size-3.5" />
-            Stocks & Feed
+            Stocks
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
                 activeTab === "all" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
@@ -1189,34 +1020,14 @@ export function SwingerPage() {
         <div className="space-y-4">
           {/* UNIFIED COMPACT CONTROL BAR */}
           <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs space-y-2.5">
-            {/* Top Row: Mode Switcher + Live Overview Badges + Search & Sort */}
+            {/* Top Row: Title + Live Overview Badges + Search & Sort */}
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-              {/* Left: View Mode Segmented Pill */}
-              <div className="inline-flex p-1 rounded-xl bg-slate-100 border border-slate-200/80 gap-1 self-start md:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setFeedViewMode("stocks")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
-                    feedViewMode === "stocks"
-                      ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <Layers className="size-3.5 text-emerald-600" />
+              {/* Left: Section Header */}
+              <div className="flex items-center gap-2">
+                <Layers className="size-4 text-emerald-600" />
+                <h2 className="text-sm font-black text-slate-900 tracking-tight font-mono">
                   Distinct Stocks ({distinctStocks.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFeedViewMode("stream")}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-black transition flex items-center gap-1.5 ${
-                    feedViewMode === "stream"
-                      ? "bg-white text-emerald-800 shadow-xs border border-slate-200/60"
-                      : "text-slate-600 hover:text-slate-900"
-                  }`}
-                >
-                  <Zap className="size-3.5 text-amber-500" />
-                  Trigger Stream ({unifiedTriggers.length})
-                </button>
+                </h2>
               </div>
 
               {/* Center: Live Overview Badges */}
@@ -1231,6 +1042,12 @@ export function SwingerPage() {
                   <Flame className="size-3 text-purple-600" />
                   {distinctStocks.filter((s) => s.isMultiBagger).length} Multi-Baggers
                 </span>
+                {dailySignals.count > 0 && (
+                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200/70 font-bold flex items-center gap-1">
+                    <Zap className="size-3 text-amber-600" />
+                    {dailySignals.count} Today's Hits
+                  </span>
+                )}
               </div>
 
               {/* Right: Search & Sort */}
@@ -1254,171 +1071,94 @@ export function SwingerPage() {
                   )}
                 </div>
 
-                {feedViewMode === "stocks" && (
-                  <select
-                    value={distinctSort}
-                    onChange={(e) => setDistinctSort(e.target.value as any)}
-                    className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white cursor-pointer"
-                  >
-                    <option value="pnl">Sort: Net P&L</option>
-                    <option value="trades">Sort: Trades</option>
-                    <option value="winrate">Sort: Win Rate</option>
-                    <option value="alpha">Sort: Symbol (A-Z)</option>
-                  </select>
-                )}
+                <select
+                  value={distinctSort}
+                  onChange={(e) => setDistinctSort(e.target.value as any)}
+                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white cursor-pointer"
+                >
+                  <option value="pnl">Active First · Net P&L</option>
+                  <option value="trades">Sort: Trades</option>
+                  <option value="winrate">Sort: Win Rate</option>
+                  <option value="alpha">Sort: Symbol (A-Z)</option>
+                </select>
               </div>
             </div>
 
             {/* Bottom Row: Compact Filter Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-slate-100 scrollbar-none text-xs">
-              {feedViewMode === "stocks" ? (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setDistinctFilter("ALL")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      distinctFilter === "ALL"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    All Stocks ({distinctStocks.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDistinctFilter("PORTFOLIO")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
-                      distinctFilter === "PORTFOLIO"
-                        ? "bg-sky-600 text-white shadow-xs"
-                        : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
-                    }`}
-                  >
-                    <ShieldCheck className="size-3" />
-                    In Portfolio ({positions.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDistinctFilter("WINNERS")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      distinctFilter === "WINNERS"
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
-                    }`}
-                  >
-                    Profitable ({distinctStocks.filter((s) => s.totalPnl > 0).length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDistinctFilter("MULTIBAGGER")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
-                      distinctFilter === "MULTIBAGGER"
-                        ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
-                    }`}
-                  >
-                    <Flame className="size-3" />
-                    Multi-Baggers ({distinctStocks.filter((s) => s.isMultiBagger).length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDistinctFilter("MULTITRADE")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      distinctFilter === "MULTITRADE"
-                        ? "bg-amber-600 text-white shadow-xs"
-                        : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
-                    }`}
-                  >
-                    Multi-Trades ({distinctStocks.filter((s) => s.totalTrades > 1).length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setDistinctFilter("LOSSES")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      distinctFilter === "LOSSES"
-                        ? "bg-rose-600 text-white shadow-xs"
-                        : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
-                    }`}
-                  >
-                    Net Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
-                  </button>
-                </>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("ALL")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      filterType === "ALL"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    All Triggers ({unifiedTriggers.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("TODAY")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
-                      filterType === "TODAY"
-                        ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
-                    }`}
-                  >
-                    <Flame className="size-3" />
-                    Today's Hits ({dailySignals.count})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("ACTIVE")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      filterType === "ACTIVE"
-                        ? "bg-sky-600 text-white shadow-xs"
-                        : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
-                    }`}
-                  >
-                    Active ({positions.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("WIN")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      filterType === "WIN"
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
-                    }`}
-                  >
-                    Winners ({trades.filter((t) => (t.pnl || 0) > 0).length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("LOSS")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      filterType === "LOSS"
-                        ? "bg-rose-600 text-white shadow-xs"
-                        : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
-                    }`}
-                  >
-                    Stop Loss ({trades.filter((t) => (t.pnl || 0) <= 0).length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("RADAR")}
-                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                      filterType === "RADAR"
-                        ? "bg-amber-600 text-white shadow-xs"
-                        : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
-                    }`}
-                  >
-                    Radar ({activeRadarList.length})
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={() => setDistinctFilter("ALL")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                  distinctFilter === "ALL"
+                    ? "bg-slate-900 text-white shadow-xs"
+                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                }`}
+              >
+                All Stocks ({distinctStocks.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistinctFilter("PORTFOLIO")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
+                  distinctFilter === "PORTFOLIO"
+                    ? "bg-sky-600 text-white shadow-xs"
+                    : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
+                }`}
+              >
+                <ShieldCheck className="size-3" />
+                In Portfolio ({positions.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistinctFilter("WINNERS")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                  distinctFilter === "WINNERS"
+                    ? "bg-emerald-600 text-white shadow-xs"
+                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
+                }`}
+              >
+                Profitable ({distinctStocks.filter((s) => s.totalPnl > 0).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistinctFilter("MULTIBAGGER")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
+                  distinctFilter === "MULTIBAGGER"
+                    ? "bg-purple-600 text-white shadow-xs"
+                    : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
+                }`}
+              >
+                <Flame className="size-3" />
+                Multi-Baggers ({distinctStocks.filter((s) => s.isMultiBagger).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistinctFilter("MULTITRADE")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                  distinctFilter === "MULTITRADE"
+                    ? "bg-amber-600 text-white shadow-xs"
+                    : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
+                }`}
+              >
+                Multi-Trades ({distinctStocks.filter((s) => s.totalTrades > 1).length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setDistinctFilter("LOSSES")}
+                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
+                  distinctFilter === "LOSSES"
+                    ? "bg-rose-600 text-white shadow-xs"
+                    : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
+                }`}
+              >
+                Net Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
+              </button>
             </div>
           </div>
 
           {/* VIEW MODE CONTENT */}
-          {feedViewMode === "stocks" ? (
-            <div className="space-y-4">
+          <div className="space-y-4">
               {/* Distinct Stocks Table */}
               <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
                 <div className="overflow-x-auto">
@@ -1606,283 +1346,6 @@ export function SwingerPage() {
                 </div>
               </div>
             </div>
-          ) : (
-            /* VIEW MODE B: CHRONOLOGICAL STREAM FEED (CLASSIC VIEW) */
-            <div className="space-y-4">
-              {/* Sub-Filters & Search Bar */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-3.5 rounded-2xl border border-slate-200/80 shadow-xs">
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400 mr-1 hidden sm:inline">
-                    Filter:
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("ALL")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                      filterType === "ALL"
-                        ? "bg-slate-900 text-white shadow-xs"
-                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                    }`}
-                  >
-                    All ({unifiedTriggers.length})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("TODAY")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1 ${
-                      filterType === "TODAY"
-                        ? "bg-purple-600 text-white shadow-xs"
-                        : "bg-purple-50 text-purple-700 hover:bg-purple-100"
-                    }`}
-                  >
-                    <Flame className="size-3" />
-                    Today's Hits ({dailySignals.count})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("ACTIVE")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                      filterType === "ACTIVE"
-                        ? "bg-sky-600 text-white shadow-xs"
-                        : "bg-sky-50 text-sky-700 hover:bg-sky-100"
-                    }`}
-                  >
-                    Active ({positions.length})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("WIN")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                      filterType === "WIN"
-                        ? "bg-emerald-600 text-white shadow-xs"
-                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                    }`}
-                  >
-                    Winners ({trades.filter((t) => (t.pnl || 0) > 0).length})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("LOSS")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                      filterType === "LOSS"
-                        ? "bg-rose-600 text-white shadow-xs"
-                        : "bg-rose-50 text-rose-700 hover:bg-rose-100"
-                    }`}
-                  >
-                    Stop Loss ({trades.filter((t) => (t.pnl || 0) <= 0).length})
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() => setFilterType("RADAR")}
-                    className={`px-3 py-1 rounded-xl text-xs font-bold transition ${
-                      filterType === "RADAR"
-                        ? "bg-amber-600 text-white shadow-xs"
-                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
-                    }`}
-                  >
-                    Radar ({activeRadarList.length})
-                  </button>
-                </div>
-
-                {/* Quick Search */}
-                <div className="relative w-full sm:w-64">
-                  <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search symbol or name..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-9 pr-3 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
-                  />
-                </div>
-              </div>
-
-              {/* Master Stream Table */}
-              <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                        <th className="p-3.5">Stock Symbol</th>
-                        <th className="p-3.5">Category</th>
-                        <th className="p-3.5 font-mono">Date</th>
-                        <th className="p-3.5 font-mono">Entry (₹)</th>
-                        <th className="p-3.5 font-mono">CMP / Exit (₹)</th>
-                        <th className="p-3.5">Held</th>
-                        <th className="p-3.5 text-right font-mono">Gain / Loss</th>
-                        <th className="p-3.5">Milestone / Exit Reason</th>
-                        <th className="p-3.5 text-center">Interactive Chart</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {visibleTriggers.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
-                            No triggers match the selected filter.
-                          </td>
-                        </tr>
-                      ) : (
-                        visibleTriggers.map((item, idx) => {
-                          const isPositive = (item.pnl || item.pnlPct || 0) >= 0
-
-                          return (
-                            <tr
-                              key={idx}
-                              onClick={() => setSelectedTradeForChart(item.raw)}
-                              className="hover:bg-slate-50/90 cursor-pointer transition group"
-                            >
-                              <td className="p-3.5">
-                                <div className="flex items-center gap-2">
-                                  <div
-                                    className={`size-8 rounded-xl flex items-center justify-center font-bold text-white text-[11px] ${
-                                      item.type === "TODAY"
-                                        ? "bg-purple-600"
-                                        : item.type === "ACTIVE"
-                                        ? "bg-sky-600"
-                                        : item.subType === "WIN"
-                                        ? "bg-emerald-600"
-                                        : item.type === "RADAR"
-                                        ? "bg-amber-600"
-                                        : "bg-rose-600"
-                                    }`}
-                                  >
-                                    {item.symbol.slice(0, 2)}
-                                  </div>
-                                  <div>
-                                    <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition flex items-center gap-1.5">
-                                      <span className="hover:underline font-mono">{item.symbol}</span>
-                                      <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
-                                      <a
-                                        href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(item.symbol)}`}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        onClick={(e) => e.stopPropagation()}
-                                        className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
-                                        title={`Open ${item.symbol} on TradingView`}
-                                      >
-                                        <ExternalLink className="size-3" />
-                                      </a>
-                                    </div>
-                                    <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
-                                      {item.name}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              <td className="p-3.5">
-                                {item.type === "TODAY" ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-200">
-                                    <Flame className="size-3 text-purple-600" />
-                                    Screener Hit
-                                  </span>
-                                ) : item.type === "ACTIVE" ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
-                                    <ShieldCheck className="size-3 text-sky-600" />
-                                    Active Slot
-                                  </span>
-                                ) : item.type === "CLOSED" ? (
-                                  <span
-                                    className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${
-                                      item.subType === "WIN"
-                                        ? "bg-emerald-100 text-emerald-800 border-emerald-200"
-                                        : "bg-rose-100 text-rose-800 border-rose-200"
-                                    }`}
-                                  >
-                                    {item.subType === "WIN" ? "Winner" : "Stop Loss"}
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-200">
-                                    <Flame className="size-3 text-amber-600" />
-                                    Radar
-                                  </span>
-                                )}
-                              </td>
-
-                              <td className="p-3.5 font-mono text-slate-600 font-medium">{item.date}</td>
-
-                              <td className="p-3.5 font-mono font-medium text-slate-900">
-                                ₹{item.entryPrice > 0 ? item.entryPrice.toFixed(2) : "—"}
-                              </td>
-
-                              <td className="p-3.5 font-mono font-bold text-slate-900">
-                                ₹{item.currentPrice > 0 ? item.currentPrice.toFixed(2) : "—"}
-                              </td>
-
-                              <td className="p-3.5 font-mono text-slate-600 font-medium">{item.daysHeld}d</td>
-
-                              <td className="p-3.5 text-right font-mono font-bold">
-                                {item.type === "TODAY" ? (
-                                  <span className="text-purple-600">+{item.pnlPct.toFixed(1)}%</span>
-                                ) : item.type === "RADAR" ? (
-                                  <span className="text-amber-600">{item.pnlPct.toFixed(1)}% Pullback</span>
-                                ) : (
-                                  <span className={isPositive ? "text-emerald-600" : "text-rose-600"}>
-                                    {isPositive ? "+" : ""}₹{item.pnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                    <span className="block text-[10px] font-semibold text-slate-400">
-                                      ({isPositive ? "+" : ""}{item.pnlPct.toFixed(1)}%)
-                                    </span>
-                                  </span>
-                                )}
-                              </td>
-
-                              <td className="p-3.5 text-slate-600 font-medium">{item.ruleDetails}</td>
-
-                              <td className="p-3.5 text-center">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    setSelectedTradeForChart(item.raw)
-                                  }}
-                                  className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1"
-                                >
-                                  <LineChart className="size-3.5" />
-                                  Chart
-                                </Button>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                {filteredUnifiedTriggers.length > displayLimit && (
-                  <div className="p-3.5 bg-slate-50/80 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                    <span>
-                      Showing {displayLimit} of {filteredUnifiedTriggers.length} items
-                    </span>
-                    <div className="flex gap-2">
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setDisplayLimit((prev) => prev + 30)}
-                        className="h-7 text-xs font-bold rounded-lg border-slate-200"
-                      >
-                        Load Next 30
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setDisplayLimit(filteredUnifiedTriggers.length)}
-                        className="h-7 text-xs font-bold rounded-lg text-emerald-700 hover:bg-emerald-50"
-                      >
-                        Show All
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1896,7 +1359,7 @@ export function SwingerPage() {
                 Active Portfolio Positions ({positions.length} Stocks)
               </h2>
               <p className="text-xs text-slate-500 font-medium">
-                Autonomous SL tracking: -25% Initial SL · +15% BE Shield · Pyramid @ +20% · +25% Vault Lock @ +50% · 50 EMA Vol Breakdown + 25% Close Trail
+                Automated Capital Protection: Stop Loss · Break-Even Shield · Trailing Profit Lock
               </p>
             </div>
             <div className="text-right">

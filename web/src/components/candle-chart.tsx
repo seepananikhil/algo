@@ -32,7 +32,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts"
-import type { Candle, RuleTrade, Setup } from "@/lib/api"
+import { prettyReason, type Candle, type RuleTrade, type Setup } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { PriceBandPrimitive, type Band } from "@/components/price-band"
 import { BoxPrimitive, type TimeBoundedBox } from "@/components/box-primitive"
@@ -1016,6 +1016,8 @@ export function CandleChart({
     }
     for (const t of trades) {
       const call = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
+      const engineOrSetup = (t as any).strategy_label || (t as any).engine || t.setup || (t as any).trigger_reason || ""
+      const logicPrefix = engineOrSetup ? `${engineOrSetup} · ` : ""
       if (t.entry) {
         m.push({
           time: toTime(date, t.entry.slice(0, 5)),
@@ -1023,17 +1025,18 @@ export function CandleChart({
           color: call ? "#10b981" : "#ef4444",
           shape: call ? "arrowUp" : "arrowDown",
           size: 1.5,
-          text: `BUY @ ${t.entry_price ? fmtNum(t.entry_price, 1) : ""}`,
+          text: `${logicPrefix}BUY ${call ? "CALL" : "PUT"} @ ${t.entry_price ? fmtNum(t.entry_price, 1) : ""}`,
         })
       }
       if (t.exit && !(t.reason && t.reason.endsWith("open"))) {
+        const exitReason = t.reason ? prettyReason(t.reason) : "EXIT"
         m.push({
           time: toTime(date, t.exit.slice(0, 5)),
           position: call ? "aboveBar" : "belowBar",
           color: "#71717a",
           shape: call ? "arrowDown" : "arrowUp",
           size: 1.5,
-          text: `EXIT ${t.pnl_points ? `(${t.pnl_points > 0 ? "+" : ""}${fmtNum(t.pnl_points, 1)} pts)` : ""}`,
+          text: `EXIT: ${exitReason} ${t.pnl_points ? `(${t.pnl_points > 0 ? "+" : ""}${fmtNum(t.pnl_points, 1)} pts)` : ""}`,
         })
       }
     }

@@ -825,57 +825,36 @@ export function ManualTradingPage() {
           </div>
         </header>
 
-        {/* ─── 1. DUAL FINANCIAL METRICS: OVERALL P&L & AVAILABLE BALANCE ─── */}
-        <div className="grid grid-cols-2 gap-2">
-          {/* Card A: OVERALL P&L */}
-          <div className={cn(
-            "p-2.5 rounded-2xl border transition-all flex flex-col justify-between shadow-2xs relative overflow-hidden",
-            overallPnl > 0
-              ? "bg-gradient-to-br from-emerald-500/10 via-card to-card border-emerald-500/35"
-              : overallPnl < 0
-              ? "bg-gradient-to-br from-rose-500/10 via-card to-card border-rose-500/35"
-              : "bg-card border-border/60"
-          )}>
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5 leading-none">
-                <span className={cn(
-                  "size-1.5 rounded-full",
-                  hasActivePosition ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground"
-                )} />
-                OVERALL P&L
-              </span>
-              {closedPositions.length > 0 && (
-                <span className="text-[9px] font-mono font-bold px-1.5 py-0.2 rounded-md bg-muted/60 text-muted-foreground">
-                  {closedPositions.length} done
-                </span>
-              )}
-            </div>
+        {/* ─── 1. UNIFIED FINANCIAL METRICS: OVERALL P&L + WALLET MARGIN ─── */}
+        <div className={cn(
+          "p-2.5 rounded-2xl border transition-all shadow-2xs relative overflow-hidden flex flex-col gap-2",
+          overallPnl > 0
+            ? "bg-gradient-to-br from-emerald-500/10 via-card to-card border-emerald-500/35"
+            : overallPnl < 0
+            ? "bg-gradient-to-br from-rose-500/10 via-card to-card border-rose-500/35"
+            : "bg-card border-border/60"
+        )}>
+          {/* Top Row: Overall P&L Label on Left, Wallet & Log on Right */}
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1.5 leading-none">
+              <span className={cn(
+                "size-1.5 rounded-full shrink-0",
+                hasActivePosition ? "bg-emerald-500 animate-pulse" : "bg-muted-foreground"
+              )} />
+              OVERALL P&L
+            </span>
 
-            <div className={cn(
-              "font-black font-mono tracking-tight mt-1",
-              isPositionFocused ? "text-xl sm:text-2xl" : "text-2xl",
-              overallPnl > 0 ? "text-emerald-500" : overallPnl < 0 ? "text-rose-500" : "text-muted-foreground"
-            )}>
-              {overallPnl > 0 ? "+" : ""}
-              {fmtRs(overallPnl)}
-            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Wallet with Available Margin Number */}
+              <div 
+                className="flex items-center gap-1 px-2 py-0.5 rounded-lg bg-muted/60 border border-border/50 text-[11px] font-mono font-bold text-foreground"
+                title="Available Trading Margin (Kotak Neo)"
+              >
+                <Wallet className="size-3 text-primary shrink-0" />
+                <span>{availableFunds != null ? fmtRs(availableFunds) : isKotakConnected ? "₹37,258" : "—"}</span>
+              </div>
 
-            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground mt-1 pt-1 border-t border-border/30">
-              <span>Realized: {realizedPnl >= 0 ? "+" : ""}{fmtRs(realizedPnl)}</span>
-              {hasActivePosition && (
-                <span className={totalOpenPnl >= 0 ? "text-emerald-500 font-bold" : "text-rose-500 font-bold"}>
-                  {totalOpenPnl >= 0 ? "+" : ""}{fmtRs(totalOpenPnl)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          {/* Card B: AVAILABLE BALANCE */}
-          <div className="p-2.5 rounded-2xl bg-card border border-border/60 transition-all flex flex-col justify-between shadow-2xs relative overflow-hidden">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1 leading-none">
-                <Wallet className="size-3 text-primary" /> AVAIL MARGIN
-              </span>
+              {/* Closed Trades Log Button */}
               <button
                 type="button"
                 onClick={() => {
@@ -886,28 +865,54 @@ export function ManualTradingPage() {
                   }
                 }}
                 className={cn(
-                  "text-[9px] font-mono font-bold px-1.5 py-0.5 rounded-md border cursor-pointer transition-all active:scale-95 flex items-center gap-1",
+                  "text-[10px] font-mono font-bold px-1.5 py-0.5 rounded-lg border cursor-pointer transition-all active:scale-95 flex items-center gap-1 shrink-0",
                   viewMode === "HISTORY"
                     ? "bg-primary text-primary-foreground border-primary"
                     : "bg-muted/60 text-muted-foreground border-border/60 hover:text-foreground"
                 )}
-                title="View today's closed trades"
+                title="View today's closed trades log"
               >
                 <Clock className="size-2.5" />
                 <span>{viewMode === "HISTORY" ? "Close" : `Log (${closedPositions.length})`}</span>
               </button>
             </div>
+          </div>
 
+          {/* Bottom Row: Large Overall PnL Number on Left, Stacked Realized (Top) & Running (Below) on Right */}
+          <div className="flex items-end justify-between gap-2 pt-0.5">
+            {/* Big Overall Net P&L */}
             <div className={cn(
-              "font-black font-mono tracking-tight text-foreground mt-1",
-              isPositionFocused ? "text-xl sm:text-2xl" : "text-2xl"
+              "font-black font-mono tracking-tight leading-none text-2xl sm:text-3xl",
+              overallPnl > 0 ? "text-emerald-500" : overallPnl < 0 ? "text-rose-500" : "text-muted-foreground"
             )}>
-              {availableFunds != null ? fmtRs(availableFunds) : isKotakConnected ? "₹37,258" : "—"}
+              {overallPnl > 0 ? "+" : ""}{fmtRs(overallPnl)}
             </div>
 
-            <div className="flex items-center justify-between text-[10px] font-mono text-muted-foreground mt-1 pt-1 border-t border-border/30">
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold">₹0 Brokerage</span>
-              <span>Kotak Neo</span>
+            {/* Stacked Realised (Top) & Running (Below) */}
+            <div className="flex flex-col items-end justify-center font-mono text-[11px] leading-tight shrink-0">
+              {/* Realized at Top */}
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-sans font-medium text-muted-foreground">Realised:</span>
+                <span className={cn("font-bold", realizedPnl > 0 ? "text-emerald-500" : realizedPnl < 0 ? "text-rose-500" : "text-foreground")}>
+                  {realizedPnl > 0 ? "+" : ""}{fmtRs(realizedPnl)}
+                </span>
+              </div>
+
+              {/* Running Below */}
+              <div className="flex items-center gap-1 mt-0.5">
+                <span className="text-[10px] font-sans font-medium text-muted-foreground flex items-center gap-1">
+                  {hasActivePosition && <span className="size-1.5 rounded-full bg-emerald-500 animate-ping" />}
+                  Running:
+                </span>
+                <span className={cn(
+                  "font-bold",
+                  hasActivePosition
+                    ? (totalOpenPnl >= 0 ? "text-emerald-500" : "text-rose-500")
+                    : "text-muted-foreground"
+                )}>
+                  {hasActivePosition ? `${totalOpenPnl >= 0 ? "+" : ""}${fmtRs(totalOpenPnl)}` : "₹0"}
+                </span>
+              </div>
             </div>
           </div>
         </div>

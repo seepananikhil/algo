@@ -265,7 +265,7 @@ export function PaperPage() {
   }
 
   return (
-    <div className="flex flex-col gap-2.5 sm:gap-3 max-w-[1720px] mx-auto w-full pb-16">
+    <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-5 pb-20">
       {/* 1. COMPACT TOP BAR: TITLE, FILTER TABS & BACKUP */}
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-2 pb-2 border-b border-border/40">
         <div className="flex items-center gap-2.5 flex-wrap">

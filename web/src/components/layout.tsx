@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, CalendarDays, LineChart, Lock, Moon, Power, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
+import { Activity, Briefcase, CalendarDays, LineChart, Lock, Moon, Power, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -10,10 +10,11 @@ import { useAuth } from "@/lib/auth"
 
 const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
+  { to: "/holdings", label: "Holdings", icon: Briefcase },
+  { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },
   { to: "/trade", label: "Quick Trade", icon: Zap },
   { to: "/day", label: "Day viewer", icon: CalendarDays },
   { to: "/paper", label: "Trades P&L", icon: Wallet },
-  { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },
   { to: "/backtest", label: "Backtest", icon: LineChart },
   { to: "/config", label: "Strategy Config", icon: Sliders },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
@@ -220,7 +221,7 @@ export function Layout() {
         <main
           className={cn(
             "flex-1 flex flex-col min-h-0",
-            isLive ? "overflow-hidden p-0" : isTrade ? "overflow-y-auto p-0" : isFixedViewport ? "overflow-hidden p-1 sm:p-2" : "overflow-y-auto p-2 sm:p-2.5"
+            isLive ? "overflow-hidden p-0" : isTrade ? "overflow-y-auto p-0" : "overflow-y-auto p-0"
           )}
         >
           <Outlet />

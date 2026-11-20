@@ -152,31 +152,9 @@ def get_reset_baseline() -> float:
 
 
 def reset_risk_lock() -> dict:
-    """Manually clear the risk lock, reset the baseline P&L to current P&L, and clear halts."""
-    global _MANUAL_RESET_TIMESTAMP
-    try:
-        _MANUAL_RESET_TIMESTAMP = time.time()
-        today = today_str()
-        metrics = get_current_metrics()
-        curr_pnl = float(metrics.get("net_pnl", 0.0) or 0.0)
-
-        # Persist manual reset with current P&L as baseline
-        reset_data = {
-            "date": today,
-            "reset_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
-            "baseline_pnl": curr_pnl,
-        }
-        RISK_RESET_FILE.write_text(json.dumps(reset_data, indent=2), encoding="utf-8")
-
-        if RISK_LOCK_FILE.exists():
-            RISK_LOCK_FILE.unlink(missing_ok=True)
-        if STOP_FILE.exists():
-            STOP_FILE.unlink(missing_ok=True)
-        logger.info(f"🛡️ [RISK GUARDIAN] Circuit breaker manually reset! New baseline P&L: Rs. {curr_pnl:+,.2f}. Fresh buffer allocated.")
-        return {"ok": True, "baseline_pnl": curr_pnl}
-    except Exception as exc:
-        logger.error(f"Failed to reset risk lock: {exc}")
-        return {"ok": False, "error": str(exc)}
+    """Manual reset is strictly disabled by policy to prevent revenge trading after daily loss breach."""
+    logger.warning("🛡️ [RISK GUARDIAN] Manual reset attempted, but resets are disabled by policy.")
+    return {"ok": False, "error": "Risk Guardian manual reset is disabled by policy. Locks cannot be cleared mid-day."}
 
 
 def cancel_all_pending_orders() -> list:
@@ -205,16 +183,51 @@ def cancel_all_pending_orders() -> list:
     return cancelled
 
 
+_last_square_off_attempt = 0.0
+_last_square_off_failed = False
+_guardian_cached_state = {}
+
+
+def get_guardian_status() -> dict:
+    """Return latest cached Risk Guardian status without executing synchronous broker square-offs."""
+    global _guardian_cached_state
+    if _guardian_cached_state:
+        return _guardian_cached_state
+    locked, lock_data = is_risk_locked()
+    cfg = get_guardian_config()
+    return {
+        "status": "LOCKED" if locked else ("ACTIVE" if cfg.get("enabled") else "DISABLED"),
+        "is_locked": locked,
+        "enabled": cfg.get("enabled", True),
+        "daily_loss_limit": cfg.get("daily_loss_limit", 2000.0),
+        "lock_info": lock_data,
+        "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+    }
+
+
 def square_off_all_positions(reason: str = "daily_loss_breach") -> list:
     """Square off all open positions immediately at market."""
+    global _last_square_off_attempt, _last_square_off_failed
+    now = time.time()
+    # Backoff 30 seconds if last attempt failed (e.g. 401 Unauthorized or broker down)
+    if _last_square_off_failed and (now - _last_square_off_attempt) < 30.0:
+        return []
+    _last_square_off_attempt = now
+
     closed = []
+    has_failure = False
     try:
         from broker import get_positions
         from app_server import exit_position
 
         pos_resp = get_positions()
+        if not pos_resp.get("ok"):
+            _last_square_off_failed = True
+            return []
+
         open_pos = pos_resp.get("open_positions", [])
         if not open_pos:
+            _last_square_off_failed = False
             return []
 
         logger.warning(f"🛡️ [RISK GUARDIAN] Square-off triggered ({reason}): {len(open_pos)} open position(s) found.")
@@ -232,10 +245,14 @@ def square_off_all_positions(reason: str = "daily_loss_breach") -> list:
                 closed.append({"symbol": sym, "qty": qty, "status": "success", "order_id": res.get("order_id")})
                 logger.warning(f"🛡️ [RISK GUARDIAN] Successfully squared off {sym} (Order ID: {res.get('order_id')})")
             except Exception as exc:
+                has_failure = True
                 closed.append({"symbol": sym, "qty": qty, "status": "failed", "error": str(exc)})
                 logger.error(f"🛡️ [RISK GUARDIAN] FAILED to square off {sym}: {exc}")
     except Exception as exc:
+        has_failure = True
         logger.error(f"Error in square_off_all_positions: {exc}")
+
+    _last_square_off_failed = has_failure
 
     # Also clean up any open paper scalper trades in CSV
     try:
@@ -411,9 +428,11 @@ def check_and_enforce_guardian() -> dict:
         closed_actions = []
         cancelled_actions = []
         if open_count > 0 and auto_close:
-            logger.warning(f"🛡️ [RISK GUARDIAN AUTO-CLOSE] Position detected while locked! ({open_count} open). Closing now...")
-            closed_actions = square_off_all_positions(reason="post_breach_enforcement")
-            cancelled_actions = cancel_all_pending_orders()
+            now = time.time()
+            if not _last_square_off_failed or (now - _last_square_off_attempt) >= 45.0:
+                logger.warning(f"🛡️ [RISK GUARDIAN AUTO-CLOSE] Position detected while locked! ({open_count} open). Closing now...")
+                closed_actions = square_off_all_positions(reason="post_breach_enforcement")
+                cancelled_actions = cancel_all_pending_orders()
 
         return {
             "status": "LOCKED",
@@ -522,12 +541,14 @@ _guardian_running = False
 
 
 def _guardian_loop():
-    global _guardian_running
+    global _guardian_running, _guardian_cached_state
     logger.info("🛡️ [RISK GUARDIAN] Watcher loop running.")
     while _guardian_running:
         had_error = False
         try:
             res = check_and_enforce_guardian()
+            if isinstance(res, dict):
+                _guardian_cached_state = res
             if isinstance(res, dict) and not res.get("enabled", True):
                 time.sleep(5.0)
                 continue

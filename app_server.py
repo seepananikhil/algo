@@ -3070,7 +3070,7 @@ def status() -> dict:
         "lots": int(cfg.get("lots", PAPER_LOTS)) if cfg.get("midpoint_live_trading", cfg.get("live_trading")) or auto_live_started else PAPER_LOTS,
         "daily_loss_limit": cfg.get("daily_loss_limit", 2000),
         "kill_switch": is_kill_switch_active(),
-        "risk_guardian": (lambda: (__import__("risk_guardian").check_and_enforce_guardian()))(),
+        "risk_guardian": (lambda: (__import__("risk_guardian").get_guardian_status()))(),
         "last_tick": last_tick,
         "sensex_last_tick": sensex_last_tick,
         "vix_last_tick": vix_last_tick,
@@ -4110,6 +4110,238 @@ def gap_and_go_backtest_report(symbol: str = "nifty") -> dict:
     }
 
 
+def the_scalper_backtest_report(symbol: str = "sensex") -> dict:
+    """Historical backtest performance for 'The Scalper' Multi-Strategy Confluence Engine (Best Combo Only)."""
+    sym = symbol.lower()
+    sx_csv = ROOT / "performance" / "the_scalper_sensex_trades.csv"
+    nf_csv = ROOT / "performance" / "the_scalper_nifty_trades.csv"
+
+    if sym == "all":
+        # Load and combine both Sensex and Nifty best combo trades
+        parsed = []
+        if sx_csv.exists():
+            for r in read_csv_rows(sx_csv):
+                try:
+                    pnl_pts = round(float(r.get("pnl") or r.get("pnl_points") or 0.0), 2)
+                    parsed.append({
+                        "date": str(r.get("date", "")),
+                        "time": str(r.get("time", ""))[:5],
+                        "symbol": "SENSEX",
+                        "side": "CALL" if str(r.get("side", "")).upper() in ("LONG", "CALL", "CE") else "PUT",
+                        "entry": round(float(r.get("entry") or 0.0), 2),
+                        "pnl_points": pnl_pts,
+                        "pnl_rupees": round(pnl_pts * 20.0, 2),
+                        "reason": f"[SENSEX {r.get('reason', 'Scalp')}] {r.get('res', 'TIME_EXIT')}",
+                        "lot_size": 20
+                    })
+                except Exception: pass
+        if nf_csv.exists():
+            for r in read_csv_rows(nf_csv):
+                try:
+                    pnl_pts = round(float(r.get("pnl") or r.get("pnl_points") or 0.0), 2)
+                    parsed.append({
+                        "date": str(r.get("date", "")),
+                        "time": str(r.get("time", ""))[:5],
+                        "symbol": "NIFTY",
+                        "side": "CALL" if str(r.get("side", "")).upper() in ("LONG", "CALL", "CE") else "PUT",
+                        "entry": round(float(r.get("entry") or 0.0), 2),
+                        "pnl_points": pnl_pts,
+                        "pnl_rupees": round(pnl_pts * 65.0, 2),
+                        "reason": f"[NIFTY {r.get('reason', 'Scalp')}] {r.get('res', 'TIME_EXIT')}",
+                        "lot_size": 65
+                    })
+                except Exception: pass
+
+        parsed.sort(key=lambda x: (x["date"], x["time"]))
+        trades, equity_rs, peak_rs = [], 0.0, 0.0
+        daily_map = {}
+        monthly_map = {}
+        reasons_map = {}
+
+        for p in parsed:
+            equity_rs += p["pnl_rupees"]
+            peak_rs = max(peak_rs, equity_rs)
+            dd_rs = equity_rs - peak_rs
+            res_label = p["reason"].split("]")[-1].strip()
+
+            trades.append({
+                "date": p["date"],
+                "side": p["side"],
+                "entry": p["time"],
+                "entry_price": p["entry"],
+                "sl": p["entry"] - 60.0 if p["symbol"] == "SENSEX" else p["entry"] - 16.0,
+                "target": p["entry"] + 120.0 if p["symbol"] == "SENSEX" else p["entry"] + 32.0,
+                "exit": p["time"],
+                "exit_price": p["entry"] + p["pnl_points"],
+                "reason": p["reason"],
+                "pnl_points": p["pnl_points"],
+                "base_points": p["pnl_points"],
+                "pnl_rupees": p["pnl_rupees"],
+                "futures_rupees": p["pnl_rupees"],
+                "lots": 1,
+                "equity": round(equity_rs, 2),
+                "drawdown": round(dd_rs, 2),
+            })
+
+            d = daily_map.setdefault(p["date"], {"date": p["date"], "points": 0.0, "rupees": 0.0, "trades": 0})
+            d["rupees"] = round(d["rupees"] + p["pnl_rupees"], 2)
+            d["points"] = round(d["points"] + p["pnl_points"], 2)
+            d["trades"] += 1
+
+            m = p["date"][:7]
+            monthly_map[m] = round(monthly_map.get(m, 0.0) + p["pnl_rupees"], 2)
+            reasons_map[res_label] = reasons_map.get(res_label, 0) + 1
+
+        n = len(trades)
+        if n == 0:
+            return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+        wins = sum(1 for x in trades if x["pnl_rupees"] > 0)
+        losses = sum(1 for x in trades if x["pnl_rupees"] < 0)
+        sorted_daily = sorted(daily_map.values(), key=lambda x: x["date"])
+        sorted_monthly = [{"month": m, "points": round(v / 50.0, 1), "rupees": v} for m, v in sorted(monthly_map.items())]
+        sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+        gw = sum(x["pnl_rupees"] for x in trades if x["pnl_rupees"] > 0)
+        gl = abs(sum(x["pnl_rupees"] for x in trades if x["pnl_rupees"] < 0))
+        pf = round(gw / gl, 2) if gl > 0 else 99.0
+        max_dd = round(min((x["drawdown"] for x in trades), default=0.0), 2)
+
+        return {
+            "summary": {
+                "from": sorted_daily[0]["date"] if sorted_daily else "",
+                "to": sorted_daily[-1]["date"] if sorted_daily else "",
+                "days": len(sorted_daily),
+                "trades": n,
+                "wins": wins,
+                "losses": losses,
+                "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+                "profit_factor": pf,
+                "total_points": round(equity_rs / 25.0, 2),
+                "avg_points": round((equity_rs / 25.0) / n, 2) if n else 0.0,
+                "total_rupees": round(equity_rs, 2),
+                "max_drawdown": max_dd,
+                "max_drawdown_rupees": max_dd,
+                "best": max((x["pnl_rupees"] for x in trades), default=0.0),
+                "worst": min((x["pnl_rupees"] for x in trades), default=0.0),
+                "lot_size": 1,
+                "option_delta": 1.0,
+                "strategy_name": "The Scalper (Combined Best Combo: Sensex + Nifty)",
+            },
+            "trades": trades,
+            "daily": sorted_daily,
+            "monthly": sorted_monthly,
+            "exit_reasons": sorted_reasons,
+        }
+
+    # Single index path
+    is_sx = "sensex" in sym
+    csv_path = sx_csv if is_sx else nf_csv
+    if not csv_path.exists():
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+    lot_size = 20 if is_sx else 65
+    raw_trades = read_csv_rows(csv_path)
+    trades, equity, peak = [], 0.0, 0.0
+    daily_map = {}
+    monthly_map = {}
+    reasons_map = {}
+
+    for r in raw_trades:
+        try:
+            r_date = str(r.get("date", ""))
+            side = "CALL" if str(r.get("side", "")).upper() in ("LONG", "CALL", "CE") else "PUT"
+            entry_spot = round(float(r.get("entry") or r.get("entry_price") or 0.0), 2)
+            pnl_pts = round(float(r.get("pnl") or r.get("pnl_points") or 0.0), 2)
+            equity += pnl_pts
+            peak = max(peak, equity)
+            res_status = str(r.get("res") or r.get("exit_reason") or "TIME_EXIT")
+            reason_label = str(r.get("reason") or "CMS Scalp")
+
+            sl_pts = 60.0 if is_sx else 16.0
+            tgt_pts = 120.0 if is_sx else 32.0
+            sl_spot = round(float(r.get("sl") or (entry_spot - sl_pts if side == "CALL" else entry_spot + sl_pts)), 2)
+            tgt_spot = round(float(r.get("target") or (entry_spot + tgt_pts if side == "CALL" else entry_spot - tgt_pts)), 2)
+            exit_spot = round(float(r.get("exit_price") or (entry_spot + (pnl_pts if side == "CALL" else -pnl_pts))), 2)
+            opt_rs = round(pnl_pts * lot_size, 2)
+            entry_t = str(r.get("entry_time") or r.get("time", ""))[:5]
+            exit_t = str(r.get("exit_time") or r.get("exit") or entry_t)[:5]
+
+            trades.append({
+                "date": r_date,
+                "side": side,
+                "entry": entry_t,
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": exit_t,
+                "exit_price": exit_spot,
+                "reason": f"[{reason_label}] {res_status}",
+                "strategy_label": reason_label,
+                "trigger_label": f"[{reason_label}] BUY {side}",
+                "trigger_reason": reason_label,
+                "pnl_points": pnl_pts,
+                "base_points": pnl_pts,
+                "pnl_rupees": opt_rs,
+                "futures_rupees": opt_rs,
+                "lots": 1,
+                "equity": round(equity, 2),
+                "drawdown": round(equity - peak, 2),
+            })
+
+            d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0})
+            d["points"] = round(d["points"] + pnl_pts, 2)
+            d["trades"] += 1
+
+            m = r_date[:7]
+            monthly_map[m] = round(monthly_map.get(m, 0.0) + pnl_pts, 2)
+            reasons_map[res_status] = reasons_map.get(res_status, 0) + 1
+        except Exception:
+            continue
+
+    n = len(trades)
+    if n == 0:
+        return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
+
+    wins = sum(1 for x in trades if x["pnl_points"] > 0)
+    losses = sum(1 for x in trades if x["pnl_points"] < 0)
+    sorted_daily = sorted(daily_map.values(), key=lambda x: x["date"])
+    sorted_monthly = [{"month": m, "points": pts} for m, pts in sorted(monthly_map.items())]
+    sorted_reasons = [{"reason": reason, "count": count} for reason, count in sorted(reasons_map.items(), key=lambda item: -item[1])]
+
+    gw = sum(x["pnl_points"] for x in trades if x["pnl_points"] > 0)
+    gl = abs(sum(x["pnl_points"] for x in trades if x["pnl_points"] < 0))
+    pf = round(gw / gl, 2) if gl > 0 else 99.0
+    max_dd = round(min((x["drawdown"] for x in trades), default=0.0), 2)
+
+    return {
+        "summary": {
+            "from": sorted_daily[0]["date"] if sorted_daily else "",
+            "to": sorted_daily[-1]["date"] if sorted_daily else "",
+            "days": len(sorted_daily),
+            "trades": n,
+            "wins": wins,
+            "losses": losses,
+            "win_rate_pct": round(100.0 * wins / n, 2) if n else 0.0,
+            "profit_factor": pf,
+            "total_points": round(equity, 2),
+            "avg_points": round(equity / n, 2) if n else 0.0,
+            "total_rupees": round(equity * lot_size, 2),
+            "max_drawdown": max_dd,
+            "max_drawdown_rupees": round(max_dd * lot_size, 2),
+            "best": max((x["pnl_points"] for x in trades), default=0.0),
+            "worst": min((x["pnl_points"] for x in trades), default=0.0),
+            "lot_size": lot_size,
+            "option_delta": 1.0,
+            "strategy_name": f"The Scalper ({'SENSEX' if is_sx else 'NIFTY'})",
+        },
+        "trades": trades,
+        "daily": sorted_daily,
+        "monthly": sorted_monthly,
+        "exit_reasons": sorted_reasons,
+    }
+
+
 def vix_master_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
     """Historical spot trades for Unified VIX Master Strategy on date."""
     fname = "sensex_vix_master_trades.csv" if symbol.upper() == "SENSEX" else "nifty_vix_master_trades.csv"
@@ -4139,6 +4371,47 @@ def vix_master_spot_trades_for_day(date: str, symbol: str = "NIFTY") -> list:
                 "lots": int(r.get("total_lots") or 1),
                 "stage": str(r.get("stage", "")),
                 "origin": str(r.get("origin", ""))
+            })
+    return out
+
+def the_scalper_spot_trades_for_day(date: str, symbol: str = "SENSEX") -> list:
+    """Spot trades for The Scalper on date with accurate entry & exit places."""
+    is_sx = "sensex" in symbol.lower()
+    fname = "the_scalper_sensex_trades.csv" if is_sx else "the_scalper_nifty_trades.csv"
+    csv_path = ROOT / "performance" / fname
+    if not csv_path.exists():
+        return []
+    out = []
+    for r in read_csv_rows(csv_path):
+        if r.get("date") == date:
+            side = str(r.get("side", "LONG")).upper()
+            chart_side = "CALL" if side in ("LONG", "CALL", "CE") else "PUT"
+            entry_spot = round(float(r.get("entry_price") or r.get("entry") or 0.0), 2)
+            exit_spot = round(float(r.get("exit_price") or r.get("exit") or entry_spot), 2)
+            sl_spot = round(float(r.get("sl") or (entry_spot - 60.0 if chart_side == "CALL" else entry_spot + 60.0)), 2)
+            tgt_spot = round(float(r.get("target") or (entry_spot + 120.0 if chart_side == "CALL" else entry_spot - 120.0)), 2)
+            pts = round(float(r.get("pnl_points") or r.get("pnl") or 0.0), 2)
+            res = str(r.get("exit_reason") or r.get("res") or "TIME_EXIT")
+            reason = str(r.get("reason") or "Scalp")
+            entry_t = str(r.get("entry_time") or r.get("time") or "")[:5]
+            exit_t = str(r.get("exit_time") or r.get("exit") or entry_t)[:5]
+
+            out.append({
+                "side": chart_side,
+                "entry": entry_t,
+                "entry_price": entry_spot,
+                "sl": sl_spot,
+                "target": tgt_spot,
+                "exit": exit_t,
+                "exit_price": exit_spot,
+                "reason": f"[{reason}] {res}",
+                "pnl_points": pts,
+                "base_points": pts,
+                "lots": 1,
+                "strategy_label": reason,
+                "trigger_label": f"[{reason}] BUY {chart_side}",
+                "trigger_reason": reason,
+                "engine": "SCALPER",
             })
     return out
 
@@ -6118,6 +6391,9 @@ class Handler(BaseHTTPRequestHandler):
                 rule_trades = nifty_key_levels_spot_trades_for_day(date)
             elif strategy_param in ("master_portfolio", "master_portfolio_nifty", "master_portfolio_sensex", "master_portfolio_all", "portfolio", "unified_master"):
                 rule_trades = master_portfolio_spot_trades_for_day(date, symbol)
+            elif strategy_param in ("the_scalper", "the_scalper_sensex", "the_scalper_nifty", "the_scalper_all", "scalper"):
+                effective_sym = "SENSEX" if "sensex" in strategy_param.lower() else ("NIFTY" if "nifty" in strategy_param.lower() else symbol)
+                rule_trades = the_scalper_spot_trades_for_day(date, effective_sym)
             elif strategy_param in ("gap_and_go", "gap_and_go_williams", "gap_williams", "williams", "gap_and_go_nifty", "gap_and_go_sensex", "gap_and_go_all"):
                 rule_trades = gap_and_go_spot_trades_for_day(date, symbol)
             elif strategy_param in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
@@ -6413,6 +6689,12 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(gap_and_go_backtest_report("nifty"))
             elif strategy in ("gap_and_go_sensex", "gap_sensex", "williams_sensex"):
                 self._json(gap_and_go_backtest_report("sensex"))
+            elif strategy in ("the_scalper_all", "the_scalper_combined", "scalper_all"):
+                self._json(the_scalper_backtest_report("all"))
+            elif strategy in ("the_scalper", "the_scalper_sensex", "scalper_sensex"):
+                self._json(the_scalper_backtest_report("sensex"))
+            elif strategy in ("the_scalper_nifty", "scalper_nifty"):
+                self._json(the_scalper_backtest_report("nifty"))
             elif strategy in ("vix_master_nifty", "nifty_vix_master", "vix_master"):
                 self._json(nifty_vix_master_backtest_report())
             elif strategy in ("vix_master_sensex", "sensex_vix_master"):

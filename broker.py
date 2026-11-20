@@ -115,8 +115,12 @@ def kotak_positions() -> dict:
     try:
         resp = client.positions()
         if not isinstance(resp, dict) or resp.get("stat") != "ok":
-            err = resp.get("errMsg") or resp.get("stat") or "Failed to fetch Kotak positions"
-            if _last_positions_cache.get("ok"):
+            err = str(resp.get("errMsg") or resp.get("stat") or "Failed to fetch Kotak positions")
+            _last_positions_err_time = time.time()
+            if "unauthorized" in err.lower() or "100008" in str(resp):
+                _last_positions_cache = {}
+                return {"ok": False, "error": err, "open_positions": [], "closed_positions": [], "summary": {}}
+            if _last_positions_cache.get("ok") and (now - _last_positions_time) < 10.0:
                 return _last_positions_cache
             return {"ok": False, "error": str(err), "open_positions": [], "closed_positions": [], "summary": {}}
 

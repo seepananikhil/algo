@@ -57,7 +57,18 @@ export function RuleTradesTable({ trades, empty = "No trades." }: { trades: Rule
           } else if (eng.includes("WILLIAMS")) {
             badgeClass = "border-purple-500/40 text-purple-400 bg-purple-500/10"
             dotColor = "bg-purple-500"
+          } else if (eng.includes("ORB") || eng.includes("BREAKOUT")) {
+            badgeClass = "border-indigo-500/40 text-indigo-400 bg-indigo-500/10"
+            dotColor = "bg-indigo-500"
+          } else if (eng.includes("CMS")) {
+            badgeClass = "border-cyan-500/40 text-cyan-400 bg-cyan-500/10"
+            dotColor = "bg-cyan-500"
+          } else if (eng.includes("SQUEEZE")) {
+            badgeClass = "border-fuchsia-500/40 text-fuchsia-400 bg-fuchsia-500/10"
+            dotColor = "bg-fuchsia-500"
           }
+
+          const showSub = triggerReason && triggerReason !== label ? triggerReason : (trigger && trigger !== label ? trigger : null)
 
           return (
             <TableRow key={i} className="bg-transparent hover:bg-muted/20">
@@ -70,15 +81,11 @@ export function RuleTradesTable({ trades, empty = "No trades." }: { trades: Rule
                         {label}
                       </Badge>
                     </div>
-                    {triggerReason ? (
+                    {showSub && (
                       <span className="text-[10px] text-muted-foreground pl-3">
-                        {triggerReason}
+                        {showSub}
                       </span>
-                    ) : trigger ? (
-                      <span className="text-[10px] text-muted-foreground pl-3">
-                        {trigger}
-                      </span>
-                    ) : null}
+                    )}
                   </div>
                 </TableCell>
               )}

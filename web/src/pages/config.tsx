@@ -277,7 +277,7 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const isConcurrent = activeInst === "BOTH" && config.cross_instrument_concurrency === "CONCURRENT"
 
   return (
-    <div className={cn("space-y-4 max-w-5xl mx-auto", embedded ? "w-full" : "p-3 sm:p-5")}>
+    <div className={cn("w-full max-w-[1600px] mx-auto", embedded ? "w-full" : "px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-5 pb-20")}>
       {/* Top Header Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b pb-4">
         <div>
