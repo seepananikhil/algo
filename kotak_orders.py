@@ -594,26 +594,44 @@ def get_kotak_holdings() -> dict:
         return {"ok": False, "error": f"Failed to fetch Kotak holdings: {exc}"}
 
 
-_kotak_token_cache: dict[str, int] = {}
+_kotak_token_cache: dict[str, any] = {}
+_last_kotak_hist_ts: float = 0.0
 
-def get_kotak_candles(symbol: str, days: int = 120):
+def get_kotak_candles(symbol: str, days: int = 165):
     """
     Fetch official daily OHLCV candlestick data directly from Kotak Neo API.
-    Resolves symbol token, queries historical_data (interval='D'), and formats as a DataFrame.
-    Returns DataFrame with columns ['Open', 'High', 'Low', 'Close', 'Volume'] indexed by DatetimeIndex, or None.
+    Resolves symbol token, queries historical_data (interval='D') in safe chunks (<= 165 days)
+    to strictly adhere to Kotak Neo's 180-day API limit without 422 errors,
+    and formats as a DataFrame with columns ['Open', 'High', 'Low', 'Close', 'Volume'] indexed by DatetimeIndex.
     """
+    global _last_kotak_hist_ts
     import pandas as pd
     import datetime
+    import time
 
     clean_sym = symbol.upper().replace(".NS", "").replace(".BO", "").replace("NSE:", "").strip()
     client = get_kotak_client()
     if not client:
         return None
 
-    token = _kotak_token_cache.get(clean_sym)
+    cached_meta = _kotak_token_cache.get(clean_sym)
+    token = None
+    exchange_seg = "nse_cm"
+    if isinstance(cached_meta, tuple):
+        exchange_seg, token = cached_meta
+    elif cached_meta:
+        token = cached_meta
+
     if not token:
         try:
+            # First search NSE
             res = client.search_scrip(exchange_segment="nse_cm", symbol=clean_sym)
+            exchange_seg = "nse_cm"
+            if not res or not isinstance(res, list):
+                # Fallback to BSE
+                res = client.search_scrip(exchange_segment="bse_cm", symbol=clean_sym)
+                exchange_seg = "bse_cm"
+
             if res and isinstance(res, list):
                 # Strict matching: exact trading symbol or exact symbol name in EQ group
                 # Avoids substring false matches (e.g. RAYMOND matching RAYMONDLSL first)
@@ -625,9 +643,10 @@ def get_kotak_candles(symbol: str, days: int = 120):
                 if not exact:
                     exact = [x for x in res if x.get("pGroup") == "EQ"]
                 selected = exact[0] if exact else res[0]
-                token = selected.get("pSymbol")
-                if token:
-                    _kotak_token_cache[clean_sym] = int(token)
+                t_val = selected.get("pSymbol")
+                if t_val:
+                    token = int(t_val)
+                    _kotak_token_cache[clean_sym] = (exchange_seg, token)
         except Exception as e:
             print(f"[Kotak Candles] Scrip search error for {clean_sym}: {e}")
             return None
@@ -636,25 +655,71 @@ def get_kotak_candles(symbol: str, days: int = 120):
         return None
 
     try:
-        to_dt = datetime.datetime.now().strftime("%Y-%m-%d")
-        from_dt = (datetime.datetime.now() - datetime.timedelta(days=min(days, 180))).strftime("%Y-%m-%d")
+        # Kotak Neo strictly limits interval 'D' to 180 days or less.
+        # We chunk requests into <= 165 calendar day windows.
+        all_candles = []
+        now = datetime.datetime.now()
+        cur_end = now
+        remaining_days = max(1, days)
+        chunk_idx = 0
+        max_chunks = 4  # Up to ~650 days (~2.5 years)
 
-        hist = client.historical_data(neosymbol=f"nse_cm|{token}", interval="D", from_date=from_dt, to_date=to_dt)
-        candles = hist.get("data", {}).get("candles", []) if isinstance(hist, dict) else []
-        if not candles:
+        while remaining_days > 0 and chunk_idx < max_chunks:
+            chunk_days = min(remaining_days, 165)
+            from_dt = (cur_end - datetime.timedelta(days=chunk_days)).strftime("%Y-%m-%d")
+            to_dt = cur_end.strftime("%Y-%m-%d")
+
+            # Respect Kotak Neo global rate limit of 1 req/sec
+            now_ts = time.time()
+            elapsed = now_ts - _last_kotak_hist_ts
+            if elapsed < 1.15:
+                time.sleep(1.15 - elapsed)
+            _last_kotak_hist_ts = time.time()
+
+            hist = None
+            for retry in range(2):
+                try:
+                    hist = client.historical_data(neosymbol=f"{exchange_seg}|{token}", interval="D", from_date=from_dt, to_date=to_dt)
+                    if isinstance(hist, dict):
+                        fault_code = hist.get("fault", {}).get("code") if isinstance(hist.get("fault"), dict) else None
+                        if hist.get("code") in [429, "429"] or fault_code in [429, "429"]:
+                            time.sleep(1.5)
+                            _last_kotak_hist_ts = time.time()
+                            continue
+                    break
+                except Exception as e_hist:
+                    if "429" in str(e_hist):
+                        time.sleep(1.5)
+                        _last_kotak_hist_ts = time.time()
+                        continue
+                    break
+
+            chunk_candles = hist.get("data", {}).get("candles", []) if isinstance(hist, dict) else []
+            if chunk_candles:
+                all_candles.extend(chunk_candles)
+
+            remaining_days -= chunk_days
+            cur_end = cur_end - datetime.timedelta(days=chunk_days + 1)
+            chunk_idx += 1
+
+        if not all_candles:
             return None
 
+        seen = set()
         rows = []
-        for c in candles:
+        for c in all_candles:
             dt_str = str(c[0])[:10]
-            rows.append({
-                "Date": pd.to_datetime(dt_str),
-                "Open": float(c[1]),
-                "High": float(c[2]),
-                "Low": float(c[3]),
-                "Close": float(c[4]),
-                "Volume": float(c[5])
-            })
+            if dt_str not in seen:
+                seen.add(dt_str)
+                rows.append({
+                    "Date": pd.to_datetime(dt_str),
+                    "Open": float(c[1]),
+                    "High": float(c[2]),
+                    "Low": float(c[3]),
+                    "Close": float(c[4]),
+                    "Volume": float(c[5])
+                })
+
         if not rows:
             return None
         df = pd.DataFrame(rows).set_index("Date").sort_index()

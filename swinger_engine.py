@@ -551,34 +551,51 @@ _candles_cache = None
 _formatted_candles_cache = {}
 _synced_today_symbols = set()
 _last_sync_date = ""
+CANDLES_CACHE_FILE = ROOT / "paper" / "swinger" / "candles_cache.json"
 
 def _warmup_universe_cache():
     global _candles_cache
     if _candles_cache is None:
+        _candles_cache = {}
+        # 1. Bundled lightweight candles_cache.json (available on all deployed servers)
+        if CANDLES_CACHE_FILE.exists():
+            try:
+                import json
+                with open(CANDLES_CACHE_FILE, "r", encoding="utf-8") as f:
+                    j_data = json.load(f)
+                for sym, rows in j_data.items():
+                    if rows:
+                        df_sym = pd.DataFrame(rows)
+                        if "Date" in df_sym.columns:
+                            df_sym["Date"] = pd.to_datetime(df_sym["Date"])
+                            df_sym = df_sym.set_index("Date").sort_index()
+                            _candles_cache[sym] = df_sym
+                print(f"[Swinger] Pre-warmed {len(_candles_cache)} symbols from candles_cache.json")
+            except Exception as e:
+                print(f"[Swinger] Error loading candles_cache.json: {e}")
+
+        # 2. Merge local scratch pkl if present on development machine
         p = ROOT / "scratch" / "universe_4y_prices.pkl"
         if p.exists():
             try:
                 import pickle
                 with open(p, "rb") as f:
-                    _candles_cache = pickle.load(f)
-                print(f"[Swinger] Pre-warmed universe candles cache with {len(_candles_cache)} symbols in RAM")
+                    pkl_data = pickle.load(f)
+                for sym, df_pkl in pkl_data.items():
+                    if sym not in _candles_cache:
+                        _candles_cache[sym] = df_pkl
+                print(f"[Swinger] Universe candles cache: {len(_candles_cache)} symbols in RAM")
             except Exception as e:
-                print(f"[Swinger] Warmup error: {e}")
+                print(f"[Swinger] Warmup pkl error: {e}")
 
 import threading
 threading.Thread(target=_warmup_universe_cache, daemon=True).start()
 
 def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
-    """Fetch daily candles for a stock symbol from pickle cache + live recent yfinance delta."""
+    """Fetch daily candles for a stock symbol from bundled cache + live Kotak Neo delta."""
     global _candles_cache, _formatted_candles_cache, _synced_today_symbols, _last_sync_date
-    import pickle
-    cache_path = ROOT / "scratch" / "universe_4y_prices.pkl"
-    if cache_path.exists() and _candles_cache is None:
-        try:
-            with open(cache_path, "rb") as f:
-                _candles_cache = pickle.load(f)
-        except Exception:
-            _candles_cache = {}
+    if _candles_cache is None:
+        _warmup_universe_cache()
 
     keys = list(_candles_cache.keys()) if _candles_cache else None
     symbol = resolve_symbol(symbol, keys)
@@ -612,7 +629,7 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
         # 1. Primary: Official Kotak Neo Historical API (Fast < 0.5s, Official NSE Exchange Data)
         try:
             from kotak_orders import get_kotak_candles
-            recent_df = get_kotak_candles(symbol, days=90 if (df is not None and not df.empty) else 180)
+            recent_df = get_kotak_candles(symbol, days=90 if (df is not None and not df.empty) else 330)
             if recent_df is not None and not recent_df.empty:
                 print(f"[Swinger] Refreshed {len(recent_df)} live candles for {symbol} via Kotak Neo API")
         except Exception as e:
