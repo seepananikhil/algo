@@ -2,7 +2,6 @@ import { useState, useEffect, useMemo } from "react"
 import {
   TrendingUp,
   RefreshCw,
-  Clock,
   Calendar as CalendarIcon,
   BarChart3,
   ShieldCheck,
@@ -154,8 +153,10 @@ export function SwingerPage() {
   const [scanning, setScanning] = useState(false)
   const [refreshing, setRefreshing] = useState(false)
 
-  // Chart Inspection Modal Target
+  // Chart Inspection Embedded Target (Split View)
   const [selectedTradeForChart, setSelectedTradeForChart] = useState<SwingerTradeTarget | null>(null)
+  // Dedicated state for Tab 3 Historical Popup Modal
+  const [popupModalTrade, setPopupModalTrade] = useState<SwingerTradeTarget | null>(null)
 
   // Navigation Tabs: 'all' | 'holdings' | 'calendar' | 'radar' | 'payoff'
   const [activeTab, setActiveTab] = useState<"all" | "holdings" | "calendar" | "radar" | "payoff">("all")
@@ -537,6 +538,41 @@ export function SwingerPage() {
     })
   }, [distinctStocks, distinctFilter, distinctSort, searchQuery])
 
+  // Auto-select first stock for the right-side embedded chart on tab change / load
+  useEffect(() => {
+    if (activeTab === "radar" && activeRadarList.length > 0) {
+      const first = activeRadarList[0]
+      setSelectedTradeForChart({
+        symbol: first.symbol,
+        name: first.name || first.symbol,
+        alert_date: first.alert_date,
+        alert_price: first.alert_price,
+        cmp: first.current_price,
+        status: "RADAR",
+        reason: first.notes,
+        pnl: 0,
+        pct_return: first.pullback_pct || 0,
+        holding_days: 0,
+      })
+    } else if (activeTab === "holdings" && positions.length > 0) {
+      setSelectedTradeForChart(positions[0] as any)
+    } else if (activeTab === "all" && filteredDistinctStocks.length > 0) {
+      const first = filteredDistinctStocks[0]
+      const targetTrade = (first.activePosition as any) || first.trades[0]
+      if (targetTrade) {
+        setSelectedTradeForChart({
+          ...targetTrade,
+          symbol: first.symbol,
+          name: first.name,
+          stockTrades: [
+            ...(first.activePosition ? [first.activePosition as any] : []),
+            ...first.trades,
+          ],
+        })
+      }
+    }
+  }, [activeTab, activeRadarList, positions, filteredDistinctStocks])
+
   // All chartable trades/triggers for keyboard & button flipping inside chart modal
   const chartableList = useMemo(() => {
     if (activeTab === "calendar" && calendarSelectedTrades.length > 0) {
@@ -544,6 +580,20 @@ export function SwingerPage() {
     }
     if (activeTab === "holdings") {
       return positions as any[]
+    }
+    if (activeTab === "radar") {
+      return activeRadarList.map((item) => ({
+        symbol: item.symbol,
+        name: item.name || item.symbol,
+        alert_date: item.alert_date,
+        alert_price: item.alert_price,
+        cmp: item.current_price,
+        status: "RADAR",
+        reason: item.notes,
+        pnl: 0,
+        pct_return: item.pullback_pct || 0,
+        holding_days: 0,
+      })) as any[]
     }
     return filteredDistinctStocks.map((s) => {
       const primary = (s.activePosition as any) || s.trades[0]
@@ -557,7 +607,7 @@ export function SwingerPage() {
         ]
       }
     })
-  }, [activeTab, calendarSelectedTrades, positions, filteredDistinctStocks])
+  }, [activeTab, calendarSelectedTrades, positions, activeRadarList, filteredDistinctStocks])
 
   // Cumulative Equity & Drawdown Curve Data
   const equityCurveData = useMemo(() => {
@@ -721,7 +771,7 @@ export function SwingerPage() {
   }, [trades])
 
   return (
-    <div className="h-full max-h-full w-full flex flex-col gap-2 p-2 sm:p-3 overflow-hidden select-none">
+    <div className="w-full flex-1 flex flex-col gap-3 p-2.5 sm:p-4 pb-16 select-none">
       {/* ================= 1. SWINGER 2.0 HERO & ACTION BAR ================= */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
         <div className="flex items-center gap-2 flex-wrap">
@@ -980,33 +1030,25 @@ export function SwingerPage() {
         </div>
       </div>
 
-      {/* ================= 4. TAB VIEWPORT (NO OUTER PAGE SCROLL) ================= */}
-      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+      {/* ================= 4. TAB VIEWPORT ================= */}
+      <div className="flex-1 min-h-0 flex flex-col gap-3">
         {/* ================= TAB 1: ALL TRIGGERS & MASTER FEED ================= */}
         {activeTab === "all" && (
-          <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
-            {/* UNIFIED COMPACT CONTROL BAR */}
-            <div className="bg-white rounded-xl border border-slate-200/80 p-2.5 shadow-2xs space-y-2 shrink-0">
-              {/* Top Row: Title + Live Overview Badges + Search & Sort */}
-              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
-                {/* Left: Section Header */}
+          <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 overflow-hidden">
+            {/* LEFT COLUMN: FILTER & STOCKS LIST */}
+            <div className="lg:col-span-5 xl:col-span-5 flex flex-col gap-2 min-h-0 h-full overflow-hidden">
+              {/* UNIFIED COMPACT CONTROL BAR */}
+              <div className="bg-white rounded-xl border border-slate-200/80 p-2 shadow-2xs space-y-1.5 shrink-0">
+                {/* Search & Sort */}
                 <div className="flex items-center gap-2">
-                  <Layers className="size-4 text-emerald-600" />
-                  <h2 className="text-sm font-black text-slate-900 tracking-tight font-mono">
-                    Distinct Stocks ({distinctStocks.length})
-                  </h2>
-                </div>
-
-                {/* Right: Search & Sort */}
-                <div className="flex items-center gap-2">
-                  <div className="relative flex-1 md:w-52">
-                    <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                  <div className="relative flex-1">
+                    <Search className="size-3.5 absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
                       type="text"
                       placeholder="Search stock..."
                       value={searchQuery}
                       onChange={(e) => setSearchQuery(e.target.value)}
-                      className="w-full pl-8 pr-7 py-1 rounded-lg border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
+                      className="w-full pl-8 pr-7 py-1 rounded-lg border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition h-7.5"
                     />
                     {searchQuery && (
                       <button
@@ -1021,326 +1063,263 @@ export function SwingerPage() {
                   <select
                     value={distinctSort}
                     onChange={(e) => setDistinctSort(e.target.value as any)}
-                    className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white cursor-pointer"
+                    className="px-2 py-1 rounded-lg border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white cursor-pointer h-7.5"
                   >
-                    <option value="pnl">Active First · Net P&L</option>
-                    <option value="trades">Sort: Trades</option>
-                    <option value="winrate">Sort: Win Rate</option>
-                    <option value="alpha">Sort: Symbol (A-Z)</option>
+                    <option value="pnl">Net P&L</option>
+                    <option value="trades">Trades</option>
+                    <option value="winrate">Win Rate</option>
+                    <option value="alpha">A-Z</option>
                   </select>
+                </div>
+
+                {/* Compact Filter Pills */}
+                <div className="flex items-center gap-1 overflow-x-auto pt-1 border-t border-slate-100 scrollbar-none text-[11px]">
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("ALL")}
+                    className={`px-2 py-0.5 rounded-md font-bold transition shrink-0 ${
+                      distinctFilter === "ALL"
+                        ? "bg-slate-900 text-white shadow-xs"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    All ({distinctStocks.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("PORTFOLIO")}
+                    className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-1 shrink-0 ${
+                      distinctFilter === "PORTFOLIO"
+                        ? "bg-sky-600 text-white shadow-xs"
+                        : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
+                    }`}
+                  >
+                    Portfolio ({positions.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("WINNERS")}
+                    className={`px-2 py-0.5 rounded-md font-bold transition shrink-0 ${
+                      distinctFilter === "WINNERS"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
+                    }`}
+                  >
+                    Winners ({distinctStocks.filter((s) => s.totalPnl > 0).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("MULTIBAGGER")}
+                    className={`px-2 py-0.5 rounded-md font-bold transition flex items-center gap-0.5 shrink-0 ${
+                      distinctFilter === "MULTIBAGGER"
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
+                    }`}
+                  >
+                    <Flame className="size-2.5" />
+                    100%+ ({distinctStocks.filter((s) => s.isMultiBagger).length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDistinctFilter("LOSSES")}
+                    className={`px-2 py-0.5 rounded-md font-bold transition shrink-0 ${
+                      distinctFilter === "LOSSES"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
+                    }`}
+                  >
+                    Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
+                  </button>
                 </div>
               </div>
 
-              {/* Bottom Row: Compact Filter Pills */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pt-1.5 border-t border-slate-100 scrollbar-none text-xs">
-                <button
-                  type="button"
-                  onClick={() => setDistinctFilter("ALL")}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
-                    distinctFilter === "ALL"
-                      ? "bg-slate-900 text-white shadow-xs"
-                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                  }`}
-                >
-                  All Stocks ({distinctStocks.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDistinctFilter("PORTFOLIO")}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
-                    distinctFilter === "PORTFOLIO"
-                      ? "bg-sky-600 text-white shadow-xs"
-                      : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
-                  }`}
-                >
-                  <ShieldCheck className="size-3" />
-                  In Portfolio ({positions.length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDistinctFilter("WINNERS")}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
-                    distinctFilter === "WINNERS"
-                      ? "bg-emerald-600 text-white shadow-xs"
-                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
-                  }`}
-                >
-                  Profitable ({distinctStocks.filter((s) => s.totalPnl > 0).length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDistinctFilter("MULTIBAGGER")}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
-                    distinctFilter === "MULTIBAGGER"
-                      ? "bg-purple-600 text-white shadow-xs"
-                      : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
-                  }`}
-                >
-                  <Flame className="size-3" />
-                  Multi-Baggers ({distinctStocks.filter((s) => s.isMultiBagger).length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDistinctFilter("MULTITRADE")}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
-                    distinctFilter === "MULTITRADE"
-                      ? "bg-amber-600 text-white shadow-xs"
-                      : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
-                  }`}
-                >
-                  Multi-Trades ({distinctStocks.filter((s) => s.totalTrades > 1).length})
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setDistinctFilter("LOSSES")}
-                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
-                    distinctFilter === "LOSSES"
-                      ? "bg-rose-600 text-white shadow-xs"
-                      : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
-                  }`}
-                >
-                  Net Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
-                </button>
-              </div>
-            </div>
-
-            {/* VIEW MODE CONTENT */}
-            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
-              {/* Distinct Stocks Table */}
+              {/* Scrollable Stocks Table */}
               <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
                     <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                      <th className="p-3">Stock Symbol</th>
-                      <th className="p-3">Status</th>
-                      <th className="p-3 text-center">Trades Taken</th>
-                      <th className="p-3 text-center">Win Rate</th>
-                      <th className="p-3 text-right font-mono">Best Win</th>
-                      <th className="p-3 text-right font-mono">Realized P&L</th>
-                      <th className="p-3 text-right font-mono">Open Unrealized</th>
-                      <th className="p-3 text-right font-mono">Total Net P&L</th>
-                      <th className="p-3 text-center">Action</th>
+                      <th className="py-2 px-2.5">Stock</th>
+                      <th className="py-2 px-2 text-center">Trades</th>
+                      <th className="py-2 px-2 text-center">Win Rate</th>
+                      <th className="py-2 px-2.5 text-right font-mono">Net P&L</th>
                     </tr>
                   </thead>
-                    <tbody className="divide-y divide-slate-100">
-                      {filteredDistinctStocks.length === 0 ? (
-                        <tr>
-                          <td colSpan={9} className="p-8 text-center text-slate-400 font-medium">
-                            No distinct stocks match your search or filter.
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredDistinctStocks.map((stock) => {
-                          const isProfitable = stock.totalPnl > 0
-                          const hasActive = !!stock.activePosition
-                          const openChartForStock = () => {
-                            const targetTrade = (stock.activePosition as any) || stock.trades[0]
-                            if (targetTrade) {
-                              setSelectedTradeForChart({
-                                ...targetTrade,
-                                symbol: stock.symbol,
-                                name: stock.name,
-                                stockTrades: [
-                                  ...(stock.activePosition ? [stock.activePosition as any] : []),
-                                  ...stock.trades
-                                ]
-                              })
-                            }
+                  <tbody className="divide-y divide-slate-100">
+                    {filteredDistinctStocks.length === 0 ? (
+                      <tr>
+                        <td colSpan={4} className="p-8 text-center text-slate-400 font-medium">
+                          No distinct stocks match your search or filter.
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredDistinctStocks.map((stock) => {
+                        const isProfitable = stock.totalPnl > 0
+                        const isSelected = selectedTradeForChart?.symbol === stock.symbol
+                        const openChartForStock = () => {
+                          const targetTrade = (stock.activePosition as any) || stock.trades[0]
+                          if (targetTrade) {
+                            setSelectedTradeForChart({
+                              ...targetTrade,
+                              symbol: stock.symbol,
+                              name: stock.name,
+                              stockTrades: [
+                                ...(stock.activePosition ? [stock.activePosition as any] : []),
+                                ...stock.trades,
+                              ],
+                            })
                           }
+                        }
 
-                          return (
-                            <tr
-                              key={stock.symbol}
-                              onClick={openChartForStock}
-                              className="hover:bg-slate-50/90 cursor-pointer transition group"
-                            >
-                              {/* Symbol & Company */}
-                              <td className="p-3.5">
-                                <div className="flex items-center gap-2.5">
-                                  <div
-                                    className={`size-8 rounded-xl flex items-center justify-center font-bold text-white text-[11px] ${
-                                      stock.currentStatus === "RUNNER"
-                                        ? "bg-purple-600"
-                                        : stock.currentStatus === "ACTIVE"
-                                        ? "bg-sky-600"
-                                        : isProfitable
-                                        ? "bg-emerald-600"
-                                        : "bg-slate-700"
-                                    }`}
-                                  >
-                                    {stock.symbol.slice(0, 2)}
-                                  </div>
-                                  <div>
-                                    <div className="font-black text-slate-900 text-sm font-mono flex items-center gap-1.5 group-hover:text-emerald-700 transition">
-                                      <span className="hover:underline">{stock.symbol}</span>
-                                      {stock.isMultiBagger && (
-                                        <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200 flex items-center gap-0.5">
-                                          <Flame className="size-2.5 text-purple-600" />
-                                          100%+
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="text-[11px] text-slate-500 font-medium truncate max-w-[150px]">
-                                      {stock.name}
-                                    </div>
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* Status */}
-                              <td className="p-3.5">
-                                {stock.currentStatus === "RUNNER" ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-300 animate-pulse">
-                                    <Flame className="size-3 text-purple-600" />
-                                    RUNNER (+{(stock.activePosition?.unrealized_pct ?? 0).toFixed(0)}%)
-                                  </span>
-                                ) : stock.currentStatus === "ACTIVE" ? (
-                                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
-                                    <ShieldCheck className="size-3 text-sky-600" />
-                                    PORTFOLIO
-                                  </span>
-                                ) : (
-                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">
-                                    CLOSED ({stock.trades.length}x)
-                                  </span>
-                                )}
-                              </td>
-
-                              {/* Total Trades */}
-                              <td className="p-3.5 text-center">
-                                <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-slate-100 font-mono text-xs font-bold text-slate-800">
-                                  <span>{stock.totalTrades} Trade{stock.totalTrades > 1 ? "s" : ""}</span>
-                                  <span className="text-[10px] text-slate-400">·</span>
-                                  <span className="text-emerald-700">{stock.wins}W</span>
-                                  <span className="text-rose-700">{stock.losses}L</span>
-                                </div>
-                              </td>
-
-                              {/* Win Rate */}
-                              <td className="p-3.5 text-center">
-                                <div className="flex flex-col items-center gap-1">
-                                  <span className="font-mono font-bold text-xs text-slate-900">
-                                    {stock.winRate.toFixed(1)}%
-                                  </span>
-                                  <div className="w-16 bg-slate-200 h-1.5 rounded-full overflow-hidden">
-                                    <div
-                                      className={`h-full rounded-full ${
-                                        stock.winRate >= 50 ? "bg-emerald-500" : "bg-rose-500"
-                                      }`}
-                                      style={{ width: `${Math.min(100, Math.max(5, stock.winRate))}%` }}
-                                    />
-                                  </div>
-                                </div>
-                              </td>
-
-                              {/* Best Win */}
-                              <td className="p-3.5 text-right font-mono font-bold">
-                                <span className={stock.bestPnlPct >= 100 ? "text-purple-700 font-black" : stock.bestPnlPct > 0 ? "text-emerald-600" : "text-slate-600"}>
-                                  {stock.bestPnlPct > 0 ? "+" : ""}{stock.bestPnlPct.toFixed(1)}%
-                                </span>
-                              </td>
-
-                              {/* Realized P&L */}
-                              <td className="p-3.5 text-right font-mono font-medium">
-                                <span className={stock.realizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}>
-                                  {stock.realizedPnl >= 0 ? "+" : ""}₹{stock.realizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                </span>
-                              </td>
-
-                              {/* Open Unrealized */}
-                              <td className="p-3.5 text-right font-mono">
-                                {hasActive ? (
-                                  <span className={stock.unrealizedPnl >= 0 ? "text-emerald-600 font-bold" : "text-rose-600 font-bold"}>
-                                    {stock.unrealizedPnl >= 0 ? "+" : ""}₹{stock.unrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                    <span className="block text-[10px] text-slate-400 font-normal">
-                                      ({stock.unrealizedPnl >= 0 ? "+" : ""}{(stock.activePosition?.unrealized_pct ?? 0).toFixed(1)}%)
-                                    </span>
-                                  </span>
-                                ) : (
-                                  <span className="text-slate-400 text-xs">—</span>
-                                )}
-                              </td>
-
-                              {/* Total Net P&L */}
-                              <td className="p-3.5 text-right font-mono font-black">
-                                <span className={`text-sm ${isProfitable ? "text-emerald-700" : "text-rose-700"}`}>
-                                  {isProfitable ? "+" : ""}₹{stock.totalPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-                                </span>
-                              </td>
-
-                              {/* Direct Candlestick Chart Action */}
-                              <td className="p-3.5 text-center">
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    openChartForStock()
-                                  }}
-                                  className="h-7 px-2.5 text-xs font-bold rounded-lg gap-1.5 text-emerald-700 border-emerald-200 hover:bg-emerald-50 hover:border-emerald-300 transition shadow-2xs"
+                        return (
+                          <tr
+                            key={stock.symbol}
+                            onClick={openChartForStock}
+                            className={`cursor-pointer transition group select-none border-l-4 ${
+                              isSelected
+                                ? "bg-emerald-50/80 border-l-emerald-600 shadow-2xs font-semibold"
+                                : "hover:bg-slate-50 border-l-transparent"
+                            }`}
+                          >
+                            {/* Symbol & Name */}
+                            <td className="py-2 px-2.5">
+                              <div className="flex items-center gap-2">
+                                <div
+                                  className={`size-7 rounded-lg flex items-center justify-center font-bold text-white text-[10px] shrink-0 ${
+                                    stock.currentStatus === "RUNNER"
+                                      ? "bg-purple-600"
+                                      : stock.currentStatus === "ACTIVE"
+                                      ? "bg-sky-600"
+                                      : isProfitable
+                                      ? "bg-emerald-600"
+                                      : "bg-slate-700"
+                                  }`}
                                 >
-                                  <LineChart className="size-3.5" />
-                                  Chart ({stock.totalTrades})
-                                </Button>
-                              </td>
-                            </tr>
-                          )
-                        })
-                      )}
-                    </tbody>
-                  </table>
-                </div>
+                                  {stock.symbol.slice(0, 2)}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-slate-900 text-xs font-mono flex items-center gap-1 group-hover:text-emerald-700 transition">
+                                    <span>{stock.symbol}</span>
+                                    {stock.isMultiBagger && (
+                                      <span className="px-1 py-0.1 rounded text-[8px] font-black bg-purple-100 text-purple-700 border border-purple-200">
+                                        100%+
+                                      </span>
+                                    )}
+                                    {stock.currentStatus === "RUNNER" && (
+                                      <span className="px-1 py-0.1 rounded text-[8px] font-black bg-purple-100 text-purple-700">
+                                        RUNNER
+                                      </span>
+                                    )}
+                                    {stock.currentStatus === "ACTIVE" && (
+                                      <span className="px-1 py-0.1 rounded text-[8px] font-bold bg-sky-100 text-sky-700">
+                                        ACTIVE
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div className="text-[10px] text-slate-400 truncate max-w-[130px]">
+                                    {stock.name}
+                                  </div>
+                                </div>
+                              </div>
+                            </td>
+
+                            {/* Total Trades */}
+                            <td className="py-2 px-2 text-center font-mono text-[11px]">
+                              <span className="font-bold text-slate-800">{stock.totalTrades}</span>
+                              <span className="text-[9px] text-slate-400 block font-sans">
+                                {stock.wins}W / {stock.losses}L
+                              </span>
+                            </td>
+
+                            {/* Win Rate */}
+                            <td className="py-2 px-2 text-center">
+                              <span className="font-mono font-bold text-xs text-slate-900">
+                                {stock.winRate.toFixed(0)}%
+                              </span>
+                              <div className="w-12 bg-slate-200 h-1 rounded-full overflow-hidden mx-auto mt-0.5">
+                                <div
+                                  className={`h-full rounded-full ${
+                                    stock.winRate >= 50 ? "bg-emerald-500" : "bg-rose-500"
+                                  }`}
+                                  style={{ width: `${Math.min(100, Math.max(5, stock.winRate))}%` }}
+                                />
+                              </div>
+                            </td>
+
+                            {/* Net P&L */}
+                            <td className="py-2 px-2.5 text-right font-mono">
+                              <span className={`text-xs font-bold ${isProfitable ? "text-emerald-700" : "text-rose-600"}`}>
+                                {isProfitable ? "+" : ""}₹{stock.totalPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                              </span>
+                              <span className="block text-[10px] text-slate-400 font-sans">
+                                {stock.bestPnlPct > 0 ? `+${stock.bestPnlPct.toFixed(0)}% best` : ""}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
               </div>
             </div>
+
+            {/* RIGHT COLUMN: EMBEDDED TECHNICAL CHART */}
+            <div className="lg:col-span-7 xl:col-span-7 h-full min-h-0 overflow-hidden flex flex-col rounded-xl border border-slate-200/80 shadow-2xs bg-white">
+              {selectedTradeForChart ? (
+                <div className="w-full h-full min-h-0 flex-1 overflow-hidden">
+                  <SwingerTradeChartModal
+                    trade={selectedTradeForChart}
+                    allTrades={chartableList}
+                    onSelectTrade={(t) => setSelectedTradeForChart(t)}
+                    embedded={true}
+                  />
+                </div>
+              ) : (
+                <div className="w-full h-full min-h-0 flex-1 flex items-center justify-center text-slate-400">
+                  <div className="flex flex-col items-center gap-2">
+                    <LineChart className="size-8 opacity-40 text-emerald-500" />
+                    <span className="text-xs">Select any stock on the left to inspect technical candlestick chart</span>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         )}
 
       {/* ================= TAB 2: ACTIVE POSITIONS ================= */}
       {activeTab === "holdings" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
-          <div className="flex justify-between items-center bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
-            <div>
-              <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 overflow-hidden">
+          {/* LEFT COLUMN: ACTIVE POSITIONS LIST */}
+          <div className="lg:col-span-5 xl:col-span-5 flex flex-col gap-2 min-h-0 h-full overflow-hidden">
+            <div className="flex justify-between items-center bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
+              <div className="flex items-center gap-1.5">
                 <ShieldCheck className="size-4 text-emerald-600" />
-                Active Portfolio Positions ({positions.length} Stocks)
-              </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                Automated Capital Protection: Stop Loss · Break-Even Shield · Trailing Profit Lock
-              </p>
-            </div>
-            <div className="flex items-center gap-3">
-              <a
-                href="/holdings"
-                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors shadow-2xs"
-                title="Open detailed holdings manager"
-              >
-                <Wallet className="size-3.5" />
-                <span>Open in Holdings Page</span>
-              </a>
+                <span className="text-xs font-bold text-slate-900">
+                  Active Holdings ({positions.length})
+                </span>
+              </div>
               <div className="text-right">
-                <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Total Open P&L</span>
-                <span className={`text-base font-black font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                <span className="text-[10px] text-slate-400 font-bold uppercase mr-1">Open:</span>
+                <span className={`text-xs font-black font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
                   {totalUnrealizedPnl >= 0 ? "+" : ""}₹{totalUnrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
                 </span>
               </div>
             </div>
-          </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="p-3">Stock / Strategy</th>
-                  <th className="p-3 text-right font-mono">CMP & Avg Cost</th>
-                  <th className="p-3 text-right font-mono">Invested / Value</th>
-                  <th className="p-3 text-right font-mono">Open P&L</th>
-                  <th className="p-3">Protection Status</th>
-                  <th className="p-3 text-center">Chart</th>
-                </tr>
-              </thead>
+            <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="py-2 px-2.5">Stock / Leg</th>
+                    <th className="py-2 px-2 text-right font-mono">CMP & Avg</th>
+                    <th className="py-2 px-2.5 text-right font-mono">Open P&L</th>
+                    <th className="py-2 px-2.5 text-right font-mono">SL / Status</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-slate-100">
                   {positions.length === 0 ? (
                     <tr>
-                      <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
+                      <td colSpan={4} className="p-8 text-center text-slate-400 font-medium">
                         No active positions currently. Scanner runs daily at 15:25 IST.
                       </td>
                     </tr>
@@ -1350,94 +1329,61 @@ export function SwingerPage() {
                       const isPositive = (p.unrealized_pnl || 0) >= 0
                       const isLeg2 = p.leg === 2 || String((p as any).strategy_leg || "").toUpperCase().includes("LEG2")
                       const slDisplay = p.sl_price ?? (isLeg2 ? avgCost * 0.92 : avgCost * 0.85)
-                      const beTarget = p.be_trigger_price ?? avgCost * 1.15
-                      const curVal = (p.cmp || avgCost) * (p.current_qty || p.shares || 0)
-                      const investedVal = avgCost * (p.current_qty || p.shares || 0)
+                      const isSelected = selectedTradeForChart?.symbol === p.symbol
 
                       return (
                         <tr
                           key={p.symbol}
                           onClick={() => setSelectedTradeForChart(p as any)}
-                          className="hover:bg-slate-50/90 cursor-pointer transition group"
+                          className={`cursor-pointer transition group select-none border-l-4 ${
+                            isSelected
+                              ? "bg-emerald-50/80 border-l-emerald-600 shadow-2xs font-semibold"
+                              : "hover:bg-slate-50 border-l-transparent"
+                          }`}
                         >
-                          <td className="p-3.5">
-                            <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono">
-                              <span className="hover:underline">{p.symbol}</span>
-                              <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
-                              <a
-                                href={`https://in.tradingview.com/chart/?symbol=NSE%3A${encodeURIComponent(p.symbol)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
-                                title={`Open ${p.symbol} on TradingView`}
-                              >
-                                <ExternalLink className="size-3" />
-                              </a>
+                          <td className="py-2 px-2.5">
+                            <div className="font-bold text-slate-900 text-xs font-mono group-hover:text-emerald-700 transition flex items-center gap-1">
+                              <span>{p.symbol}</span>
+                              <span className="text-[9px] font-bold px-1 py-0.1 rounded bg-slate-100 text-slate-600">
+                                {isLeg2 ? "L2" : "L1"}
+                              </span>
                             </div>
-                            <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
+                            <div className="text-[10px] text-slate-400 truncate max-w-[120px]">
                               {p.name || p.symbol}
                             </div>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              {isLeg2 ? (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-300">
-                                  LEG 2 BASE
-                                </span>
-                              ) : (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-blue-100 text-blue-700 border border-blue-300">
-                                  LEG 1 TURNAROUND
-                                </span>
-                              )}
-                              <span className="text-[10px] text-slate-400 font-mono">· {p.days_held}d held</span>
+                          </td>
+
+                          <td className="py-2 px-2 text-right font-mono">
+                            <div className="font-bold text-xs text-slate-900">₹{(p.cmp || avgCost).toFixed(2)}</div>
+                            <div className="text-[10px] text-slate-400">avg ₹{avgCost.toFixed(1)}</div>
+                          </td>
+
+                          <td className="py-2 px-2.5 text-right font-mono">
+                            <div className={`font-bold text-xs ${isPositive ? "text-emerald-600" : "text-rose-600"}`}>
+                              {isPositive ? "+" : ""}₹{(p.unrealized_pnl || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                            </div>
+                            <div className={`text-[10px] font-bold ${isPositive ? "text-emerald-700" : "text-rose-600"}`}>
+                              {isPositive ? "+" : ""}{(p.unrealized_pnl_pct ?? 0).toFixed(1)}%
                             </div>
                           </td>
-                          <td className="p-3.5 text-right font-mono">
-                            <div className="font-bold text-emerald-700 text-sm">₹{(p.cmp || avgCost).toFixed(2)}</div>
-                            <div className="text-[11px] text-slate-400 font-medium">Avg ₹{avgCost.toFixed(2)} · {p.current_qty} qty</div>
-                          </td>
-                          <td className="p-3.5 text-right font-mono">
-                            <div className="font-bold text-slate-900">₹{curVal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div>
-                            <div className="text-[11px] text-slate-400">Inv ₹{investedVal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div>
-                          </td>
-                          <td className="p-3.5 text-right font-mono font-black">
-                            <span className={isPositive ? "text-emerald-600" : "text-rose-600"}>
-                              {isPositive ? "+" : ""}₹{(p.unrealized_pnl ?? 0).toFixed(0)}
-                              <span className="block text-[10px] font-semibold">
-                                ({isPositive ? "+" : ""}{(p.unrealized_pnl_pct ?? p.unrealized_pct ?? 0).toFixed(1)}%)
+
+                          <td className="py-2 px-2.5 text-right font-mono">
+                            {p.runner_mode ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                                RUNNER
                               </span>
-                            </span>
-                          </td>
-                          <td className="p-3.5 font-mono">
-                            <div className="font-bold">
-                              <span className={p.runner_mode ? "text-purple-700" : p.be_active ? "text-sky-700" : "text-rose-600"}>
-                                ₹{slDisplay.toFixed(2)}
+                            ) : p.be_active ? (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
+                                SHIELDED
                               </span>
-                            </div>
-                            <div>
-                              {p.runner_mode ? (
-                                <span className="text-[10px] text-purple-700 font-semibold">Runner Trail</span>
-                              ) : p.be_active ? (
-                                <span className="text-[10px] text-sky-700 font-semibold">Cost Shield (+0.5%)</span>
-                              ) : (
-                                <span className="text-[10px] text-slate-400">
-                                  {isLeg2 ? "Base SL (-8%)" : "Target ₹" + beTarget.toFixed(2)}
+                            ) : (
+                              <div>
+                                <span className="font-bold text-xs text-slate-800">₹{slDisplay.toFixed(1)}</span>
+                                <span className="text-[9px] text-slate-400 block font-sans">
+                                  {isLeg2 ? "SL -8%" : "SL -15%"}
                                 </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="p-3.5 text-center">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                setSelectedTradeForChart(p as any)
-                              }}
-                              className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1"
-                            >
-                              <LineChart className="size-3.5" />
-                              Chart
-                            </Button>
+                              </div>
+                            )}
                           </td>
                         </tr>
                       )
@@ -1446,6 +1392,28 @@ export function SwingerPage() {
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* RIGHT COLUMN: EMBEDDED TECHNICAL CHART */}
+          <div className="lg:col-span-7 xl:col-span-7 h-full min-h-0 overflow-hidden flex flex-col rounded-xl border border-slate-200/80 shadow-2xs bg-white">
+            {selectedTradeForChart ? (
+              <div className="w-full h-full min-h-0 flex-1 overflow-hidden">
+                <SwingerTradeChartModal
+                  trade={selectedTradeForChart}
+                  allTrades={positions as any}
+                  onSelectTrade={(t) => setSelectedTradeForChart(t)}
+                  embedded={true}
+                />
+              </div>
+            ) : (
+              <div className="w-full h-full min-h-0 flex-1 flex items-center justify-center text-slate-400">
+                <div className="flex flex-col items-center gap-2">
+                  <ShieldCheck className="size-8 opacity-40 text-emerald-500" />
+                  <span className="text-xs">Click any active position on the left to inspect trade chart</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -1615,7 +1583,7 @@ export function SwingerPage() {
                           return (
                             <tr
                               key={i}
-                              onClick={() => setSelectedTradeForChart(t as any)}
+                              onClick={() => setPopupModalTrade(t as any)}
                               className="hover:bg-slate-50 cursor-pointer transition group"
                             >
                               <td className="p-3 font-bold text-slate-900 group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono">
@@ -1658,7 +1626,7 @@ export function SwingerPage() {
                                   variant="ghost"
                                   onClick={(e) => {
                                     e.stopPropagation()
-                                    setSelectedTradeForChart(t as any)
+                                    setPopupModalTrade(t as any)
                                   }}
                                   className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1"
                                 >
@@ -2013,7 +1981,7 @@ export function SwingerPage() {
                       return (
                         <tr
                           key={t.trade_id || `${t.symbol}-${idx}`}
-                          onClick={() => setSelectedTradeForChart(t as any)}
+                          onClick={() => setPopupModalTrade(t as any)}
                           className="hover:bg-slate-50 cursor-pointer transition group"
                         >
                           <td className="p-3">
@@ -2081,7 +2049,7 @@ export function SwingerPage() {
                               variant="ghost"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                setSelectedTradeForChart(t as any)
+                                setPopupModalTrade(t as any)
                               }}
                               className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1"
                             >
@@ -2116,183 +2084,147 @@ export function SwingerPage() {
 
       {/* ================= TAB 4: RADAR WATCHLIST ================= */}
       {activeTab === "radar" && (
-        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
-            <div>
-              <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+        <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 overflow-hidden">
+          {/* LEFT COLUMN: RADAR CANDIDATES LIST */}
+          <div className="lg:col-span-5 xl:col-span-5 flex flex-col gap-2 min-h-0 h-full overflow-hidden">
+            {/* Header / Summary Bar */}
+            <div className="flex items-center justify-between gap-2 bg-white px-2.5 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
+              <div className="flex items-center gap-1.5">
                 <Flame className="size-4 text-amber-500" />
-                Turnaround Pullback Radar ({activeRadarList.length} Candidates Tracked)
-              </h2>
-              <p className="text-[11px] text-slate-500 font-medium">
-                High-probability 2-stage swing re-entry: Alerted on massive volume surge (RSI &gt; 68), cooling down to 20 EMA
-              </p>
+                <span className="text-xs font-black text-slate-900">Pullback Radar</span>
+                <span className="text-[10px] text-slate-400 font-mono">({activeRadarList.length})</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-[10px] font-mono font-bold">
+                <span className="px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
+                  {activeRadarList.filter((w) => w.cooldown_ready).length} Ready
+                </span>
+                <span className="px-1.5 py-0.5 rounded bg-sky-50 text-sky-700 border border-sky-200">
+                  {activeRadarList.filter((w) => w.status === "ENTERED").length} Active
+                </span>
+              </div>
             </div>
-            <div className="flex items-center gap-2 text-xs font-mono font-bold">
-              <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
-                {activeRadarList.filter(w => w.cooldown_ready).length} Ready
-              </span>
-              <span className="px-2 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200">
-                {activeRadarList.filter(w => w.status === "ENTERED").length} Entered
-              </span>
-            </div>
-          </div>
 
-          <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
-            <table className="w-full text-left text-xs border-collapse">
-              <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
-                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                  <th className="p-3">Symbol</th>
-                  <th className="p-3 font-mono">Alert Price (₹)</th>
-                  <th className="p-3 font-mono">Alert RSI</th>
-                  <th className="p-3 font-mono">Current CMP (₹)</th>
-                  <th className="p-3 font-mono">Current RSI</th>
-                  <th className="p-3 font-mono">20 EMA (₹)</th>
-                  <th className="p-3">Cooldown Status</th>
-                  <th className="p-3">Turnaround Context</th>
-                  <th className="p-3 text-center">Chart</th>
-                </tr>
-              </thead>
+            {/* Scrollable Radar Table */}
+            <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+              <table className="w-full text-left text-xs border-collapse">
+                <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                    <th className="py-2 px-2.5">Stock</th>
+                    <th className="py-2 px-2 text-right font-mono">CMP & Alert</th>
+                    <th className="py-2 px-2 text-center font-mono">RSI</th>
+                    <th className="py-2 px-2.5 text-right font-mono">Status</th>
+                  </tr>
+                </thead>
                 <tbody className="divide-y divide-slate-100">
                   {activeRadarList.length === 0 ? (
                     <tr>
-                      <td colSpan={9} className="p-12 text-center">
-                        <div className="flex flex-col items-center justify-center gap-2 max-w-md mx-auto">
-                          <div className="size-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                            <Flame className="size-6" />
-                          </div>
-                          <div className="text-sm font-black text-slate-800">
-                            No Stocks Currently on Pullback Cooldown
-                          </div>
-                          <p className="text-xs text-slate-500 font-medium leading-relaxed">
-                            All previous pullback candidates have triggered and moved into <strong>Active Positions</strong> (Manyavar, Cohance, Shoppers Stop) or <strong>Closed Trades</strong> (UFBL, Tejas, Relaxo). Fresh candidates are queued here automatically upon volume blast alerts.
-                          </p>
-                        </div>
+                      <td colSpan={4} className="p-8 text-center text-slate-400 font-medium">
+                        No stocks currently on pullback cooldown.
                       </td>
                     </tr>
                   ) : (
-                    activeRadarList.map((item) => (
-                      <tr
-                        key={item.symbol}
-                        onClick={() =>
-                          setSelectedTradeForChart({
-                            symbol: item.symbol,
-                            name: item.name || item.symbol,
-                            alert_date: item.alert_date,
-                            alert_price: item.alert_price,
-                            cmp: item.current_price,
-                            status: "RADAR",
-                            reason: item.notes,
-                            pnl: 0,
-                            pct_return: item.pullback_pct || 0,
-                            holding_days: 0
-                          })
-                        }
-                        className="hover:bg-slate-50/90 cursor-pointer transition group"
-                      >
-                        <td className="p-3.5">
-                          <div className="font-black text-slate-900 text-sm group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono">
-                            <span className="hover:underline">{item.symbol}</span>
-                            <LineChart className="size-3 text-slate-400 group-hover:text-emerald-600 transition shrink-0" />
-                          </div>
-                          <div className="text-[11px] text-slate-500 font-medium">{item.name}</div>
-                        </td>
-                        <td className="p-3.5 font-mono">
-                          <span className="font-bold text-slate-800">₹{item.alert_price?.toFixed(2)}</span>
-                          <span className="block text-[10px] text-slate-400">{item.alert_date}</span>
-                        </td>
-                        <td className="p-3.5 font-mono">
-                          <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-rose-50 text-rose-700 border border-rose-200">
-                            {item.alert_rsi?.toFixed(1)}
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-mono font-bold text-slate-900">
-                          ₹{item.current_price?.toFixed(2)}
-                          {item.pullback_pct !== undefined && (
-                            <span className={`block text-[10px] ${item.pullback_pct >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                              {item.pullback_pct >= 0 ? "+" : ""}{item.pullback_pct?.toFixed(1)}% vs Alert
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3.5 font-mono">
-                          <span
-                            className={`px-2 py-0.5 rounded text-xs font-black ${
-                              item.current_rsi >= 52 && item.current_rsi <= 65
-                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
-                                : item.current_rsi > 65
-                                ? "bg-amber-100 text-amber-800 border border-amber-300"
-                                : "bg-sky-100 text-sky-800 border border-sky-300"
-                            }`}
-                          >
-                            {item.current_rsi?.toFixed(1)}
-                          </span>
-                        </td>
-                        <td className="p-3.5 font-mono">
-                          <span className="font-bold text-slate-800">₹{item.ema20?.toFixed(2)}</span>
-                          <span className="block text-[10px] text-slate-400">
-                            {item.distance_to_ema20_pct !== undefined
-                              ? `${item.distance_to_ema20_pct > 0 ? "+" : ""}${item.distance_to_ema20_pct?.toFixed(1)}%`
-                              : "—"}
-                          </span>
-                        </td>
-                        <td className="p-3.5">
-                          {item.status === "ENTERED" ? (
-                            <div>
-                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
-                                <CheckCircle2 className="size-3 text-sky-600" />
-                                Entry Executed
+                    activeRadarList.map((item) => {
+                      const isSelected = selectedTradeForChart?.symbol === item.symbol
+                      return (
+                        <tr
+                          key={item.symbol}
+                          onClick={() =>
+                            setSelectedTradeForChart({
+                              symbol: item.symbol,
+                              name: item.name || item.symbol,
+                              alert_date: item.alert_date,
+                              alert_price: item.alert_price,
+                              cmp: item.current_price,
+                              status: "RADAR",
+                              reason: item.notes,
+                              pnl: 0,
+                              pct_return: item.pullback_pct || 0,
+                              holding_days: 0,
+                            })
+                          }
+                          className={`cursor-pointer transition group select-none border-l-4 ${
+                            isSelected
+                              ? "bg-amber-50/70 border-l-amber-500 font-semibold"
+                              : "hover:bg-slate-50/80 border-l-transparent"
+                          }`}
+                        >
+                          <td className="py-2 px-2.5">
+                            <div className="flex flex-col">
+                              <span
+                                className={`font-mono font-bold text-xs ${
+                                  isSelected ? "text-amber-800 font-extrabold" : "text-slate-900 group-hover:text-amber-700"
+                                }`}
+                              >
+                                {item.symbol}
                               </span>
-                              {item.entry_date && (
-                                <span className="block text-[10px] text-slate-400 mt-0.5 font-mono">
-                                  {item.entry_date} @ ₹{item.entry_price?.toFixed(1)}
-                                </span>
-                              )}
+                              <span className="text-[10px] text-slate-400 truncate max-w-[120px]">
+                                {item.name || item.symbol}
+                              </span>
                             </div>
-                          ) : item.cooldown_ready ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
-                              <CheckCircle2 className="size-3 text-emerald-600" />
-                              Stage-2 Ready (Buy)
+                          </td>
+                          <td className="py-2 px-2 text-right font-mono">
+                            <div className="font-bold text-xs text-slate-900">₹{item.current_price?.toFixed(1)}</div>
+                            <div className="text-[10px] text-slate-400">
+                              Alert ₹{item.alert_price?.toFixed(0)} ({item.pullback_pct != null ? `${item.pullback_pct >= 0 ? "+" : ""}${item.pullback_pct.toFixed(0)}%` : ""})
+                            </div>
+                          </td>
+                          <td className="py-2 px-2 text-center font-mono">
+                            <span
+                              className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                (item.current_rsi || 0) >= 50 && (item.current_rsi || 0) <= 65
+                                  ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                  : (item.current_rsi || 0) > 65
+                                  ? "bg-amber-50 text-amber-700 border border-amber-200"
+                                  : "bg-sky-50 text-sky-700 border border-sky-200"
+                              }`}
+                            >
+                              {item.current_rsi?.toFixed(0)}
                             </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
-                              <Clock className="size-3 text-amber-500" />
-                              Cooling Down (Wait)
-                            </span>
-                          )}
-                        </td>
-                        <td className="p-3.5 text-xs text-slate-600 max-w-xs leading-relaxed truncate">
-                          {item.notes}
-                        </td>
-                        <td className="p-3.5 text-center">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setSelectedTradeForChart({
-                                symbol: item.symbol,
-                                name: item.name || item.symbol,
-                                alert_date: item.alert_date,
-                                alert_price: item.alert_price,
-                                cmp: item.current_price,
-                                status: "RADAR",
-                                reason: item.notes,
-                                pnl: 0,
-                                pct_return: item.pullback_pct || 0,
-                                holding_days: 0
-                              })
-                            }}
-                            className="h-7 px-2.5 text-xs font-bold text-emerald-700 hover:bg-emerald-50 rounded-lg gap-1"
-                          >
-                            <LineChart className="size-3.5" />
-                            Chart
-                          </Button>
-                        </td>
-                      </tr>
-                    ))
+                          </td>
+                          <td className="py-2 px-2.5 text-right font-mono">
+                            {item.status === "ENTERED" ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+                                ACTIVE
+                              </span>
+                            ) : item.cooldown_ready ? (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                                READY BUY
+                              </span>
+                            ) : (
+                              <span className="inline-block px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                COOLDOWN
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      )
+                    })
                   )}
                 </tbody>
               </table>
             </div>
+          </div>
+
+          {/* RIGHT COLUMN: EMBEDDED TECHNICAL CHART */}
+          <div className="lg:col-span-7 xl:col-span-7 h-full min-h-0 overflow-hidden flex flex-col rounded-xl border border-slate-200/80 shadow-2xs bg-white">
+            {selectedTradeForChart ? (
+              <div className="w-full h-full min-h-0 flex-1 overflow-hidden">
+                <SwingerTradeChartModal
+                  trade={selectedTradeForChart}
+                  allTrades={chartableList}
+                  onSelectTrade={(t) => setSelectedTradeForChart(t)}
+                  embedded={true}
+                />
+              </div>
+            ) : (
+              <div className="w-full h-full min-h-0 flex-1 flex items-center justify-center text-slate-400">
+                <div className="flex flex-col items-center gap-2">
+                  <Flame className="size-8 opacity-40 text-amber-500" />
+                  <span className="text-xs">Click any radar candidate on the left to inspect technical chart</span>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -2822,13 +2754,13 @@ export function SwingerPage() {
       )}
       </div>
 
-      {/* ================= 4. EMBEDDED INTERACTIVE TRADINGVIEW CHART MODAL ================= */}
-      {selectedTradeForChart && (
+      {/* ================= 4. POPUP TRADINGVIEW CHART MODAL (TAB 3 HISTORICAL TRADES) ================= */}
+      {popupModalTrade && (
         <SwingerTradeChartModal
-          trade={selectedTradeForChart}
+          trade={popupModalTrade}
           allTrades={chartableList}
-          onSelectTrade={(t) => setSelectedTradeForChart(t)}
-          onClose={() => setSelectedTradeForChart(null)}
+          onSelectTrade={(t) => setPopupModalTrade(t)}
+          onClose={() => setPopupModalTrade(null)}
         />
       )}
     </div>

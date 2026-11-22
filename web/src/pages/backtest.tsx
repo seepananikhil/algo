@@ -674,7 +674,7 @@ export function BacktestPage() {
   )
 
   return (
-    <div className="w-full h-full max-h-full flex flex-col min-h-0 overflow-hidden p-2 sm:p-2.5 pb-2.5 gap-2">
+    <div className="w-full flex-1 flex flex-col min-h-0 p-2.5 sm:p-4 pb-16 gap-3">
       {/* 1. TOP COMMAND BAR: STRATEGY + STICKY YEAR & CALENDAR + VIEW TABS */}
       <div className="relative z-40 flex items-center justify-between gap-2 p-1.5 px-2.5 rounded-xl border border-border/60 bg-card/90 shadow-2xs backdrop-blur-md shrink-0 flex-wrap sm:flex-nowrap">
         {/* Left Side: Strategy Switcher */}
@@ -811,10 +811,10 @@ export function BacktestPage() {
           <Skeleton className="flex-1 w-full rounded-xl" />
         </div>
       ) : (
-        <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+        <div className="flex-1 min-h-0 flex flex-col gap-3">
           {/* TAB 1: STATS & PAYOFF CURVE (DEFAULT VIEW) */}
           {analyticsView === "stats" && (
-            <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden animate-in fade-in duration-150">
+            <div className="flex-1 min-h-0 flex flex-col gap-3 animate-in fade-in duration-150">
               {/* Top Row: 6 KPI Stat Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 shrink-0">
                 <StatCard
@@ -864,7 +864,7 @@ export function BacktestPage() {
               </div>
 
               {/* Charts Row: Cumulative Payoff & Drawdown Curve (Left) + Monthly P&L Distribution (Right) Side-by-Side */}
-              <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 overflow-hidden">
+              <div className="min-h-[360px] lg:h-[400px] flex flex-col lg:flex-row gap-2.5">
                 {/* Left: Cumulative Payoff & Drawdown Curve */}
                 <Card className="flex-1 min-h-0 min-w-0 flex flex-col overflow-hidden border border-border/60 shadow-xs bg-card/90">
                   <div className="p-2 sm:px-3 border-b border-border/40 flex items-center justify-between shrink-0 bg-muted/15">
@@ -954,14 +954,19 @@ export function BacktestPage() {
                   </div>
                 </Card>
               </div>
+
+              {/* Session Trades Ledger */}
+              <div className="w-full">
+                {renderTradesListCard()}
+              </div>
             </div>
           )}
 
           {/* TAB 2: CHART & TRADES VIEW (65% CHART / 35% TRADES) */}
           {analyticsView === "terminal" && (
-            <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 items-stretch overflow-hidden animate-in fade-in duration-150">
+            <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 items-stretch animate-in fade-in duration-150">
               {/* LEFT SIDE (65%): CANDLESTICK CHART */}
-              <div className="w-full lg:w-[65%] flex flex-col min-w-0 h-full min-h-0 overflow-hidden">
+              <div className="w-full lg:w-[65%] flex flex-col min-w-0 min-h-[520px] lg:h-[650px]">
                 {picked ? (
                   <DayDetail
                     key={`${picked}-${chartStrategy}-${activeChartSymbol}`}
@@ -986,7 +991,7 @@ export function BacktestPage() {
               </div>
 
               {/* RIGHT SIDE (35%): SCROLLABLE TRADES LIST */}
-              <div className="w-full lg:w-[35%] flex flex-col min-w-0 h-full min-h-0 overflow-hidden">
+              <div className="w-full lg:w-[35%] flex flex-col min-w-0 min-h-[400px] lg:h-[650px]">
                 {renderTradesListCard()}
               </div>
             </div>

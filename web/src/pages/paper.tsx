@@ -748,10 +748,8 @@ export function PaperPage() {
   return (
     <div
       className={cn(
-        "w-full flex flex-col min-h-0",
-        mainTab === "APEX"
-          ? "h-full max-h-full overflow-hidden p-2 sm:p-2.5 pb-2.5 gap-2"
-          : "max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 gap-5 pb-20 overflow-y-auto"
+        "w-full flex-1 flex flex-col min-h-0 p-2 sm:p-3 pb-16 gap-3",
+        mainTab === "SWINGER" && "max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-4 gap-5"
       )}
     >
       {/* 1. TOP COMMAND BAR: STRATEGY ENGINE + FILTERS + VIEW SWITCHER */}
@@ -1525,10 +1523,10 @@ export function PaperPage() {
           <SwingerTradeChartModal trade={selectedSwingerTrade} onClose={() => setSelectedSwingerTrade(null)} />
         </div>
       ) : (
-        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+        <div className="flex-1 min-h-0 flex flex-col gap-3">
           {/* VIEW 1: STATS & PAYOFF VIEW */}
           {analyticsView === "stats" && (
-            <div className="flex-1 min-h-0 flex flex-col gap-2.5 overflow-y-auto animate-in fade-in duration-150">
+            <div className="flex-1 min-h-0 flex flex-col gap-3 animate-in fade-in duration-150">
               {/* 6 Summary Cards */}
               {summary && (
                 <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 sm:gap-2.5 shrink-0">
@@ -1651,7 +1649,7 @@ export function PaperPage() {
 
               {/* Side-by-side charts row */}
               {equityCurve.length > 0 && (
-                <div className="flex-1 min-h-[300px] flex flex-col lg:flex-row gap-2.5 overflow-hidden">
+                <div className="min-h-[360px] lg:h-[400px] flex flex-col lg:flex-row gap-2.5">
                   <Card className="flex-1 min-h-0 min-w-0 border-border/70 shadow-2xs flex flex-col">
                     <CardHeader className="py-2 px-3.5 border-b border-border/40 flex flex-row items-center justify-between">
                       <CardTitle className="text-xs font-bold font-mono uppercase text-foreground">
@@ -1737,14 +1735,19 @@ export function PaperPage() {
                   </Card>
                 </div>
               )}
+
+              {/* Session Trades Ledger */}
+              <div className="w-full">
+                {renderTradesListCard()}
+              </div>
             </div>
           )}
 
           {/* VIEW 2: CHART & TRADES VIEW (65% CHART / 35% TRADES) */}
           {analyticsView === "terminal" && (
-            <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 items-stretch overflow-hidden animate-in fade-in duration-150">
+            <div className="flex-1 min-h-0 flex flex-col lg:flex-row gap-2.5 items-stretch animate-in fade-in duration-150">
               {/* LEFT SIDE (65%): CANDLESTICK CHART */}
-              <div className="w-full lg:w-[65%] flex flex-col min-w-0 h-full min-h-0 overflow-hidden">
+              <div className="w-full lg:w-[65%] flex flex-col min-w-0 min-h-[520px] lg:h-[650px]">
                 {activeDate ? (
                   <DayDetail
                     key={`${activeDate}-${activeInstrument}`}
@@ -1770,7 +1773,7 @@ export function PaperPage() {
               </div>
 
               {/* RIGHT SIDE (35%): SCROLLABLE TRADES LIST */}
-              <div className="w-full lg:w-[35%] flex flex-col min-w-0 h-full min-h-0 overflow-hidden">
+              <div className="w-full lg:w-[35%] flex flex-col min-w-0 min-h-[400px] lg:h-[650px]">
                 {renderTradesListCard()}
               </div>
             </div>

@@ -31,11 +31,7 @@ export function Layout() {
   const location = useLocation()
   const isLive = location.pathname === "/"
   const isTrade = location.pathname === "/trade" || location.pathname === "/manual" || location.pathname === "/mobile"
-  const isBacktest = location.pathname.startsWith("/backtest")
-  const isPaper = location.pathname.startsWith("/paper")
-  const isHoldings = location.pathname.startsWith("/holdings")
-  const isSwinger = location.pathname.startsWith("/swinger")
-  const isFixedViewport = isLive || isTrade || isBacktest || isPaper || isHoldings || isSwinger
+  const isFixedViewport = isLive || isTrade
 
   return (
     <div
@@ -224,7 +220,7 @@ export function Layout() {
         <main
           className={cn(
             "flex-1 flex flex-col min-h-0",
-            (isLive || isBacktest || isPaper || isHoldings || isSwinger) ? "overflow-hidden p-0" : isTrade ? "overflow-y-auto p-0" : "overflow-y-auto p-0"
+            isLive ? "overflow-hidden p-0" : "overflow-y-auto p-0"
           )}
         >
           <Outlet />

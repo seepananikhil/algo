@@ -322,7 +322,7 @@ export function HoldingsPage() {
   const isPaperUnrealizedProfit = paperSummary.total_unrealized_pnl >= 0
 
   return (
-    <div className="h-full max-h-full w-full flex flex-col gap-2.5 p-3 sm:p-4 overflow-hidden select-none">
+    <div className="w-full flex-1 flex flex-col gap-3 p-2.5 sm:p-4 pb-16 select-none">
       {/* 1. CLEAN EXECUTIVE TITLE & CONTROLS BAR */}
       <div className="flex items-center justify-between gap-3 shrink-0 pb-1 border-b border-border/60">
         <div className="flex items-center gap-2.5">
