@@ -31,7 +31,11 @@ export function Layout() {
   const location = useLocation()
   const isLive = location.pathname === "/"
   const isTrade = location.pathname === "/trade" || location.pathname === "/manual" || location.pathname === "/mobile"
-  const isFixedViewport = isLive || isTrade
+  const isSwinger = location.pathname === "/swinger"
+  const isHoldings = location.pathname === "/holdings"
+  const isPaper = location.pathname === "/paper"
+  const isBacktest = location.pathname === "/backtest"
+  const isFixedViewport = isLive || isTrade || isSwinger || isHoldings || isPaper || isBacktest
 
   return (
     <div
@@ -220,7 +224,7 @@ export function Layout() {
         <main
           className={cn(
             "flex-1 flex flex-col min-h-0",
-            isLive ? "overflow-hidden p-0" : "overflow-y-auto p-0"
+            isFixedViewport ? "overflow-hidden p-0" : "overflow-y-auto p-0"
           )}
         >
           <Outlet />

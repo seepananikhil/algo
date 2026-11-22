@@ -322,22 +322,22 @@ export function HoldingsPage() {
   const isPaperUnrealizedProfit = paperSummary.total_unrealized_pnl >= 0
 
   return (
-    <div className="w-full flex-1 flex flex-col gap-3 p-2.5 sm:p-4 pb-16 select-none">
+    <div className="w-full h-full min-h-0 flex-1 flex flex-col gap-2 p-2 overflow-hidden select-none">
       {/* 1. CLEAN EXECUTIVE TITLE & CONTROLS BAR */}
-      <div className="flex items-center justify-between gap-3 shrink-0 pb-1 border-b border-border/60">
-        <div className="flex items-center gap-2.5">
+      <div className="flex items-center justify-between gap-2 shrink-0 pb-1 border-b border-border/60">
+        <div className="flex items-center gap-2">
           <div
             className={cn(
-              "size-9 rounded-xl flex items-center justify-center font-bold shadow-2xs transition-colors shrink-0",
+              "size-7 rounded-lg flex items-center justify-center font-bold shadow-2xs transition-colors shrink-0",
               portfolioMode === "paper"
                 ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
                 : "bg-primary/10 text-primary border border-primary/20"
             )}
           >
-            {portfolioMode === "paper" ? <FileText className="size-4.5" /> : <Briefcase className="size-4.5" />}
+            {portfolioMode === "paper" ? <FileText className="size-3.5" /> : <Briefcase className="size-3.5" />}
           </div>
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold tracking-tight text-foreground">Holdings</h1>
+            <h1 className="text-base font-bold tracking-tight text-foreground">Holdings</h1>
             <Badge
               variant="outline"
               className={cn(

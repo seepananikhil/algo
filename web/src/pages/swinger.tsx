@@ -771,42 +771,113 @@ export function SwingerPage() {
   }, [trades])
 
   return (
-    <div className="w-full flex-1 flex flex-col gap-3 p-2.5 sm:p-4 pb-16 select-none">
-      {/* ================= 1. SWINGER 2.0 HERO & ACTION BAR ================= */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="size-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-2xs shrink-0">
-            <TrendingUp className="size-4" />
+    <div className="w-full h-full min-h-0 flex-1 flex flex-col gap-2 p-2 overflow-hidden select-none">
+      {/* ================= 1. COMPACT EXECUTIVE TOP BAR (BRAND + TABS + ACTIONS) ================= */}
+      <div className="flex items-center justify-between gap-2 bg-white px-3 py-1.5 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
+        {/* Left: Brand + Navigation Tabs */}
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 shrink-0 pr-2 border-r border-slate-200">
+            <div className="size-6 rounded-md bg-emerald-600 flex items-center justify-center text-white shadow-2xs">
+              <TrendingUp className="size-3.5" />
+            </div>
+            <span className="font-black text-xs text-slate-900 tracking-tight hidden sm:inline">Swinger 2.0</span>
           </div>
-          <h1 className="text-base font-bold tracking-tight text-slate-900">Phoenix Swinger 2.0</h1>
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Live Engine
-          </span>
-          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 font-mono">
-            ₹25k Slot (20 Max)
-          </span>
-          <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
-            SL -15% · BE Shield @ +15%
-          </span>
-          <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
-            25% Runner Trail · 50 EMA Vol
-          </span>
+
+          {/* Clean Segmented Tabs */}
+          <div className="flex items-center gap-1 p-0.5 bg-slate-100/90 rounded-lg text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setActiveTab("all")}
+              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 text-xs cursor-pointer ${
+                activeTab === "all"
+                  ? "bg-white text-emerald-700 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Layers className="size-3.5" />
+              <span>Stocks</span>
+              <span className={`px-1 py-0.1 rounded text-[10px] font-mono ${activeTab === "all" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                {distinctStocks.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("holdings")}
+              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 text-xs cursor-pointer ${
+                activeTab === "holdings"
+                  ? "bg-white text-emerald-700 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <ShieldCheck className="size-3.5" />
+              <span>Portfolio</span>
+              <span className={`px-1 py-0.1 rounded text-[10px] font-mono ${activeTab === "holdings" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                {positions.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("radar")}
+              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 text-xs cursor-pointer ${
+                activeTab === "radar"
+                  ? "bg-white text-emerald-700 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Flame className="size-3.5" />
+              <span>Radar</span>
+              <span className={`px-1 py-0.1 rounded text-[10px] font-mono ${activeTab === "radar" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                {activeRadarList.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("calendar")}
+              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 text-xs cursor-pointer ${
+                activeTab === "calendar"
+                  ? "bg-white text-emerald-700 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <CalendarIcon className="size-3.5" />
+              <span>History</span>
+              <span className={`px-1 py-0.1 rounded text-[10px] font-mono ${activeTab === "calendar" ? "bg-emerald-100 text-emerald-800" : "bg-slate-200 text-slate-600"}`}>
+                {trades.length}
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab("payoff")}
+              className={`px-2.5 py-1 rounded-md transition-all flex items-center gap-1 text-xs cursor-pointer ${
+                activeTab === "payoff"
+                  ? "bg-white text-emerald-700 shadow-2xs font-bold"
+                  : "text-slate-600 hover:text-slate-900"
+              }`}
+            >
+              <Activity className="size-3.5" />
+              <span>Payoff</span>
+            </button>
+          </div>
         </div>
 
-        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end shrink-0">
+        {/* Right: Quick Backtest & Actions */}
+        <div className="flex items-center gap-1.5 shrink-0">
           {/* Quick Stock Backtester Input Bar */}
-          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 gap-1.5 focus-within:ring-1 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition shadow-2xs h-7.5">
+          <div className="hidden md:flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 gap-1 focus-within:ring-1 focus-within:ring-emerald-500 transition shadow-2xs h-7">
             <Zap className="size-3 text-amber-500 shrink-0" />
             <input
               type="text"
-              placeholder="Test stock (e.g. PARAS)..."
+              placeholder="Sim stock (e.g. PARAS)..."
               value={backtestSymbol}
               onChange={(e) => setBacktestSymbol(e.target.value.toUpperCase())}
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleRunBacktest(backtestSymbol)
               }}
-              className="bg-transparent text-xs font-mono font-bold outline-none text-slate-800 placeholder:text-slate-400 placeholder:font-sans w-28 sm:w-36"
+              className="bg-transparent text-[11px] font-mono font-bold outline-none text-slate-800 placeholder:text-slate-400 placeholder:font-sans w-24 sm:w-32"
             />
             <Button
               size="sm"
@@ -814,17 +885,17 @@ export function SwingerPage() {
               disabled={backtestLoading || !backtestSymbol.trim()}
               className="h-5 px-1.5 text-[9px] font-bold rounded bg-amber-500 hover:bg-amber-600 text-white shadow-2xs cursor-pointer"
             >
-              {backtestLoading ? <RefreshCw className="size-2 animate-spin" /> : "Backtest"}
+              {backtestLoading ? <RefreshCw className="size-2 animate-spin" /> : "Sim"}
             </Button>
           </div>
 
           <a
             href="/holdings"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition-colors shadow-2xs h-7.5"
+            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 transition-colors shadow-2xs h-7"
             title="Open Paper & Demat Holdings Dashboard"
           >
             <Wallet className="size-3 text-emerald-600" />
-            <span>Holdings ({positions.length})</span>
+            <span className="hidden sm:inline">Holdings</span>
           </a>
 
           <Button
@@ -832,7 +903,7 @@ export function SwingerPage() {
             size="sm"
             onClick={fetchData}
             disabled={refreshing}
-            className="rounded-lg text-xs font-bold gap-1 text-slate-600 hover:text-slate-900 border-slate-200 bg-white h-7.5 px-2.5"
+            className="rounded-lg text-xs font-bold gap-1 text-slate-600 hover:text-slate-900 border-slate-200 bg-white h-7 px-2"
           >
             <RefreshCw className={`size-3 ${refreshing ? "animate-spin text-emerald-600" : ""}`} />
             Sync
@@ -842,15 +913,15 @@ export function SwingerPage() {
             size="sm"
             onClick={handleScanNow}
             disabled={scanning}
-            className="rounded-lg text-xs font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs h-7.5 px-3"
+            className="rounded-lg text-xs font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs h-7 px-2.5"
           >
             <Sparkles className="size-3" />
-            {scanning ? "Scanning..." : "Scan Now"}
+            {scanning ? "Scanning..." : "Scan"}
           </Button>
         </div>
       </div>
 
-      {/* ================= 2. ONE-LINE HORIZONTAL STATS STRIP (IDENTICAL STYLE TO /HOLDINGS) ================= */}
+      {/* ================= 2. ONE-LINE HORIZONTAL STATS STRIP ================= */}
       <div className="flex items-center justify-between px-3 py-1.5 bg-white border border-slate-200/80 rounded-xl text-xs gap-3 overflow-x-auto shrink-0 shadow-2xs">
         {/* Item 1: Realized PnL & CAGR */}
         <div className="flex items-center gap-2 font-mono shrink-0">
@@ -925,113 +996,8 @@ export function SwingerPage() {
         </div>
       </div>
 
-      {/* ================= 3. PRIMARY NAVIGATION TABS (COMPACT & BALANCED) ================= */}
-      <div className="flex items-center justify-between bg-white p-1 rounded-xl border border-slate-200/80 shadow-2xs gap-1.5 shrink-0">
-        <div className="flex items-center gap-1 flex-wrap">
-          <button
-            type="button"
-            onClick={() => setActiveTab("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "all"
-                ? "bg-emerald-600 text-white shadow-2xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Layers className="size-3.5" />
-            Stocks
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === "all" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
-              }`}
-            >
-              {distinctStocks.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("holdings")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "holdings"
-                ? "bg-emerald-600 text-white shadow-2xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <ShieldCheck className="size-3.5" />
-            Active Portfolio
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === "holdings" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
-              }`}
-            >
-              {positions.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("calendar")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "calendar"
-                ? "bg-emerald-600 text-white shadow-2xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <CalendarIcon className="size-3.5" />
-            Calendar & History
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === "calendar" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
-              }`}
-            >
-              {trades.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("radar")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "radar"
-                ? "bg-emerald-600 text-white shadow-2xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Flame className="size-3.5" />
-            Radar Watchlist
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === "radar" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
-              }`}
-            >
-              {activeRadarList.length}
-            </span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab("payoff")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
-              activeTab === "payoff"
-                ? "bg-emerald-600 text-white shadow-2xs"
-                : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
-            }`}
-          >
-            <Activity className="size-3.5" />
-            Payoff Curve
-            <span
-              className={`px-1.5 py-0.2 rounded-full text-[10px] font-mono ${
-                activeTab === "payoff" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
-              }`}
-            >
-              2.57x
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* ================= 4. TAB VIEWPORT ================= */}
-      <div className="flex-1 min-h-0 flex flex-col gap-3">
+      {/* ================= 3. TAB VIEWPORT (NO OUTER PAGE SCROLL) ================= */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
         {/* ================= TAB 1: ALL TRIGGERS & MASTER FEED ================= */}
         {activeTab === "all" && (
           <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 gap-2.5 overflow-hidden">

@@ -818,7 +818,7 @@ export function SwingerTradeChartModal({
             ? Math.min(candles.length - 1, xIdx + 30)
             : Math.min(candles.length - 1, eIdx + 60)
 
-          const minBars = 65
+          const minBars = embedded ? 140 : 80
           const barSpan = endIdx - startIdx
           let adjustedStart = startIdx
           let adjustedEnd = endIdx
@@ -838,7 +838,7 @@ export function SwingerTradeChartModal({
           to: toTime as any
         })
       } else {
-        const fromIdx = Math.max(0, candles.length - 252)
+        const fromIdx = Math.max(0, candles.length - (embedded ? 160 : 252))
         chart.timeScale().setVisibleRange({
           from: candles[fromIdx].time as any,
           to: candles[candles.length - 1].time as any
@@ -848,7 +848,21 @@ export function SwingerTradeChartModal({
       chart.timeScale().fitContent()
     }
 
-    // Window Resize Observer
+    // Precise Container & Window Resize Observers
+    let resizeObserver: ResizeObserver | null = null
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver((entries) => {
+        if (!entries || entries.length === 0) return
+        const entry = entries[0]
+        const width = Math.floor(entry.contentRect.width)
+        const height = Math.floor(entry.contentRect.height)
+        if (width > 0 && height > 0) {
+          chart.applyOptions({ width, height })
+        }
+      })
+      resizeObserver.observe(container)
+    }
+
     const handleResize = () => {
       if (containerRef.current) {
         chart.applyOptions({
@@ -862,6 +876,7 @@ export function SwingerTradeChartModal({
     chartRef.current = chart
 
     return () => {
+      if (resizeObserver) resizeObserver.disconnect()
       window.removeEventListener("resize", handleResize)
       chart.remove()
       chartRef.current = null
@@ -1577,7 +1592,7 @@ export function SwingerTradeChartModal({
         )}
 
         {/* ================= 3. CHART CANVAS ================= */}
-        <div className="p-3 sm:p-5 flex-1 relative bg-white min-h-[420px] overflow-hidden">
+        <div className={`flex-1 relative bg-white overflow-hidden min-h-0 ${embedded ? "p-1.5 sm:p-2" : "p-3 sm:p-5 min-h-[380px]"}`}>
           {/* Floating In-Chart OHLCV Legend: Clean, sleek, non-intrusive */}
           {hovered && (
             <div className="absolute top-3 left-4 z-10 pointer-events-none flex items-center gap-2 font-mono text-[11px] bg-white/90 backdrop-blur-xs px-2.5 py-1 rounded-md border border-slate-200/80 shadow-2xs">
