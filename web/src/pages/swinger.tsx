@@ -867,7 +867,7 @@ export function SwingerPage() {
           <Activity className="size-4 text-indigo-500 shrink-0" />
           <span className="text-slate-500 font-sans">Active:</span>
           <span className="font-bold text-slate-800 text-sm">
-            {positions.length}/20 Slots
+            ₹{(totalInvested / 100000).toFixed(2)}L · {positions.length}/20 Slots
           </span>
           <span className={`text-[11px] font-bold font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
             ({totalUnrealizedPnl >= 0 ? "+" : ""}₹{Math.round(totalUnrealizedPnl).toLocaleString("en-IN")})
@@ -1292,8 +1292,7 @@ export function SwingerPage() {
                 </div>
               </div>
             </div>
-        </div>
-      )}
+        )}
 
       {/* ================= TAB 2: ACTIVE POSITIONS ================= */}
       {activeTab === "holdings" && (
@@ -2821,6 +2820,7 @@ export function SwingerPage() {
         </div>
         )
       )}
+      </div>
 
       {/* ================= 4. EMBEDDED INTERACTIVE TRADINGVIEW CHART MODAL ================= */}
       {selectedTradeForChart && (
