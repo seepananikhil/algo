@@ -213,7 +213,7 @@ class TrendRunnerPaperEngine:
         r5_lock: float = 220.0,
         r6_trigger: Optional[float] = 330.0,
         r6_lock: float = 270.0,
-        williams_fallback: bool = True,
+        williams_fallback: bool = False,
         strike_mode: str = "itm150",
         reentry_be_trigger: Optional[float] = None,
         reentry_be_lock: float = 5.0,
@@ -278,8 +278,19 @@ class TrendRunnerPaperEngine:
         self.log_trades: bool = kwargs.get("log_trades", True)
         self.notify_telegram: bool = kwargs.get("notify_telegram", False)
         self.fetch_live_quotes: bool = kwargs.get("fetch_live_quotes", False)
-        self.enable_trend_runner: bool = kwargs.get("enable_trend_runner", True)
-        self.enable_vix_trap: bool = kwargs.get("enable_vix_trap", False)
+        cfg_setups = {}
+        cfg_path = ROOT / "master_portfolio_config.json"
+        if cfg_path.exists():
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    cfg_setups = json.load(f).get("setups", {})
+            except Exception:
+                pass
+
+        self.enable_trend_runner: bool = kwargs.get("enable_trend_runner", cfg_setups.get("trend_runner", True))
+        self.enable_vix_trap: bool = kwargs.get("enable_vix_trap", cfg_setups.get("vix_trap", True))
+        if "williams_fallback" not in kwargs and "williams_fractal" in cfg_setups:
+            self.williams_fallback = bool(cfg_setups["williams_fractal"])
 
         if self.symbol == "SENSEX":
             if sl_points == 30.0:
@@ -695,7 +706,7 @@ class TrendRunnerPaperEngine:
             # MANDATORY: Must break Dynamic Expanded Range (OR High / Low expanded by pre-breakout wicks)
             if not sig and self.enable_trend_runner and ("09:30" <= t_str <= "13:00"):
                 if or_range >= 30.0:
-                    # Solid Breakout Candle Filter (Conviction Body >= 70% of candle range, Rejection Wick <= 20%)
+                    # Solid Breakout Candle Filter (Conviction Body >= 70% of candle range, Rejection Wick <= 30% or <= noise floor)
                     candle_rng = h - l
                     candle_body = abs(c - o)
                     body_ratio = candle_body / candle_rng if candle_rng > 0 else 0.0
@@ -703,10 +714,14 @@ class TrendRunnerPaperEngine:
                     lower_wick_pct = (min(o, c) - l) / candle_rng if candle_rng > 0 else 0.0
 
                     # Rejection Wick check:
-                    # For LONG (CALL): upper wick represents overhead rejection selling -> must be <= 20%
-                    # For SHORT (PUT): lower wick represents bottom absorption buying -> must be <= 20%
-                    long_conviction = (upper_wick_pct <= 0.20)
-                    short_conviction = (lower_wick_pct <= 0.20)
+                    # For LONG (CALL): upper wick represents overhead rejection selling -> allow up to 30% or <= noise floor (4 pts Nifty, 15 pts Sensex)
+                    # For SHORT (PUT): lower wick represents bottom absorption buying -> allow up to 30% or <= noise floor (4 pts Nifty, 15 pts Sensex)
+                    wick_noise_tol = 15.0 if self.symbol == "SENSEX" else 4.0
+                    upper_wick_pts = h - max(o, c)
+                    lower_wick_pts = min(o, c) - l
+
+                    long_conviction = (upper_wick_pct <= 0.30) or (upper_wick_pts <= wick_noise_tol)
+                    short_conviction = (lower_wick_pct <= 0.30) or (lower_wick_pts <= wick_noise_tol)
 
                     # 1. High-Conviction Breakout (Body >= 80% with Directional VIX confirmation <= 0.0% / >= 0.0%)
                     # Captures major trends where VIX cools mildly while blocking counter-trend traps
@@ -757,11 +772,17 @@ class TrendRunnerPaperEngine:
                 upper_wick_pct = (h - max(o, c)) / candle_rng if candle_rng > 0 else 0.0
                 lower_wick_pct = (min(o, c) - l) / candle_rng if candle_rng > 0 else 0.0
 
+                wick_noise_tol = 15.0 if self.symbol == "SENSEX" else 4.0
+                upper_wick_pts = h - max(o, c)
+                lower_wick_pts = min(o, c) - l
+                long_reentry_conv = (upper_wick_pct <= 0.30) or (upper_wick_pts <= wick_noise_tol)
+                short_reentry_conv = (lower_wick_pct <= 0.30) or (lower_wick_pts <= wick_noise_tol)
+
                 if body_ratio >= 0.70 and self.last_trade_sig:
-                    if self.last_trade_sig == "LONG" and self.allow_call_reentry and c >= prev_dh and c > o and c > vwap and (upper_wick_pct <= 0.20):
+                    if self.last_trade_sig == "LONG" and self.allow_call_reentry and c >= prev_dh and c > o and c > vwap and long_reentry_conv:
                         sig = "LONG"
                         stage_name = "REENTRY_EXPANSION"
-                    elif self.last_trade_sig == "SHORT" and c <= prev_dl and c < o and c < vwap and (lower_wick_pct <= 0.20):
+                    elif self.last_trade_sig == "SHORT" and c <= prev_dl and c < o and c < vwap and short_reentry_conv:
                         sig = "SHORT"
                         stage_name = "REENTRY_EXPANSION"
 
@@ -1037,7 +1058,7 @@ def run_replay(
     reentry: bool = True,
     be_trigger: Optional[float] = None,
     vix_chg_override: Optional[float] = None,
-    williams_fallback: bool = True,
+    williams_fallback: bool = False,
     strike_mode: str = "itm150",
     pyramid: bool = False,
 ) -> None:
@@ -1155,7 +1176,7 @@ def run_live_monitor(
     reentry: bool = True,
     be_trigger: Optional[float] = None,
     vix_chg_override: Optional[float] = None,
-    williams_fallback: bool = True,
+    williams_fallback: bool = False,
     strike_mode: str = "itm150",
     pyramid: bool = False,
 ) -> None:
@@ -1262,7 +1283,7 @@ if __name__ == "__main__":
     parser.add_argument("--reentry", action="store_true", default=True, help="Enable smart re-entry after morning stopout (default: True)")
     parser.add_argument("--no-reentry", action="store_false", dest="reentry", help="Disable smart re-entry")
     parser.add_argument("--be-trigger", type=float, default=None, help="Breakeven trigger in spot points (default: None for Path A Pure Ride)")
-    parser.add_argument("--williams", action="store_true", default=True, help="Enable Williams Afternoon Fallback (12:00-14:15 Seamless) (default: True)")
+    parser.add_argument("--williams", action="store_true", default=False, help="Enable Williams Afternoon Fallback (12:00-14:15 Seamless) (default: False)")
     parser.add_argument("--no-williams", action="store_false", dest="williams", help="Disable Williams Afternoon Fallback")
     parser.add_argument("--strike-mode", choices=["itm150", "atm"], default="itm150", help="Strike selection mode (default: itm150)")
     parser.add_argument("--pyramid", action="store_true", default=False, help="Enable pyramiding (adding Lot 2 at +70 pts) (default: False)")

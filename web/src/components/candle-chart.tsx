@@ -32,7 +32,7 @@ import {
   type Time,
   type UTCTimestamp,
 } from "lightweight-charts"
-import { prettyReason, type Candle, type RuleTrade, type Setup } from "@/lib/api"
+import { fmtPts, type Candle, type RuleTrade, type Setup } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { PriceBandPrimitive, type Band } from "@/components/price-band"
 import { BoxPrimitive, type TimeBoundedBox } from "@/components/box-primitive"
@@ -49,13 +49,34 @@ const toTime = (date: string, hhmm: string) => {
   return (isNaN(ts) ? 0 : ts / 1000) as UTCTimestamp
 }
 
-function fitSession(c: IChartApi, barCount: number, fullDay = false) {
+function fitSession(
+  c: IChartApi,
+  barCount: number,
+  _fullDay = false,
+  focusIndex?: number,
+  maxBars = 60
+) {
   if (!c || barCount <= 0) return
   try {
     const timeScale = c.timeScale()
-    const fromIndex = -4
-    const toIndex = fullDay || barCount >= 50 ? barCount + 3 : Math.max(barCount + 2, 38)
-    timeScale.setVisibleLogicalRange({ from: fromIndex, to: toIndex })
+    if (barCount <= maxBars) {
+      timeScale.setVisibleLogicalRange({ from: -3, to: Math.max(barCount + 3, 20) })
+      return
+    }
+
+    // Default to zoomed-in view of at most maxBars (60 candles)
+    let center = 20
+    if (focusIndex != null && focusIndex >= 0) {
+      center = focusIndex
+    }
+
+    let from = Math.max(-2, Math.round(center - maxBars * 0.35))
+    let to = from + maxBars
+    if (to > barCount + 3) {
+      to = barCount + 3
+      from = Math.max(-2, to - maxBars)
+    }
+    timeScale.setVisibleLogicalRange({ from, to })
   } catch {}
 }
 
@@ -167,6 +188,11 @@ type Props = {
   resetKey?: string
   /** When true, disables the floating on-hover candle info / OHLC tooltip. */
   hideHoverHUD?: boolean
+  strategy?: string
+  /** HH:MM time to focus and zoom in on (~60 candles) */
+  focusTime?: string
+  /** Currently selected trade to highlight levels & management zone on the chart */
+  activeTrade?: any
 }
 
 export function CandleChart({
@@ -178,8 +204,8 @@ export function CandleChart({
   setup,
   trades = [],
   keyLevelZone,
-  showKeyLevels = true,
-  showTradeLevels = true,
+  showKeyLevels = false,
+  showTradeLevels = false,
   boxes = [],
   className = "h-[clamp(560px,72vh,750px)]",
   overlay,
@@ -188,6 +214,9 @@ export function CandleChart({
   fullDay = false,
   resetKey = "",
   hideHoverHUD = true,
+  strategy = "",
+  focusTime,
+  activeTrade,
 }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
@@ -205,23 +234,23 @@ export function CandleChart({
   const viewKey = useRef("")
   const { resolvedTheme } = useTheme()
 
-  // Feature toggles: Levels, Volume, 50 EMA, 200 EMA, Fullscreen
-  const [showVolume, setShowVolume] = useState<boolean>(true)
-  const [showLevelsState, setShowLevelsState] = useState<boolean>(true)
+  // Feature toggles: Levels, Volume, 50 EMA, 200 EMA (Clean defaults: OFF to prevent clutter)
+  const [showVolume, setShowVolume] = useState<boolean>(false)
+  const [showLevelsState, setShowLevelsState] = useState<boolean>(false)
   const [showEMA50, setShowEMA50] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem("chart_show_ema50")
-      return v !== null ? v === "true" : true
+      return v === "true"
     } catch {
-      return true
+      return false
     }
   })
   const [showEMA200, setShowEMA200] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem("chart_show_ema200")
-      return v !== null ? v === "true" : true
+      return v === "true"
     } catch {
-      return true
+      return false
     }
   })
 
@@ -301,6 +330,32 @@ export function CandleChart({
       totalVol,
     }
   }, [candles, currentPrice])
+
+  // Focus index for zoomed-in trade view (max 60 candles)
+  const focusIndex = useMemo(() => {
+    if (!candles || candles.length === 0) return undefined
+    if (focusTime) {
+      const ft = focusTime.slice(0, 5)
+      const idx = candles.findIndex((k) => k.time?.slice(0, 5) === ft)
+      if (idx >= 0) return idx
+    }
+    if (trades && trades.length > 0) {
+      const entryTime = (trades[0].entry || "").slice(0, 5)
+      if (entryTime) {
+        const idx = candles.findIndex((k) => k.time?.slice(0, 5) === entryTime)
+        if (idx >= 0) return idx
+      }
+    }
+    return 20
+  }, [candles, trades, focusTime])
+
+  // Zoom into focus candle whenever focusTime, date, or symbol changes
+  useEffect(() => {
+    manualRange.current = false
+    if (chart.current && bars.current > 0) {
+      fitSession(chart.current, bars.current, fullDay, focusIndex, 60)
+    }
+  }, [focusTime, date, symbol, focusIndex])
 
   // Load drawings from localStorage for this specific day & symbol
   useEffect(() => {
@@ -508,8 +563,8 @@ export function CandleChart({
       rightPriceScale: {
         borderColor: borderColor,
         scaleMargins: {
-          top: 0.06,
-          bottom: showVolume ? 0.20 : 0.05,
+          top: 0.08,
+          bottom: showVolume ? 0.20 : 0.08,
         },
         entireTextOnly: true,
       },
@@ -646,7 +701,7 @@ export function CandleChart({
           c.resize(Math.floor(entry.contentRect.width), Math.floor(entry.contentRect.height), true)
           setChartDim({ width: entry.contentRect.width, height: entry.contentRect.height })
           if (!manualRange.current && bars.current > 0) {
-            fitSession(c, bars.current, fullDay)
+            fitSession(c, bars.current, fullDay, focusIndex, 60)
           }
         }
       }
@@ -708,7 +763,7 @@ export function CandleChart({
       if (chart.current && el.current) {
         chart.current.resize(el.current.clientWidth, el.current.clientHeight, true)
         setChartDim({ width: el.current.clientWidth, height: el.current.clientHeight })
-        fitSession(chart.current, bars.current, fullDay)
+        fitSession(chart.current, bars.current, fullDay, focusIndex, 60)
       }
     }, 60)
     return () => clearTimeout(timer)
@@ -842,25 +897,30 @@ export function CandleChart({
     const bands: Band[] = []
 
     if (showLevelsState) {
-      // Subtle reference lines
-      if (currentPrice != null) {
+      // Subtle reference lines for live session current price
+      if (currentPrice != null && (!date || date === new Date().toISOString().slice(0, 10))) {
         add(currentPrice, "rgba(249, 115, 22, 0.7)", LineStyle.Dotted, false, "", 1)
       }
-      add(setup?.range_high, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "HIGH", 1)
-      add(setup?.range_low, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "LOW", 1)
-      add(setup?.mid, "#fbbf24", LineStyle.Solid, true, "MID", 2)
 
-      if (setup?.mid != null && setup.buffer) {
-        bands.push({
-          top: setup.mid + setup.buffer,
-          bottom: setup.mid - setup.buffer,
-          fill: "rgba(251, 191, 36, 0.08)",
-          edge: "rgba(251, 191, 36, 0.3)",
-          autoscale: false,
-        })
+      // Midpoint levels (ONLY for Midpoint strategy)
+      if (strategy === "midpoint") {
+        add(setup?.range_high, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "HIGH", 1)
+        add(setup?.range_low, "rgba(56, 189, 248, 0.65)", LineStyle.Dashed, false, "LOW", 1)
+        add(setup?.mid, "#fbbf24", LineStyle.Solid, true, "MID", 2)
+
+        if (setup?.mid != null && setup.buffer) {
+          bands.push({
+            top: setup.mid + setup.buffer,
+            bottom: setup.mid - setup.buffer,
+            fill: "rgba(251, 191, 36, 0.08)",
+            edge: "rgba(251, 191, 36, 0.3)",
+            autoscale: false,
+          })
+        }
       }
 
-      if (showKeyLevels || showTradeLevels || keyLevelZone) {
+      // Key levels (ONLY when explicitly enabled AND on Key Levels strategy or explicit zone)
+      if (showKeyLevels && (strategy?.includes("key_level") || keyLevelZone)) {
         const step = 500
         const defaultBuffer = keyLevelZone?.buffer ?? setup?.key_level_zone?.buffer ?? 10
         const levelSet = new Set<number>()
@@ -910,66 +970,82 @@ export function CandleChart({
         }
       }
 
-      if (setup?.armed) add(setup.armed.level, "#c084fc", LineStyle.Solid, true, "ARMED", 2)
+      if (strategy === "midpoint" && setup?.armed) {
+        add(setup.armed.level, "#c084fc", LineStyle.Solid, true, "ARMED", 2)
+      }
 
-      if (showTradeLevels) {
-        for (const trade of trades) {
+      // Draw Standard Floor Pivot Lines ONLY if strategy is pivot_runner
+      if (strategy?.includes("pivot") && (setup as any)?.pivots) {
+        const piv = (setup as any).pivots
+        if (piv.R2) add(piv.R2, "#ef4444", LineStyle.Dashed, true, `R2: ${fmtNum(piv.R2, 1)}`, 1)
+        if (piv.R1) add(piv.R1, "#f59e0b", LineStyle.Dashed, true, `R1: ${fmtNum(piv.R1, 1)}`, 2)
+        if (piv.P)  add(piv.P,  "#818cf8", LineStyle.Solid,  true, `PIVOT (P): ${fmtNum(piv.P, 1)}`, 2)
+        if (piv.S1) add(piv.S1, "#06b6d4", LineStyle.Dashed, true, `S1: ${fmtNum(piv.S1, 1)}`, 2)
+        if (piv.S2) add(piv.S2, "#10b981", LineStyle.Dashed, true, `S2: ${fmtNum(piv.S2, 1)}`, 1)
+      }
+
+      // Trade level lines: for open trades, or for the currently inspected active trade
+      if (showTradeLevels || activeTrade) {
+        const targetTrades = activeTrade ? [activeTrade] : trades
+        for (const trade of targetTrades) {
           if (!trade) continue
+          const isOpen = trade.reason === "open" || (trade as any).is_open || !trade.exit
+          if (!isOpen && !activeTrade) continue // Skip completed trades only if no specific trade was selected
+
           const slNum = Number(trade.sl)
           const tgtNum = Number(trade.target)
-          const entryNum = Number(trade.entry_price)
-          const isOpen = trade.reason === "open" || (trade as any).is_open || !trade.exit
-          const isCall = trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE"
-          const ceilNum = Number((trade as any).box_high ?? (trade as any).ceil)
-          const floorNum = Number((trade as any).box_low ?? (trade as any).floor)
+          const entryNum = Number(trade.entry_price ?? trade.nifty_in ?? trade.spot_at_entry ?? trade.buy_price)
+          const exitNum = Number(trade.exit_price ?? trade.nifty_out ?? trade.sell_price)
+          const isCall = trade.side === "CALL" || trade.side === "LONG" || trade.side === "CE" || trade.side === "BUY"
 
-          if (!Number.isNaN(ceilNum) && Number.isFinite(ceilNum) && ceilNum > 0 && ceilNum >= sessionLow * 0.9 && ceilNum <= sessionHigh * 1.1) {
-            add(ceilNum, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
-          }
-          if (!Number.isNaN(floorNum) && Number.isFinite(floorNum) && floorNum > 0 && floorNum >= sessionLow * 0.9 && floorNum <= sessionHigh * 1.1) {
-            add(floorNum, "rgba(56, 189, 248, 0.85)", LineStyle.Dashed, true, "SUP", 1)
-          }
-
-          // 1. Entry Level Line for Active / Open Position
-          if (isOpen && !Number.isNaN(entryNum) && Number.isFinite(entryNum) && entryNum > 0 && entryNum >= sessionLow * 0.9 && entryNum <= sessionHigh * 1.1) {
+          if (!Number.isNaN(entryNum) && Number.isFinite(entryNum) && entryNum > 0) {
             add(
               entryNum,
               isCall ? "rgba(16, 185, 129, 0.95)" : "rgba(244, 63, 94, 0.95)",
               LineStyle.Solid,
               true,
-              `ENTRY: ${fmtNum(entryNum, 1)} (${trade.side || "BUY"})`,
+              `ENTRY: ₹${fmtNum(entryNum, 1)}`,
               2
             )
           }
 
-          // 2. Stop Loss / Trailing Stop Loss Line
-          if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0 && slNum >= sessionLow * 0.9 && slNum <= sessionHigh * 1.1) {
-            const isProfitLock = isOpen && ((isCall && slNum > entryNum) || (!isCall && slNum < entryNum))
+          if (!Number.isNaN(slNum) && Number.isFinite(slNum) && slNum > 0) {
             add(
               slNum,
-              isProfitLock ? "#f59e0b" : "#ef4444",
+              "#ef4444",
               LineStyle.Dashed,
               true,
-              isOpen ? (isProfitLock ? `TRAILING SL: ${fmtNum(slNum, 1)} (LOCK)` : `STOP LOSS: ${fmtNum(slNum, 1)}`) : "SL",
-              isOpen ? 2 : 1
+              `STOP LOSS: ₹${fmtNum(slNum, 1)}`,
+              2
             )
           }
 
-          // 3. Target Level Line
-          if (!Number.isNaN(tgtNum) && Number.isFinite(tgtNum) && tgtNum > 0 && tgtNum >= sessionLow * 0.9 && tgtNum <= sessionHigh * 1.1) {
+          if (!Number.isNaN(tgtNum) && Number.isFinite(tgtNum) && tgtNum > 0) {
             add(
               tgtNum,
               "#10b981",
               LineStyle.Dashed,
               true,
-              isOpen ? `TARGET: ${fmtNum(tgtNum, 1)}` : "TGT",
-              isOpen ? 2 : 1
+              `TARGET: ₹${fmtNum(tgtNum, 1)}`,
+              2
+            )
+          }
+
+          if (!isOpen && !Number.isNaN(exitNum) && Number.isFinite(exitNum) && exitNum > 0) {
+            const isWin = (trade.pnl_points ?? 0) >= 0
+            add(
+              exitNum,
+              isWin ? "#10b981" : "#f43f5e",
+              LineStyle.Dotted,
+              true,
+              `EXIT: ₹${fmtNum(exitNum, 1)}`,
+              2
             )
           }
         }
       }
 
-      if (boxes && boxes.length > 0) {
+      if (boxes && boxes.length > 0 && strategy?.includes("compression")) {
         for (const b of boxes) {
           if (b.ceiling && (!trades || trades.length === 0)) {
             add(b.ceiling, "rgba(245, 158, 11, 0.85)", LineStyle.Dashed, true, "RES", 1)
@@ -983,7 +1059,7 @@ export function CandleChart({
 
     band.current?.setBands(bands)
 
-    // Markers
+    // Markers: Clean, sharp, minimalistic (no long sentences or clutter)
     const m: SeriesMarker<Time>[] = []
     const seenTouches = new Set<string>()
     const addTouches = (touchTimes: string[] | undefined, isRes: boolean) => {
@@ -1007,36 +1083,36 @@ export function CandleChart({
       })
     }
 
-    if (boxes && boxes.length > 0 && showLevelsState) {
+    if (boxes && boxes.length > 0 && showLevelsState && strategy?.includes("compression")) {
       for (const b of boxes) {
         if (b.touch_times) {
           addTouches(b.touch_times, b.status !== "breakout_down")
         }
       }
     }
+
     for (const t of trades) {
       const call = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
-      const engineOrSetup = (t as any).strategy_label || (t as any).engine || t.setup || (t as any).trigger_reason || ""
-      const logicPrefix = engineOrSetup ? `${engineOrSetup} · ` : ""
       if (t.entry) {
         m.push({
           time: toTime(date, t.entry.slice(0, 5)),
           position: call ? "belowBar" : "aboveBar",
-          color: call ? "#10b981" : "#ef4444",
+          color: call ? "#10b981" : "#f43f5e",
           shape: call ? "arrowUp" : "arrowDown",
-          size: 1.5,
-          text: `${logicPrefix}BUY ${call ? "CALL" : "PUT"} @ ${t.entry_price ? fmtNum(t.entry_price, 1) : ""}`,
+          size: 1.2,
+          text: call ? "BUY CE" : "BUY PE",
         })
       }
       if (t.exit && !(t.reason && t.reason.endsWith("open"))) {
-        const exitReason = t.reason ? prettyReason(t.reason) : "EXIT"
+        const pts = t.pnl_points ?? 0
+        const isWin = pts >= 0
         m.push({
           time: toTime(date, t.exit.slice(0, 5)),
           position: call ? "aboveBar" : "belowBar",
-          color: "#71717a",
+          color: isWin ? "#10b981" : "#ef4444",
           shape: call ? "arrowDown" : "arrowUp",
-          size: 1.5,
-          text: `EXIT: ${exitReason} ${t.pnl_points ? `(${t.pnl_points > 0 ? "+" : ""}${fmtNum(t.pnl_points, 1)} pts)` : ""}`,
+          size: 1.2,
+          text: `${isWin ? "+" : ""}${fmtPts(pts)}`,
         })
       }
     }
@@ -1047,22 +1123,23 @@ export function CandleChart({
       console.warn("CandleChart: failed to set markers", e)
     }
 
-    if (boxes && boxes.length > 0 && showLevelsState) {
-      const bBoxes: TimeBoundedBox[] = boxes.map((b, idx) => {
-        const sTime = toTime(date, b.start_time)
-        const eTime = toTime(date, b.end_time || b.break_time || "15:25")
-        return {
-          id: b.box_id || `box-${idx}`,
-          startTime: sTime,
-          endTime: eTime,
-          ceiling: b.ceiling,
-          floor: b.floor,
-          midpoint: b.midpoint || (b.ceiling + b.floor) / 2,
-          rangePts: b.range_pts || (b.ceiling - b.floor),
-          durationBars: b.duration_bars || 14,
-          status: b.status || "coiling",
-        }
-      })
+    const bBoxes: TimeBoundedBox[] = (boxes && boxes.length > 0 && showLevelsState) ? boxes.map((b, idx) => {
+      const sTime = toTime(date, b.start_time)
+      const eTime = toTime(date, b.end_time || b.break_time || "15:25")
+      return {
+        id: b.box_id || `box-${idx}`,
+        startTime: sTime,
+        endTime: eTime,
+        ceiling: b.ceiling,
+        floor: b.floor,
+        midpoint: b.midpoint || (b.ceiling + b.floor) / 2,
+        rangePts: b.range_pts || (b.ceiling - b.floor),
+        durationBars: b.duration_bars || 14,
+        status: b.status || "coiling",
+      }
+    }) : []
+
+    if (bBoxes.length > 0) {
       boxPrimitive.current?.setBoxes(bBoxes)
     } else {
       boxPrimitive.current?.setBoxes([])
@@ -1071,7 +1148,7 @@ export function CandleChart({
     const isFirstBarFit = bars.current === 0 && data.length > 0
     bars.current = data.length
     if (chart.current && !manualRange.current && isFirstBarFit) {
-      fitSession(chart.current, data.length, fullDay)
+      fitSession(chart.current, data.length, fullDay, focusIndex, 60)
     }
   }, [
     date,
@@ -1090,12 +1167,15 @@ export function CandleChart({
     showLevelsState,
     showEMA50,
     showEMA200,
+    strategy,
+    focusIndex,
+    activeTrade,
   ])
 
   useEffect(() => {
     manualRange.current = false
-    if (chart.current) fitSession(chart.current, bars.current, fullDay)
-  }, [fullDay])
+    if (chart.current) fitSession(chart.current, bars.current, fullDay, focusIndex, 60)
+  }, [fullDay, focusIndex])
 
   function zoom(factor: number) {
     const timeScale = chart.current?.timeScale()
@@ -1109,7 +1189,7 @@ export function CandleChart({
 
   function reset() {
     manualRange.current = false
-    if (chart.current) fitSession(chart.current, bars.current, fullDay)
+    if (chart.current) fitSession(chart.current, bars.current, fullDay, focusIndex, 60)
   }
 
   // Coordinate projections for drawn lines
@@ -1942,7 +2022,7 @@ export function CandleChart({
   return (
     <div className={cn("relative w-full flex-1 flex flex-col rounded-lg overflow-hidden border border-border/40 bg-card shadow-2xs", className)}>
       {/* Chart Canvas */}
-      <div className="flex-1 relative w-full h-full min-h-[340px]">
+      <div className={cn("flex-1 relative w-full h-full", className?.includes("min-h-0") ? "min-h-0" : "min-h-[340px]")}>
         {/* Floating Controls Toolbar */}
         {!hideToolbar && renderToolbar(false)}
 
@@ -1959,7 +2039,7 @@ export function CandleChart({
       </div>
 
       {/* Slim interactive footer with legend */}
-      {renderFooter()}
+      {!hideToolbar && renderFooter()}
     </div>
   )
 }

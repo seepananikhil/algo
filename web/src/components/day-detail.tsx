@@ -21,7 +21,12 @@ export function DayDetail({
   chartOnly = false,
   allowTimeframeSwitch = false,
   headerLeading,
+  headerTrailing,
   simpleChart = false,
+  symbol,
+  height,
+  focusTime,
+  activeTrade,
 }: {
   date: string | null
   mode?: DayMode
@@ -30,14 +35,26 @@ export function DayDetail({
   chartOnly?: boolean
   allowTimeframeSwitch?: boolean
   headerLeading?: ReactNode
+  headerTrailing?: ReactNode
   simpleChart?: boolean
+  symbol?: "NIFTY" | "SENSEX"
+  height?: string
+  focusTime?: string
+  activeTrade?: any
 }) {
-  const isSensexStrategy = Boolean(strategy && (strategy === "sensex_runner" || strategy.includes("sensex")))
-  const isNiftyStrategy = Boolean(strategy && (strategy === "trend_runner" || strategy.includes("nifty")))
+  const isSensexStrategy = Boolean(
+    symbol === "SENSEX" ||
+    (!symbol && strategy && (strategy === "sensex_runner" || strategy.includes("sensex")))
+  )
+  const isNiftyStrategy = Boolean(
+    symbol === "NIFTY" ||
+    (!symbol && strategy && (strategy === "trend_runner" || strategy.includes("nifty") || strategy.includes("pivot") || strategy === "pivot_runner"))
+  )
+  const singleIndexOnly = Boolean(symbol || isSensexStrategy || isNiftyStrategy || compact || simpleChart)
   const [timeframe, setTimeframe] = useState<"1m" | "5m">("1m")
-  const [chartHeightMode, setChartHeightMode] = useState<"normal" | "tall" | "xl">("tall")
+  const [chartHeightMode, setChartHeightMode] = useState<"normal" | "tall" | "xl">(compact ? "normal" : "tall")
   const [chartLayout, setChartLayout] = useState<"both" | "primary" | "secondary">(
-    isSensexStrategy || isNiftyStrategy ? "primary" : "both"
+    singleIndexOnly ? "primary" : "both"
   )
   const [primaryResetKey, setPrimaryResetKey] = useState(0)
   const [secondaryResetKey, setSecondaryResetKey] = useState(0)
@@ -45,7 +62,7 @@ export function DayDetail({
   const primarySymbol = isSensexStrategy ? "SENSEX" : "NIFTY"
   const secondarySymbol = isSensexStrategy ? "NIFTY" : "SENSEX"
   const day = usePoll<DayData>(date && `/api/day?date=${date}&symbol=${primarySymbol}${strategy ? `&strategy=${strategy}` : ""}${allowTimeframeSwitch ? "&full=1" : ""}`)
-  const secondaryDay = usePoll<DayData>(date && !simpleChart && (chartLayout === "both" || chartLayout === "secondary") ? `/api/day?date=${date}&symbol=${secondarySymbol}${allowTimeframeSwitch ? "&full=1" : ""}` : null)
+  const secondaryDay = usePoll<DayData>(date && !singleIndexOnly && (chartLayout === "both" || chartLayout === "secondary") ? `/api/day?date=${date}&symbol=${secondarySymbol}${allowTimeframeSwitch ? "&full=1" : ""}` : null)
   const currentIstDate = new Intl.DateTimeFormat("sv-SE", { timeZone: "Asia/Kolkata" }).format(new Date())
   const keyLevelDay = usePoll<KeyLevelDay>(date && useFiveMinute && !isSensexStrategy ? `/api/key-level-day?date=${date}` : null, useFiveMinute && date === currentIstDate ? 1000 : 0)
   const signals = day.data?.signals ?? []
@@ -109,7 +126,7 @@ export function DayDetail({
   // Secondary price metrics
   const secondaryCandles = secondaryDay.data?.candles ?? []
   const secondarySetup = secondaryDay.data?.setup
-  const hasSecondary = secondaryCandles.length > 0
+  const hasSecondary = !singleIndexOnly && secondaryCandles.length > 0
   const secondaryLastCandle = hasSecondary ? secondaryCandles[secondaryCandles.length - 1] : undefined
   const secondaryPrice = secondaryLastCandle?.close
   const secondaryFirstCandle = hasSecondary ? secondaryCandles[0] : undefined
@@ -136,8 +153,12 @@ export function DayDetail({
   // Render Charts grid block (reusable in compact and regular view)
   const renderCharts = (_isCompactView?: boolean) => {
     const isDual = !simpleChart && chartLayout === "both" && hasSecondary
-    const chartHeightClass = simpleChart
-      ? "h-[500px] min-h-[450px]"
+    const chartHeightClass = height
+      ? height
+      : simpleChart
+      ? "h-[600px] min-h-[540px]"
+      : compact
+      ? "h-[440px] min-h-[380px]"
       : isDual
       ? chartHeightMode === "normal"
         ? "h-[clamp(480px,56vh,620px)] min-h-[480px]"
@@ -145,7 +166,7 @@ export function DayDetail({
         ? "h-[clamp(760px,84vh,960px)] min-h-[720px]"
         : "h-[clamp(620px,72vh,780px)] min-h-[580px]"
       : chartHeightMode === "normal"
-      ? "h-[clamp(540px,62vh,680px)] min-h-[520px]"
+      ? "h-[clamp(580px,68vh,720px)] min-h-[540px]"
       : chartHeightMode === "xl"
       ? "h-[clamp(820px,88vh,1050px)] min-h-[800px]"
       : "h-[clamp(680px,78vh,880px)] min-h-[640px]"
@@ -153,11 +174,15 @@ export function DayDetail({
     return (
     <div className={cn(
       "w-full",
+      height?.includes("h-full") && "h-full min-h-0 flex-1",
       isDual ? "grid grid-cols-1 lg:grid-cols-2 gap-3" : "flex flex-col gap-3"
     )}>
       {/* PRIMARY CHART CARD (SENSEX for Sensex strategy, NIFTY 50 otherwise) */}
       {(chartLayout === "both" || chartLayout === "primary" || !hasSecondary) && (
-        <div className="rounded-xl border border-border/50 bg-card shadow-2xs flex flex-col overflow-hidden">
+        <div className={cn(
+          "rounded-xl border border-border/60 bg-card shadow-xs flex flex-col overflow-hidden",
+          height?.includes("h-full") && "h-full min-h-0 flex-1"
+        )}>
           <div className="flex items-center justify-between border-b border-border/40 px-3.5 py-2 shrink-0 bg-muted/15 gap-2">
             <div className="flex items-center gap-2.5 min-w-0">
               <span className="text-xs font-bold tracking-tight text-foreground whitespace-nowrap">
@@ -194,6 +219,7 @@ export function DayDetail({
               )}
             </div>
             <div className="flex items-center gap-2">
+              {headerTrailing}
               {allowTimeframeSwitch && (
                 <Tabs value={timeframe} onValueChange={(value) => setTimeframe(value as "1m" | "5m")}>
                   <TabsList className="h-6 p-0.5 bg-muted/60">
@@ -202,7 +228,7 @@ export function DayDetail({
                   </TabsList>
                 </Tabs>
               )}
-              {(fills.length > 0 || trades.length > 0) && (
+              {!simpleChart && !headerTrailing && (fills.length > 0 || trades.length > 0) && (
                 <span className={cn(
                   "text-[11px] font-mono font-bold px-2 py-0.5 rounded border shadow-2xs whitespace-nowrap",
                   pnlValue >= 0 ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" : "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/30"
@@ -218,7 +244,7 @@ export function DayDetail({
               <button
                 type="button"
                 onClick={() => setPrimaryResetKey((k) => k + 1)}
-                className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/60 transition-colors"
+                className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/60 transition-colors cursor-pointer"
                 title={`Reset ${primarySymbol} zoom to full day`}
               >
                 <RotateCcw className="h-3.5 w-3.5" />
@@ -248,16 +274,20 @@ export function DayDetail({
                 candles={chartCandles}
                 forming={useFiveMinute ? keyLevelDay.data?.forming ?? undefined : day.data?.forming}
                 currentPrice={useFiveMinute ? keyLevelDay.data?.current_price ?? undefined : day.data?.forming?.close}
-                setup={useFiveMinute || (isStrategyFiltered && strategy !== "midpoint") ? undefined : s}
+                setup={s}
                 trades={chartTrades}
                 boxes={day.data?.boxes ?? []}
                 keyLevelZone={useFiveMinute ? (keyLevelDay.data?.key_level_zone ?? s?.key_level_zone) : (s?.key_level_zone ?? null)}
-                showKeyLevels={true}
+                showKeyLevels={strategy?.includes("key_level")}
                 showTradeLevels={true}
+                activeTrade={activeTrade}
                 hideHoverHUD={true}
-                className={cn("w-full", chartHeightClass)}
+                hideToolbar={simpleChart}
+                strategy={strategy}
+                className={cn("w-full", chartHeightClass, simpleChart && "border-0 shadow-none rounded-none")}
                 zoomable
                 fullDay={true}
+                focusTime={focusTime ?? activeTrade?.entry}
                 resetKey={`${chartLayout}|${primaryResetKey}`}
               />
             ) : (
@@ -345,10 +375,12 @@ export function DayDetail({
                 setup={secondarySetup}
                 trades={[]}
                 keyLevelZone={secondarySetup?.key_level_zone ?? null}
-                showKeyLevels={true}
+                showKeyLevels={false}
                 showTradeLevels={false}
                 hideHoverHUD={true}
-                className={cn("w-full", chartHeightClass)}
+                hideToolbar={simpleChart}
+                strategy={strategy}
+                className={cn("w-full", chartHeightClass, simpleChart && "border-0 shadow-none rounded-none")}
                 zoomable
                 fullDay={true}
                 resetKey={`${chartLayout}|${secondaryResetKey}`}
@@ -365,7 +397,7 @@ export function DayDetail({
 
   if (simpleChart) {
     return (
-      <div className="w-full flex flex-col">
+      <div className={cn("w-full flex flex-col", height?.includes("h-full") && "h-full min-h-0 flex-1")}>
         {renderCharts(true)}
       </div>
     )

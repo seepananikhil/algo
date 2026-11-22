@@ -593,3 +593,74 @@ def get_kotak_holdings() -> dict:
     except Exception as exc:
         return {"ok": False, "error": f"Failed to fetch Kotak holdings: {exc}"}
 
+
+_kotak_token_cache: dict[str, int] = {}
+
+def get_kotak_candles(symbol: str, days: int = 120):
+    """
+    Fetch official daily OHLCV candlestick data directly from Kotak Neo API.
+    Resolves symbol token, queries historical_data (interval='D'), and formats as a DataFrame.
+    Returns DataFrame with columns ['Open', 'High', 'Low', 'Close', 'Volume'] indexed by DatetimeIndex, or None.
+    """
+    import pandas as pd
+    import datetime
+
+    clean_sym = symbol.upper().replace(".NS", "").replace(".BO", "").replace("NSE:", "").strip()
+    client = get_kotak_client()
+    if not client:
+        return None
+
+    token = _kotak_token_cache.get(clean_sym)
+    if not token:
+        try:
+            res = client.search_scrip(exchange_segment="nse_cm", symbol=clean_sym)
+            if res and isinstance(res, list):
+                # Strict matching: exact trading symbol or exact symbol name in EQ group
+                # Avoids substring false matches (e.g. RAYMOND matching RAYMONDLSL first)
+                exact = [x for x in res if str(x.get("pTrdSymbol", "")).strip().upper() == f"{clean_sym}-EQ"]
+                if not exact:
+                    exact = [x for x in res if str(x.get("pSymbolName", "")).strip().upper() == clean_sym and x.get("pGroup") == "EQ"]
+                if not exact:
+                    exact = [x for x in res if str(x.get("pSymbolName", "")).strip().upper() == clean_sym]
+                if not exact:
+                    exact = [x for x in res if x.get("pGroup") == "EQ"]
+                selected = exact[0] if exact else res[0]
+                token = selected.get("pSymbol")
+                if token:
+                    _kotak_token_cache[clean_sym] = int(token)
+        except Exception as e:
+            print(f"[Kotak Candles] Scrip search error for {clean_sym}: {e}")
+            return None
+
+    if not token:
+        return None
+
+    try:
+        to_dt = datetime.datetime.now().strftime("%Y-%m-%d")
+        from_dt = (datetime.datetime.now() - datetime.timedelta(days=min(days, 180))).strftime("%Y-%m-%d")
+
+        hist = client.historical_data(neosymbol=f"nse_cm|{token}", interval="D", from_date=from_dt, to_date=to_dt)
+        candles = hist.get("data", {}).get("candles", []) if isinstance(hist, dict) else []
+        if not candles:
+            return None
+
+        rows = []
+        for c in candles:
+            dt_str = str(c[0])[:10]
+            rows.append({
+                "Date": pd.to_datetime(dt_str),
+                "Open": float(c[1]),
+                "High": float(c[2]),
+                "Low": float(c[3]),
+                "Close": float(c[4]),
+                "Volume": float(c[5])
+            })
+        if not rows:
+            return None
+        df = pd.DataFrame(rows).set_index("Date").sort_index()
+        return df
+    except Exception as e:
+        print(f"[Kotak Candles] Error fetching candles for {clean_sym}: {e}")
+        return None
+
+

@@ -17,6 +17,7 @@ _last_positions_cache: dict = {}
 _last_known_ltps: dict = {}
 _last_positions_time: float = 0.0
 _last_positions_err_time: float = 0.0
+_last_positions_date: str = ""
 
 
 def invalidate_positions_cache() -> None:
@@ -94,8 +95,20 @@ def get_all_broker_status() -> dict:
 
 
 def kotak_positions() -> dict:
-    global _last_positions_cache, _last_positions_time, _last_positions_err_time
+    global _last_positions_cache, _last_positions_time, _last_positions_err_time, _last_positions_date
     import time
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+    IST = ZoneInfo("Asia/Kolkata")
+    now_dt = datetime.now(IST)
+    today_str = now_dt.strftime("%Y-%m-%d")
+
+    # Invalidate cache if calendar date has changed (midnight rollover)
+    if _last_positions_date != today_str:
+        _last_positions_cache = {}
+        _last_positions_date = today_str
+        _last_positions_time = 0.0
+
     now = time.time()
     # Serve cached positions if requested within 2.5s to avoid duplicate API calls
     if (now - _last_positions_time) < 2.5 and _last_positions_cache.get("ok"):
@@ -145,6 +158,13 @@ def kotak_positions() -> dict:
             b_amt = float(r.get("buyAmt", 0)) + float(r.get("cfBuyAmt", 0))
             s_amt = float(r.get("sellAmt", 0)) + float(r.get("cfSellAmt", 0))
             net_qty = b_qty - s_qty
+
+            # If market has not opened yet today (before 09:14 IST or on weekend),
+            # any closed position (net_qty == 0) was executed in a prior session.
+            # Do NOT count yesterday's realized P&L or closed trades into today's session!
+            is_off_hours = (now_dt.weekday() >= 5) or (now_dt.time() < datetime.strptime("09:14", "%H:%M").time())
+            if is_off_hours and net_qty == 0:
+                continue
 
             # If position is closed (net_qty == 0) and had ZERO trading activity today,
             # it was closed on a PREVIOUS session! Do NOT count yesterday's realized PnL into today's session.

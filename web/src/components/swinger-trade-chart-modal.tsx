@@ -22,8 +22,8 @@ import {
   Layers,
   ExternalLink,
   Ruler,
-  Zap,
-  Table
+  Table,
+  RefreshCw
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -187,12 +187,14 @@ export function SwingerTradeChartModal({
   trade,
   allTrades,
   onSelectTrade,
-  onClose
+  onClose,
+  embedded = false,
 }: {
   trade: SwingerTradeTarget | null
   allTrades?: SwingerTradeTarget[]
   onSelectTrade?: (trade: SwingerTradeTarget) => void
-  onClose: () => void
+  onClose?: () => void
+  embedded?: boolean
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -310,7 +312,7 @@ export function SwingerTradeChartModal({
           setIsMeasureActive(false)
           return
         }
-        onClose()
+        onClose?.()
       }
       if (e.key === "Shift") {
         setIsShiftPressed(true)
@@ -366,8 +368,13 @@ export function SwingerTradeChartModal({
       ? `/api/swinger/backtest-stock?symbol=${encodeURIComponent(trade.symbol)}`
       : `/api/swinger/candles?symbol=${encodeURIComponent(trade.symbol)}`
 
+    const abortController = new AbortController()
+    const timeoutId = setTimeout(() => {
+      abortController.abort()
+    }, 25000)
+
     // Request full historical candles with live fresh delta and trade context
-    fetch(endpoint)
+    fetch(endpoint, { signal: abortController.signal })
       .then((r) => r.json())
       .then((d) => {
         if (!active) return
@@ -382,6 +389,9 @@ export function SwingerTradeChartModal({
           if (sTrades.length > 0) {
             setActiveTradeIndex(findInitialTradeIndex(sTrades, trade))
           }
+          if (d.summary) {
+            setBacktestSummary(d.summary)
+          }
           setIsOnRadar(Boolean(d.is_on_radar))
           if (d.market_cap_cr) {
             setMarketCapCr(d.market_cap_cr)
@@ -392,14 +402,21 @@ export function SwingerTradeChartModal({
       })
       .catch((err) => {
         if (!active) return
-        setError(err.message || "Failed to load candles")
+        if (err.name === "AbortError") {
+          setError(`Request timed out while loading chart data for ${trade.symbol}. Click retry or check connection.`)
+        } else {
+          setError(err.message || "Failed to load candles")
+        }
       })
       .finally(() => {
+        clearTimeout(timeoutId)
         if (active) setLoading(false)
       })
 
     return () => {
       active = false
+      clearTimeout(timeoutId)
+      abortController.abort()
     }
   }, [trade?.symbol, (trade as any)?.isBacktest])
 
@@ -592,14 +609,15 @@ export function SwingerTradeChartModal({
           : initialSlPrice
         const bePrice = entryPrice * 1.25
 
-        // Entry Line (Clean Emerald Dashed)
+        const isLeg2 = activeTargetTrade.leg === 2 || String(activeTargetTrade.strategy_leg || "").toUpperCase().includes("LEG2")
+        // Entry Line (Vibrant Purple Dashed for Leg 2, Emerald Dashed for Leg 1)
         mainSeries.createPriceLine({
           price: entryPrice,
-          color: "#059669",
+          color: isLeg2 ? "#8b5cf6" : "#059669",
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,
-          title: `BUY ₹${entryPrice.toFixed(1)}`
+          title: `${isLeg2 ? "BUY [LEG 2]" : "BUY [LEG 1]"} ₹${entryPrice.toFixed(1)}`
         })
 
         // Stop Loss Line (Clean Rose Dotted: shows active trail SL if raised, else initial -15% SL)
@@ -682,18 +700,25 @@ export function SwingerTradeChartModal({
       }
     })
 
-    // B. Buy & Exit Arrows for ALL actual trades of this stock
+    // B. Buy & Exit Arrows for ALL actual trades of this stock (distinct Leg 1 vs Leg 2 styling)
     symbolTrades.forEach((st, idx) => {
       const tradeNum = idx + 1
       const stEntryPrice = st.avg_price ?? st.entry_price
       const validEntryTime = sanitizeDateToCandleTime(st.entry_date, candles)
+      const isLeg2 = st.leg === 2 || String(st.strategy_leg || "").toUpperCase().includes("LEG2")
+      const legLabel = isLeg2 ? "LEG 2" : "LEG 1"
+      const legShort = isLeg2 ? "L2" : "L1"
+      const buyColor = isLeg2 ? "#8b5cf6" : "#10b981" // Purple for Leg 2, Emerald for Leg 1
+
       if (validEntryTime && stEntryPrice && stEntryPrice > 0) {
         markers.push({
           time: validEntryTime as any,
           position: "belowBar",
-          color: "#10b981",
+          color: buyColor,
           shape: "arrowUp",
-          text: symbolTrades.length > 1 ? `BUY #${tradeNum} ₹${stEntryPrice.toFixed(0)}` : `BUY ₹${stEntryPrice.toFixed(0)}`,
+          text: symbolTrades.length > 1
+            ? `BUY #${tradeNum} [${legShort}] ₹${stEntryPrice.toFixed(0)}`
+            : `BUY [${legLabel}] ₹${stEntryPrice.toFixed(0)}`,
           size: 2
         })
       }
@@ -716,7 +741,9 @@ export function SwingerTradeChartModal({
           position: "aboveBar",
           color: isWin ? "#10b981" : "#ef4444",
           shape: "arrowDown",
-          text: symbolTrades.length > 1 ? `EXIT #${tradeNum} (${isWin ? "+" : ""}${ret.toFixed(0)}%)` : `EXIT (${isWin ? "+" : ""}${ret.toFixed(0)}%)`,
+          text: symbolTrades.length > 1
+            ? `EXIT #${tradeNum} [${legShort}] (${isWin ? "+" : ""}${ret.toFixed(0)}%)`
+            : `EXIT [${legShort}] (${isWin ? "+" : ""}${ret.toFixed(0)}%)`,
           size: 2
         })
       }
@@ -1019,165 +1046,378 @@ export function SwingerTradeChartModal({
   const prevTrade = allTrades && curIdx > 0 ? allTrades[curIdx - 1] : null
   const nextTrade = allTrades && curIdx >= 0 && curIdx < allTrades.length - 1 ? allTrades[curIdx + 1] : null
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-150">
-      <div
-        className={`bg-white rounded-3xl border border-slate-200/90 shadow-2xl flex flex-col transition-all duration-200 overflow-hidden ${
-          isMaximized ? "w-[98vw] h-[96vh] max-w-none max-h-none" : "w-full max-w-5xl max-h-[92vh] h-[820px]"
-        }`}
-      >
+  const content = (
+    <div
+      className={`bg-white rounded-2xl border border-slate-200/90 flex flex-col transition-all duration-200 overflow-hidden ${
+        embedded && !isMaximized
+          ? "w-full h-full min-h-0 flex-1 shadow-2xs"
+          : isMaximized
+          ? "w-[98vw] h-[96vh] max-w-none max-h-none rounded-3xl shadow-2xl"
+          : "w-full max-w-5xl max-h-[92vh] h-[820px] rounded-3xl shadow-2xl"
+      }`}
+    >
         {/* ================= 1. CLEAN EXECUTIVE TITLE BAR ================= */}
-        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-white gap-4">
-          {/* Left: Symbol (shown once), Company Name, Status Pill & Market Price in ONE clean row */}
-          <div className="flex items-center gap-3 flex-wrap">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight font-mono">
-              {currentSymbol || trade.symbol}
-            </h2>
+        {embedded && !isMaximized ? (
+          /* SINGLE CLEAN EXECUTIVE ROW WHEN EMBEDDED IN HOLDINGS */
+          <div className="px-3.5 py-2 border-b border-slate-100 flex items-center justify-between bg-white gap-2 shrink-0">
+            {/* Left: Symbol, Leg, TV Link, CMP, Multi-Trade tabs */}
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+              <h2 className="text-base font-black text-slate-900 tracking-tight font-mono">
+                {currentSymbol || trade.symbol}
+              </h2>
 
-            {/* Show company name ONLY if present and different from ticker */}
-            {trade.name && trade.name.trim().toUpperCase() !== (currentSymbol || trade.symbol).trim().toUpperCase() && (
-              <span className="text-xs text-slate-400 font-medium hidden sm:inline">
-                {trade.name}
-              </span>
-            )}
+              {loading && (
+                <span title="Loading candles...">
+                  <RefreshCw className="size-3 animate-spin text-emerald-500 shrink-0" />
+                </span>
+              )}
 
-            {/* Direct TradingView Link (Icon only) */}
-            <a
-              href={`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(currentSymbol || trade.symbol)}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="size-6 inline-flex items-center justify-center rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/80 transition shadow-2xs shrink-0"
-              title={`Open ${currentSymbol || trade.symbol} on TradingView (NSE)`}
-            >
-              <ExternalLink className="size-3.5" />
-            </a>
+              {(() => {
+                const legVal = targetTradeForHeader.leg
+                const stratLeg = String(targetTradeForHeader.strategy_leg || "").toUpperCase()
+                const isLeg2 = legVal === 2 || stratLeg.includes("LEG2")
+                const isLeg1 = legVal === 1 || stratLeg.includes("LEG1") || (!isLeg2 && hasTradeDetails)
+                if (isLeg2) {
+                  return (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-purple-100 text-purple-700 border border-purple-200 shrink-0">
+                      LEG 2
+                    </span>
+                  )
+                }
+                if (isLeg1) {
+                  return (
+                    <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-blue-100 text-blue-700 border border-blue-200 shrink-0">
+                      LEG 1
+                    </span>
+                  )
+                }
+                return null
+              })()}
 
-            {/* Single Unified Status / Backtest Badge */}
-            {isBacktestMode ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-amber-50 text-amber-900 border-amber-200 font-mono shadow-2xs">
-                <span className="font-black text-amber-700">⚡ Backtest Sim:</span>
-                {backtestSummary ? (
-                  <span>
-                    {backtestSummary.total_trades} Trades · {backtestSummary.win_rate}% WR · PF {backtestSummary.profit_factor} · {backtestSummary.realized_pnl >= 0 ? "+" : ""}₹{Math.round(backtestSummary.realized_pnl).toLocaleString("en-IN")}
-                  </span>
-                ) : (
-                  <span>Simulating...</span>
-                )}
-              </span>
-            ) : hasTradeDetails ? (
-              <span
-                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
-                  isOpen
-                    ? "bg-sky-50 text-sky-700 border-sky-200"
-                    : isWin
-                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                    : "bg-rose-50 text-rose-700 border-rose-200"
-                }`}
+              <a
+                href={`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(currentSymbol || trade.symbol)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="size-6 inline-flex items-center justify-center rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/80 transition shadow-2xs shrink-0"
+                title={`Open ${currentSymbol || trade.symbol} on TradingView (NSE)`}
               >
-                {isOpen && <span className="size-1.5 rounded-full bg-sky-500 animate-pulse" />}
-                <span>
-                  {targetTradeForHeader.trade_id ? (
-                    <strong className="font-mono mr-1 text-[10px] opacity-75">{targetTradeForHeader.trade_id} ·</strong>
-                  ) : null}
-                  {isOpen
-                    ? "Active Position"
-                    : isWin
-                    ? "Closed Winner"
-                    : "Closed Trade"}
-                </span>
-                <span className="font-mono font-black">
-                  ({isWin ? "+" : ""}{pnlPct.toFixed(1)}% · {isWin ? "+" : ""}₹{Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })})
-                </span>
-              </span>
-            ) : null}
+                <ExternalLink className="size-3.5" />
+              </a>
 
-            {/* Market CMP, Day Gain, 52W, Market Cap & Volume inline */}
-            {stats && (
-              <div className="flex items-center gap-2 text-xs pl-2 border-l border-slate-200 hidden md:flex">
-                <span className="font-extrabold font-mono text-slate-900">
-                  ₹{fmtNum(stats.cmp)}
+              {stats && (
+                <div className="flex items-center gap-1.5 text-xs font-mono shrink-0 pl-1">
+                  <span className="font-black text-slate-900">₹{fmtNum(stats.cmp)}</span>
+                  <span
+                    className={`font-bold text-[11px] ${
+                      stats.dayChangePts >= 0 ? "text-emerald-600" : "text-rose-600"
+                    }`}
+                  >
+                    {stats.dayChangePts >= 0 ? "+" : ""}{stats.dayChangePct.toFixed(2)}%
+                  </span>
+                </div>
+              )}
+
+              {/* Multi-Trade Switcher Tabs (if multiple trades exist for this symbol) */}
+              {symbolTrades.length > 1 && (
+                <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg border border-slate-200 shrink-0 ml-1">
+                  {symbolTrades.map((st, idx) => {
+                    const isSel = idx === activeTradeIndex
+                    const isLeg2 = st.leg === 2 || String(st.strategy_leg || "").toUpperCase().includes("LEG2")
+                    const ret = st.pnl_pct ?? st.pct_return ?? 0
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActiveTradeIndex(idx)}
+                        className={`px-1.5 py-0.5 rounded text-[10px] font-bold transition flex items-center gap-1 ${
+                          isSel
+                            ? "bg-white text-slate-900 shadow-2xs font-extrabold border border-slate-200"
+                            : "text-slate-500 hover:text-slate-800"
+                        }`}
+                        title={`Trade #${idx + 1} (${isLeg2 ? "LEG 2" : "LEG 1"}): ${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%`}
+                      >
+                        <span>T{idx + 1}</span>
+                        <span className={`text-[9px] font-black ${ret >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                          {ret >= 0 ? "+" : ""}{ret.toFixed(0)}%
+                        </span>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* Right: Technical Toggles & Action Icons */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowEMA50(!showEMA50)}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition border ${
+                  showEMA50
+                    ? "bg-cyan-50 text-cyan-800 border-cyan-300 font-extrabold"
+                    : "bg-white text-slate-400 border-slate-200 hover:text-slate-700"
+                }`}
+                title="50 Exponential Moving Average"
+              >
+                50 EMA
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowEMA200(!showEMA200)}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition border ${
+                  showEMA200
+                    ? "bg-amber-50 text-amber-800 border-amber-300 font-extrabold"
+                    : "bg-white text-slate-400 border-slate-200 hover:text-slate-700"
+                }`}
+                title="200 Exponential Moving Average"
+              >
+                200 EMA
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setShowVolume(!showVolume)}
+                className={`px-2 py-0.5 rounded text-[10px] font-bold transition border ${
+                  showVolume
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-300 font-extrabold"
+                    : "bg-white text-slate-400 border-slate-200 hover:text-slate-700"
+                }`}
+                title="Volume Bars"
+              >
+                Vol
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setIsMeasureActive(!isMeasureActive)
+                  if (isMeasureActive) setMeasureData(null)
+                }}
+                className={`size-6.5 inline-flex items-center justify-center rounded text-[11px] font-bold transition border ${
+                  isMeasureActive
+                    ? "bg-purple-600 text-white border-purple-700 shadow-2xs"
+                    : "bg-white text-slate-500 hover:text-slate-900 border-slate-200"
+                }`}
+                title="Measure Tool (or hold Shift on chart)"
+              >
+                <Ruler className="size-3.5" />
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsLogScale(!isLogScale)}
+                className={`px-1.5 py-0.5 rounded text-[10px] font-bold font-mono transition border ${
+                  isLogScale
+                    ? "bg-indigo-50 text-indigo-700 border-indigo-300 font-extrabold"
+                    : "bg-white text-slate-400 border-slate-200 hover:text-slate-700"
+                }`}
+                title="Toggle Log / Linear Price Scale"
+              >
+                {isLogScale ? "Log" : "Lin"}
+              </button>
+
+              <button
+                type="button"
+                onClick={handleFitContent}
+                className="size-6.5 inline-flex items-center justify-center rounded text-[11px] font-bold border bg-white text-slate-500 hover:text-slate-900 border-slate-200 transition"
+                title="Fit all candles"
+              >
+                <Maximize2 className="size-3.5" />
+              </button>
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMaximized(true)}
+                title="Open Fullscreen Chart Modal"
+                className="size-7 rounded-lg text-slate-500 hover:text-slate-900 hover:bg-slate-100"
+              >
+                <Maximize2 className="size-4" />
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between bg-white gap-4">
+            {/* Left: Symbol (shown once), Company Name, Status Pill & Market Price in ONE clean row */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <h2 className="text-xl font-black text-slate-900 tracking-tight font-mono">
+                {currentSymbol || trade.symbol}
+              </h2>
+
+              {/* Show company name ONLY if present and different from ticker */}
+              {trade.name && trade.name.trim().toUpperCase() !== (currentSymbol || trade.symbol).trim().toUpperCase() && (
+                <span className="text-xs text-slate-400 font-medium hidden sm:inline">
+                  {trade.name}
                 </span>
+              )}
+
+              {/* Direct TradingView Link (Icon only) */}
+              <a
+                href={`https://in.tradingview.com/chart/?symbol=NSE:${encodeURIComponent(currentSymbol || trade.symbol)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="size-6 inline-flex items-center justify-center rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/80 transition shadow-2xs shrink-0"
+                title={`Open ${currentSymbol || trade.symbol} on TradingView (NSE)`}
+              >
+                <ExternalLink className="size-3.5" />
+              </a>
+
+              {/* Single Unified Status / Backtest Badge */}
+              {isBacktestMode ? (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold border bg-amber-50 text-amber-900 border-amber-200 font-mono shadow-2xs">
+                  <span className="font-black text-amber-700">⚡ Backtest Sim:</span>
+                  {backtestSummary ? (
+                    <span>
+                      {backtestSummary.total_trades} Trades · {backtestSummary.win_rate}% WR · PF {backtestSummary.profit_factor} · {backtestSummary.realized_pnl >= 0 ? "+" : ""}₹{Math.round(backtestSummary.realized_pnl).toLocaleString("en-IN")}
+                    </span>
+                  ) : (
+                    <span>Simulating...</span>
+                  )}
+                </span>
+              ) : hasTradeDetails ? (
                 <span
-                  className={`font-mono font-bold text-[11px] ${
-                    stats.dayChangePts >= 0 ? "text-emerald-600" : "text-rose-600"
+                  className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold border flex items-center gap-1.5 ${
+                    isOpen
+                      ? "bg-sky-50 text-sky-700 border-sky-200"
+                      : isWin
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                      : "bg-rose-50 text-rose-700 border-rose-200"
                   }`}
                 >
-                  {stats.dayChangePts >= 0 ? "+" : ""}
-                  {fmtNum(stats.dayChangePts)} ({stats.dayChangePct >= 0 ? "+" : ""}{stats.dayChangePct.toFixed(2)}%)
+                  {isOpen && <span className="size-1.5 rounded-full bg-sky-500 animate-pulse" />}
+                  <span>
+                    {targetTradeForHeader.trade_id ? (
+                      <strong className="font-mono mr-1 text-[10px] opacity-75">{targetTradeForHeader.trade_id} ·</strong>
+                    ) : null}
+                    {isOpen
+                      ? "Active Position"
+                      : isWin
+                      ? "Closed Winner"
+                      : "Closed Trade"}
+                  </span>
+                  <span className="font-mono font-black">
+                    ({isWin ? "+" : ""}{pnlPct.toFixed(1)}% · {isWin ? "+" : ""}₹{Math.abs(pnl).toLocaleString("en-IN", { maximumFractionDigits: 0 })})
+                  </span>
                 </span>
-                <span className="text-slate-300">·</span>
-                <span className="text-slate-500 text-[11px]">
-                  52W: ₹{fmtNum(stats.low52, 0)} - ₹{fmtNum(stats.high52, 0)}
-                </span>
-                {marketCapCr != null && marketCapCr > 0 && (
-                  <>
-                    <span className="text-slate-300">·</span>
-                    <span className="text-slate-500 text-[11px]">
-                      MCap: <strong className="font-mono text-slate-700">₹{marketCapCr >= 100000 ? (marketCapCr / 100000).toFixed(2) + " L Cr" : Math.round(marketCapCr).toLocaleString("en-IN") + " Cr"}</strong>
+              ) : null}
+
+              {/* Strategy Leg Badge (LEG 1 Turnaround vs LEG 2 Base Breakout) */}
+              {(() => {
+                const legVal = targetTradeForHeader.leg
+                const stratLeg = String(targetTradeForHeader.strategy_leg || "").toUpperCase()
+                const isLeg2 = legVal === 2 || stratLeg.includes("LEG2")
+                const isLeg1 = legVal === 1 || stratLeg.includes("LEG1") || (!isLeg2 && hasTradeDetails)
+                if (isLeg2) {
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
+                      <span className="size-1.5 rounded-full bg-purple-600" />
+                      LEG 2 · Base Breakout / Pullback
                     </span>
-                  </>
-                )}
-                <span className="text-slate-300">·</span>
-                <span className="text-slate-500 text-[11px]">
-                  Vol: <strong className="font-mono text-slate-700">{fmtVol(stats.latestVol)}</strong>
-                </span>
-              </div>
-            )}
-          </div>
+                  )
+                }
+                if (isLeg1) {
+                  return (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-black bg-blue-100 text-blue-900 border border-blue-300 shadow-2xs">
+                      <span className="size-1.5 rounded-full bg-blue-600" />
+                      LEG 1 · Turnaround Breakout
+                    </span>
+                  )
+                }
+                return null
+              })()}
 
-          {/* Right: Pagination Flipper & Window Actions */}
-          <div className="flex items-center gap-2 shrink-0">
-            {!isBacktestMode && allTrades && onSelectTrade && (
-              <div className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded-lg border border-slate-200">
+              {/* Market CMP, Day Gain, 52W, Market Cap & Volume inline */}
+              {stats && (
+                <div className="flex items-center gap-2 text-xs pl-2 border-l border-slate-200 hidden md:flex">
+                  <span className="font-extrabold font-mono text-slate-900">
+                    ₹{fmtNum(stats.cmp)}
+                  </span>
+                  <span
+                    className={`font-mono font-bold text-[11px] ${
+                      stats.dayChangePts >= 0 ? "text-emerald-600" : "text-rose-600"
+                    }`}
+                  >
+                    {stats.dayChangePts >= 0 ? "+" : ""}
+                    {fmtNum(stats.dayChangePts)} ({stats.dayChangePct >= 0 ? "+" : ""}{stats.dayChangePct.toFixed(2)}%)
+                  </span>
+                  <span className="text-slate-300">·</span>
+                  <span className="text-slate-500 text-[11px]">
+                    52W: ₹{fmtNum(stats.low52, 0)} - ₹{fmtNum(stats.high52, 0)}
+                  </span>
+                  {marketCapCr != null && marketCapCr > 0 && (
+                    <>
+                      <span className="text-slate-300">·</span>
+                      <span className="text-slate-500 text-[11px]">
+                        MCap: <strong className="font-mono text-slate-700">₹{marketCapCr >= 100000 ? (marketCapCr / 100000).toFixed(2) + " L Cr" : Math.round(marketCapCr).toLocaleString("en-IN") + " Cr"}</strong>
+                      </span>
+                    </>
+                  )}
+                  <span className="text-slate-300">·</span>
+                  <span className="text-slate-500 text-[11px]">
+                    Vol: <strong className="font-mono text-slate-700">{fmtVol(stats.latestVol)}</strong>
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Right: Pagination Flipper & Window Actions */}
+            <div className="flex items-center gap-2 shrink-0">
+              {!isBacktestMode && allTrades && onSelectTrade && (
+                <div className="flex items-center gap-1 bg-slate-50 px-1.5 py-0.5 rounded-lg border border-slate-200">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={!prevTrade}
+                    onClick={() => prevTrade && onSelectTrade(prevTrade)}
+                    title={prevTrade ? `Previous: ${prevTrade.symbol}` : "No previous"}
+                    className="size-5 rounded text-slate-500 hover:text-slate-900"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </Button>
+                  <span className="text-[11px] font-mono text-slate-500 px-1 font-semibold">
+                    {curIdx + 1}/{allTrades.length}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    disabled={!nextTrade}
+                    onClick={() => nextTrade && onSelectTrade(nextTrade)}
+                    title={nextTrade ? `Next: ${nextTrade.symbol}` : "No next"}
+                    className="size-5 rounded text-slate-500 hover:text-slate-900"
+                  >
+                    <ChevronRight className="size-3.5" />
+                  </Button>
+                </div>
+              )}
+
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsMaximized(!isMaximized)}
+                title={isMaximized ? "Restore" : "Fullscreen"}
+                className="size-7 rounded-lg text-slate-400 hover:text-slate-800"
+              >
+                {isMaximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
+              </Button>
+
+              {onClose && (
                 <Button
                   variant="ghost"
                   size="icon"
-                  disabled={!prevTrade}
-                  onClick={() => prevTrade && onSelectTrade(prevTrade)}
-                  title={prevTrade ? `Previous: ${prevTrade.symbol}` : "No previous"}
-                  className="size-5 rounded text-slate-500 hover:text-slate-900"
+                  onClick={onClose}
+                  title="Close (Esc)"
+                  className="size-7 rounded-lg text-slate-400 hover:text-slate-800"
                 >
-                  <ChevronLeft className="size-3.5" />
+                  <X className="size-4" />
                 </Button>
-                <span className="text-[11px] font-mono text-slate-500 px-1 font-semibold">
-                  {curIdx + 1}/{allTrades.length}
-                </span>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  disabled={!nextTrade}
-                  onClick={() => nextTrade && onSelectTrade(nextTrade)}
-                  title={nextTrade ? `Next: ${nextTrade.symbol}` : "No next"}
-                  className="size-5 rounded text-slate-500 hover:text-slate-900"
-                >
-                  <ChevronRight className="size-3.5" />
-                </Button>
-              </div>
-            )}
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => setIsMaximized(!isMaximized)}
-              title={isMaximized ? "Restore" : "Fullscreen"}
-              className="size-7 rounded-lg text-slate-400 hover:text-slate-800"
-            >
-              {isMaximized ? <Minimize2 className="size-3.5" /> : <Maximize2 className="size-3.5" />}
-            </Button>
-
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              title="Close (Esc)"
-              className="size-7 rounded-lg text-slate-400 hover:text-slate-800"
-            >
-              <X className="size-4" />
-            </Button>
+              )}
+            </div>
           </div>
-        </div>
+        )}
 
-        {/* ================= 2. FIXED SLIM CONTROLS TOOLBAR ================= */}
+        {/* ================= 2. FIXED SLIM CONTROLS TOOLBAR (ONLY FOR POPUP / MAXIMIZED) ================= */}
+        {(!embedded || isMaximized) && (
         <div className="px-5 py-1.5 bg-slate-50/70 border-b border-slate-100 flex items-center justify-between gap-3 text-xs">
           {/* Left: Ledger Toggle & Multi-Trade Switcher */}
           <div className="flex items-center gap-2 flex-wrap">
@@ -1201,6 +1441,7 @@ export function SwingerTradeChartModal({
               <div className="flex items-center gap-1 bg-slate-200/70 p-0.5 rounded-lg border border-slate-200">
                 {symbolTrades.map((st, idx) => {
                   const isSel = idx === activeTradeIndex
+                  const isLeg2 = st.leg === 2 || String(st.strategy_leg || "").toUpperCase().includes("LEG2")
                   const isOpenTrade = !st.exit_date || st.status === "ACTIVE" || st.status === "SHIELDED" || st.status === "RUNNER"
                   const isWin = (st.pnl ?? 0) >= 0
                   const ret = st.pnl_pct ?? st.pct_return ?? 0
@@ -1214,9 +1455,12 @@ export function SwingerTradeChartModal({
                           ? "bg-white text-slate-900 shadow-2xs font-extrabold border border-slate-200/80"
                           : "text-slate-600 hover:text-slate-900"
                       }`}
-                      title={isOpenTrade ? `Trade #${idx + 1}: Currently Holding (${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%)` : `Trade #${idx + 1}: Closed (${isWin ? "+" : ""}${ret.toFixed(1)}%)`}
+                      title={isOpenTrade ? `Trade #${idx + 1} (${isLeg2 ? "LEG 2" : "LEG 1"}): Currently Holding (${ret >= 0 ? "+" : ""}${ret.toFixed(1)}%)` : `Trade #${idx + 1} (${isLeg2 ? "LEG 2" : "LEG 1"}): Closed (${isWin ? "+" : ""}${ret.toFixed(1)}%)`}
                     >
                       <span>Trade #{idx + 1}</span>
+                      <span className={`px-1 rounded text-[9px] font-black ${isLeg2 ? "bg-purple-100 text-purple-700 border border-purple-200" : "bg-blue-100 text-blue-700 border border-blue-200"}`}>
+                        {isLeg2 ? "LEG 2" : "LEG 1"}
+                      </span>
                       {isOpenTrade ? (
                         <span className="px-1.5 py-0.2 rounded text-[9px] bg-sky-100 text-sky-800 font-black">
                           Active {ret >= 0 ? "+" : ""}{ret.toFixed(0)}%
@@ -1330,6 +1574,7 @@ export function SwingerTradeChartModal({
             </button>
           </div>
         </div>
+        )}
 
         {/* ================= 3. CHART CANVAS ================= */}
         <div className="p-3 sm:p-5 flex-1 relative bg-white min-h-[420px] overflow-hidden">
@@ -1458,22 +1703,21 @@ export function SwingerTradeChartModal({
             </>
           )}
 
-          {loading && (
-            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-white/90 backdrop-blur-xs gap-3 animate-in fade-in duration-100">
-              <div className="size-12 rounded-2xl bg-amber-500/10 border border-amber-300 flex items-center justify-center text-amber-600 shadow-sm animate-pulse">
-                <Zap className="size-6 text-amber-500" />
+          {/* Subtle top loading pulse bar if chart already has candles (ZERO flickering) */}
+          {loading && candles.length > 0 && (
+            <div className="absolute top-0 left-0 right-0 h-0.5 bg-emerald-500 animate-pulse z-30 pointer-events-none" />
+          )}
+
+          {/* Centered loader ONLY on initial blank load when no candles exist yet */}
+          {loading && candles.length === 0 && (
+            <div className="absolute inset-0 z-40 flex flex-col items-center justify-center bg-white/95 backdrop-blur-xs gap-3">
+              <div className="size-10 rounded-2xl bg-emerald-500/10 border border-emerald-300 flex items-center justify-center text-emerald-600 shadow-sm animate-pulse">
+                <RefreshCw className="size-5 text-emerald-600 animate-spin" />
               </div>
               <div className="text-center">
-                <span className="text-sm font-black text-slate-800 tracking-tight">
-                  {isBacktestMode
-                    ? `Simulating Swinger Strategy on ${currentSymbol || trade.symbol}...`
-                    : `Loading Trade Details & Chart for ${currentSymbol || trade.symbol}...`}
+                <span className="text-sm font-black text-slate-800 tracking-tight font-mono">
+                  Loading {currentSymbol || trade.symbol}...
                 </span>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {isBacktestMode
-                    ? "Analyzing 5Y historical bars, breakouts, SL, BE lock & runner trail"
-                    : "Retrieving trade log entry, execution levels & candlestick history"}
-                </p>
               </div>
             </div>
           )}
@@ -1507,6 +1751,7 @@ export function SwingerTradeChartModal({
                 <thead>
                   <tr className="bg-white border-b border-slate-100 text-slate-400 font-bold uppercase tracking-wider text-[10px] sticky top-8">
                     <th className="p-2 pl-4">#</th>
+                    <th className="p-2">Strategy Leg</th>
                     <th className="p-2">Entry Date</th>
                     <th className="p-2 font-mono text-right">Entry Price</th>
                     <th className="p-2">Exit Date</th>
@@ -1522,6 +1767,7 @@ export function SwingerTradeChartModal({
                     const isTradeWin = (st.pnl ?? 0) >= 0
                     const isOpenTrade = !st.exit_date || st.status === "ACTIVE" || st.status === "SHIELDED" || st.status === "RUNNER"
                     const tradeNum = i + 1
+                    const isLeg2 = st.leg === 2 || String(st.strategy_leg || "").toUpperCase().includes("LEG2")
                     return (
                       <tr
                         key={i}
@@ -1536,6 +1782,19 @@ export function SwingerTradeChartModal({
                           <span className={isSel ? "text-amber-800" : "text-slate-400"}>
                             #{tradeNum}
                           </span>
+                        </td>
+                        <td className="p-2">
+                          {isLeg2 ? (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                              <span className="size-1 rounded-full bg-purple-500" />
+                              LEG 2
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                              <span className="size-1 rounded-full bg-blue-500" />
+                              LEG 1
+                            </span>
+                          )}
                         </td>
                         <td className="p-2 font-mono text-slate-600">{st.entry_date}</td>
                         <td className="p-2 font-mono text-right font-bold text-slate-800">
@@ -1576,6 +1835,15 @@ export function SwingerTradeChartModal({
           )}
         </div>
       </div>
+  )
+
+  if (embedded && !isMaximized) {
+    return content
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-2 sm:p-4 animate-in fade-in duration-150">
+      {content}
     </div>
   )
 }

@@ -108,7 +108,7 @@ def precompute_indicators(price_data, mcap_2000, blacklist=None):
         
     return stock_bars
 
-def run_backtest(stock_bars, max_slots=15, slot_size=25000.0, sim_start="2022-01-01"):
+def run_backtest(stock_bars, max_slots=15, slot_size=25000.0, sim_start="2022-01-01", runner_trail_pct=18.0):
     dt_sim_start = pd.to_datetime(sim_start)
     all_market_dates = sorted(list(set(d for b in stock_bars.values() for d in b["dates"] if d >= dt_sim_start)))
     
@@ -168,11 +168,11 @@ def run_backtest(stock_bars, max_slots=15, slot_size=25000.0, sim_start="2022-01
                     exit_p = c
                     exit_reason = "Initial SL (-12% Close)"
             else:
-                peak_trail = pos["runner_peak"] * 0.75
+                peak_trail = pos["runner_peak"] * (1.0 - runner_trail_pct / 100.0)
                 if l <= peak_trail:
                     exited = True
                     exit_p = min(o, peak_trail) if o < peak_trail else peak_trail
-                    exit_reason = "Peak Trail Stop (25%)"
+                    exit_reason = f"Peak Trail Stop ({int(runner_trail_pct)}%)"
                 elif pos["bars_held"] >= 10 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
                     exited = True
                     exit_p = c

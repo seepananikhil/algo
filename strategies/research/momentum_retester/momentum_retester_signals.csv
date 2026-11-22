@@ -1,0 +1,367 @@
+date,symbol,cap,sector
+2026-03-19,JINDALSAW,Midcap,Industrials
+2026-03-19,RCF,Midcap,Chemicals
+2026-03-19,OLECTRA,Midcap,Auto
+2026-03-19,JBMA,Midcap,Auto
+2026-03-19,REDINGTON,Largecap,Services
+2026-03-19,DIXON,Largecap,Consumer Discretionary
+2026-03-19,NPST,Smallcap,I.T
+2026-03-23,MRPL,Largecap,Energy
+2026-03-23,ELECTCAST,Smallcap,"Castings, Forgings & Fasteners"
+2026-03-23,JINDALSAW,Midcap,Industrials
+2026-03-23,SHAILY,Midcap,Plastic products
+2026-03-23,MMTC,Midcap,Services
+2026-03-23,ITI,Largecap,Aerospace & Defence
+2026-03-23,RCF,Midcap,Chemicals
+2026-03-23,OLECTRA,Midcap,Auto
+2026-03-23,JBMA,Midcap,Auto
+2026-03-23,JPPOWER,Midcap,Power & Utilities
+2026-03-23,REDINGTON,Largecap,Services
+2026-03-23,KIOCL,Largecap,Metals & Mining
+2026-03-23,DIXON,Largecap,Consumer Discretionary
+2026-03-23,ATGL,Largecap,Energy
+2026-03-23,HAPPSTMNDS,Smallcap,I.T
+2026-03-23,NPST,Smallcap,I.T
+2026-03-23,ABSLAMC,Largecap,Financials
+2026-03-23,FIRSTCRY,Midcap,Consumer Discretionary
+2026-03-23,NTPCGREEN,Largecap,Power & Utilities
+2026-03-25,AETHER,Largecap,Chemicals
+2026-03-27,MRPL,Largecap,Energy
+2026-03-27,SHAILY,Midcap,Plastic products
+2026-03-27,PCBL,Midcap,Chemicals
+2026-03-27,ALKYLAMINE,Midcap,Chemicals
+2026-03-27,JBMA,Midcap,Auto
+2026-03-27,SPARC,Midcap,Healthcare
+2026-03-27,MOIL,Smallcap,Metals & Mining
+2026-03-27,BLS,Midcap,I.T
+2026-03-27,NPST,Smallcap,I.T
+2026-03-30,PCBL,Midcap,Chemicals
+2026-03-30,ALKYLAMINE,Midcap,Chemicals
+2026-03-30,HEG,Midcap,Power & Utilities
+2026-03-30,MMTC,Midcap,Services
+2026-03-30,ITI,Largecap,Aerospace & Defence
+2026-03-30,OLECTRA,Midcap,Auto
+2026-03-30,JBMA,Midcap,Auto
+2026-03-30,JPPOWER,Midcap,Power & Utilities
+2026-03-30,SPARC,Midcap,Healthcare
+2026-03-30,BLS,Midcap,I.T
+2026-03-30,NPST,Smallcap,I.T
+2026-03-30,AETHER,Largecap,Chemicals
+2026-03-30,FIRSTCRY,Midcap,Consumer Discretionary
+2026-04-02,GRSE,Largecap,Aerospace & Defence
+2026-04-06,TCI,Midcap,Transportation
+2026-04-08,DEEPINDS,Smallcap,Energy
+2026-04-09,LUXIND,Smallcap,Textiles
+2026-04-13,SPARC,Midcap,Healthcare
+2026-04-13,COHANCE,Midcap,Healthcare
+2026-04-13,OLAELEC,Midcap,Auto
+2026-04-17,GALLANTT,Midcap,Metals & Mining
+2026-04-20,RAMRAT,Smallcap,Metals & Mining
+2026-04-20,GMDCLTD,Midcap,Metals & Mining
+2026-04-20,COHANCE,Midcap,Healthcare
+2026-04-21,OLAELEC,Midcap,Auto
+2026-04-22,ROLEXRINGS,Midcap,Auto
+2026-04-23,ASHOKLEY,Largecap,Auto
+2026-04-23,GOKULAGRO,Midcap,FMCG
+2026-04-24,NAVA,Midcap,Miscellaneous
+2026-04-27,ROLEXRINGS,Midcap,Auto
+2026-04-28,SBCL,Midcap,Metals & Mining
+2026-04-28,TANLA,Midcap,I.T
+2026-04-28,AEQUS,Midcap,Aerospace & Defence
+2026-04-29,AGI,Smallcap,Industrials
+2026-04-29,COHANCE,Midcap,Healthcare
+2026-04-29,JSFB,Smallcap,Bank
+2026-04-30,TANLA,Midcap,I.T
+2026-05-04,MTARTECH,Midcap,Aerospace & Defence
+2026-05-04,SAPPHIRE,Midcap,Consumer Discretionary
+2026-05-05,CEMPRO,Largecap,Realty
+2026-05-05,SAPPHIRE,Midcap,Consumer Discretionary
+2026-05-05,MEESHO,Largecap,Transportation
+2026-05-07,WOCKPHARMA,Largecap,Healthcare
+2026-05-11,GODREJIND,Largecap,Chemicals
+2026-05-11,RAYMOND,Midcap,Transportation
+2026-05-11,SUNFLAG,Midcap,Metals & Mining
+2026-05-11,CEMPRO,Largecap,Realty
+2026-05-11,SBCL,Midcap,Metals & Mining
+2026-05-11,FSL,Largecap,I.T
+2026-05-11,DBREALTY,Smallcap,Realty
+2026-05-11,TEJASNET,Midcap,Telecom
+2026-05-11,AEROFLEX,Midcap,Metals & Mining
+2026-05-11,RAYMONDREL,Smallcap,Realty
+2026-05-11,AEQUS,Midcap,Aerospace & Defence
+2026-05-12,GODREJIND,Largecap,Chemicals
+2026-05-12,AGI,Smallcap,Industrials
+2026-05-12,SUNFLAG,Midcap,Metals & Mining
+2026-05-12,GRWRHITECH,Midcap,Industrials
+2026-05-12,UNIVCABLES,Smallcap,Industrials
+2026-05-12,SANDUMA,Midcap,Metals & Mining
+2026-05-12,RESPONIND,Smallcap,Plastic products
+2026-05-12,SHOPERSTOP,Smallcap,Consumer Discretionary
+2026-05-12,TANLA,Midcap,I.T
+2026-05-12,FSL,Largecap,I.T
+2026-05-12,EMBDL,Midcap,Realty
+2026-05-12,RPGLIFE,Smallcap,Healthcare
+2026-05-12,DBREALTY,Smallcap,Realty
+2026-05-12,CREDITACC,Midcap,Financials
+2026-05-12,MTARTECH,Midcap,Aerospace & Defence
+2026-05-12,MAPMYINDIA,Smallcap,I.T
+2026-05-12,PPLPHARMA,Largecap,Healthcare
+2026-05-12,AEROFLEX,Midcap,Metals & Mining
+2026-05-12,AEQUS,Midcap,Aerospace & Defence
+2026-05-12,MEESHO,Largecap,Transportation
+2026-05-13,JINDWORLD,Smallcap,Textiles
+2026-05-13,CREDITACC,Midcap,Financials
+2026-05-13,COHANCE,Midcap,Healthcare
+2026-05-14,FOSECOIND,Smallcap,Chemicals
+2026-05-15,SANDUMA,Midcap,Metals & Mining
+2026-05-15,NLCINDIA,Largecap,Power & Utilities
+2026-05-15,DBREALTY,Smallcap,Realty
+2026-05-15,TEXRAIL,Smallcap,Industrials
+2026-05-15,MTARTECH,Midcap,Aerospace & Defence
+2026-05-15,RRKABEL,Largecap,Industrials
+2026-05-18,SUNFLAG,Midcap,Metals & Mining
+2026-05-18,SAREGAMA,Midcap,Media
+2026-05-18,EMBDL,Midcap,Realty
+2026-05-18,TEXRAIL,Smallcap,Industrials
+2026-05-18,MAPMYINDIA,Smallcap,I.T
+2026-05-18,JAINREC,Midcap,Metals & Mining
+2026-05-19,RESPONIND,Smallcap,Plastic products
+2026-05-19,MTARTECH,Midcap,Aerospace & Defence
+2026-05-19,JAINREC,Midcap,Metals & Mining
+2026-05-19,WAKEFIT,Smallcap,Textiles
+2026-05-20,KIRLOSIND,Smallcap,Financials
+2026-05-20,MAPMYINDIA,Smallcap,I.T
+2026-05-21,FCL,Midcap,Chemicals
+2026-05-22,WAKEFIT,Smallcap,Textiles
+2026-05-27,SPARC,Midcap,Healthcare
+2026-05-27,YASHO,Smallcap,Chemicals
+2026-05-27,REDTAPE,Midcap,Consumer Discretionary
+2026-05-29,SUDARSCHEM,Midcap,Chemicals
+2026-05-29,GUJTHEM,Smallcap,Healthcare
+2026-05-29,JPPOWER,Midcap,Power & Utilities
+2026-05-29,SPARC,Midcap,Healthcare
+2026-05-29,ATGL,Largecap,Energy
+2026-05-29,NAZARA,Midcap,I.T
+2026-06-01,BLISSGVS,Midcap,Healthcare
+2026-06-01,RELAXO,Midcap,Consumer Discretionary
+2026-06-01,JPPOWER,Midcap,Power & Utilities
+2026-06-01,SPARC,Midcap,Healthcare
+2026-06-01,ATGL,Largecap,Energy
+2026-06-02,WOCKPHARMA,Largecap,Healthcare
+2026-06-02,SUPRIYA,Midcap,Healthcare
+2026-06-03,APOLLO,Midcap,Aerospace & Defence
+2026-06-04,FCL,Midcap,Chemicals
+2026-06-04,NEWGEN,Midcap,I.T
+2026-06-04,JSLL,Smallcap,Healthcare
+2026-06-05,ASHAPURMIN,Smallcap,Metals & Mining
+2026-06-05,WOCKPHARMA,Largecap,Healthcare
+2026-06-05,TBZ,Smallcap,Consumer Discretionary
+2026-06-05,NETWEB,Largecap,I.T
+2026-06-05,RUBICON,Largecap,Healthcare
+2026-06-08,IFCI,Midcap,Financials
+2026-06-08,UNIVCABLES,Smallcap,Industrials
+2026-06-08,BLISSGVS,Midcap,Healthcare
+2026-06-08,ASHAPURMIN,Smallcap,Metals & Mining
+2026-06-08,JINDWORLD,Smallcap,Textiles
+2026-06-08,ITDC,Midcap,Services
+2026-06-08,NETWORK18,Smallcap,Media
+2026-06-08,SPARC,Midcap,Healthcare
+2026-06-08,FCL,Midcap,Chemicals
+2026-06-08,MSTCLTD,Smallcap,I.T
+2026-06-08,NETWEB,Largecap,I.T
+2026-06-08,KSHINTL,Midcap,Metals & Mining
+2026-06-08,KWIL,Midcap,FMCG
+2026-06-10,IFCI,Midcap,Financials
+2026-06-10,GUJTHEM,Smallcap,Healthcare
+2026-06-10,BALAMINES,Midcap,Chemicals
+2026-06-10,NETWORK18,Smallcap,Media
+2026-06-11,MOREPENLAB,Midcap,Healthcare
+2026-06-11,THOMASCOOK,Smallcap,Miscellaneous
+2026-06-11,UNIVCABLES,Smallcap,Industrials
+2026-06-11,NPST,Smallcap,I.T
+2026-06-11,OMNI,Midcap,Industrials
+2026-06-18,IFCI,Midcap,Financials
+2026-06-18,IDBI,Largecap,Bank
+2026-06-18,GOLDIAM,Smallcap,Consumer Discretionary
+2026-06-18,INOXINDIA,Midcap,Industrials
+2026-06-19,BATAINDIA,Midcap,Consumer Discretionary
+2026-06-19,THOMASCOOK,Smallcap,Miscellaneous
+2026-06-23,KIRLPNU,Midcap,Industrials
+2026-06-23,NIACL,Largecap,Financials
+2026-06-23,MSTCLTD,Smallcap,I.T
+2026-06-24,SUBROS,Smallcap,Auto
+2026-06-24,MTARTECH,Midcap,Aerospace & Defence
+2026-06-25,PARAS,Midcap,Aerospace & Defence
+2026-06-29,KPRMILL,Largecap,Readymade Garments/Apparels
+2026-06-29,PARAS,Midcap,Aerospace & Defence
+2026-07-01,GARFIBRES,Midcap,Textiles
+2026-07-02,KIRLPNU,Midcap,Industrials
+2026-07-06,PCJEWELLER,Midcap,Consumer Discretionary
+2026-07-07,SPECTRUM,Midcap,Industrials
+2026-07-08,RITES,Midcap,Miscellaneous
+2026-07-13,UNICHEMLAB,Smallcap,Healthcare
+2026-07-13,SGMART,Midcap,Services
+2026-07-13,J&KBANK,Midcap,Bank
+2026-07-13,AZAD,Midcap,Aerospace & Defence
+2026-07-14,NEWGEN,Midcap,I.T
+2026-07-15,NOVARTIND,Smallcap,Healthcare
+2026-07-15,IOLCP,Midcap,Healthcare
+2026-07-16,ITDC,Midcap,Services
+2026-07-17,GRINDWELL,Largecap,Industrials
+2026-07-17,IOLCP,Midcap,Healthcare
+2026-07-20,RESPONIND,Smallcap,Plastic products
+2026-07-20,ECLERX,Midcap,I.T
+2026-07-20,MAPMYINDIA,Smallcap,I.T
+2026-07-21,RESPONIND,Smallcap,Plastic products
+2026-07-21,RELAXO,Midcap,Consumer Discretionary
+2026-07-22,UNICHEMLAB,Smallcap,Healthcare
+2026-07-22,DPABHUSHAN,Smallcap,Consumer Discretionary
+2026-07-23,WESTLIFE,Midcap,Consumer Discretionary
+2026-07-23,JINDWORLD,Smallcap,Textiles
+2026-07-23,NEWGEN,Midcap,I.T
+2026-07-23,CYIENTDLM,Midcap,Aerospace & Defence
+2026-07-28,TATVA,Smallcap,Chemicals
+2026-07-28,DATAPATTNS,Largecap,Aerospace & Defence
+2026-07-28,BLUESTONE,Midcap,Consumer Discretionary
+2026-07-28,CAPILLARY,Smallcap,I.T
+2026-07-30,PCBL,Midcap,Chemicals
+2026-07-31,DATAPATTNS,Largecap,Aerospace & Defence
+2026-08-05,DALMIASUG,Smallcap,FMCG
+2026-08-05,YASHO,Smallcap,Chemicals
+2026-08-06,SMLMAH,Midcap,Auto
+2026-08-06,FSL,Largecap,I.T
+2026-08-06,CELLO,Midcap,Consumer Discretionary
+2026-08-06,OMNI,Midcap,Industrials
+2026-08-07,DECNGOLD,Smallcap,Metals & Mining
+2026-08-07,NAVINFLUOR,Largecap,Chemicals
+2026-08-07,FSL,Largecap,I.T
+2026-08-07,ASKAUTOLTD,Midcap,Auto
+2026-08-07,OMNI,Midcap,Industrials
+2026-08-10,ELANTAS,Midcap,Chemicals
+2026-08-10,SMLMAH,Midcap,Auto
+2026-08-10,SOTL,Smallcap,Energy
+2026-08-10,RBA,Midcap,Consumer Discretionary
+2026-08-10,CAPILLARY,Smallcap,I.T
+2026-08-10,OMNI,Midcap,Industrials
+2026-08-11,SBCL,Midcap,Metals & Mining
+2026-08-12,MOREPENLAB,Midcap,Healthcare
+2026-08-12,UNICHEMLAB,Smallcap,Healthcare
+2026-08-12,KOLTEPATIL,Smallcap,Realty
+2026-08-12,OMNI,Midcap,Industrials
+2026-08-17,GALAXYSURF,Midcap,Chemicals
+2026-08-19,UNIVCABLES,Smallcap,Industrials
+2026-08-19,DECNGOLD,Smallcap,Metals & Mining
+2026-08-19,YASHO,Smallcap,Chemicals
+2026-08-19,AARTIPHARM,Midcap,Healthcare
+2026-08-20,YASHO,Smallcap,Chemicals
+2026-08-21,BALRAMCHIN,Midcap,FMCG
+2026-08-21,BANARISUG,Smallcap,FMCG
+2026-08-21,KPL,Smallcap,Healthcare
+2026-08-24,BALRAMCHIN,Midcap,FMCG
+2026-08-25,BAJAJHIND,Smallcap,FMCG
+2026-08-25,TDPOWERSYS,Midcap,Industrials
+2026-08-26,BAJAJHIND,Smallcap,FMCG
+2026-08-28,SHANTIGEAR,Smallcap,Industrials
+2026-08-31,MASTEK,Smallcap,I.T
+2026-09-01,BANARISUG,Smallcap,FMCG
+2026-09-01,ICIL,Midcap,Textiles
+2026-09-02,BALUFORGE,Midcap,"Castings, Forgings & Fasteners"
+2026-09-07,MASTEK,Smallcap,I.T
+2026-09-07,SOTL,Smallcap,Energy
+2026-09-08,IFCI,Midcap,Financials
+2026-09-08,JINDWORLD,Smallcap,Textiles
+2026-09-08,NIACL,Largecap,Financials
+2026-09-09,RAYMOND,Midcap,Transportation
+2026-09-09,TBZ,Smallcap,Consumer Discretionary
+2026-09-10,IFCI,Midcap,Financials
+2026-09-10,TBZ,Smallcap,Consumer Discretionary
+2026-09-11,JINDWORLD,Smallcap,Textiles
+2026-09-15,IFCI,Midcap,Financials
+2026-09-15,NOVARTIND,Smallcap,Healthcare
+2026-09-15,RESPONIND,Smallcap,Plastic products
+2026-09-15,GRAPHITE,Midcap,Industrials
+2026-09-15,SSWL,Midcap,Auto
+2026-09-15,CENTUM,Midcap,Aerospace & Defence
+2026-09-15,FILATEX,Smallcap,Textiles
+2026-09-15,JINDWORLD,Smallcap,Textiles
+2026-09-15,SMSPHARMA,Smallcap,Healthcare
+2026-09-15,BRIGADE,Midcap,Realty
+2026-09-15,PCJEWELLER,Midcap,Consumer Discretionary
+2026-09-15,WHEELS,Midcap,Auto
+2026-09-15,NIACL,Largecap,Financials
+2026-09-15,MIDHANI,Midcap,Aerospace & Defence
+2026-09-15,SYRMA,Largecap,Consumer Discretionary
+2026-09-15,PINELABS,Midcap,I.T
+2026-09-16,NOVARTIND,Smallcap,Healthcare
+2026-09-16,PINELABS,Midcap,I.T
+2026-09-18,TATACHEM,Midcap,Chemicals
+2026-09-18,NIACL,Largecap,Financials
+2026-09-22,ASHIANA,Smallcap,Realty
+2026-09-23,PINELABS,Midcap,I.T
+2026-09-24,OPTIEMUS,Midcap,Telecom
+2026-09-24,KPIGREEN,Midcap,Power & Utilities
+2026-09-24,AVALON,Midcap,Consumer Discretionary
+2026-09-24,TRANSRAILL,Midcap,Realty
+2026-09-24,PINELABS,Midcap,I.T
+2026-09-28,MANINDS,Midcap,Metals & Mining
+2026-09-28,NPST,Smallcap,I.T
+2026-09-28,TRANSRAILL,Midcap,Realty
+2026-09-28,RAYMONDREL,Smallcap,Realty
+2026-09-29,TATACHEM,Midcap,Chemicals
+2026-09-30,MANINDS,Midcap,Metals & Mining
+2026-09-30,KIRLOSENG,Largecap,Industrials
+2026-10-01,IRCON,Midcap,Realty
+2026-10-05,HEG,Midcap,Power & Utilities
+2026-10-05,KPIGREEN,Midcap,Power & Utilities
+2026-10-06,DCMSHRIRAM,Midcap,Miscellaneous
+2026-10-07,BALAMINES,Midcap,Chemicals
+2026-10-08,CHENNPETRO,Largecap,Energy
+2026-10-08,ALKYLAMINE,Midcap,Chemicals
+2026-10-08,MANINDS,Midcap,Metals & Mining
+2026-10-08,OPTIEMUS,Midcap,Telecom
+2026-10-12,OPTIEMUS,Midcap,Telecom
+2026-10-12,INOXGREEN,Smallcap,Miscellaneous
+2026-10-13,WSTCSTPAPR,Smallcap,Building Materials
+2026-10-15,CHENNPETRO,Largecap,Energy
+2026-10-15,WSTCSTPAPR,Smallcap,Building Materials
+2026-10-15,OPTIEMUS,Midcap,Telecom
+2026-10-15,TARIL,Midcap,Industrials
+2026-10-15,VEDPOWER,Midcap,Power & Utilities
+2026-10-16,DPABHUSHAN,Smallcap,Consumer Discretionary
+2026-10-16,INOXGREEN,Smallcap,Miscellaneous
+2026-10-19,OPTIEMUS,Midcap,Telecom
+2026-10-21,WSTCSTPAPR,Smallcap,Building Materials
+2026-10-21,GALLANTT,Midcap,Metals & Mining
+2026-10-21,V2RETAIL,Midcap,Consumer Discretionary
+2026-10-21,CCAVENUE,Largecap,I.T
+2026-10-21,VEDPOWER,Midcap,Power & Utilities
+2026-10-22,GALLANTT,Midcap,Metals & Mining
+2026-10-22,CCAVENUE,Largecap,I.T
+2026-10-23,INDIACEM,Midcap,Building Materials
+2026-10-23,V2RETAIL,Midcap,Consumer Discretionary
+2026-10-23,INOXGREEN,Smallcap,Miscellaneous
+2026-10-23,OMNI,Midcap,Industrials
+2026-10-23,VEDPOWER,Midcap,Power & Utilities
+2026-10-26,PCJEWELLER,Midcap,Consumer Discretionary
+2026-10-28,MRPL,Largecap,Energy
+2026-10-28,TTML,Midcap,Telecom-Service
+2026-10-28,PCJEWELLER,Midcap,Consumer Discretionary
+2026-10-28,YASHO,Smallcap,Chemicals
+2026-10-29,TTML,Midcap,Telecom-Service
+2026-10-29,OLAELEC,Midcap,Auto
+2026-10-30,SSWL,Midcap,Auto
+2026-10-30,TTML,Midcap,Telecom-Service
+2026-10-30,BSOFT,Midcap,I.T
+2026-10-30,SGFIN,Smallcap,Financials
+2026-10-30,YASHO,Smallcap,Chemicals
+2026-10-30,OLAELEC,Midcap,Auto
+2026-10-30,OMNI,Midcap,Industrials
+2026-11-03,PRAJIND,Smallcap,Industrials
+2026-11-03,OMNI,Midcap,Industrials
+2026-11-05,MRPL,Largecap,Energy
+2026-11-05,ICIL,Midcap,Textiles
+2026-11-05,VRLLOG,Midcap,Transportation
+2026-11-05,OMNI,Midcap,Industrials
+2026-11-08,VRLLOG,Midcap,Transportation
+2026-11-09,FINCABLES,Midcap,Industrials
+2026-11-09,TTML,Midcap,Telecom-Service

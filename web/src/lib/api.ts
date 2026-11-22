@@ -256,7 +256,24 @@ export function chartTradesFromOptionFills(fills: OptionTrade[]): RuleTrade[] {
   }))
 }
 
-export type BacktestTrade = RuleTrade & { date: string; equity: number; drawdown: number; bars_held?: number; setup?: string; lots?: number; base_points?: number; pnl_rupees?: number; futures_rupees?: number; weighted_points?: number }
+export type BacktestTrade = RuleTrade & {
+  date: string
+  equity: number
+  drawdown: number
+  bars_held?: number
+  setup?: string
+  lots?: number
+  base_points?: number
+  pnl_rupees?: number
+  futures_rupees?: number
+  weighted_points?: number
+  symbol?: string
+  stage?: string
+  engine?: string
+  strategy_label?: string
+  trigger_reason?: string
+  trigger_label?: string
+}
 
 export type PaperReport = {
   summary: {
@@ -473,6 +490,9 @@ export type Backtest = {
   monthly: { month: string; trades: number; points: number; win_rate_pct: number }[]
   daily: { date: string; trades: number; net_rs: number; points: number }[]
   exit_reasons: { reason: string; count: number; points?: number }[]
+  nifty_summary?: any
+  sensex_summary?: any
+  comparison?: any
 }
 
 export type FundsStatus = {

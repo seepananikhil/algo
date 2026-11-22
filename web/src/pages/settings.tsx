@@ -18,6 +18,8 @@ import {
   TrendingUp,
   Sparkles,
   Lock,
+  Bell,
+  Send,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -63,6 +65,74 @@ export function SettingsPage() {
   const [restart, setRestart] = useState(false)
   const [funds, setFunds] = useState<FundsStatus | null>(null)
   const [fundsLoading, setFundsLoading] = useState(false)
+  const [telegramConfig, setTelegramConfig] = useState<{
+    ok: boolean
+    enabled: boolean
+    auto_enable_deployed: boolean
+    is_deployed: boolean
+    is_active: boolean
+    bot_token_set: boolean
+    chat_id: string
+  } | null>(null)
+  const [telegramTesting, setTelegramTesting] = useState(false)
+  const [telegramSaving, setTelegramSaving] = useState(false)
+
+  const loadTelegramConfig = async () => {
+    try {
+      const res = await getJSON<any>("/api/telegram/config")
+      if (res) setTelegramConfig(res)
+    } catch {}
+  }
+
+  useEffect(() => {
+    loadTelegramConfig()
+  }, [])
+
+  const handleToggleTelegram = async (newVal: boolean) => {
+    setTelegramSaving(true)
+    try {
+      const res = await postJSON<any>("/api/telegram/config", { enabled: newVal })
+      if (res?.ok) {
+        setTelegramConfig((prev) => (prev ? { ...prev, enabled: res.enabled, is_active: res.is_active } : null))
+        toast.success(newVal ? "Telegram alerts enabled" : "Telegram alerts turned off (silenced)")
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update Telegram setting")
+    } finally {
+      setTelegramSaving(false)
+    }
+  }
+
+  const handleToggleAutoDeploy = async (newVal: boolean) => {
+    setTelegramSaving(true)
+    try {
+      const res = await postJSON<any>("/api/telegram/config", { auto_enable_deployed: newVal })
+      if (res?.ok) {
+        setTelegramConfig((prev) => (prev ? { ...prev, auto_enable_deployed: res.auto_enable_deployed, is_active: res.is_active } : null))
+        toast.success(newVal ? "Auto-enable on deployed version active" : "Auto-enable on deploy disabled")
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to update setting")
+    } finally {
+      setTelegramSaving(false)
+    }
+  }
+
+  const handleSendTestAlert = async () => {
+    setTelegramTesting(true)
+    try {
+      const res = await postJSON<any>("/api/telegram/config", { action: "test" })
+      if (res?.ok) {
+        toast.success(res.message || "Test alert sent to Telegram!")
+      } else {
+        toast.error(res?.message || "Failed to send test alert")
+      }
+    } catch (e: any) {
+      toast.error(e?.message || "Failed to dispatch test alert")
+    } finally {
+      setTelegramTesting(false)
+    }
+  }
 
   useEffect(() => {
     if (data) {
@@ -552,6 +622,89 @@ export function SettingsPage() {
                   </Button>
                 </div>
               )}
+            </CardContent>
+          </Card>
+
+          {/* Telegram Trade Alerts Card */}
+          <Card className={telegramConfig?.is_active ? "border-emerald-500/40 bg-emerald-500/5" : "border-border/60"}>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Bell className={cn("size-5", telegramConfig?.is_active ? "text-emerald-400" : "text-muted-foreground")} />
+                  <CardTitle className="text-lg">Telegram Trade Alerts</CardTitle>
+                </div>
+                <Badge
+                  variant="outline"
+                  className={
+                    telegramConfig?.is_active
+                      ? "border-emerald-500/40 text-emerald-400 bg-emerald-500/10 font-bold"
+                      : telegramConfig?.is_deployed
+                      ? "border-sky-500/40 text-sky-400 bg-sky-500/10 font-medium"
+                      : "border-border/60 text-muted-foreground bg-muted/30 font-medium"
+                  }
+                >
+                  {telegramConfig?.is_active
+                    ? "ACTIVE & BROADCASTING"
+                    : telegramConfig?.is_deployed
+                    ? "DEPLOYED (OFF)"
+                    : "LOCAL (SILENCED / OFF)"}
+                </Badge>
+              </div>
+              <CardDescription>
+                Real-time alerts for entries, dynamic SL ratchets, pyramiding, and trade exits with realized P&L.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3.5">
+              <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-foreground">Telegram Alerts</span>
+                  <span className="text-xs text-muted-foreground">
+                    {telegramConfig?.enabled
+                      ? "Notifications will be dispatched for all live trade events."
+                      : "Notifications are silenced on this local machine to avoid spam during development."}
+                  </span>
+                </div>
+                <Switch
+                  checked={Boolean(telegramConfig?.enabled)}
+                  onCheckedChange={handleToggleTelegram}
+                  disabled={telegramSaving}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-3 rounded-lg border border-border/60 bg-muted/20">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-semibold text-foreground">Auto-Enable in Deployed Environment</span>
+                  <span className="text-xs text-muted-foreground">
+                    Automatically activate Telegram notifications when deployed on cloud or production (<code className="text-[11px] font-mono text-primary">DEPLOYED=1</code>).
+                  </span>
+                </div>
+                <Switch
+                  checked={Boolean(telegramConfig?.auto_enable_deployed)}
+                  onCheckedChange={handleToggleAutoDeploy}
+                  disabled={telegramSaving}
+                />
+              </div>
+
+              <div className="flex items-center justify-between p-2.5 px-3 rounded-lg border border-border/40 bg-card/60 text-xs">
+                <div className="flex items-center gap-3">
+                  <span className="font-mono text-muted-foreground">
+                    Chat ID: <span className="text-foreground font-semibold">{telegramConfig?.chat_id || "Not Set"}</span>
+                  </span>
+                  <span className="font-mono text-muted-foreground">
+                    Bot: <span className={telegramConfig?.bot_token_set ? "text-emerald-400 font-semibold" : "text-amber-400 font-semibold"}>{telegramConfig?.bot_token_set ? "✓ Connected" : "Missing Token"}</span>
+                  </span>
+                </div>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSendTestAlert}
+                  disabled={telegramTesting || !telegramConfig?.bot_token_set}
+                  className="text-xs gap-1.5 cursor-pointer"
+                >
+                  <Send className={cn("size-3.5", telegramTesting && "animate-pulse")} />
+                  {telegramTesting ? "Sending…" : "Send Test Alert"}
+                </Button>
+              </div>
             </CardContent>
           </Card>
         </div>

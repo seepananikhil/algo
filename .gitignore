@@ -12,6 +12,7 @@ telegram_config.json
 
 # Kill switches & flags
 STOP_TRADING
+RISK_LOCK.json
 
 # Logs & temp files
 *.log
@@ -19,8 +20,18 @@ logs/
 app_server.log
 tmp/
 .tmp/
+tmp_chrome_*/
+scratch/
+rejected_strategies/
+strategy_versions/
 __pycache__/
 *.pyc
+
+# Backup files
+captured_data/archive/
+performance/archive/
+*_backup*
+*.backup*
 
 # Virtual environments & node dependencies
 venv/
@@ -34,6 +45,12 @@ captured_data/fyers/
 captured_data/live/
 captured_data/risk_guardian_lock.json
 captured_data/technovusin_*/
+captured_data/archive_*/
+captured_data/india_vix_10y.csv
+captured_data/sensex_yahoo_*.csv
+captured_data/trading_days.json
+paper/trend_runner/2026/
+paper/trend_runner_sensex/
 performance/live_*.json
 performance/live_*.csv
 

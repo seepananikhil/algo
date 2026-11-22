@@ -1,3 +1,4 @@
+import math
 #!/usr/bin/env python3
 """
 Phoenix Swinger Engine - Deep Value Asymmetric Reversal Paper Engine
@@ -16,6 +17,7 @@ import os
 import sys
 import json
 import time
+import pickle
 import requests
 import pandas as pd
 import numpy as np
@@ -32,6 +34,7 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 PORTFOLIO_FILE = DATA_DIR / "portfolio.json"
 TRADES_FILE = DATA_DIR / "trades.json"
+BACKTEST_TRADES_FILE = DATA_DIR / "backtest_trades.json"
 SIGNALS_FILE = DATA_DIR / "daily_signals.json"
 WATCHLIST_FILE = DATA_DIR / "watchlist.json"
 CONFIG_FILE = ROOT / "swinger_config.json"
@@ -84,7 +87,7 @@ DEFAULT_CONFIG = {
     "base_position_size": 25000.0,
     "min_stock_price": 20.0,
     "min_market_cap_cr": 2000.0,
-    "max_direct_entry_gain_pct": 10.0,
+    "max_direct_entry_gain_pct": 0.0,
     "min_star_rating": 4,
     "require_below_ema200": True,
     "min_volume_surge_mult": 1.5,
@@ -94,9 +97,9 @@ DEFAULT_CONFIG = {
     "be_shield_enabled": True,
     "be_shield_trigger_pct": 15.0,
     "runner_trailing_stop_pct": 25.0,
-    "leg2_enabled": True,
+    "leg2_enabled": False,
     "leg2_be_trigger_pct": 10.0,
-    "leg2_trail_sl_pct": 20.0,
+    "leg2_trail_sl_pct": 18.0,
     "leg2_breakout_vol_mult": 1.4,
     "scan_clause": "( {cash} ( daily close <= daily max( 1000 , daily high ) * 0.40 and daily close < daily ema( daily close , 200 ) and market cap > 2000 and daily close >= 20 and daily close > daily open and daily close > daily ema( daily close , 20 ) and daily close >= 1 day ago close * 1.05 and daily volume >= daily sma( daily volume , 60 ) * 1.5 and daily rsi( 14 ) > 54 and 1 day ago rsi( 14 ) <= 65 and daily close - daily low >= ( daily high - daily low ) * 0.65 ) )",
     "leg2_clause": "( {cash} ( daily close > 20 and market cap > 2000 and daily close > daily open and daily close >= 20 days ago max( 40 , daily high ) and daily volume >= daily sma( daily volume , 50 ) * 1.4 and daily close > daily ema( daily close , 50 ) and daily rsi( 14 ) >= 55 ) )"
@@ -145,6 +148,15 @@ def save_watchlist(data):
     with open(WATCHLIST_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
+def load_backtest_trades():
+    if BACKTEST_TRADES_FILE.exists():
+        try:
+            with open(BACKTEST_TRADES_FILE, "r", encoding="utf-8") as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return {"trades": [], "summary": {}, "yearly_breakdown": []}
+
 def load_trades():
     if TRADES_FILE.exists():
         try:
@@ -154,9 +166,8 @@ def load_trades():
             pass
     return {"trades": [], "summary": {}, "yearly_breakdown": []}
 
-def save_trades(data):
+def compute_swinger_summary(trades, positions=None):
     from collections import defaultdict
-    trades = data.get("trades", [])
     wins = [t for t in trades if t.get("pnl", 0) > 0]
     losses = [t for t in trades if t.get("pnl", 0) < 0]
     total_gain = sum(t.get("pnl", 0) for t in wins)
@@ -164,19 +175,19 @@ def save_trades(data):
     
     pf = round(total_gain / total_loss, 2) if total_loss > 0 else 99.0
     win_rate = round(len(wins) / len(trades) * 100, 1) if trades else 0.0
-    total_pnl = round(sum(t.get("pnl", 0) for t in trades), 2)
+    total_realized_pnl = round(sum(t.get("pnl", 0) for t in trades), 2)
     
     avg_win_amt = round(total_gain / len(wins), 2) if wins else 0.0
     avg_loss_amt = round(total_loss / len(losses), 2) if losses else 0.0
     payoff = round(avg_win_amt / avg_loss_amt, 2) if avg_loss_amt > 0 else 99.0
-    expectancy = round(total_pnl / len(trades), 2) if trades else 0.0
+    expectancy = round(total_realized_pnl / len(trades), 2) if trades else 0.0
     
     avg_win = round(sum(t.get("pnl_pct", 0) for t in wins) / len(wins), 1) if wins else 0.0
     avg_loss = round(sum(t.get("pnl_pct", 0) for t in losses) / len(losses), 1) if losses else 0.0
     avg_return = round(sum(t.get("pnl_pct", 0) for t in trades) / len(trades), 1) if trades else 0.0
     avg_hold = round(sum(t.get("days_held", 0) for t in trades) / len(trades), 1) if trades else 0.0
 
-    # Drawdown calculation
+    # Drawdown calculation across closed trades
     sorted_trades = sorted(trades, key=lambda x: x.get("exit_date", ""))
     cum = 0.0; peak = 0.0; max_dd = 0.0; cons_losses = 0; max_cons_losses = 0
     for t in sorted_trades:
@@ -191,10 +202,67 @@ def save_trades(data):
         else:
             cons_losses = 0
             
-    base_cap = 500000.0
-    total_pnl_pct = round((total_pnl / base_cap) * 100.0, 1)
+    cfg = load_config()
+    base_cap = float(cfg.get("capital_allocated", 500000.0))
+    slot_size = float(cfg.get("base_position_size", 25000.0))
+    max_slots = int(cfg.get("max_open_positions", 20))
+
+    # Active positions integration
+    if positions is None:
+        try:
+            positions = load_portfolio().get("positions", [])
+        except Exception:
+            positions = []
+            
+    valid_inv = []
+    for x in positions:
+        try:
+            val = float(x.get("invested", 0) or 0)
+            if not math.isnan(val): valid_inv.append(val)
+        except Exception:
+            pass
+    tot_invested = round(sum(valid_inv), 2)
+
+    valid_unreal = []
+    for x in positions:
+        try:
+            val = float(x.get("unrealized_pnl", 0) or 0)
+            if not math.isnan(val): valid_unreal.append(val)
+        except Exception:
+            pass
+    tot_unrealized = round(sum(valid_unreal), 2)
+    tot_combined_pnl = round(total_realized_pnl + tot_unrealized, 2)
+    ending_capital = round(base_cap + tot_combined_pnl, 2)
+    free_cash = round(base_cap - tot_invested + total_realized_pnl, 2)
+
+    # Date span & CAGR calculation
+    all_dates = [t.get("entry_date") for t in trades if t.get("entry_date")] + \
+                [t.get("exit_date") for t in trades if t.get("exit_date")] + \
+                [p.get("entry_date") for p in positions if p.get("entry_date")]
+    if all_dates:
+        min_dt = datetime.strptime(min(all_dates)[:10], "%Y-%m-%d")
+        max_dt = datetime.strptime(max(all_dates)[:10], "%Y-%m-%d")
+        days_span = max(1, (max_dt - min_dt).days)
+        period_years = round(days_span / 365.25, 2)
+    else:
+        period_years = 0.67
+
+    total_pnl_pct = round((tot_combined_pnl / base_cap) * 100.0, 1)
     max_dd_pct = round((abs(max_dd) / (base_cap + peak)) * 100.0, 1) if (base_cap + peak) > 0 else 0.0
-    calmar = round(abs(total_pnl / max_dd), 2) if max_dd < 0 else 99.0
+    calmar = round(abs(total_realized_pnl / max_dd), 2) if max_dd < 0 else 99.0
+
+    # Dynamic CAGR on full portfolio capital
+    if period_years > 0 and ending_capital > 0:
+        cagr = round(((ending_capital / base_cap) ** (1.0 / period_years) - 1.0) * 100.0, 1)
+    else:
+        cagr = 0.0
+
+    # Dynamic XIRR on active deployed margin
+    active_base = max(tot_invested, 25000.0)
+    if period_years > 0:
+        active_xirr = round((((active_base + tot_combined_pnl) / active_base) ** (1.0 / period_years) - 1.0) * 100.0, 1)
+    else:
+        active_xirr = 0.0
 
     # 1. Yearly Breakdown
     by_year = defaultdict(list)
@@ -273,19 +341,28 @@ def save_trades(data):
             "trades": len(d_trades)
         })
 
-    data["summary"] = {
+    summary = {
         "total_trades": len(trades),
         "wins": len(wins),
         "losses": len(losses),
         "win_rate": win_rate,
         "profit_factor": pf,
-        "total_pnl": total_pnl,
-        "net_pnl": total_pnl,
+        "total_pnl": total_realized_pnl,
+        "net_pnl": total_realized_pnl,
+        "total_realized_pnl": total_realized_pnl,
+        "total_unrealized_pnl": tot_unrealized,
+        "total_combined_pnl": tot_combined_pnl,
         "total_pnl_pct": total_pnl_pct,
-        "period_years": 0.8,
-        "current_capital": base_cap + total_pnl,
-        "xirr": 61.4,
-        "xirr_active": 54.2,
+        "period_years": period_years,
+        "base_capital": base_cap,
+        "capital_allocated": base_cap,
+        "current_capital": ending_capital,
+        "total_invested": tot_invested,
+        "free_cash": free_cash,
+        "active_positions_count": len(positions),
+        "xirr": cagr,
+        "cagr": cagr,
+        "xirr_active": active_xirr,
         "max_drawdown": max_dd,
         "max_drawdown_pct": max_dd_pct,
         "max_drawdown_active_pct": max_dd_pct,
@@ -299,15 +376,32 @@ def save_trades(data):
         "avg_loss_pct": avg_loss,
         "avg_return_pct": avg_return,
         "avg_holding_days": avg_hold,
-        "base_slot_size": 25000.0,
+        "base_slot_size": slot_size,
+        "max_slots": max_slots,
         "mode": "PAPER",
         "strategy": "Phoenix Swinger 2.0 · 15% SL · Cost Shield @ +15% · 25% Peak Trail",
         "last_updated": datetime.now(IST).isoformat()
     }
+    return summary, yearly, monthly, daily
+
+def save_trades(data, positions=None):
+    trades = data.get("trades", [])
+    summary, yearly, monthly, daily = compute_swinger_summary(trades, positions)
+    data["summary"] = summary
     data["yearly_breakdown"] = yearly
     data["monthly"] = monthly
     data["daily"] = daily
     with open(TRADES_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+
+def save_backtest_trades(data, positions=None):
+    trades = data.get("trades", [])
+    summary, yearly, monthly, daily = compute_swinger_summary(trades, positions)
+    data["summary"] = summary
+    data["yearly_breakdown"] = yearly
+    data["monthly"] = monthly
+    data["daily"] = daily
+    with open(BACKTEST_TRADES_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2)
 
 def load_daily_signals():
@@ -454,10 +548,29 @@ def calculate_setup_star_rating(df, symbol):
     return stars, details
 
 _candles_cache = None
+_formatted_candles_cache = {}
+_synced_today_symbols = set()
+_last_sync_date = ""
+
+def _warmup_universe_cache():
+    global _candles_cache
+    if _candles_cache is None:
+        p = ROOT / "scratch" / "universe_4y_prices.pkl"
+        if p.exists():
+            try:
+                import pickle
+                with open(p, "rb") as f:
+                    _candles_cache = pickle.load(f)
+                print(f"[Swinger] Pre-warmed universe candles cache with {len(_candles_cache)} symbols in RAM")
+            except Exception as e:
+                print(f"[Swinger] Warmup error: {e}")
+
+import threading
+threading.Thread(target=_warmup_universe_cache, daemon=True).start()
 
 def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
     """Fetch daily candles for a stock symbol from pickle cache + live recent yfinance delta."""
-    global _candles_cache
+    global _candles_cache, _formatted_candles_cache, _synced_today_symbols, _last_sync_date
     import pickle
     cache_path = ROOT / "scratch" / "universe_4y_prices.pkl"
     if cache_path.exists() and _candles_cache is None:
@@ -469,47 +582,71 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
 
     keys = list(_candles_cache.keys()) if _candles_cache else None
     symbol = resolve_symbol(symbol, keys)
+
+    # Instant RAM cache hit (< 1 millisecond response)
+    if not from_date and not to_date and symbol in _formatted_candles_cache:
+        return _formatted_candles_cache[symbol]
     df = None
     if _candles_cache and symbol in _candles_cache:
         df = _candles_cache[symbol]
 
-    # Check if df is missing recent market action (e.g. today or yesterday)
     today_str = datetime.now(IST).strftime("%Y-%m-%d")
+    if _last_sync_date != today_str:
+        _synced_today_symbols.clear()
+        _last_sync_date = today_str
+
+    # Only sync recent delta once per day per symbol to keep chart opening ultra-fast (<10ms)
     needs_recent_sync = False
-    if df is None or df.empty:
-        needs_recent_sync = True
-    else:
-        last_dt = df.index[-1].strftime("%Y-%m-%d") if isinstance(df.index, pd.DatetimeIndex) else str(df.index[-1])[:10]
-        if last_dt < today_str:
+    if symbol not in _synced_today_symbols:
+        if df is None or df.empty:
             needs_recent_sync = True
+        else:
+            last_dt = df.index[-1].strftime("%Y-%m-%d") if isinstance(df.index, pd.DatetimeIndex) else str(df.index[-1])[:10]
+            if last_dt < today_str:
+                needs_recent_sync = True
 
     if needs_recent_sync:
+        _synced_today_symbols.add(symbol)
+        recent_df = None
+
+        # 1. Primary: Official Kotak Neo Historical API (Fast < 0.5s, Official NSE Exchange Data)
         try:
-            period_req = "2y" if (df is None or df.empty) else "1mo"
-            recent_df = yf.download(f"{symbol}.NS", period=period_req, interval="1d", progress=False, auto_adjust=False)
-            if recent_df.empty:
-                recent_df = yf.download(f"{symbol}.BO", period=period_req, interval="1d", progress=False, auto_adjust=False)
-            if not recent_df.empty:
-                if isinstance(recent_df.columns, pd.MultiIndex):
-                    recent_df.columns = [c[0] for c in recent_df.columns]
-                if not isinstance(recent_df.index, pd.DatetimeIndex):
-                    recent_df.index = pd.to_datetime(recent_df.index)
-                recent_df.index = recent_df.index.tz_localize(None)
-
-                if df is not None and not df.empty:
-                    df = df.copy()
-                    if not isinstance(df.index, pd.DatetimeIndex):
-                        df.index = pd.to_datetime(df.index)
-                    df.index = df.index.tz_localize(None)
-                    combined = pd.concat([df.loc[df.index < recent_df.index[0]], recent_df])
-                    df = combined[~combined.index.duplicated(keep="last")].sort_index()
-                else:
-                    df = recent_df
-
-                if _candles_cache is not None:
-                    _candles_cache[symbol] = df
+            from kotak_orders import get_kotak_candles
+            recent_df = get_kotak_candles(symbol, days=90 if (df is not None and not df.empty) else 180)
+            if recent_df is not None and not recent_df.empty:
+                print(f"[Swinger] Refreshed {len(recent_df)} live candles for {symbol} via Kotak Neo API")
         except Exception as e:
-            print(f"[Swinger] Candle download/refresh error for {symbol}: {e}")
+            print(f"[Swinger] Kotak candle fetch error for {symbol}: {e}")
+
+        # 2. Secondary Fallback: only if Kotak failed AND we have no local df
+        if (recent_df is None or recent_df.empty) and (df is None or df.empty):
+            try:
+                period_req = "2y"
+                recent_df = yf.download(f"{symbol}.NS", period=period_req, interval="1d", progress=False, auto_adjust=False, timeout=2.0)
+                if recent_df is None or recent_df.empty:
+                    recent_df = yf.download(f"{symbol}.BO", period=period_req, interval="1d", progress=False, auto_adjust=False, timeout=2.0)
+            except Exception as e:
+                print(f"[Swinger] yfinance fallback error for {symbol}: {e}")
+
+        if recent_df is not None and not recent_df.empty:
+            if isinstance(recent_df.columns, pd.MultiIndex):
+                recent_df.columns = [c[0] for c in recent_df.columns]
+            if not isinstance(recent_df.index, pd.DatetimeIndex):
+                recent_df.index = pd.to_datetime(recent_df.index)
+            recent_df.index = recent_df.index.tz_localize(None)
+
+            if df is not None and not df.empty:
+                df = df.copy()
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    df.index = pd.to_datetime(df.index)
+                df.index = df.index.tz_localize(None)
+                combined = pd.concat([df.loc[df.index < recent_df.index[0]], recent_df])
+                df = combined[~combined.index.duplicated(keep="last")].sort_index()
+            else:
+                df = recent_df
+
+            if _candles_cache is not None:
+                _candles_cache[symbol] = df
 
     if df is None or df.empty:
         return []
@@ -553,45 +690,40 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
         except Exception:
             pass
 
+    # Cap at last 1200 trading days (~5 years) for lightning fast rendering
+    if not from_date and len(df) > 1200:
+        df = df.tail(1200)
+
     candles = []
-    for dt, row in df.iterrows():
-        try:
-            o_raw = row.get("Open")
-            h_raw = row.get("High")
-            l_raw = row.get("Low")
-            c_raw = row.get("Close")
-            
-            o = float(o_raw) if pd.notnull(o_raw) and not np.isnan(float(o_raw)) else 0.0
-            h = float(h_raw) if pd.notnull(h_raw) and not np.isnan(float(h_raw)) else 0.0
-            l = float(l_raw) if pd.notnull(l_raw) and not np.isnan(float(l_raw)) else 0.0
-            c = float(c_raw) if pd.notnull(c_raw) and not np.isnan(float(c_raw)) else 0.0
+    try:
+        d_strs = [d.strftime("%Y-%m-%d") if hasattr(d, "strftime") else str(d)[:10] for d in df.index]
+        o_vals = np.round(df["Open"].fillna(0).values, 2)
+        h_vals = np.round(df["High"].fillna(0).values, 2)
+        l_vals = np.round(df["Low"].fillna(0).values, 2)
+        c_vals = np.round(df["Close"].fillna(0).values, 2)
+        v_vals = df["Volume"].fillna(0).astype(int).values
 
-            # If close is missing/NaN, fallback to Open or High/Low midpoint
-            if c <= 0 or np.isnan(c):
-                c = o if (o > 0 and not np.isnan(o)) else ((h + l) / 2.0 if (h + l) > 0 else 0.0)
-            if o <= 0 or np.isnan(o):
-                o = c
-            if h <= 0 or np.isnan(h):
-                h = max(o, c)
-            if l <= 0 or np.isnan(l):
-                l = min(o, c)
-
-            if c <= 0 or np.isnan(c):
+        for i in range(len(d_strs)):
+            c_val = float(c_vals[i])
+            if c_val <= 0 or np.isnan(c_val):
                 continue
-
-            v_raw = row.get("Volume", 0)
-            v = int(v_raw) if pd.notnull(v_raw) and not np.isnan(float(v_raw)) else 0
-
+            o_val = float(o_vals[i]) if o_vals[i] > 0 else c_val
+            h_val = float(h_vals[i]) if h_vals[i] > 0 else max(o_val, c_val)
+            l_val = float(l_vals[i]) if l_vals[i] > 0 else min(o_val, c_val)
             candles.append({
-                "time": dt.strftime("%Y-%m-%d"),
-                "open": round(o, 2),
-                "high": round(h, 2),
-                "low": round(l, 2),
-                "close": round(c, 2),
-                "volume": v
+                "time": d_strs[i],
+                "open": o_val,
+                "high": h_val,
+                "low": l_val,
+                "close": c_val,
+                "volume": int(v_vals[i])
             })
-        except Exception:
-            pass
+    except Exception as e:
+        print(f"[Swinger] Vectorized candle parse error for {symbol}: {e}")
+
+    if not from_date and not to_date and candles:
+        _formatted_candles_cache[symbol] = candles
+
     return candles
 
 _mcap_cache = {}
@@ -645,18 +777,31 @@ def get_stock_trade_context(symbol: str):
     symbol = resolve_symbol(symbol, keys)
     port = load_portfolio().get("positions", [])
     closed_trades = load_trades().get("trades", [])
+    bt_trades = load_backtest_trades().get("trades", [])
     wl = load_watchlist().get("watchlist", [])
     
     pos_matches = [p for p in port if resolve_symbol(p.get("symbol", "")) == symbol]
     trade_matches = [t for t in closed_trades if resolve_symbol(t.get("symbol", "")) == symbol]
+    bt_matches = [t for t in bt_trades if resolve_symbol(t.get("symbol", "")) == symbol]
     wl_matches = [w for w in wl if resolve_symbol(w.get("symbol", "")) == symbol]
     
-    # 1. Collect all real trades
+    # 1. Collect all real trades (deduplicate closed trades across paper & backtest)
     all_symbol_trades = []
     active_intervals = []
+    seen_closed_entries = set()
+    combined_closed = []
+    for t in trade_matches + bt_matches:
+        ed = str(t.get("entry_date", ""))[:10]
+        ep = round(float(t.get("entry_price") or t.get("avg_price") or 0.0), 2)
+        key = (ed, ep)
+        if key not in seen_closed_entries:
+            seen_closed_entries.add(key)
+            combined_closed.append(t)
     
     # Closed trades
-    for t in trade_matches:
+    for t in combined_closed:
+        t_leg = t.get("leg") or (2 if "LEG2" in str(t.get("strategy_leg", "")).upper() else 1)
+        t_strat = t.get("strategy_leg") or ("LEG2_BASE_BREAKOUT" if t_leg == 2 else "LEG1_TURNAROUND")
         if t.get("all_historical_trades"):
             for ht in t["all_historical_trades"]:
                 he = str(ht.get("entry_date", ""))[:10]
@@ -667,6 +812,9 @@ def get_stock_trade_context(symbol: str):
                         "trade_id": ht.get("trade_id") or t.get("trade_id"),
                         "symbol": symbol,
                         "name": t.get("name", symbol),
+                        "leg": ht.get("leg") or t_leg,
+                        "strategy_leg": ht.get("strategy_leg") or t_strat,
+                        "entry_type": ht.get("entry_type") or t.get("entry_type"),
                         "type": "CLOSED",
                         "entry_date": he,
                         "entry_price": float(ht.get("entry_price") or 0.0),
@@ -689,6 +837,9 @@ def get_stock_trade_context(symbol: str):
                     "trade_id": t.get("trade_id"),
                     "symbol": symbol,
                     "name": t.get("name", symbol),
+                    "leg": t_leg,
+                    "strategy_leg": t_strat,
+                    "entry_type": t.get("entry_type"),
                     "type": "CLOSED",
                     "entry_date": e,
                     "entry_price": float(t.get("entry_price") or t.get("avg_price") or 0.0),
@@ -709,9 +860,14 @@ def get_stock_trade_context(symbol: str):
         if e:
             active_intervals.append((e, "9999-12-31"))
             status_str = "RUNNER" if p.get("runner_mode") else ("SHIELDED" if p.get("be_active") else "ACTIVE")
+            p_leg = p.get("leg") or (2 if "LEG2" in str(p.get("strategy_leg", "")).upper() else 1)
+            p_strat = p.get("strategy_leg") or ("LEG2_BASE_BREAKOUT" if p_leg == 2 else "LEG1_TURNAROUND")
             all_symbol_trades.append({
                 "symbol": symbol,
                 "name": p.get("name", symbol),
+                "leg": p_leg,
+                "strategy_leg": p_strat,
+                "entry_type": p.get("entry_type"),
                 "type": "OPEN",
                 "entry_date": e,
                 "entry_price": float(p.get("entry_price") or p.get("avg_price") or 0.0),
@@ -1047,7 +1203,7 @@ def update_positions_and_scan():
     vault_trigger_pct = cfg.get("profit_vault_trigger_pct", 50.0)
     vault_floor_pct = cfg.get("profit_vault_floor_pct", 25.0)
     partial_take_frac = cfg.get("partial_profit_take_fraction", 0.0)
-    trail_pct = cfg.get("runner_trailing_stop_pct", 25.0)
+    trail_pct = cfg.get("runner_trailing_stop_pct", 18.0)
     vol_loss_exit_enabled = cfg.get("vol_loss_exit_enabled", True)
     vol_loss_min_gain_pct = cfg.get("vol_loss_min_gain_pct", 20.0)
     vol_loss_vol_mult = cfg.get("vol_loss_vol_mult", 1.2)
@@ -1187,32 +1343,6 @@ def update_positions_and_scan():
                 trade_pnl = round((exit_price - avg_price) * current_qty, 2)
                 reason = "Catastrophe Stop (-15% Floor)"
                 print(f"[Swinger Paper] CATASTROPHE STOP HIT for {sym} @ Rs.{exit_price} ({reason}). PnL: Rs.{trade_pnl}")
-                closed_this_cycle.append({
-                    "symbol": sym,
-                    "name": pos.get("name", sym),
-                    "leg": pos.get("leg", 1),
-                    "strategy_leg": pos.get("strategy_leg", "LEG1_TURNAROUND"),
-                    "entry_date": pos["entry_date"],
-                    "exit_date": datetime.now(IST).strftime("%Y-%m-%d"),
-                    "entry_price": entry_price,
-                    "avg_price": avg_price,
-                    "exit_price": exit_price,
-                    "qty": current_qty,
-                    "reason": reason,
-                    "days_held": days_held,
-                    "pnl": trade_pnl,
-                    "pnl_pct": round(((exit_price / avg_price) - 1) * 100, 2)
-                })
-                continue
-
-            # Universal 10-Day 20 EMA Momentum Eject (Universal 20 EMA Cut)
-            ema20_val = float(df["EMA20"].iloc[-1]) if "EMA20" in df else 0.0
-            vol_ratio = float(df["VolRatio"].iloc[-1]) if "VolRatio" in df else 1.0
-            if 3 <= days_held <= 12 and cmp_price < ema20_val and vol_ratio >= 1.0:
-                exit_price = cmp_price
-                trade_pnl = round((exit_price - avg_price) * current_qty, 2)
-                reason = "10-Day 20 EMA Momentum Eject"
-                print(f"[Swinger Paper] 10-DAY 20 EMA MOMENTUM EJECT for {sym} @ Rs.{exit_price} ({reason}). PnL: Rs.{trade_pnl}")
                 closed_this_cycle.append({
                     "symbol": sym,
                     "name": pos.get("name", sym),
@@ -1410,11 +1540,22 @@ def update_positions_and_scan():
 
         updated_positions.append(pos)
         
-    # --- SCAN CHARTINK FOR TODAY'S SIGNALS ---
-    print("[Swinger Paper] Fetching daily Chartink scanner signals...")
-    raw_signals = fetch_chartink_signals(cfg.get("scan_clause"))
-    saved_sig = save_daily_signals(raw_signals)
-    print(f"[Swinger Paper] Chartink returned {len(raw_signals)} trigger candidates.")
+    # --- SCAN CHARTINK FOR TODAY'S SIGNALS (LEG 1 + LEG 2) ---
+    print("[Swinger Paper] Fetching daily Chartink scanner signals (Leg 1 & Leg 2)...")
+    raw_signals_leg1 = fetch_chartink_signals(cfg.get("scan_clause"))
+    for s in raw_signals_leg1:
+        s["leg"] = 1
+        s["strategy_leg"] = "LEG1_TURNAROUND"
+
+    raw_signals_leg2 = fetch_chartink_signals(cfg.get("leg2_clause"))
+    for s in raw_signals_leg2:
+        s["leg"] = 2
+        s["strategy_leg"] = "LEG2_BASE_BREAKOUT"
+
+    raw_signals = raw_signals_leg1
+    combined_signals = raw_signals_leg1 + raw_signals_leg2
+    saved_sig = save_daily_signals(combined_signals)
+    print(f"[Swinger Paper] Chartink returned {len(raw_signals_leg1)} Leg 1 and {len(raw_signals_leg2)} Leg 2 trigger candidates.")
     
     # --- FILL AVAILABLE SLOTS IN PAPER MODE ---
     max_slots = cfg.get("max_open_positions", 20)
@@ -1484,6 +1625,7 @@ def update_positions_and_scan():
                         "tp_50_hit": False,
                         "tp_target_price": tp_target,
                         "runner_mode": False,
+                "status": "ACTIVE",
                         "runner_peak_price": round(w_close, 2),
                         "runner_trail_sl": None,
                         "days_held": 0,
@@ -1599,6 +1741,7 @@ def update_positions_and_scan():
                 "tp_50_hit": False,
                 "tp_target_price": tp_target,
                 "runner_mode": False,
+                "status": "ACTIVE",
                 "runner_peak_price": round(last_close, 2),
                 "runner_trail_sl": None,
                 "days_held": 0,
@@ -1625,82 +1768,122 @@ def update_positions_and_scan():
     leg2_enabled = cfg.get("leg2_enabled", True)
     leg2_sl_pct = cfg.get("leg2_initial_sl_pct", -12.0)
     leg2_be_pct = cfg.get("leg2_be_trigger_pct", 10.0)
+    alloc_per_slot = cfg.get("base_position_size", 25000.0)
     
     if available_slots > 0 and leg2_enabled and cfg.get("enabled", True):
         try:
-            import pickle
+            trig_leg2 = []
+            coiled_leg2 = []
+
+            # 1. Primary: Live Real-Time Chartink Leg 2 Scanner (Whole NSE Market)
+            chartink_leg2_raw = raw_signals_leg2
+            if chartink_leg2_raw:
+                print(f"[Swinger Paper] Live Chartink returned {len(chartink_leg2_raw)} Leg 2 breakout candidates: {[x.get('nsecode') for x in chartink_leg2_raw]}")
+                for sig in chartink_leg2_raw:
+                    s_sym = sig.get("nsecode")
+                    if not s_sym or s_sym in held_symbols:
+                        continue
+                    m_df = get_market_data(s_sym)
+                    if m_df is not None and len(m_df) >= 50:
+                        cur_bar = m_df.iloc[-1]
+                        c_p = float(cur_bar["Close"])
+                        vol_now = float(cur_bar.get("Volume", 0))
+                        vol_sma = float(cur_bar.get("VolSMA60", 0)) or 1.0
+                        vol_mult = round(vol_now / vol_sma, 1)
+                        trig_leg2.append({
+                            "symbol": s_sym,
+                            "name": sig.get("name", s_sym),
+                            "date": datetime.now(IST).strftime("%Y-%m-%d"),
+                            "leg": 2,
+                            "strategy_leg": "LEG2_BASE_BREAKOUT",
+                            "current_price": c_p,
+                            "base_high": float(cur_bar["High"]),
+                            "base_low": float(cur_bar["Low"]),
+                            "surge_date": datetime.now(IST).strftime("%Y-%m-%d"),
+                            "consol_days": 15,
+                            "today_vol_mult": vol_mult,
+                            "trigger_sl": round(float(cur_bar["Low"]), 2),
+                            "status": "LIVE CHARTINK TRIGGER"
+                        })
+
+            # 2. Secondary Supplement: Local Cache Scanning (for Coiled Watchlist & Extra Setups)
             cache_p = ROOT / "scratch" / "universe_4y_prices.pkl"
             if cache_p.exists():
                 with open(cache_p, "rb") as f:
                     u_data = pickle.load(f)
-                trig_leg2, coiled_leg2 = scan_leg2_breakouts(u_data, held_symbols=held_symbols, eligible_symbols=False)
-                print(f"[Swinger Paper] Leg 2 Scanner: {len(trig_leg2)} breakouts triggering, {len(coiled_leg2)} coiled.")
-                
-                radar_file = ROOT / "paper" / "swinger" / "radar_leg2.json"
-                with open(radar_file, "w", encoding="utf-8") as f:
-                    json.dump({"coiled": coiled_leg2, "updated_at": datetime.now(IST).isoformat()}, f, indent=2)
-                    
-                alloc_per_slot = cfg.get("base_position_size", 25000.0)
-                for cand2 in trig_leg2:
-                    if available_slots <= 0:
-                        break
-                    sym2 = cand2["symbol"]
-                    if sym2 in held_symbols:
-                        continue
-                    c_p = cand2["current_price"]
-                    qty2 = int(alloc_per_slot // c_p)
-                    if qty2 <= 0:
-                        continue
-                    trig_low2 = cand2.get("trigger_sl", round(c_p * 0.95, 2))
-                    sl2 = round(c_p * (1.0 + leg2_sl_pct / 100.0), 2)
-                    be2 = round(c_p * (1.0 + leg2_be_pct / 100.0), 2)
-                    tp2 = round(c_p * 1.30, 2)
-                    s_leg2 = cand2.get("strategy_leg", "LEG2_MA_PULLBACK")
-                    
-                    new_pos2 = {
-                        "symbol": sym2,
-                        "name": sym2,
-                        "leg": 2,
-                        "strategy_leg": s_leg2,
-                        "entry_date": cand2.get("date", datetime.now(IST).strftime("%Y-%m-%d")),
-                        "entry_price": c_p,
-                        "avg_price": c_p,
-                        "cmp": c_p,
-                        "initial_qty": qty2,
-                        "current_qty": qty2,
-                        "shares": qty2,
-                        "invested": round(qty2 * c_p, 2),
-                        "initial_sl_pct": round((sl2 / c_p - 1.0) * 100.0, 1),
-                        "sl_price": sl2,
-                        "trigger_sl": trig_low2,
-                        "be_active": False,
-                        "be_trigger_price": be2,
-                        "tp_hit": False,
-                        "tp_50_hit": False,
-                        "tp_target_price": tp2,
-                        "runner_mode": False,
-                        "runner_peak_price": c_p,
-                        "runner_trail_sl": None,
-                        "base_high": cand2["base_high"],
-                        "base_low": cand2["base_low"],
-                        "surge_date": cand2["surge_date"],
-                        "consol_days": cand2["consol_days"],
-                        "days_held": 0,
-                        "booked_pnl": 0.0,
-                        "unrealized_pnl": 0.0,
-                        "unrealized_pnl_pct": 0.0,
-                        "unrealized_pct": 0.0,
-                        "status": f"ACTIVE ({'20 EMA Pullback' if 'PULLBACK' in s_leg2 else 'Base Breakout'})",
-                        "stars": 5,
-                        "exit_rule": f"Leg 2 SL {leg2_sl_pct:.0f}% - BE Shield @ +{leg2_be_pct:.0f}% - 50 EMA Vol Breakdown + 20% Trail",
-                        "peak_price": c_p
-                    }
-                    print(f"[Swinger Paper] NEW LEG 2 BREAKOUT BUY: {sym2} @ Rs.{c_p} | Ceiling: Rs.{cand2['base_high']} | Vol: {cand2['today_vol_mult']}x | SL ({leg2_sl_pct:.0f}%): Rs.{sl2}")
-                    updated_positions.append(new_pos2)
-                    held_symbols.add(sym2)
-                    available_slots -= 1
-                    
-                # Dynamically update watchlist.json with true cooldown candidates (excluding all held symbols)
+                cache_trig, cache_coiled = scan_leg2_breakouts(u_data, held_symbols=held_symbols, eligible_symbols=False)
+                coiled_leg2.extend(cache_coiled)
+                for ct in cache_trig:
+                    if ct["symbol"] not in [x["symbol"] for x in trig_leg2] and ct["symbol"] not in held_symbols:
+                        trig_leg2.append(ct)
+
+            print(f"[Swinger Paper] Leg 2 Total: {len(trig_leg2)} breakouts triggering, {len(coiled_leg2)} coiled.")
+
+            radar_file = ROOT / "paper" / "swinger" / "radar_leg2.json"
+            with open(radar_file, "w", encoding="utf-8") as f:
+                json.dump({"coiled": coiled_leg2, "updated_at": datetime.now(IST).isoformat()}, f, indent=2)
+
+            for cand2 in trig_leg2:
+                if available_slots <= 0:
+                    break
+                sym2 = cand2["symbol"]
+                if sym2 in held_symbols:
+                    continue
+                c_p = cand2["current_price"]
+                qty2 = int(alloc_per_slot // c_p)
+                if qty2 <= 0:
+                    continue
+                trig_low2 = cand2.get("trigger_sl", round(c_p * 0.95, 2))
+                sl2 = round(c_p * (1.0 + leg2_sl_pct / 100.0), 2)
+                be2 = round(c_p * (1.0 + leg2_be_pct / 100.0), 2)
+                tp2 = round(c_p * 1.30, 2)
+                s_leg2 = cand2.get("strategy_leg", "LEG2_BASE_BREAKOUT")
+
+                new_pos2 = {
+                    "symbol": sym2,
+                    "name": sym2,
+                    "leg": 2,
+                    "strategy_leg": s_leg2,
+                    "entry_date": cand2.get("date", datetime.now(IST).strftime("%Y-%m-%d")),
+                    "entry_price": c_p,
+                    "avg_price": c_p,
+                    "cmp": c_p,
+                    "initial_qty": qty2,
+                    "current_qty": qty2,
+                    "shares": qty2,
+                    "invested": round(qty2 * c_p, 2),
+                    "initial_sl_pct": round((sl2 / c_p - 1.0) * 100.0, 1),
+                    "sl_price": sl2,
+                    "trigger_sl": trig_low2,
+                    "be_active": False,
+                    "be_trigger_price": be2,
+                    "tp_hit": False,
+                    "tp_50_hit": False,
+                    "tp_target_price": tp2,
+                    "runner_mode": False,
+                    "status": "ACTIVE",
+                    "runner_peak_price": c_p,
+                    "runner_trail_sl": None,
+                    "base_high": cand2.get("base_high", c_p),
+                    "base_low": cand2.get("base_low", c_p),
+                    "surge_date": cand2.get("surge_date", datetime.now(IST).strftime("%Y-%m-%d")),
+                    "consol_days": cand2.get("consol_days", 15),
+                    "days_held": 0,
+                    "booked_pnl": 0.0,
+                    "unrealized_pnl": 0.0,
+                    "unrealized_pnl_pct": 0.0,
+                    "unrealized_pct": 0.0,
+                    "stars": 5,
+                    "exit_rule": f"Leg 2 SL {leg2_sl_pct:.0f}% - BE Shield @ +{leg2_be_pct:.0f}% - 50 EMA Vol Breakdown + 20% Trail",
+                    "peak_price": c_p
+                }
+                print(f"[Swinger Paper] NEW LEG 2 BREAKOUT BUY: {sym2} @ Rs.{c_p} | Ceiling: Rs.{cand2.get('base_high', c_p)} | Vol: {cand2.get('today_vol_mult', 1.5)}x | SL ({leg2_sl_pct:.0f}%): Rs.{sl2}")
+                updated_positions.append(new_pos2)
+                held_symbols.add(sym2)
+                available_slots -= 1
+
+            # Dynamically update watchlist.json with true cooldown candidates (excluding all held symbols)
+            if 'u_data' in locals():
                 radar_candidates = scan_cooldown_radar(u_data, held_symbols=held_symbols)
                 save_watchlist({"watchlist": radar_candidates})
         except Exception as e:
@@ -1719,6 +1902,22 @@ def update_positions_and_scan():
     if closed_this_cycle:
         trade_db["trades"].extend(closed_this_cycle)
         save_trades(trade_db)
+        try:
+            from telegram_notifier import notify_swinger_trade_exit
+            for ct in closed_this_cycle:
+                notify_swinger_trade_exit(
+                    symbol=ct.get("symbol", ""),
+                    name=ct.get("name", ct.get("symbol", "")),
+                    exit_price=float(ct.get("exit_price", 0.0)),
+                    avg_price=float(ct.get("avg_price", 0.0)),
+                    qty=int(ct.get("qty", 1)),
+                    pnl=float(ct.get("pnl", 0.0)),
+                    pnl_pct=float(ct.get("pnl_pct", 0.0)),
+                    days_held=int(ct.get("days_held", 0)),
+                    reason=str(ct.get("reason", "Exit")),
+                )
+        except Exception as tg_err:
+            print(f"[Swinger Paper] Telegram exit alert note: {tg_err}")
         
     print(f"[Swinger Paper] Cycle complete. Active positions: {len(updated_positions)}, Invested: Rs.{total_invested}, Unrealized: Rs.{total_unrealized}")
     return {
@@ -1733,7 +1932,7 @@ def simulate_strategy_on_df(
     max_direct_gain: float = 10.0,
     initial_sl_pct: float = -15.0,
     be_trigger_pct: float = 15.0,
-    runner_trail_pct: float = 25.0,
+    runner_trail_pct: float = 18.0,
     trigger_dates: list = None,
     vol_loss_min_gain: float = 20.0,
     vol_loss_vol_mult: float = 1.2,
@@ -1798,9 +1997,10 @@ def simulate_strategy_on_df(
 
     if trigger_dates is not None:
         trig_set = set(pd.to_datetime(t).strftime('%Y-%m-%d') for t in trigger_dates)
+        leg1_dates = set()
     else:
-        # Standard Phoenix Turnaround Breakout Condition
-        mask = (
+        # Leg 1: Phoenix Turnaround Breakout (< 40% of 1000-day ATH & < 200 EMA)
+        leg1_mask = (
             (c <= peak_high * 0.40) &
             (c < ema200) &
             (c > ema20) &
@@ -1812,7 +2012,32 @@ def simulate_strategy_on_df(
             (prev_rsi <= 65) &
             close_in_upper_35
         )
-        trig_set = set(df.index[mask].strftime('%Y-%m-%d'))
+        leg1_dates = set(df.index[leg1_mask].strftime('%Y-%m-%d'))
+
+        # Leg 2: Post-Blast Consolidation Base Breakout / MA Pullback Bounce
+        # (Within 65% of ATH, prior institutional blast in past 8-50 days, volume dry-up, green expansion today)
+        peak_500 = h.rolling(500, min_periods=30).max()
+        vol_max_45 = v.shift(8).rolling(45, min_periods=10).max()
+        vsma_min_45 = vol_sma50.shift(8).rolling(45, min_periods=10).min()
+        c_max_45 = c.shift(8).rolling(45, min_periods=10).max()
+        c_min_45 = c.shift(8).rolling(45, min_periods=10).min()
+        vol_sma10 = v.rolling(10, min_periods=5).mean()
+        vol_sma20 = v.rolling(20, min_periods=10).mean()
+
+        leg2_mask = (
+            ((c <= peak_high * 0.65) | (c <= peak_500 * 0.65)) &
+            (c >= 20.0) &
+            (c > o) &
+            (c >= prev_c) &
+            ((v >= vol_sma50 * 1.4) | (v >= vol_sma20 * 1.4)) &
+            (c >= ema20 * 0.99) &
+            (vol_max_45 >= vsma_min_45 * 2.5) &
+            (c_max_45 >= c_min_45 * 1.12) &
+            (vol_sma10.shift(1) <= vol_sma50.shift(1) * 1.1)
+        )
+
+        combined_mask = leg1_mask | leg2_mask
+        trig_set = set(df.index[combined_mask].strftime('%Y-%m-%d'))
 
     closed_trades = []
     in_trade = False
@@ -1909,9 +2134,12 @@ def simulate_strategy_on_df(
                     shares = int(base_position_size / entry_p) if entry_p > 0 else 0
                     if shares > 0:
                         in_trade = True
+                        is_leg1 = pending_radar['blast_date'] in leg1_dates
                         cur = {
                             'symbol': symbol,
                             'name': symbol,
+                            'leg': 1 if is_leg1 else 2,
+                            'strategy_leg': 'LEG1_TURNAROUND' if is_leg1 else 'LEG2_BASE_BREAKOUT',
                             'entry_date': dt_str,
                             'entry_price': round(entry_p, 2),
                             'avg_price': round(entry_p, 2),
@@ -1950,9 +2178,12 @@ def simulate_strategy_on_df(
                     shares = int(base_position_size / entry_p) if entry_p > 0 else 0
                     if shares > 0:
                         in_trade = True
+                        is_leg1 = dt_str in leg1_dates
                         cur = {
                             'symbol': symbol,
                             'name': symbol,
+                            'leg': 1 if is_leg1 else 2,
+                            'strategy_leg': 'LEG1_TURNAROUND' if is_leg1 else 'LEG2_BASE_BREAKOUT',
                             'entry_date': entry_date,
                             'entry_price': round(entry_p, 2),
                             'avg_price': round(entry_p, 2),
@@ -2039,8 +2270,10 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
     if be_trigger_pct is None:
         be_trigger_pct = float(cfg.get("be_shield_trigger_pct", 15.0))
     if runner_trail_pct is None:
-        runner_trail_pct = float(cfg.get("runner_trailing_stop_pct", 25.0))
+        runner_trail_pct = float(cfg.get("runner_trailing_stop_pct", 18.0))
     max_direct_gain = float(cfg.get("max_direct_entry_gain_pct", 10.0))
+    if max_direct_gain <= 0:
+        max_direct_gain = 10.0  # Standard calibrated Phoenix Swinger rule: clean breakouts <= 10% enter directly
     vol_loss_min_gain = float(cfg.get("vol_loss_min_gain_pct", 20.0))
     vol_loss_vol_mult = float(cfg.get("vol_loss_vol_mult", 1.2))
     base_pos_size = float(cfg.get("base_position_size", 25000.0))
@@ -2060,13 +2293,31 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
     if cache and resolved_sym in cache:
         df = cache[resolved_sym]
 
-    # Ensure full data (fallback to yfinance if missing or short)
+    # 1. Primary: Append official recent live delta from Kotak Neo API (up to today!)
+    try:
+        from kotak_orders import get_kotak_candles
+        kotak_df = get_kotak_candles(resolved_sym, days=90 if (df is not None and not df.empty) else 180)
+        if kotak_df is not None and not kotak_df.empty:
+            if df is not None and not df.empty:
+                df = df.copy()
+                if not isinstance(df.index, pd.DatetimeIndex):
+                    df.index = pd.to_datetime(df.index)
+                df.index = df.index.tz_localize(None)
+                combined = pd.concat([df.loc[df.index < kotak_df.index[0]], kotak_df])
+                df = combined[~combined.index.duplicated(keep="last")].sort_index()
+                print(f"[OnDemand Backtest] Refreshed {resolved_sym} up to {df.index[-1].strftime('%Y-%m-%d')} via Kotak Neo")
+            else:
+                df = kotak_df
+    except Exception as e:
+        print(f"[OnDemand Backtest] Kotak candle delta error for {resolved_sym}: {e}")
+
+    # 2. Secondary Fallback: yfinance only if missing or short (< 50 bars)
     if df is None or len(df) < 50:
         try:
             ticker_ns = f"{resolved_sym}.NS" if not resolved_sym.endswith(".NS") and not resolved_sym.endswith(".BO") else resolved_sym
-            yf_df = yf.download(ticker_ns, period="5y", progress=False, auto_adjust=False)
+            yf_df = yf.download(ticker_ns, period="5y", progress=False, auto_adjust=False, timeout=3.0)
             if yf_df.empty and not resolved_sym.endswith(".BO"):
-                yf_df = yf.download(f"{resolved_sym}.BO", period="5y", progress=False, auto_adjust=False)
+                yf_df = yf.download(f"{resolved_sym}.BO", period="5y", progress=False, auto_adjust=False, timeout=3.0)
             if not yf_df.empty:
                 if isinstance(yf_df.columns, pd.MultiIndex):
                     yf_df.columns = [c[0] for c in yf_df.columns]
@@ -2079,6 +2330,12 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
 
     if df is None or len(df) < 50:
         return {"ok": False, "error": f"Insufficient price data available for {symbol} (at least 50 trading days required)"}
+
+    # Restrict to calibrated 4-year universe period (~1000-1200 trading days)
+    # This prevents running backtests across 30-year unindexed historical artifacts (e.g. 1996 data)
+    # while ensuring every simulated trade has corresponding chart candles and exact Kotak Neo levels.
+    if len(df) > 1200:
+        df = df.iloc[-1200:].copy()
 
     # Run unified strategy simulation
     closed_trades, open_pos, triggers, summary = simulate_strategy_on_df(
@@ -2094,16 +2351,27 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
         base_position_size=base_pos_size
     )
 
-    candles_payload = []
-    for idx, r in df.iterrows():
-        candles_payload.append({
-            "time": idx.strftime('%Y-%m-%d'),
-            "open": round(float(r['Open']), 2),
-            "high": round(float(r['High']), 2),
-            "low": round(float(r['Low']), 2),
-            "close": round(float(r['Close']), 2),
-            "volume": int(r['Volume'])
-        })
+    # Fast vectorized candle payload (capped at last 1200 bars for instant UI rendering)
+    plot_df = df.tail(1200) if len(df) > 1200 else df
+    d_strs = [d.strftime('%Y-%m-%d') if hasattr(d, 'strftime') else str(d)[:10] for d in plot_df.index]
+    o_vals = np.round(plot_df['Open'].fillna(0).values, 2)
+    h_vals = np.round(plot_df['High'].fillna(0).values, 2)
+    l_vals = np.round(plot_df['Low'].fillna(0).values, 2)
+    c_vals = np.round(plot_df['Close'].fillna(0).values, 2)
+    v_vals = plot_df['Volume'].fillna(0).astype(int).values
+
+    candles_payload = [
+        {
+            "time": d_strs[i],
+            "open": float(o_vals[i]),
+            "high": float(h_vals[i]),
+            "low": float(l_vals[i]),
+            "close": float(c_vals[i]),
+            "volume": int(v_vals[i])
+        }
+        for i in range(len(d_strs))
+        if float(c_vals[i]) > 0
+    ]
 
     all_trades = closed_trades + ([open_pos] if open_pos else [])
 
@@ -2122,8 +2390,9 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
 def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
     """
     Generates the complete authoritative Swinger backtest ledger over Chartink triggers.
-    Enforces UNLIMITED slots and strict >10% cooldown radar retracement with green stabilization.
-    Saves to paper/swinger/trades.json and paper/swinger/portfolio.json.
+    Enforces UNLIMITED slots, strict >10% cooldown radar retracement,
+    and calibrated Leg 2 Base Breakout engine strictly for stocks that completed Leg 1.
+    Saves to paper/swinger/trades.json, paper/swinger/backtest_trades.json, and paper/swinger/portfolio.json.
     """
     import pickle
     import csv
@@ -2140,7 +2409,7 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
 
     # 2. Load Price Databases
     price_data = {}
-    for pkl_name in ["universe_4y_prices.pkl", "testnik_all_prices.pkl", "universe_down_50_prices.pkl"]:
+    for pkl_name in ["universe_down_50_prices.pkl", "testnik_all_prices.pkl", "universe_4y_prices.pkl"]:
         p_path = ROOT / "scratch" / pkl_name
         if p_path.exists():
             try:
@@ -2159,14 +2428,15 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
         df.index = df.index.tz_localize(None)
         df.sort_index(inplace=True)
         
-        c = df["Close"].values
-        h = df["High"].values
-        l = df["Low"].values
-        o = df["Open"].values
-        v = df["Volume"].values
+        c = df["Close"].ffill().bfill().values.astype(float)
+        h = df["High"].ffill().bfill().values.astype(float)
+        l = df["Low"].ffill().bfill().values.astype(float)
+        o = df["Open"].ffill().bfill().values.astype(float)
+        v = df["Volume"].fillna(0).values.astype(float)
         dates = [d.strftime("%Y-%m-%d") for d in df.index]
         
         vol_sma50 = pd.Series(v).rolling(50, min_periods=20).mean().values
+        vol_sma20 = pd.Series(v).rolling(20, min_periods=10).mean().values
         ema20 = pd.Series(c).ewm(span=20, adjust=False).mean().values
         ema50 = pd.Series(c).ewm(span=50, adjust=False).mean().values
         
@@ -2175,17 +2445,18 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
             "date_map": {d: i for i, d in enumerate(dates)},
             "c": c, "h": h, "l": l, "o": o, "v": v,
             "ema20": ema20, "ema50": ema50,
-            "vol_sma50": vol_sma50
+            "vol_sma50": vol_sma50,
+            "vol_sma20": vol_sma20
         }
 
-    # Parameters - UNLIMITED SLOTS & STRICT >10% COOLDOWN RETRACEMENT
+    # Parameters
     cfg = load_config()
     SLOT_SIZE = float(cfg.get("base_position_size", 25000.0))
     INITIAL_SL_PCT = float(cfg.get("initial_sl_pct", -15.0))
     BE_SHIELD_PCT = float(cfg.get("be_shield_trigger_pct", 15.0))
     RUNNER_TRIGGER_PCT = 20.0
     RUNNER_TRAIL_PCT = float(cfg.get("runner_trailing_stop_pct", 25.0))
-    MAX_DIRECT_GAIN = float(cfg.get("max_direct_entry_gain_pct", 10.0))
+    MAX_DIRECT_GAIN = float(cfg.get("max_direct_entry_gain_pct", 0.0))
 
     ref_sym = "RELIANCE" if "RELIANCE" in stock_bars else list(stock_bars.keys())[0]
     all_sim_dates = sorted([d for d in stock_bars[ref_sym]["dates"] if d >= "2026-03-24"])
@@ -2199,6 +2470,7 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
     open_positions = []
     closed_trades = []
     cooldown_radar = []
+    leg2_radar = {}
     trade_id = 1
 
     for cur_date in all_sim_dates:
@@ -2217,6 +2489,7 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
             l = float(b["l"][i])
             o = float(b["o"][i])
             v = float(b["v"][i])
+            e20 = float(b["ema20"][i])
             e50 = float(b["ema50"][i])
             vsma50 = float(b["vol_sma50"][i])
             
@@ -2230,13 +2503,13 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
                 
             peak_gain_pct = (pos["highest_close"] - entry_p) / entry_p * 100.0
             pos["peak_gain_pct"] = round(peak_gain_pct, 1)
-            
-            exited = False
-            exit_p = None
-            exit_reason = None
+
+            is_l2 = (pos.get("leg") == 2)
+            be_trig = 10.0 if is_l2 else BE_SHIELD_PCT
+            trail_pct = float(cfg.get("leg2_trail_sl_pct", 18.0)) if is_l2 else RUNNER_TRAIL_PCT
             
             # Check BE Shield trigger
-            if peak_gain_pct >= BE_SHIELD_PCT and not pos["be_active"]:
+            if peak_gain_pct >= be_trig and not pos["be_active"]:
                 pos["be_active"] = True
                 pos["sl_price"] = round(entry_p * 1.005, 2)
                 
@@ -2245,26 +2518,29 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
                 pos["runner_mode"] = True
                 pos["tp_hit"] = True
                 
+            exited = False
+            exit_p = None
+            exit_reason = None
+            
             # Exit checks
             if not pos["runner_mode"]:
-                # Universal 10-Day 20 EMA Momentum Eject (Universal 20 EMA Cut)
-                # If closed below 20 EMA on above-average volume within first 12 sessions, eject early
-                e20 = float(b["ema20"][i])
-                if pos["bars_held"] >= 3 and pos["bars_held"] <= 12 and c < e20 and vsma50 > 0 and v >= 1.0 * vsma50:
+                # Early cut for Leg 1 failing momentum within 12 sessions
+                if not is_l2 and pos["bars_held"] >= 3 and pos["bars_held"] <= 12 and c < e20 and vsma50 > 0 and v >= 1.0 * vsma50:
                     exited = True
                     exit_p = c
                     exit_reason = "10-Day 20 EMA Momentum Eject"
                 elif l <= pos["sl_price"]:
                     exited = True
                     exit_p = min(o, pos["sl_price"]) if o < pos["sl_price"] else pos["sl_price"]
-                    exit_reason = "BE Shield (+0.5%)" if pos["be_active"] else f"Initial SL ({INITIAL_SL_PCT:.0f}%)"
+                    sl_label = pos.get("initial_sl_pct", INITIAL_SL_PCT)
+                    exit_reason = "BE Shield (+0.5%)" if pos["be_active"] else f"Initial SL ({sl_label:.0f}%)"
             else:
-                runner_stop = pos["highest_close"] * (1.0 - RUNNER_TRAIL_PCT / 100.0)
+                runner_stop = pos["highest_close"] * (1.0 - trail_pct / 100.0)
                 pos["runner_trail_sl"] = round(runner_stop, 2)
                 if l <= runner_stop:
                     exited = True
                     exit_p = min(o, runner_stop) if o < runner_stop else runner_stop
-                    exit_reason = f"Peak Trail ({RUNNER_TRAIL_PCT:.0f}%)"
+                    exit_reason = f"Peak Trail ({trail_pct:.0f}%)"
                 elif pos["bars_held"] >= 5 and c < e50 and vsma50 > 0 and v > 1.2 * vsma50:
                     exited = True
                     exit_p = c
@@ -2293,14 +2569,32 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
                     "days_held": pos["days_held"],
                     "bars_held": pos["bars_held"],
                     "highest_price": round(pos["peak_price"], 2),
+                    "highest_close": round(pos["highest_close"], 2),
+                    "peak_gain_pct": round((pos["peak_price"] - entry_p) / entry_p * 100.0, 1),
                     "reason": exit_reason,
                     "exit_reason": exit_reason,
                     "status": "WIN" if pnl > 0 else "LOSS",
-                    "leg": "Chartink Pure Breakout",
+                    "leg": pos.get("leg", 1),
+                    "strategy_leg": pos.get("strategy_leg", "LEG1_TURNAROUND"),
                     "breakout_candle_gain": pos.get("breakout_candle_gain", 0.0),
                     "entry_type": pos.get("entry_type", "DIRECT_BREAKOUT")
                 })
                 trade_id += 1
+
+                # USER RULE: On Leg 1 exit, ONLY proven runners (peak gain >= 30%) qualify for Leg 2 Radar!
+                l1_peak_gain = round((pos["highest_close"] - entry_p) / entry_p * 100.0, 1)
+                min_l1_gain = float(cfg.get("leg2_min_leg1_gain_pct", 30.0))
+                if pos.get("leg") == 1 and l1_peak_gain >= min_l1_gain:
+                    leg2_radar[s] = {
+                        "exit_date": cur_date,
+                        "exit_i": i,
+                        "exit_price": exit_p,
+                        "peak_price": pos["peak_price"],
+                        "base_low": l,
+                        "base_high": h,
+                        "entry_p": entry_p,
+                        "l1_peak_gain": l1_peak_gain
+                    }
             else:
                 unreal_pnl = round(pos["shares"] * (c - entry_p), 2)
                 unreal_pct = round((c / entry_p - 1.0) * 100.0, 2)
@@ -2367,6 +2661,7 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
                         "tp_hit": False,
                         "tp_target_price": round(entry_p * 1.30, 2),
                         "runner_mode": False,
+                        "status": "ACTIVE",
                         "peak_price": round(entry_p, 2),
                         "highest_close": round(entry_p, 2),
                         "peak_gain_pct": 0.0,
@@ -2404,82 +2699,186 @@ def generate_backtest_ledger(trigs_filename="chartink_verified_triggers.csv"):
             prev_c = float(b["c"][i-1]) if i >= 1 else o
             day_gain_pct = (c / prev_c - 1.0) * 100.0
             
-            # Option B Gate Enforcement:
-            if day_gain_pct > MAX_DIRECT_GAIN:
-                # Overextended Blast (> 10% gain): DO NOT buy at top; route to Cooldown Radar!
-                retrace_frac = float(cfg.get("cooldown_target_retrace_pct", 30.0)) / 100.0
-                target_pb = round(c - retrace_frac * (c - o), 2)
-                if not any(r["symbol"] == s for r in cooldown_radar):
-                    cooldown_radar.append({
+            # STRICT COOLDOWN ONLY RULE: Zero Direct Buys!
+            # Every screener trigger MUST wait on Cooldown Radar for pullback & stabilization!
+            retrace_frac = float(cfg.get("cooldown_target_retrace_pct", 40.0)) / 100.0
+            target_pb = round(c - retrace_frac * (c - o), 2)
+            if not any(r["symbol"] == s for r in cooldown_radar):
+                cooldown_radar.append({
+                    "symbol": s,
+                    "blast_i": i,
+                    "alert_date": cur_date,
+                    "alert_price": round(c, 2),
+                    "alert_gain": round(day_gain_pct, 1),
+                    "target_pb": target_pb,
+                    "blast_low": round(l, 2)
+                })
+            continue
+
+        # D. Process Leg 2 Entries (ON EXITED PROVEN LEG 1 RUNNERS ONLY & "STILL LOW")
+        min_cooldown = int(cfg.get("leg2_min_cooldown_days", 12))
+        max_cooldown = int(cfg.get("leg2_max_cooldown_days", 90))
+        min_retrace = float(cfg.get("leg2_min_retrace_from_peak_pct", 25.0))
+        max_dist_base = float(cfg.get("leg2_max_dist_from_base_low_pct", 18.0))
+
+        for s, r_info in list(leg2_radar.items()):
+            if s in held_syms:
+                continue
+            b = stock_bars.get(s)
+            if not b or cur_date not in b["date_map"]:
+                continue
+            i = b["date_map"][cur_date]
+            days_since = i - r_info["exit_i"]
+
+            # Must consolidate for at least min_cooldown sessions
+            if days_since < min_cooldown:
+                r_info["base_low"] = min(r_info["base_low"], float(b["l"][i]))
+                r_info["base_high"] = max(r_info["base_high"], float(b["h"][i]))
+                continue
+
+            # Expire after max_cooldown sessions (allows "old little bit older" up to 90 sessions)
+            if days_since > max_cooldown:
+                del leg2_radar[s]
+                continue
+
+            c = float(b["c"][i]); o = float(b["o"][i]); l = float(b["l"][i]); h = float(b["h"][i]); v = float(b["v"][i])
+            e20 = float(b["ema20"][i]); e50 = float(b["ema50"][i]); vsma50 = float(b["vol_sma50"][i]); vsma20 = float(b["vol_sma20"][i])
+            prev_c = float(b["c"][i-1])
+
+            # Invalidation: Drops below Leg 1 entry price
+            if c < r_info.get("entry_p", 0.0) * 0.95:
+                del leg2_radar[s]
+                continue
+
+            # "STILL LOW" CRITERIA:
+            peak_p = r_info.get("peak_price", r_info["exit_price"])
+            retrace_from_peak_pct = (peak_p - c) / peak_p * 100.0
+            is_cooled_down = (retrace_from_peak_pct >= min_retrace)
+
+            dist_from_base_low_pct = (c - r_info["base_low"]) / r_info["base_low"] * 100.0
+            is_still_low = (dist_from_base_low_pct <= max_dist_base)
+
+            is_green = (c > o) and (c >= prev_c * 1.025)
+            holds_trend = (c >= e20 * 0.97) and (c >= e50 * 0.92)
+            vol_surge = (vsma50 > 0 and v >= 1.4 * vsma50) or (vsma20 > 0 and v >= 1.4 * vsma20)
+
+            if is_cooled_down and is_still_low and is_green and holds_trend and vol_surge:
+                qty = int(SLOT_SIZE // c) if c > 0 else 0
+                if qty > 0:
+                    base_l = min(r_info["base_low"], l)
+                    sl_pct = (base_l / c - 1.0) * 100.0
+                    sl_initial = round(c * 0.92, 2) if sl_pct < -8.0 else round(c * 0.96, 2) if sl_pct > -4.0 else round(base_l, 2)
+                    day_gain_pct = round((c / prev_c - 1.0) * 100.0, 1)
+                    new_pos = {
                         "symbol": s,
-                        "blast_i": i,
-                        "alert_date": cur_date,
-                        "alert_price": round(c, 2),
-                        "alert_gain": round(day_gain_pct, 1),
-                        "target_pb": target_pb,
-                        "blast_low": round(l, 2)
-                    })
-                continue
-                
-            # Clean Breakout (<= 10% gain): Direct Immediate Entry at Close!
-            qty = int(SLOT_SIZE // c) if c > 0 else 0
-            if qty <= 0:
-                continue
-                
-            sl_initial = round(c * (1.0 + INITIAL_SL_PCT / 100.0), 2)
-            be_trigger = round(c * (1.0 + BE_SHIELD_PCT / 100.0), 2)
-            new_pos = {
+                        "name": s,
+                        "leg": 2,
+                        "strategy_leg": "LEG2_COOLOFF_BREAKOUT",
+                        "entry_date": cur_date,
+                        "entry_price": round(c, 2),
+                        "avg_price": round(c, 2),
+                        "cmp": round(c, 2),
+                        "shares": qty,
+                        "initial_qty": qty,
+                        "current_qty": qty,
+                        "invested": round(qty * c, 2),
+                        "initial_sl_pct": -8.0,
+                        "sl_price": sl_initial,
+                        "be_active": False,
+                        "be_trigger_price": round(c * 1.10, 2),
+                        "tp_hit": False,
+                        "tp_target_price": round(c * 1.30, 2),
+                        "runner_mode": False,
+                        "status": "ACTIVE",
+                        "peak_price": round(c, 2),
+                        "highest_close": round(c, 2),
+                        "peak_gain_pct": 0.0,
+                        "pnl": 0.0,
+                        "pnl_pct": 0.0,
+                        "unrealized_pnl": 0.0,
+                        "unrealized_pnl_pct": 0.0,
+                        "days_held": 0,
+                        "bars_held": 0,
+                        "unrealized_pct": 0.0,
+                        "ema20": round(e20, 2),
+                        "ema50": round(e50, 2),
+                        "runner_trail_sl": sl_initial,
+                        "breakout_candle_gain": day_gain_pct,
+                        "entry_type": "LEG2_BASE_BREAKOUT",
+                        "notes": f"Leg 2 Entry (Proven Leg 1 +{r_info['l1_peak_gain']:.0f}% runner | Cooled -{retrace_from_peak_pct:.0f}% from peak | +{dist_from_base_low_pct:.1f}% from base low)"
+                    }
+                    open_positions.append(new_pos)
+                    held_syms.add(s)
+                    del leg2_radar[s]
+            else:
+                r_info["base_low"] = min(r_info["base_low"], l)
+                r_info["base_high"] = max(r_info["base_high"], h)
+
+    # Save active leg2 radar for UI display & watchlist
+    radar_list = []
+    last_dt = all_sim_dates[-1] if all_sim_dates else ""
+    for s, r in leg2_radar.items():
+        b = stock_bars.get(s)
+        if b and last_dt in b["date_map"]:
+            i = b["date_map"][last_dt]
+            radar_list.append({
                 "symbol": s,
-                "name": s,
-                "leg": 1,
-                "strategy_leg": "LEG1_PHOENIX_BREAKOUT",
-                "entry_date": cur_date,
-                "entry_price": round(c, 2),
-                "avg_price": round(c, 2),
-                "cmp": round(c, 2),
-                "shares": qty,
-                "initial_qty": qty,
-                "current_qty": qty,
-                "invested": round(qty * c, 2),
-                "initial_sl_pct": INITIAL_SL_PCT,
-                "sl_price": sl_initial,
-                "be_active": False,
-                "be_trigger_price": be_trigger,
-                "tp_hit": False,
-                "tp_target_price": round(c * 1.30, 2),
-                "runner_mode": False,
-                "peak_price": round(c, 2),
-                "highest_close": round(c, 2),
-                "peak_gain_pct": 0.0,
-                "pnl": 0.0,
-                "pnl_pct": 0.0,
-                "unrealized_pnl": 0.0,
-                "unrealized_pnl_pct": 0.0,
-                "days_held": 0,
-                "bars_held": 0,
-                "unrealized_pct": 0.0,
+                "exit_date": r["exit_date"],
+                "days_in_cooldown": i - r["exit_i"],
+                "base_low": round(r["base_low"], 2),
+                "base_high": round(r["base_high"], 2),
+                "cmp": round(float(b["c"][i]), 2),
                 "ema20": round(float(b["ema20"][i]), 2),
                 "ema50": round(float(b["ema50"][i]), 2),
-                "runner_trail_sl": sl_initial,
-                "breakout_candle_gain": round(day_gain_pct, 1),
-                "entry_type": "DIRECT_BREAKOUT"
-            }
-            open_positions.append(new_pos)
-            held_syms.add(s)
+                "status": "COOLING_DOWN" if (i - r["exit_i"]) < 8 else "READY_FOR_BREAKOUT"
+            })
+    try:
+        radar_file = ROOT / "paper" / "swinger" / "radar_leg2.json"
+        with open(radar_file, "w", encoding="utf-8") as f:
+            json.dump({"coiled": radar_list, "radar": radar_list, "updated_at": datetime.now(IST).isoformat()}, f, indent=2)
+            
+        # Update Watchlist for UI with Leg 2 Cooldown candidates including JINDWORLD
+        wl_candidates = []
+        for r_item in radar_list:
+            wl_candidates.append({
+                "symbol": r_item["symbol"],
+                "name": r_item["symbol"],
+                "alert_date": r_item["exit_date"],
+                "alert_price": r_item["base_high"],
+                "alert_rsi": 55.0,
+                "current_price": r_item["cmp"],
+                "current_rsi": 52.0,
+                "ema20": r_item["ema20"],
+                "distance_to_ema20_pct": round((r_item["cmp"] / r_item["ema20"] - 1.0) * 100.0, 1) if r_item["ema20"] > 0 else 0.0,
+                "pullback_pct": round((r_item["cmp"] / r_item["base_high"] - 1.0) * 100.0, 1) if r_item["base_high"] > 0 else 0.0,
+                "status": "LEG 2 COOLDOWN" if r_item["days_in_cooldown"] < 8 else "READY FOR 2ND LEG",
+                "cooldown_ready": r_item["days_in_cooldown"] >= 8,
+                "notes": f"Exited Leg 1; consolidated {r_item['days_in_cooldown']}d in base (Rs. {r_item['base_low']} - {r_item['base_high']}). Waiting for 2nd leg blast!"
+            })
+        if wl_candidates:
+            save_watchlist({"watchlist": wl_candidates})
+    except Exception as e:
+        print(f"[Swinger Backtest] Warning saving radar/watchlist: {e}")
 
-    # Save to trades.json and portfolio.json
-    trades_dict = {"trades": closed_trades}
-    save_trades(trades_dict)
+    # Write portfolio first
+    tot_inv = round(sum(p["invested"] for p in open_positions), 2)
+    valid_unreal = [p["unrealized_pnl"] for p in open_positions if not np.isnan(p.get("unrealized_pnl", 0.0))]
+    tot_unreal = round(sum(valid_unreal), 2)
 
     portfolio_out = {
         "positions": open_positions,
         "total_open": len(open_positions),
-        "total_invested": round(sum(p["invested"] for p in open_positions), 2),
-        "total_unrealized_pnl": round(sum(p["unrealized_pnl"] for p in open_positions), 2),
+        "total_invested": tot_inv,
+        "total_unrealized_pnl": tot_unreal,
         "last_updated": datetime.now(IST).isoformat()
     }
     with open(PORTFOLIO_FILE, "w", encoding="utf-8") as f:
         json.dump(portfolio_out, f, indent=2)
+
+    # Save to backtest_trades.json and sync trades.json with active positions passed
+    trades_dict = {"trades": closed_trades}
+    save_backtest_trades(trades_dict, open_positions)
+    save_trades(trades_dict, open_positions)
 
     print(f"[Swinger Backtest] Successfully generated ledger: {len(closed_trades)} closed trades, {len(open_positions)} open positions.")
     return closed_trades, open_positions

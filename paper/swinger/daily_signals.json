@@ -1,8 +1,66 @@
 {
-  "last_scan_time": "2026-11-18T15:25:24.046600+05:30",
-  "count": 0,
-  "signals": [],
+  "last_scan_time": "2026-11-22T11:48:25.976853+05:30",
+  "count": 2,
+  "signals": [
+    {
+      "sr": 1,
+      "nsecode": "TATAELXSI",
+      "name": "Tata Elxsi Limited",
+      "bsecode": "500408",
+      "close": 3850,
+      "per_chg": 3.36,
+      "volume": 843476,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 2,
+      "nsecode": "SYNGENE",
+      "name": "Syngene International Limited",
+      "bsecode": "539268",
+      "close": 451.7,
+      "per_chg": 3.28,
+      "volume": 2557651,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    }
+  ],
   "history": [
+    {
+      "date": "2026-11-22",
+      "scan_time": "2026-11-22T11:48:25.976853+05:30",
+      "count": 2,
+      "signals": [
+        {
+          "sr": 1,
+          "nsecode": "TATAELXSI",
+          "name": "Tata Elxsi Limited",
+          "bsecode": "500408",
+          "close": 3850,
+          "per_chg": 3.36,
+          "volume": 843476,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 2,
+          "nsecode": "SYNGENE",
+          "name": "Syngene International Limited",
+          "bsecode": "539268",
+          "close": 451.7,
+          "per_chg": 3.28,
+          "volume": 2557651,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-20",
+      "scan_time": "2026-11-20T15:25:16.823916+05:30",
+      "count": 0,
+      "signals": []
+    },
     {
       "date": "2026-11-18",
       "scan_time": "2026-11-18T15:25:24.046600+05:30",

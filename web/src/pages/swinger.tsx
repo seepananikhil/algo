@@ -145,7 +145,7 @@ export function SwingerPage() {
   const [monthly, setMonthly] = useState<MonthlyStat[]>([])
   const [daily, setDaily] = useState<CalendarDay[]>([])
   const [summary, setSummary] = useState<any>({})
-  const [dailySignals, setDailySignals] = useState<DailySignalsResponse>({
+  const [, setDailySignals] = useState<DailySignalsResponse>({
     last_scan_time: null,
     count: 0,
     signals: [],
@@ -195,9 +195,10 @@ export function SwingerPage() {
           `${target}: ${data.summary.total_trades} Trades · ${data.summary.win_rate}% Win Rate · PF ${data.summary.profit_factor}`,
           { id: toastId }
         )
-        const firstTrade = (data.trades && data.trades.length > 0) ? data.trades[0] : null
+        // Default to active open position or the most recent trade, NOT the oldest trade in history!
+        const activeOrLatestTrade = data.open_position || ((data.trades && data.trades.length > 0) ? data.trades[data.trades.length - 1] : null)
         setSelectedTradeForChart({
-          ...(firstTrade || {}),
+          ...(activeOrLatestTrade || {}),
           symbol: data.symbol,
           name: data.symbol,
           candles: data.candles,
@@ -353,7 +354,6 @@ export function SwingerPage() {
 
   const totalInvested = positions.reduce((acc, p) => acc + (p.avg_price ?? p.entry_price) * p.current_qty, 0)
   const totalUnrealizedPnl = positions.reduce((acc, p) => acc + (p.unrealized_pnl ?? 0), 0)
-  const totalBookedPnl = positions.reduce((acc, p) => acc + (p.booked_pnl ?? 0), 0)
 
   // Filter out any symbols that already have open active positions so they never appear on Radar
   const heldSymbolSet = useMemo(() => new Set(positions.map((p) => p.symbol)), [positions])
@@ -372,8 +372,10 @@ export function SwingerPage() {
       }
       const pnl = t.pnl ?? 0
       const pnlPct = t.pnl_pct ?? (t as any).pct_return ?? 0
-      if (tradeLogFilter === "LEG1" && t.leg !== 1 && (t as any).strategy_leg !== "LEG1_TURNAROUND") return false
-      if (tradeLogFilter === "LEG2" && t.leg !== 2 && (t as any).strategy_leg !== "LEG2_BREAKOUT") return false
+      const isLeg2 = t.leg === 2 || String((t as any).strategy_leg || "").toUpperCase().includes("LEG2")
+      const isLeg1 = t.leg === 1 || String((t as any).strategy_leg || "").toUpperCase().includes("LEG1") || (!isLeg2 && t.leg !== 2)
+      if (tradeLogFilter === "LEG1" && !isLeg1) return false
+      if (tradeLogFilter === "LEG2" && !isLeg2) return false
       if (tradeLogFilter === "MULTIBAGGER" && pnlPct < 100.0) return false
       if (tradeLogFilter === "WIN" && pnl <= 0) return false
       if (tradeLogFilter === "LOSS" && pnl > 0) return false
@@ -561,17 +563,18 @@ export function SwingerPage() {
   const equityCurveData = useMemo(() => {
     if (!trades || trades.length === 0) return []
     const sorted = [...trades].sort((a, b) => (a.exit_date || "").localeCompare(b.exit_date || ""))
+    const startingCap = Number(summary.base_capital || summary.capital_allocated || 500000)
     let cumPnl = 0
-    let peakEquity = 500000
+    let peakEquity = startingCap
     const points: any[] = [
       {
         tradeNo: 0,
-        date: sorted[0]?.entry_date || "2022-01-01",
+        date: sorted[0]?.entry_date || "2026-03-24",
         symbol: "Base Capital",
         pnl: 0,
         pnlPct: 0,
-        equity: 500000,
-        peakEquity: 500000,
+        equity: startingCap,
+        peakEquity: startingCap,
         drawdownAmt: 0,
         drawdownPct: 0
       }
@@ -579,7 +582,7 @@ export function SwingerPage() {
 
     sorted.forEach((t, i) => {
       cumPnl += t.pnl || 0
-      const currentEquity = 500000 + cumPnl
+      const currentEquity = startingCap + cumPnl
       if (currentEquity > peakEquity) {
         peakEquity = currentEquity
       }
@@ -718,44 +721,33 @@ export function SwingerPage() {
   }, [trades])
 
   return (
-    <div className="w-full max-w-[1600px] mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col gap-5 pb-20">
+    <div className="h-full max-h-full w-full flex flex-col gap-2 p-2 sm:p-3 overflow-hidden select-none">
       {/* ================= 1. SWINGER 2.0 HERO & ACTION BAR ================= */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-white p-5 rounded-3xl border border-slate-200/80 shadow-xs">
-        <div>
-          <div className="flex items-center gap-2.5 flex-wrap">
-            <div className="size-9 rounded-2xl bg-emerald-600 flex items-center justify-center text-white shadow-emerald-200 shadow-sm">
-              <TrendingUp className="size-5" />
-            </div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">Phoenix Swinger 2.0</h1>
-            <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              Live Engine
-            </span>
-            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-              Paper Mode (₹25k / Slot)
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200" title="Enforces institutional quality: Market Cap >= Rs.2,000 Cr and High-Velocity Swing ATR >= 3.2%">
-              Mcap ≥ ₹2k Cr · ATR ≥ 3.2%
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">
-              Break-Even Shield (+15%)
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
-              Trailing Stop Lock
-            </span>
-            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
-              Cooldown Retracement
-            </span>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
+        <div className="flex items-center gap-2 flex-wrap">
+          <div className="size-7 rounded-lg bg-emerald-600 flex items-center justify-center text-white shadow-2xs shrink-0">
+            <TrendingUp className="size-4" />
           </div>
-          <p className="text-xs text-slate-500 mt-1 font-medium">
-            Phoenix Breakout Swinger · High-Probability Deep Base Breakouts & Swing Portfolio
-          </p>
+          <h1 className="text-base font-bold tracking-tight text-slate-900">Phoenix Swinger 2.0</h1>
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+            <span className="size-1.5 rounded-full bg-emerald-500 animate-pulse" />
+            Live Engine
+          </span>
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200 font-mono">
+            ₹25k Slot (20 Max)
+          </span>
+          <span className="hidden md:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-50 text-sky-700 border border-sky-200">
+            SL -15% · BE Shield @ +15%
+          </span>
+          <span className="hidden lg:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+            25% Runner Trail · 50 EMA Vol
+          </span>
         </div>
 
-        <div className="flex items-center gap-2 self-stretch md:self-auto justify-end flex-wrap">
+        <div className="flex items-center gap-2 self-stretch sm:self-auto justify-end shrink-0">
           {/* Quick Stock Backtester Input Bar */}
-          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-1 gap-1.5 focus-within:ring-2 focus-within:ring-emerald-500/30 focus-within:border-emerald-500 transition shadow-2xs">
-            <Zap className="size-3.5 text-amber-500 shrink-0" />
+          <div className="flex items-center bg-slate-50 border border-slate-200 rounded-lg px-2 py-0.5 gap-1.5 focus-within:ring-1 focus-within:ring-emerald-500 focus-within:border-emerald-500 transition shadow-2xs h-7.5">
+            <Zap className="size-3 text-amber-500 shrink-0" />
             <input
               type="text"
               placeholder="Test stock (e.g. PARAS)..."
@@ -764,26 +756,35 @@ export function SwingerPage() {
               onKeyDown={(e) => {
                 if (e.key === "Enter") handleRunBacktest(backtestSymbol)
               }}
-              className="bg-transparent text-xs font-mono font-bold outline-none text-slate-800 placeholder:text-slate-400 placeholder:font-sans w-36 sm:w-44"
+              className="bg-transparent text-xs font-mono font-bold outline-none text-slate-800 placeholder:text-slate-400 placeholder:font-sans w-28 sm:w-36"
             />
             <Button
               size="sm"
               onClick={() => handleRunBacktest(backtestSymbol)}
               disabled={backtestLoading || !backtestSymbol.trim()}
-              className="h-6 px-2.5 text-[11px] font-bold rounded-lg bg-amber-500 hover:bg-amber-600 text-white shadow-2xs cursor-pointer"
+              className="h-5 px-1.5 text-[9px] font-bold rounded bg-amber-500 hover:bg-amber-600 text-white shadow-2xs cursor-pointer"
             >
-              {backtestLoading ? <RefreshCw className="size-3 animate-spin" /> : "Backtest"}
+              {backtestLoading ? <RefreshCw className="size-2 animate-spin" /> : "Backtest"}
             </Button>
           </div>
+
+          <a
+            href="/holdings"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-800 border border-slate-200 transition-colors shadow-2xs h-7.5"
+            title="Open Paper & Demat Holdings Dashboard"
+          >
+            <Wallet className="size-3 text-emerald-600" />
+            <span>Holdings ({positions.length})</span>
+          </a>
 
           <Button
             variant="outline"
             size="sm"
             onClick={fetchData}
             disabled={refreshing}
-            className="rounded-xl text-xs font-bold gap-1.5 text-slate-600 hover:text-slate-900 border-slate-200 bg-white"
+            className="rounded-lg text-xs font-bold gap-1 text-slate-600 hover:text-slate-900 border-slate-200 bg-white h-7.5 px-2.5"
           >
-            <RefreshCw className={`size-3.5 ${refreshing ? "animate-spin text-emerald-600" : ""}`} />
+            <RefreshCw className={`size-3 ${refreshing ? "animate-spin text-emerald-600" : ""}`} />
             Sync
           </Button>
 
@@ -791,134 +792,98 @@ export function SwingerPage() {
             size="sm"
             onClick={handleScanNow}
             disabled={scanning}
-            className="rounded-xl text-xs font-bold gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200 shadow-sm"
+            className="rounded-lg text-xs font-bold gap-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-2xs h-7.5 px-3"
           >
-            <Sparkles className="size-3.5" />
-            {scanning ? "Scanning Chartink..." : "Scan Chartink Now"}
+            <Sparkles className="size-3" />
+            {scanning ? "Scanning..." : "Scan Now"}
           </Button>
         </div>
       </div>
 
-      {/* ================= 2. EXECUTIVE METRIC CARDS (4 TILES) ================= */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
-        {/* Card 1: Realized Profit & Compound Return */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5">
-              <TrendingUp className="size-3.5 text-emerald-500" />
-              <span>Realized Profit</span>
+      {/* ================= 2. ONE-LINE HORIZONTAL STATS STRIP (IDENTICAL STYLE TO /HOLDINGS) ================= */}
+      <div className="flex items-center justify-between px-3 py-1.5 bg-white border border-slate-200/80 rounded-xl text-xs gap-3 overflow-x-auto shrink-0 shadow-2xs">
+        {/* Item 1: Realized PnL & CAGR */}
+        <div className="flex items-center gap-2 font-mono shrink-0">
+          <TrendingUp className="size-4 text-emerald-500 shrink-0" />
+          <span className="text-slate-500 font-sans">Realized:</span>
+          {summary.net_pnl != null ? (
+            <span className={`font-bold font-mono text-sm ${summary.net_pnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+              {summary.net_pnl >= 0 ? "+" : ""}₹{Math.round(summary.net_pnl).toLocaleString("en-IN")}
             </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
-              CAGR: +{(summary.xirr ?? 0).toFixed(1)}% p.a.
+          ) : (
+            <span className="text-slate-300">--</span>
+          )}
+          {summary.xirr != null && (
+            <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 font-mono">
+              CAGR: +{summary.xirr.toFixed(1)}%
             </span>
-          </div>
-          <div className="my-2.5">
-            <div className={`text-2xl font-black font-mono tracking-tight ${(summary.net_pnl ?? 0) >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              {(summary.net_pnl ?? 0) >= 0 ? "+" : ""}₹{(summary.net_pnl ?? 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-            </div>
-            <div className="text-xs text-emerald-700 font-bold mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>+{(summary.total_pnl_pct ?? 0).toFixed(1)}% ROI ({summary.period_years ?? 0}y)</span>
-              <span className="text-slate-300">·</span>
-              <span className="text-sky-700">Active XIRR: +{(summary.xirr_active ?? 0).toFixed(1)}%</span>
-            </div>
-          </div>
-          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>Portfolio Ending:</span>
-            <span className="text-slate-800 font-mono font-bold">₹{((summary.current_capital ?? 500000) / 100000).toFixed(2)}L <span className="text-slate-400 font-normal">from ₹5.0L</span></span>
-          </div>
+          )}
         </div>
 
-        {/* Card 2: Drawdown & Risk Safety */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5">
-              <ShieldCheck className="size-3.5 text-sky-500" />
-              <span>Max Drawdown</span>
-            </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-sky-100 text-sky-800 border border-sky-300 font-mono">
-              Calmar: {summary.calmar_ratio ?? 0}
-            </span>
-          </div>
-          <div className="my-2.5">
-            <div className="text-2xl font-black font-mono tracking-tight text-slate-900">
-              {summary.max_drawdown_pct ?? 0}%
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>Peak Dip: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.abs(summary.max_drawdown ?? 0) / 1000).toFixed(1)}k</strong></span>
-              <span className="text-slate-300">·</span>
-              <span className="text-slate-600">Active DD: {summary.max_drawdown_active_pct ?? 0}%</span>
-            </div>
-          </div>
-          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>Max Consecutive Cuts:</span>
-            <span className="text-slate-800 font-mono font-bold">{summary.max_consecutive_losses ?? 0} <span className="text-emerald-600 font-normal">(Controlled ₹25k Lots)</span></span>
-          </div>
+        <div className="h-3.5 w-px bg-slate-200 shrink-0" />
+
+        {/* Item 2: Portfolio Ending NAV */}
+        <div className="flex items-center gap-2 font-mono shrink-0">
+          <Wallet className="size-4 text-sky-500 shrink-0" />
+          <span className="text-slate-500 font-sans">Portfolio:</span>
+          <span className="font-bold text-slate-800 text-sm">
+            ₹{summary.current_capital != null ? (summary.current_capital / 100000).toFixed(2) : "5.00"}L
+          </span>
+          <span className="text-[11px] text-slate-400 font-sans font-normal">(from ₹5.0L)</span>
         </div>
 
-        {/* Card 3: Payoff Ratio & Asymmetric Edge */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5">
-              <BarChart3 className="size-3.5 text-amber-500" />
-              <span>Reward / Risk Edge</span>
-            </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-amber-100 text-amber-800 border border-amber-300 font-mono">
-              PF: {summary.profit_factor ?? 0}
-            </span>
-          </div>
-          <div className="my-2.5">
-            <div className="text-2xl font-black font-mono tracking-tight text-amber-600">
-              {summary.payoff_ratio ?? 0}x <span className="text-xs font-bold text-slate-400 tracking-normal font-sans">Payoff</span>
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>Avg Win: <strong className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.avg_win ?? 0)).toLocaleString("en-IN")}</strong></span>
-              <span className="text-slate-300">·</span>
-              <span>Avg Loss: <strong className="text-rose-600 font-mono font-bold">-₹{(Math.round(summary.avg_loss ?? 0)).toLocaleString("en-IN")}</strong></span>
-            </div>
-          </div>
-          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>{trades.length} Closed Trades ({summary.win_rate ?? 0}% WR)</span>
-            <span className="text-emerald-700 font-mono font-bold">+₹{(Math.round(summary.expectancy ?? 0)).toLocaleString("en-IN")} <span className="text-slate-400 font-normal">/ trade</span></span>
-          </div>
+        <div className="h-3.5 w-px bg-slate-200 shrink-0" />
+
+        {/* Item 3: Max Drawdown */}
+        <div className="flex items-center gap-2 font-mono shrink-0">
+          <ShieldCheck className="size-4 text-sky-500 shrink-0" />
+          <span className="text-slate-500 font-sans">Max DD:</span>
+          <span className="font-bold text-slate-900 text-sm">
+            {summary.max_drawdown_pct != null ? `${summary.max_drawdown_pct}%` : "--"}
+          </span>
+          <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300 font-mono">
+            Calmar: {summary.calmar_ratio ?? "--"}
+          </span>
         </div>
 
-        {/* Card 4: Active Portfolio & Exposure */}
-        <div className="p-4 rounded-3xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between hover:border-slate-300 transition-all">
-          <div className="flex items-center justify-between text-xs font-bold text-slate-400 uppercase tracking-wider">
-            <span className="flex items-center gap-1.5">
-              <Wallet className="size-3.5 text-indigo-500" />
-              <span>Active Portfolio</span>
-            </span>
-            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-200">
-              {positions.length} Open Holdings
-            </span>
-          </div>
-          <div className="my-2.5">
-            <div className={`text-2xl font-black font-mono tracking-tight ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-              {totalUnrealizedPnl >= 0 ? "+" : ""}₹{totalUnrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-            </div>
-            <div className="text-xs text-slate-500 font-medium mt-1 flex items-center gap-1.5 flex-wrap">
-              <span>Invested: <strong className="text-slate-800 font-mono font-bold">₹{totalInvested >= 1000 ? `${(totalInvested / 1000).toFixed(1)}k` : totalInvested.toFixed(0)}</strong></span>
-              <span className="text-slate-300">·</span>
-              <span>Standard Slot: <strong className="text-slate-800 font-mono font-bold">₹25k</strong></span>
-            </div>
-          </div>
-          <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between text-[11px] text-slate-500 font-medium">
-            <span>Banked TP1 Cash:</span>
-            <span className="text-emerald-700 font-bold font-mono">+₹{totalBookedPnl.toLocaleString("en-IN")}</span>
-          </div>
+        <div className="h-3.5 w-px bg-slate-200 shrink-0" />
+
+        {/* Item 4: Payoff Ratio & Win Rate */}
+        <div className="flex items-center gap-2 font-mono shrink-0">
+          <BarChart3 className="size-4 text-amber-500 shrink-0" />
+          <span className="text-slate-500 font-sans">Payoff:</span>
+          <span className="font-bold text-amber-600 text-sm">
+            {summary.payoff_ratio != null ? `${summary.payoff_ratio}x` : "--"}
+          </span>
+          <span className="text-[11px] text-slate-400 font-sans font-normal">
+            (PF: {summary.profit_factor ?? "--"} · {summary.win_rate ?? "--"}% WR)
+          </span>
+        </div>
+
+        <div className="h-3.5 w-px bg-slate-200 shrink-0" />
+
+        {/* Item 5: Active Deployment */}
+        <div className="flex items-center gap-2 font-mono shrink-0">
+          <Activity className="size-4 text-indigo-500 shrink-0" />
+          <span className="text-slate-500 font-sans">Active:</span>
+          <span className="font-bold text-slate-800 text-sm">
+            {positions.length}/20 Slots
+          </span>
+          <span className={`text-[11px] font-bold font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+            ({totalUnrealizedPnl >= 0 ? "+" : ""}₹{Math.round(totalUnrealizedPnl).toLocaleString("en-IN")})
+          </span>
         </div>
       </div>
 
-      {/* ================= 3. PRIMARY NAVIGATION TABS (SIMPLIFIED) ================= */}
-      <div className="flex items-center justify-between bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-xs gap-2">
-        <div className="flex items-center gap-1.5 flex-wrap">
+      {/* ================= 3. PRIMARY NAVIGATION TABS (COMPACT & BALANCED) ================= */}
+      <div className="flex items-center justify-between bg-white p-1 rounded-xl border border-slate-200/80 shadow-2xs gap-1.5 shrink-0">
+        <div className="flex items-center gap-1 flex-wrap">
           <button
             type="button"
             onClick={() => setActiveTab("all")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeTab === "all"
-                ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
+                ? "bg-emerald-600 text-white shadow-2xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
@@ -936,9 +901,9 @@ export function SwingerPage() {
           <button
             type="button"
             onClick={() => setActiveTab("holdings")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeTab === "holdings"
-                ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
+                ? "bg-emerald-600 text-white shadow-2xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
@@ -956,9 +921,9 @@ export function SwingerPage() {
           <button
             type="button"
             onClick={() => setActiveTab("calendar")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeTab === "calendar"
-                ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
+                ? "bg-emerald-600 text-white shadow-2xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
@@ -976,9 +941,9 @@ export function SwingerPage() {
           <button
             type="button"
             onClick={() => setActiveTab("radar")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeTab === "radar"
-                ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
+                ? "bg-emerald-600 text-white shadow-2xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
@@ -996,9 +961,9 @@ export function SwingerPage() {
           <button
             type="button"
             onClick={() => setActiveTab("payoff")}
-            className={`px-3.5 py-2 rounded-xl text-xs font-black transition flex items-center gap-2 ${
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${
               activeTab === "payoff"
-                ? "bg-emerald-600 text-white shadow-emerald-200 shadow-sm"
+                ? "bg-emerald-600 text-white shadow-2xs"
                 : "text-slate-600 hover:text-slate-900 hover:bg-slate-100"
             }`}
           >
@@ -1009,173 +974,154 @@ export function SwingerPage() {
                 activeTab === "payoff" ? "bg-emerald-700 text-white" : "bg-slate-200 text-slate-700"
               }`}
             >
-              5.21x
+              2.57x
             </span>
           </button>
         </div>
       </div>
 
-      {/* ================= TAB 1: ALL TRIGGERS & MASTER FEED ================= */}
-      {activeTab === "all" && (
-        <div className="space-y-4">
-          {/* UNIFIED COMPACT CONTROL BAR */}
-          <div className="bg-white rounded-2xl border border-slate-200/80 p-3 shadow-xs space-y-2.5">
-            {/* Top Row: Title + Live Overview Badges + Search & Sort */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2.5">
-              {/* Left: Section Header */}
-              <div className="flex items-center gap-2">
-                <Layers className="size-4 text-emerald-600" />
-                <h2 className="text-sm font-black text-slate-900 tracking-tight font-mono">
-                  Distinct Stocks ({distinctStocks.length})
-                </h2>
-              </div>
-
-              {/* Center: Live Overview Badges */}
-              <div className="hidden lg:flex items-center gap-2 text-xs font-mono">
-                <span className="px-2.5 py-1 rounded-lg bg-sky-50 text-sky-800 border border-sky-200/70 font-bold">
-                  {positions.length} Active in Portfolio
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-200/70 font-bold">
-                  {distinctStocks.filter((s) => s.totalPnl > 0).length} Net Green Stocks
-                </span>
-                <span className="px-2.5 py-1 rounded-lg bg-purple-50 text-purple-800 border border-purple-200/70 font-bold flex items-center gap-1">
-                  <Flame className="size-3 text-purple-600" />
-                  {distinctStocks.filter((s) => s.isMultiBagger).length} Multi-Baggers
-                </span>
-                {dailySignals.count > 0 && (
-                  <span className="px-2.5 py-1 rounded-lg bg-amber-50 text-amber-800 border border-amber-200/70 font-bold flex items-center gap-1">
-                    <Zap className="size-3 text-amber-600" />
-                    {dailySignals.count} Today's Hits
-                  </span>
-                )}
-              </div>
-
-              {/* Right: Search & Sort */}
-              <div className="flex items-center gap-2">
-                <div className="relative flex-1 md:w-52">
-                  <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="Search stock..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="w-full pl-8 pr-7 py-1.5 rounded-xl border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
-                  />
-                  {searchQuery && (
-                    <button
-                      onClick={() => setSearchQuery("")}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold"
-                    >
-                      ×
-                    </button>
-                  )}
+      {/* ================= 4. TAB VIEWPORT (NO OUTER PAGE SCROLL) ================= */}
+      <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+        {/* ================= TAB 1: ALL TRIGGERS & MASTER FEED ================= */}
+        {activeTab === "all" && (
+          <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+            {/* UNIFIED COMPACT CONTROL BAR */}
+            <div className="bg-white rounded-xl border border-slate-200/80 p-2.5 shadow-2xs space-y-2 shrink-0">
+              {/* Top Row: Title + Live Overview Badges + Search & Sort */}
+              <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-2">
+                {/* Left: Section Header */}
+                <div className="flex items-center gap-2">
+                  <Layers className="size-4 text-emerald-600" />
+                  <h2 className="text-sm font-black text-slate-900 tracking-tight font-mono">
+                    Distinct Stocks ({distinctStocks.length})
+                  </h2>
                 </div>
 
-                <select
-                  value={distinctSort}
-                  onChange={(e) => setDistinctSort(e.target.value as any)}
-                  className="px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white cursor-pointer"
+                {/* Right: Search & Sort */}
+                <div className="flex items-center gap-2">
+                  <div className="relative flex-1 md:w-52">
+                    <Search className="size-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="Search stock..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full pl-8 pr-7 py-1 rounded-lg border border-slate-200 text-xs font-medium focus:outline-none focus:border-emerald-500 bg-slate-50 focus:bg-white transition"
+                    />
+                    {searchQuery && (
+                      <button
+                        onClick={() => setSearchQuery("")}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                      >
+                        ×
+                      </button>
+                    )}
+                  </div>
+
+                  <select
+                    value={distinctSort}
+                    onChange={(e) => setDistinctSort(e.target.value as any)}
+                    className="px-2.5 py-1 rounded-lg border border-slate-200 text-xs font-bold bg-slate-50 text-slate-700 focus:outline-none focus:bg-white cursor-pointer"
+                  >
+                    <option value="pnl">Active First · Net P&L</option>
+                    <option value="trades">Sort: Trades</option>
+                    <option value="winrate">Sort: Win Rate</option>
+                    <option value="alpha">Sort: Symbol (A-Z)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Bottom Row: Compact Filter Pills */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pt-1.5 border-t border-slate-100 scrollbar-none text-xs">
+                <button
+                  type="button"
+                  onClick={() => setDistinctFilter("ALL")}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
+                    distinctFilter === "ALL"
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                  }`}
                 >
-                  <option value="pnl">Active First · Net P&L</option>
-                  <option value="trades">Sort: Trades</option>
-                  <option value="winrate">Sort: Win Rate</option>
-                  <option value="alpha">Sort: Symbol (A-Z)</option>
-                </select>
+                  All Stocks ({distinctStocks.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistinctFilter("PORTFOLIO")}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
+                    distinctFilter === "PORTFOLIO"
+                      ? "bg-sky-600 text-white shadow-xs"
+                      : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
+                  }`}
+                >
+                  <ShieldCheck className="size-3" />
+                  In Portfolio ({positions.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistinctFilter("WINNERS")}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
+                    distinctFilter === "WINNERS"
+                      ? "bg-emerald-600 text-white shadow-xs"
+                      : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
+                  }`}
+                >
+                  Profitable ({distinctStocks.filter((s) => s.totalPnl > 0).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistinctFilter("MULTIBAGGER")}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
+                    distinctFilter === "MULTIBAGGER"
+                      ? "bg-purple-600 text-white shadow-xs"
+                      : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
+                  }`}
+                >
+                  <Flame className="size-3" />
+                  Multi-Baggers ({distinctStocks.filter((s) => s.isMultiBagger).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistinctFilter("MULTITRADE")}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
+                    distinctFilter === "MULTITRADE"
+                      ? "bg-amber-600 text-white shadow-xs"
+                      : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
+                  }`}
+                >
+                  Multi-Trades ({distinctStocks.filter((s) => s.totalTrades > 1).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDistinctFilter("LOSSES")}
+                  className={`px-2.5 py-0.5 rounded-lg text-xs font-bold transition shrink-0 ${
+                    distinctFilter === "LOSSES"
+                      ? "bg-rose-600 text-white shadow-xs"
+                      : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
+                  }`}
+                >
+                  Net Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
+                </button>
               </div>
             </div>
 
-            {/* Bottom Row: Compact Filter Pills */}
-            <div className="flex items-center gap-1.5 overflow-x-auto pt-2 border-t border-slate-100 scrollbar-none text-xs">
-              <button
-                type="button"
-                onClick={() => setDistinctFilter("ALL")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                  distinctFilter === "ALL"
-                    ? "bg-slate-900 text-white shadow-xs"
-                    : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                }`}
-              >
-                All Stocks ({distinctStocks.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistinctFilter("PORTFOLIO")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
-                  distinctFilter === "PORTFOLIO"
-                    ? "bg-sky-600 text-white shadow-xs"
-                    : "bg-sky-50 text-sky-700 hover:bg-sky-100 border border-sky-200/60"
-                }`}
-              >
-                <ShieldCheck className="size-3" />
-                In Portfolio ({positions.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistinctFilter("WINNERS")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                  distinctFilter === "WINNERS"
-                    ? "bg-emerald-600 text-white shadow-xs"
-                    : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/60"
-                }`}
-              >
-                Profitable ({distinctStocks.filter((s) => s.totalPnl > 0).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistinctFilter("MULTIBAGGER")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition flex items-center gap-1 shrink-0 ${
-                  distinctFilter === "MULTIBAGGER"
-                    ? "bg-purple-600 text-white shadow-xs"
-                    : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200/60"
-                }`}
-              >
-                <Flame className="size-3" />
-                Multi-Baggers ({distinctStocks.filter((s) => s.isMultiBagger).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistinctFilter("MULTITRADE")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                  distinctFilter === "MULTITRADE"
-                    ? "bg-amber-600 text-white shadow-xs"
-                    : "bg-amber-50 text-amber-700 hover:bg-amber-100 border border-amber-200/60"
-                }`}
-              >
-                Multi-Trades ({distinctStocks.filter((s) => s.totalTrades > 1).length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setDistinctFilter("LOSSES")}
-                className={`px-2.5 py-1 rounded-lg text-xs font-bold transition shrink-0 ${
-                  distinctFilter === "LOSSES"
-                    ? "bg-rose-600 text-white shadow-xs"
-                    : "bg-rose-50 text-rose-700 hover:bg-rose-100 border border-rose-200/60"
-                }`}
-              >
-                Net Losses ({distinctStocks.filter((s) => s.totalPnl <= 0).length})
-              </button>
-            </div>
-          </div>
-
-          {/* VIEW MODE CONTENT */}
-          <div className="space-y-4">
+            {/* VIEW MODE CONTENT */}
+            <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
               {/* Distinct Stocks Table */}
-              <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left text-xs border-collapse">
-                    <thead>
-                      <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                        <th className="p-3.5">Stock Symbol</th>
-                        <th className="p-3.5">Status</th>
-                        <th className="p-3.5 text-center">Trades Taken</th>
-                        <th className="p-3.5 text-center">Win Rate</th>
-                        <th className="p-3.5 text-right font-mono">Best Win</th>
-                        <th className="p-3.5 text-right font-mono">Realized P&L</th>
-                        <th className="p-3.5 text-right font-mono">Open Unrealized</th>
-                        <th className="p-3.5 text-right font-mono">Total Net P&L</th>
-                        <th className="p-3.5 text-center">Action</th>
-                      </tr>
-                    </thead>
+              <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                      <th className="p-3">Stock Symbol</th>
+                      <th className="p-3">Status</th>
+                      <th className="p-3 text-center">Trades Taken</th>
+                      <th className="p-3 text-center">Win Rate</th>
+                      <th className="p-3 text-right font-mono">Best Win</th>
+                      <th className="p-3 text-right font-mono">Realized P&L</th>
+                      <th className="p-3 text-right font-mono">Open Unrealized</th>
+                      <th className="p-3 text-right font-mono">Total Net P&L</th>
+                      <th className="p-3 text-center">Action</th>
+                    </tr>
+                  </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredDistinctStocks.length === 0 ? (
                         <tr>
@@ -1351,46 +1297,51 @@ export function SwingerPage() {
 
       {/* ================= TAB 2: ACTIVE POSITIONS ================= */}
       {activeTab === "holdings" && (
-        <div className="space-y-4">
-          <div className="flex justify-between items-center bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+          <div className="flex justify-between items-center bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
             <div>
-              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <ShieldCheck className="size-5 text-emerald-600" />
+              <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="size-4 text-emerald-600" />
                 Active Portfolio Positions ({positions.length} Stocks)
               </h2>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-[11px] text-slate-500 font-medium">
                 Automated Capital Protection: Stop Loss · Break-Even Shield · Trailing Profit Lock
               </p>
             </div>
-            <div className="text-right">
-              <span className="text-xs text-slate-400 font-bold block uppercase tracking-wider">Total Open P&L</span>
-              <span className={`text-xl font-black font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
-                {totalUnrealizedPnl >= 0 ? "+" : ""}₹{totalUnrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
-              </span>
+            <div className="flex items-center gap-3">
+              <a
+                href="/holdings"
+                className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200 transition-colors shadow-2xs"
+                title="Open detailed holdings manager"
+              >
+                <Wallet className="size-3.5" />
+                <span>Open in Holdings Page</span>
+              </a>
+              <div className="text-right">
+                <span className="text-[10px] text-slate-400 font-bold block uppercase tracking-wider">Total Open P&L</span>
+                <span className={`text-base font-black font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
+                  {totalUnrealizedPnl >= 0 ? "+" : ""}₹{totalUnrealizedPnl.toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+                </span>
+              </div>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="p-3.5">Symbol</th>
-                    <th className="p-3.5">Entry Date</th>
-                    <th className="p-3.5 font-mono">Avg Buy (₹)</th>
-                    <th className="p-3.5 font-mono">CMP (₹)</th>
-                    <th className="p-3.5 font-mono">Qty</th>
-                    <th className="p-3.5">Stop Loss (₹)</th>
-                    <th className="p-3.5">Protection Status</th>
-                    <th className="p-3.5 font-mono">Held</th>
-                    <th className="p-3.5 text-right font-mono">Open P&L</th>
-                    <th className="p-3.5 text-center">Chart</th>
-                  </tr>
-                </thead>
+          <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="p-3">Stock / Strategy</th>
+                  <th className="p-3 text-right font-mono">CMP & Avg Cost</th>
+                  <th className="p-3 text-right font-mono">Invested / Value</th>
+                  <th className="p-3 text-right font-mono">Open P&L</th>
+                  <th className="p-3">Protection Status</th>
+                  <th className="p-3 text-center">Chart</th>
+                </tr>
+              </thead>
                 <tbody className="divide-y divide-slate-100">
                   {positions.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="p-8 text-center text-slate-400 font-medium">
+                      <td colSpan={6} className="p-8 text-center text-slate-400 font-medium">
                         No active positions currently. Scanner runs daily at 15:25 IST.
                       </td>
                     </tr>
@@ -1398,9 +1349,11 @@ export function SwingerPage() {
                     positions.map((p) => {
                       const avgCost = p.avg_price ?? p.entry_price
                       const isPositive = (p.unrealized_pnl || 0) >= 0
-                      const isLeg2 = p.leg === 2 || (p as any).strategy_leg === "LEG2_BREAKOUT"
+                      const isLeg2 = p.leg === 2 || String((p as any).strategy_leg || "").toUpperCase().includes("LEG2")
                       const slDisplay = p.sl_price ?? (isLeg2 ? avgCost * 0.92 : avgCost * 0.85)
                       const beTarget = p.be_trigger_price ?? avgCost * 1.15
+                      const curVal = (p.cmp || avgCost) * (p.current_qty || p.shares || 0)
+                      const investedVal = avgCost * (p.current_qty || p.shares || 0)
 
                       return (
                         <tr
@@ -1423,50 +1376,30 @@ export function SwingerPage() {
                                 <ExternalLink className="size-3" />
                               </a>
                             </div>
-                            <div className="text-[11px] text-slate-500 font-medium truncate max-w-[130px]">
+                            <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">
                               {p.name || p.symbol}
                             </div>
-                            <div className="flex items-center gap-1 mt-0.5">
-                              {p.leg === 2 ? (
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              {isLeg2 ? (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-300">
-                                  LEG 2 BREAKOUT
+                                  LEG 2 BASE
                                 </span>
                               ) : (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-blue-100 text-blue-700 border border-blue-300">
                                   LEG 1 TURNAROUND
                                 </span>
                               )}
+                              <span className="text-[10px] text-slate-400 font-mono">· {p.days_held}d held</span>
                             </div>
                           </td>
-                          <td className="p-3.5 font-mono text-slate-600 font-medium">{p.entry_date}</td>
-                          <td className="p-3.5 font-mono font-bold text-slate-900">₹{avgCost.toFixed(2)}</td>
-                          <td className="p-3.5 font-mono font-bold text-emerald-700">₹{(p.cmp || avgCost).toFixed(2)}</td>
-                          <td className="p-3.5 font-mono font-medium">{p.current_qty}</td>
-                          <td className="p-3.5 font-mono font-bold">
-                            <span className={p.runner_mode ? "text-purple-700" : p.be_active ? "text-sky-700" : "text-rose-600"}>
-                              ₹{slDisplay.toFixed(2)}
-                            </span>
-                            <span className="block text-[10px] text-slate-400 font-normal">
-                              {p.runner_mode ? "25% Trail" : p.be_active ? "Cost Shield" : isLeg2 ? "Initial -8%" : "Initial -15%"}
-                            </span>
+                          <td className="p-3.5 text-right font-mono">
+                            <div className="font-bold text-emerald-700 text-sm">₹{(p.cmp || avgCost).toFixed(2)}</div>
+                            <div className="text-[11px] text-slate-400 font-medium">Avg ₹{avgCost.toFixed(2)} · {p.current_qty} qty</div>
                           </td>
-                          <td className="p-3.5 font-mono">
-                            {p.runner_mode ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800 border border-purple-300">
-                                Runner Active
-                              </span>
-                            ) : p.be_active ? (
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-sky-100 text-sky-800 border border-sky-300">
-                                Shield Active
-                              </span>
-                            ) : (
-                              <span className="text-slate-600 font-medium">
-                                ₹{beTarget.toFixed(2)}
-                                <span className="text-[10px] text-slate-400 block font-normal">Pending (+15%)</span>
-                              </span>
-                            )}
+                          <td className="p-3.5 text-right font-mono">
+                            <div className="font-bold text-slate-900">₹{curVal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div>
+                            <div className="text-[11px] text-slate-400">Inv ₹{investedVal.toLocaleString("en-IN", { maximumFractionDigits: 0 })}</div>
                           </td>
-                          <td className="p-3.5 text-slate-600 font-medium font-mono">{p.days_held}d</td>
                           <td className="p-3.5 text-right font-mono font-black">
                             <span className={isPositive ? "text-emerald-600" : "text-rose-600"}>
                               {isPositive ? "+" : ""}₹{(p.unrealized_pnl ?? 0).toFixed(0)}
@@ -1474,6 +1407,24 @@ export function SwingerPage() {
                                 ({isPositive ? "+" : ""}{(p.unrealized_pnl_pct ?? p.unrealized_pct ?? 0).toFixed(1)}%)
                               </span>
                             </span>
+                          </td>
+                          <td className="p-3.5 font-mono">
+                            <div className="font-bold">
+                              <span className={p.runner_mode ? "text-purple-700" : p.be_active ? "text-sky-700" : "text-rose-600"}>
+                                ₹{slDisplay.toFixed(2)}
+                              </span>
+                            </div>
+                            <div>
+                              {p.runner_mode ? (
+                                <span className="text-[10px] text-purple-700 font-semibold">Runner Trail</span>
+                              ) : p.be_active ? (
+                                <span className="text-[10px] text-sky-700 font-semibold">Cost Shield (+0.5%)</span>
+                              ) : (
+                                <span className="text-[10px] text-slate-400">
+                                  {isLeg2 ? "Base SL (-8%)" : "Target ₹" + beTarget.toFixed(2)}
+                                </span>
+                              )}
+                            </div>
                           </td>
                           <td className="p-3.5 text-center">
                             <Button
@@ -1496,82 +1447,81 @@ export function SwingerPage() {
                 </tbody>
               </table>
             </div>
-          </div>
         </div>
       )}
 
       {/* ================= TAB 3: CALENDAR & VINTAGE HISTORY ================= */}
       {activeTab === "calendar" && (
-        <div className="space-y-6">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-3">
           {/* 1. EXECUTIVE STRATEGY PERFORMANCE DASHBOARD CARDS */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3.5">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
             {/* Card 1: XIRR */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1.5">
                 <span>Annualized (XIRR)</span>
-                <TrendingUp className="size-4 text-emerald-600" />
+                <TrendingUp className="size-3.5 text-emerald-600" />
               </div>
-              <div className="text-2xl font-black font-mono text-emerald-600 tracking-tight">
-                +{(summary.xirr ?? 52.4).toFixed(1)}%<span className="text-xs text-slate-400 font-bold ml-1">p.a.</span>
+              <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 tracking-tight">
+                {summary.xirr != null ? `+${summary.xirr.toFixed(1)}%` : "--"}<span className="text-xs text-slate-400 font-bold ml-1">p.a.</span>
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
-                Active Margin: <strong className="text-sky-600 font-mono">+{(summary.xirr_active ?? 98.7).toFixed(1)}% p.a.</strong>
+              <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Active Margin: <strong className="text-sky-600 font-mono">{summary.xirr_active != null ? `+${summary.xirr_active.toFixed(1)}% p.a.` : "--"}</strong>
               </div>
             </div>
 
             {/* Card 2: Net Realized Profit */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1.5">
                 <span>Total Net Profit</span>
-                <Wallet className="size-4 text-emerald-600" />
+                <Wallet className="size-3.5 text-emerald-600" />
               </div>
-              <div className="text-2xl font-black font-mono text-emerald-600 tracking-tight">
-                +₹{(summary.net_pnl ?? 1239545).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              <div className="text-lg sm:text-xl font-bold font-mono text-emerald-600 tracking-tight">
+                {summary.net_pnl != null ? `${summary.net_pnl >= 0 ? "+" : ""}₹${Math.round(summary.net_pnl).toLocaleString("en-IN")}` : "--"}
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
-                Total ROI: <strong className="text-emerald-700 font-mono">+{(summary.total_pnl_pct ?? 247.9).toFixed(1)}%</strong> on ₹5.0L
+              <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Total ROI: <strong className="text-emerald-700 font-mono">{summary.total_pnl_pct != null ? `+${summary.total_pnl_pct.toFixed(1)}%` : "--"}</strong> on ₹{((summary.base_capital ?? 500000) / 100000).toFixed(1)}L
               </div>
             </div>
 
             {/* Card 3: Profit Factor */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1.5">
                 <span>Profit Factor</span>
-                <Award className="size-4 text-amber-500" />
+                <Award className="size-3.5 text-amber-500" />
               </div>
-              <div className="text-2xl font-black font-mono text-slate-900 tracking-tight">
-                {(summary.profit_factor ?? 3.01).toFixed(2)}x
+              <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 tracking-tight">
+                {summary.profit_factor != null ? `${summary.profit_factor}x` : "--"}
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
-                Payoff Ratio: <strong className="text-slate-800 font-mono">{(summary.payoff_ratio ?? 4.28).toFixed(2)}x</strong>
+              <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Payoff Ratio: <strong className="text-slate-800 font-mono">{summary.payoff_ratio != null ? `${summary.payoff_ratio}x` : "--"}</strong>
               </div>
             </div>
 
             {/* Card 4: Win Rate */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1.5">
                 <span>Win Rate</span>
-                <CheckCircle2 className="size-4 text-emerald-600" />
+                <CheckCircle2 className="size-3.5 text-emerald-600" />
               </div>
-              <div className="text-2xl font-black font-mono text-slate-900 tracking-tight">
-                {(summary.win_rate ?? 41.3).toFixed(1)}%
+              <div className="text-lg sm:text-xl font-bold font-mono text-slate-900 tracking-tight">
+                {summary.win_rate != null ? `${summary.win_rate}%` : "--"}
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
-                <strong className="text-emerald-700 font-mono">{summary.winning_trades ?? 133}W</strong> / <strong className="text-rose-700 font-mono">{summary.losing_trades ?? 189}L</strong> ({summary.total_trades ?? 322} trades)
+              <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                <strong className="text-emerald-700 font-mono">{summary.wins ?? trades.filter(t => (t.pnl || 0) > 0).length}W</strong> / <strong className="text-rose-700 font-mono">{summary.losses ?? trades.filter(t => (t.pnl || 0) <= 0).length}L</strong> ({summary.total_trades ?? trades.length} trades)
               </div>
             </div>
 
             {/* Card 5: Max Drawdown */}
-            <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-xs">
-              <div className="flex items-center justify-between text-slate-500 text-xs font-bold uppercase tracking-wider mb-2">
+            <div className="rounded-xl border border-slate-200/80 bg-white p-3 shadow-2xs">
+              <div className="flex items-center justify-between text-slate-500 text-[11px] font-bold uppercase tracking-wider mb-1.5">
                 <span>Peak Drawdown</span>
-                <ShieldCheck className="size-4 text-sky-600" />
+                <ShieldCheck className="size-3.5 text-sky-600" />
               </div>
-              <div className="text-2xl font-black font-mono text-rose-600 tracking-tight">
-                -₹{Math.abs(summary.max_drawdown ?? 62843).toLocaleString("en-IN", { maximumFractionDigits: 0 })}
+              <div className="text-lg sm:text-xl font-bold font-mono text-rose-600 tracking-tight">
+                {summary.max_drawdown != null ? `-₹${Math.abs(Math.round(summary.max_drawdown)).toLocaleString("en-IN")}` : "--"}
               </div>
-              <div className="text-[11px] text-slate-500 font-medium mt-1">
-                Total Acc: <strong className="text-slate-700 font-mono">{(summary.max_drawdown_pct ?? -5.17).toFixed(1)}%</strong> · Active DD: <strong className="text-slate-700 font-mono">{(summary.max_drawdown_active_pct ?? -9.25).toFixed(1)}%</strong>
+              <div className="text-[11px] text-slate-500 font-medium mt-0.5">
+                Total Acc: <strong className="text-slate-700 font-mono">{summary.max_drawdown_pct != null ? `${summary.max_drawdown_pct}%` : "--"}</strong> · Active DD: <strong className="text-slate-700 font-mono">{summary.max_drawdown_active_pct != null ? `${summary.max_drawdown_active_pct}%` : "--"}</strong>
               </div>
             </div>
           </div>
@@ -1974,6 +1924,28 @@ export function SwingerPage() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setTradeLogFilter("LEG1")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    tradeLogFilter === "LEG1"
+                      ? "bg-blue-600 text-white"
+                      : "bg-blue-50 text-blue-700 hover:bg-blue-100 border border-blue-200"
+                  }`}
+                >
+                  Leg 1 (Turnaround)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTradeLogFilter("LEG2")}
+                  className={`px-2.5 py-1 rounded-lg font-bold transition ${
+                    tradeLogFilter === "LEG2"
+                      ? "bg-purple-600 text-white"
+                      : "bg-purple-50 text-purple-700 hover:bg-purple-100 border border-purple-200"
+                  }`}
+                >
+                  Leg 2 (Continuation)
+                </button>
+                <button
+                  type="button"
                   onClick={() => setTradeLogFilter("MULTIBAGGER")}
                   className={`px-2.5 py-1 rounded-lg font-bold transition flex items-center gap-1 ${
                     tradeLogFilter === "MULTIBAGGER"
@@ -2048,7 +2020,7 @@ export function SwingerPage() {
                           <td className="p-3">
                             <div className="font-black text-slate-900 group-hover:text-emerald-700 transition flex items-center gap-1.5 font-mono flex-wrap">
                               <span className="hover:underline">{t.symbol}</span>
-                              {t.leg === 2 || (t as any).strategy_leg === "LEG2_BREAKOUT" ? (
+                              {t.leg === 2 || String((t as any).strategy_leg || "").toUpperCase().includes("LEG2") ? (
                                 <span className="px-1.5 py-0.2 rounded text-[9px] font-black bg-purple-100 text-purple-700 border border-purple-200">
                                   LEG 2
                                 </span>
@@ -2145,43 +2117,42 @@ export function SwingerPage() {
 
       {/* ================= TAB 4: RADAR WATCHLIST ================= */}
       {activeTab === "radar" && (
-        <div className="space-y-4">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+        <div className="flex-1 min-h-0 flex flex-col gap-2 overflow-hidden">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
             <div>
-              <h2 className="text-base font-black text-slate-900 flex items-center gap-2">
-                <Flame className="size-5 text-amber-500" />
+              <h2 className="text-sm font-black text-slate-900 flex items-center gap-2">
+                <Flame className="size-4 text-amber-500" />
                 Turnaround Pullback Radar ({activeRadarList.length} Candidates Tracked)
               </h2>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-[11px] text-slate-500 font-medium">
                 High-probability 2-stage swing re-entry: Alerted on massive volume surge (RSI &gt; 68), cooling down to 20 EMA
               </p>
             </div>
             <div className="flex items-center gap-2 text-xs font-mono font-bold">
-              <span className="px-2.5 py-1 rounded-xl bg-amber-50 text-amber-700 border border-amber-200">
-                {activeRadarList.filter(w => w.cooldown_ready).length} Ready to Enter
+              <span className="px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border border-amber-200">
+                {activeRadarList.filter(w => w.cooldown_ready).length} Ready
               </span>
-              <span className="px-2.5 py-1 rounded-xl bg-sky-50 text-sky-700 border border-sky-200">
-                {activeRadarList.filter(w => w.status === "ENTERED").length} Entries Executed
+              <span className="px-2 py-0.5 rounded-lg bg-sky-50 text-sky-700 border border-sky-200">
+                {activeRadarList.filter(w => w.status === "ENTERED").length} Entered
               </span>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-slate-200/80 bg-white overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/90 border-b border-slate-100 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
-                    <th className="p-3.5">Symbol</th>
-                    <th className="p-3.5 font-mono">Alert Price (₹)</th>
-                    <th className="p-3.5 font-mono">Alert RSI</th>
-                    <th className="p-3.5 font-mono">Current CMP (₹)</th>
-                    <th className="p-3.5 font-mono">Current RSI</th>
-                    <th className="p-3.5 font-mono">20 EMA (₹)</th>
-                    <th className="p-3.5">Cooldown Status</th>
-                    <th className="p-3.5">Turnaround Context</th>
-                    <th className="p-3.5 text-center">Chart</th>
-                  </tr>
-                </thead>
+          <div className="flex-1 min-h-0 overflow-y-auto rounded-xl border border-slate-200/80 bg-white shadow-2xs">
+            <table className="w-full text-left text-xs border-collapse">
+              <thead className="sticky top-0 z-10 bg-slate-50 shadow-2xs">
+                <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider text-[10px]">
+                  <th className="p-3">Symbol</th>
+                  <th className="p-3 font-mono">Alert Price (₹)</th>
+                  <th className="p-3 font-mono">Alert RSI</th>
+                  <th className="p-3 font-mono">Current CMP (₹)</th>
+                  <th className="p-3 font-mono">Current RSI</th>
+                  <th className="p-3 font-mono">20 EMA (₹)</th>
+                  <th className="p-3">Cooldown Status</th>
+                  <th className="p-3">Turnaround Context</th>
+                  <th className="p-3 text-center">Chart</th>
+                </tr>
+              </thead>
                 <tbody className="divide-y divide-slate-100">
                   {activeRadarList.length === 0 ? (
                     <tr>
@@ -2323,26 +2294,25 @@ export function SwingerPage() {
                 </tbody>
               </table>
             </div>
-          </div>
         </div>
       )}
 
       {/* ================= TAB 5: PAYOFF CURVE & PERFORMANCE ASYMMETRY ================= */}
       {activeTab === "payoff" && (
         trades.length === 0 ? (
-          <div className="bg-white rounded-3xl border border-slate-200/80 p-12 text-center shadow-xs">
-            <div className="size-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-3">
-              <Activity className="size-6" />
+          <div className="bg-white rounded-xl border border-slate-200/80 p-8 text-center shadow-2xs">
+            <div className="size-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-2.5">
+              <Activity className="size-5" />
             </div>
-            <h3 className="text-base font-black text-slate-800">No Closed Trades Yet</h3>
+            <h3 className="text-sm font-black text-slate-800">No Closed Trades Yet</h3>
             <p className="text-xs text-slate-500 max-w-md mx-auto mt-1">
               Your trade ledger and performance metrics are currently clean. As the automated engine executes and closes trades, your equity curves, payoff ratios, and audit logs will automatically populate here.
             </p>
           </div>
         ) : (
-        <div className="space-y-4">
+        <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-3">
           {/* Header */}
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/80 shadow-xs">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 bg-white px-3 py-2 rounded-xl border border-slate-200/80 shadow-2xs shrink-0">
             <div>
               <div className="flex items-center gap-2">
                 <div className="size-8 rounded-xl bg-amber-500/10 text-amber-600 flex items-center justify-center font-bold">

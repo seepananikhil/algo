@@ -351,22 +351,25 @@ def run_unified_vix_master(symbol: str = "NIFTY"):
                     body_ratio = c_body / c_rng if c_rng > 0 else 0.0
                     uw_pct = (h - max(o, c)) / c_rng if c_rng > 0 else 0.0
                     lw_pct = (min(o, c) - l) / c_rng if c_rng > 0 else 0.0
+                    uw_pts = h - max(o, c)
+                    lw_pts = min(o, c) - l
+                    wick_noise_tol = 15.0 if is_sx else 4.0
                     
                     if day_trades == 0:
-                        # Trade 1: Breakout beyond OR with conviction (body >= 55%, rejection wick <= 30%)
+                        # Trade 1: Breakout beyond OR with conviction (body >= 55%, rejection wick <= 30% or <= noise floor)
                         # Midday Chop Blackout: No new entries between 11:00 AM and 11:59 AM
                         if "11:00" <= t < "12:00":
                             continue
-                        long_pass = (c > or_h) and (body_ratio >= 0.55) and (uw_pct <= 0.30)
-                        short_pass = (c < or_l) and (body_ratio >= 0.55) and (lw_pct <= 0.30)
+                        long_pass = (c > or_h) and (body_ratio >= 0.55) and ((uw_pct <= 0.30) or (uw_pts <= wick_noise_tol))
+                        short_pass = (c < or_l) and (body_ratio >= 0.55) and ((lw_pct <= 0.30) or (lw_pts <= wick_noise_tol))
                     else:
                         # Trade 2 (Afternoon Re-entry): Only allowed AFTER 12:00 PM (bypassing morning revenge & lunch chop)
                         # Requires 30-min cool-off AND breaking Rolling Day Extreme
                         if t < "12:00":
                             continue
                         cool_off_ok = (i - last_exit_idx >= 30)
-                        long_pass = cool_off_ok and (c > prev_dh) and (body_ratio >= 0.55) and (uw_pct <= 0.30)
-                        short_pass = cool_off_ok and (c < prev_dl) and (body_ratio >= 0.55) and (lw_pct <= 0.30)
+                        long_pass = cool_off_ok and (c > prev_dh) and (body_ratio >= 0.55) and ((uw_pct <= 0.30) or (uw_pts <= wick_noise_tol))
+                        short_pass = cool_off_ok and (c < prev_dl) and (body_ratio >= 0.55) and ((lw_pct <= 0.30) or (lw_pts <= wick_noise_tol))
                     
                     # Long breakout: close > OR high and close > open and close > vwap
                     if long_pass and c > o and c > v:

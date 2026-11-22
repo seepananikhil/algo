@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, Briefcase, CalendarDays, LineChart, Lock, Moon, Power, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
+import { Activity, Briefcase, LineChart, Lock, Moon, Power, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -13,8 +13,7 @@ const nav = [
   { to: "/holdings", label: "Holdings", icon: Briefcase },
   { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },
   { to: "/trade", label: "Quick Trade", icon: Zap },
-  { to: "/day", label: "Day viewer", icon: CalendarDays },
-  { to: "/paper", label: "Trades P&L", icon: Wallet },
+  { to: "/paper", label: "Paper", icon: Wallet },
   { to: "/backtest", label: "Backtest", icon: LineChart },
   { to: "/config", label: "Strategy Config", icon: Sliders },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
@@ -32,7 +31,11 @@ export function Layout() {
   const location = useLocation()
   const isLive = location.pathname === "/"
   const isTrade = location.pathname === "/trade" || location.pathname === "/manual" || location.pathname === "/mobile"
-  const isFixedViewport = isLive || isTrade
+  const isBacktest = location.pathname.startsWith("/backtest")
+  const isPaper = location.pathname.startsWith("/paper")
+  const isHoldings = location.pathname.startsWith("/holdings")
+  const isSwinger = location.pathname.startsWith("/swinger")
+  const isFixedViewport = isLive || isTrade || isBacktest || isPaper || isHoldings || isSwinger
 
   return (
     <div
@@ -221,7 +224,7 @@ export function Layout() {
         <main
           className={cn(
             "flex-1 flex flex-col min-h-0",
-            isLive ? "overflow-hidden p-0" : isTrade ? "overflow-y-auto p-0" : "overflow-y-auto p-0"
+            (isLive || isBacktest || isPaper || isHoldings || isSwinger) ? "overflow-hidden p-0" : isTrade ? "overflow-y-auto p-0" : "overflow-y-auto p-0"
           )}
         >
           <Outlet />
@@ -232,9 +235,9 @@ export function Layout() {
           <nav className="flex md:hidden h-12 shrink-0 items-center justify-around border-t bg-background/95 backdrop-blur z-20 px-1">
             {[
               { to: "/", label: "Live", icon: Activity },
+              { to: "/holdings", label: "Holdings", icon: Briefcase },
               { to: "/trade", label: "Quick*", icon: Zap },
-              { to: "/day", label: "Day", icon: CalendarDays },
-              { to: "/paper", label: "Trades", icon: Wallet },
+              { to: "/paper", label: "Paper", icon: Wallet },
               { to: "/settings", label: "Settings", icon: SettingsIcon },
             ].map(({ to, label, icon: Icon }) => (
               <NavLink

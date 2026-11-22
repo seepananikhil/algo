@@ -72,7 +72,7 @@ interface PositionsResponse {
   }
 }
 
-// Check whether NSE/BSE markets are currently open (09:15 - 15:30 IST Mon-Fri)
+// Check whether NSE/BSE markets are currently open (09:15 - 15:50 IST Mon-Fri due to CAS)
 function isMarketHoursNow(): boolean {
   try {
     const now = new Date()
@@ -81,7 +81,7 @@ function isMarketHoursNow(): boolean {
     const day = ist.getDay()
     if (day === 0 || day === 6) return false
     const mins = ist.getHours() * 60 + ist.getMinutes()
-    return mins >= 9 * 60 + 15 && mins <= 15 * 60 + 30
+    return mins >= 9 * 60 + 15 && mins <= 15 * 60 + 50
   } catch {
     return false
   }
@@ -91,7 +91,7 @@ export function ManualTradingPage() {
   const { status } = useStatus()
   const isKotakConnected = Boolean(status?.token.valid)
 
-  // Live market open status (IST 09:15 - 15:30 Mon-Fri)
+  // Live market open status (IST 09:15 - 15:50 Mon-Fri)
   const isMarketOpen = Boolean(status?.market_open_day ?? isMarketHoursNow())
 
   // Theme support (Light / Dark)
@@ -369,9 +369,17 @@ export function ManualTradingPage() {
     })
   }, [indexSymbol])
 
-  // Per-position Risk mapping for active trades: symbol -> { sl, tp } (persisted in localStorage)
+  // Per-position Risk mapping for active trades: symbol -> { sl, tp } (persisted in localStorage, auto-cleared daily)
   const [riskMap, setRiskMap] = useState<Record<string, { sl: number; tp: number }>>(() => {
     try {
+      const todayStr = new Date().toISOString().slice(0, 10)
+      const storedDate = localStorage.getItem("scalper_risk_map_date")
+      if (storedDate && storedDate !== todayStr) {
+        localStorage.removeItem("scalper_risk_map")
+        localStorage.setItem("scalper_risk_map_date", todayStr)
+        return {}
+      }
+      localStorage.setItem("scalper_risk_map_date", todayStr)
       const saved = localStorage.getItem("scalper_risk_map")
       if (saved) return JSON.parse(saved)
     } catch {}
@@ -595,6 +603,13 @@ export function ManualTradingPage() {
     if (!isKotakConnected) {
       toast.error("Kotak Broker Disconnected", {
         description: "Connect Kotak Neo in Settings / Broker to place live orders.",
+      })
+      return
+    }
+
+    if (status?.risk_guardian?.is_locked) {
+      toast.error("Trading Halted by Risk Guardian", {
+        description: `Daily loss limit of -Rs. ${(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')} reached. Click 'Reset & Unlock' banner to resume.`,
       })
       return
     }
@@ -824,6 +839,39 @@ export function ManualTradingPage() {
             </Button>
           </div>
         </header>
+
+        {/* RISK GUARDIAN CIRCUIT BREAKER LOCK BANNER */}
+        {status?.risk_guardian?.is_locked && (
+          <div className="p-2.5 rounded-2xl border border-rose-500/40 bg-rose-500/10 flex items-center justify-between text-xs animate-in fade-in">
+            <div className="flex items-center gap-2 text-rose-400 font-semibold min-w-0 pr-2">
+              <AlertTriangle className="size-4 shrink-0 text-rose-400 animate-pulse" />
+              <div className="truncate">
+                <span className="font-bold">HALTED: GUARDIAN LOCKED (-Rs. {(status?.risk_guardian?.daily_loss_limit || 2000).toLocaleString('en-IN')})</span>
+                <div className="text-[10px] text-rose-300/80 font-normal truncate">{status?.risk_guardian?.lock_info?.reason || "Max daily loss limit reached."}</div>
+              </div>
+            </div>
+            <Button
+              size="sm"
+              variant="destructive"
+              className="h-7 text-xs font-bold px-3 shrink-0 shadow-sm"
+              onClick={async () => {
+                try {
+                  const res = await postJSON<{ ok: boolean; message: string }>("/api/risk-guardian/reset", {})
+                  if (res.ok) {
+                    toast.success("Risk Guardian Reset", { description: "Circuit breaker cleared and buffer refreshed." })
+                    positionsPoll.reload()
+                  } else {
+                    toast.error("Reset failed", { description: res.message })
+                  }
+                } catch (e: any) {
+                  toast.error("Error resetting Risk Guardian", { description: e.message })
+                }
+              }}
+            >
+              Reset & Unlock
+            </Button>
+          </div>
+        )}
 
         {/* ─── 1. UNIFIED FINANCIAL METRICS: OVERALL P&L + WALLET MARGIN ─── */}
         <div className={cn(
@@ -1577,7 +1625,7 @@ export function ManualTradingPage() {
               {/* CALL BUTTON */}
               <button
                 type="button"
-                disabled={!strike || actionBusy}
+                disabled={!strike || actionBusy || Boolean(status?.risk_guardian?.is_locked)}
                 onClick={() => hitOrder("CE")}
                 className="h-16 rounded-2xl bg-emerald-600 hover:bg-emerald-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-md transition-all cursor-pointer text-left"
               >
@@ -1600,7 +1648,7 @@ export function ManualTradingPage() {
               {/* PUT BUTTON */}
               <button
                 type="button"
-                disabled={!strike || actionBusy}
+                disabled={!strike || actionBusy || Boolean(status?.risk_guardian?.is_locked)}
                 onClick={() => hitOrder("PE")}
                 className="h-16 rounded-2xl bg-rose-600 hover:bg-rose-500 active:scale-95 disabled:opacity-40 disabled:pointer-events-none text-white flex flex-col justify-between p-2.5 shadow-md transition-all cursor-pointer text-left"
               >

@@ -56,6 +56,15 @@ def today_str() -> str:
     return datetime.now(IST).strftime("%Y-%m-%d")
 
 
+def is_market_hours() -> bool:
+    """Return True only if today is Mon-Fri and current time is 09:14 to 15:55 IST (extended for CAS)."""
+    now = datetime.now(IST)
+    if now.weekday() >= 5:  # Saturday or Sunday
+        return False
+    t = now.time()
+    return datetime.strptime("09:14", "%H:%M").time() <= t <= datetime.strptime("15:55", "%H:%M").time()
+
+
 def read_config() -> dict:
     if not CONFIG_FILE.exists():
         return {}
@@ -101,6 +110,21 @@ def is_risk_locked() -> tuple[bool, dict | None]:
     try:
         data = json.loads(RISK_LOCK_FILE.read_text(encoding="utf-8"))
         if str(data.get("date")) == today:
+            # If lock was recorded outside market hours, it was triggered erroneously by overnight broker carry P&L!
+            b_time = str(data.get("breached_at", ""))
+            if b_time:
+                try:
+                    b_dt = datetime.strptime(b_time, "%Y-%m-%d %H:%M:%S")
+                    m_start = datetime.strptime("09:14", "%H:%M").time()
+                    m_end = datetime.strptime("15:55", "%H:%M").time()
+                    if b_dt.weekday() >= 5 or not (m_start <= b_dt.time() <= m_end):
+                        RISK_LOCK_FILE.unlink(missing_ok=True)
+                        STOP_FILE.unlink(missing_ok=True)
+                        logger.info(f"🛡️ Auto-cleared invalid off-market RISK_LOCK from {b_time}. Risk Guardian stands by outside market hours.")
+                        return False, None
+                except Exception:
+                    pass
+
             # Check if there is an active reset today that supersedes this lock
             if RISK_RESET_FILE.exists():
                 try:
@@ -140,7 +164,11 @@ def is_risk_locked() -> tuple[bool, dict | None]:
 
 
 def lock_risk(limit: float, pnl: float, reason: str = "") -> dict:
-    """Create RISK_LOCK.json and STOP_TRADING to halt trading."""
+    """Create RISK_LOCK.json and STOP_TRADING to halt trading (strictly during market hours only)."""
+    if not is_market_hours():
+        logger.warning("🛡️ [RISK GUARDIAN] lock_risk() called outside market hours! Refusing to lock.")
+        return {}
+
     now_ist = datetime.now(IST)
     lock_data = {
         "date": today_str(),
@@ -156,6 +184,37 @@ def lock_risk(limit: float, pnl: float, reason: str = "") -> dict:
     except Exception as exc:
         logger.error(f"Error writing risk lock: {exc}")
     return lock_data
+
+
+def daily_midnight_session_reset() -> dict:
+    """
+    Complete zero-touch daily session rollover routine.
+    Runs at midnight (00:00:00 IST) and can also be invoked manually.
+    Cleans up:
+    1. Syncs previous day's closed trades into Master Backtests.
+    2. Archives and resets live paper trade CSVs.
+    3. Releases Kill Switch (STOP_TRADING), RISK_LOCK.json, and RISK_RESET.json.
+    4. Rotates and cleans up bloated log files.
+    """
+    global _guardian_cached_state, _last_metrics_cache, _last_metrics_time, _last_square_off_failed, _last_square_off_attempt
+    today = today_str()
+    now_ist = datetime.now(IST)
+
+    try:
+        from scripts.midnight_cleanup_job import run_midnight_cleanup
+        res = run_midnight_cleanup()
+    except Exception as e:
+        logger.error(f"Error invoking run_midnight_cleanup: {e}")
+        res = {"ok": False, "error": str(e), "cleaned": []}
+
+    # Reset guardian memory caches
+    _guardian_cached_state = {}
+    _last_metrics_cache = {}
+    _last_metrics_time = 0.0
+    _last_square_off_failed = False
+    _last_square_off_attempt = 0.0
+
+    return res
 
 
 _MANUAL_RESET_TIMESTAMP: float = 0.0
@@ -255,6 +314,26 @@ _guardian_cached_state = {}
 def get_guardian_status() -> dict:
     """Return latest cached Risk Guardian status without executing synchronous broker square-offs."""
     global _guardian_cached_state
+    if not is_market_hours():
+        cfg = get_guardian_config()
+        limit = cfg.get("daily_loss_limit", 2000.0)
+        return {
+            "status": "STANDBY",
+            "is_locked": False,
+            "enabled": cfg.get("enabled", True),
+            "daily_loss_limit": limit,
+            "per_trade_loss_limit": cfg.get("per_trade_loss_limit", 650.0),
+            "per_trade_loss_pct": cfg.get("per_trade_loss_pct", 20.0),
+            "per_trade_auto_cut": cfg.get("per_trade_auto_cut", True),
+            "current_pnl": 0.0,
+            "effective_pnl": 0.0,
+            "baseline_pnl": 0.0,
+            "remaining_buffer": limit,
+            "open_count": 0,
+            "lock_info": None,
+            "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+            "market_status": "CLOSED",
+        }
     if _guardian_cached_state:
         return _guardian_cached_state
     locked, lock_data = is_risk_locked()
@@ -264,8 +343,13 @@ def get_guardian_status() -> dict:
         "is_locked": locked,
         "enabled": cfg.get("enabled", True),
         "daily_loss_limit": cfg.get("daily_loss_limit", 2000.0),
+        "per_trade_loss_limit": cfg.get("per_trade_loss_limit", 650.0),
+        "per_trade_loss_pct": cfg.get("per_trade_loss_pct", 20.0),
+        "per_trade_auto_cut": cfg.get("per_trade_auto_cut", True),
+        "remaining_buffer": cfg.get("daily_loss_limit", 2000.0),
         "lock_info": lock_data,
         "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+        "market_status": "OPEN",
     }
 
 
@@ -462,10 +546,13 @@ def enforce_per_trade_stops(open_positions: list, cfg: dict) -> list:
 def check_and_enforce_guardian() -> dict:
     """
     Main enforcement routine called periodically by the watcher.
-    1. If already locked:
+    1. If market is closed:
+       - Keep in STANDBY mode.
+       - NEVER lock risk or trigger square-offs outside market hours!
+    2. If market is open and already locked:
        - Check if ANY position is open; if so, AUTO-CLOSE IMMEDIATELY!
        - Cancel any pending orders.
-    2. If not locked:
+    3. If not locked:
        - Check if net_pnl <= -daily_loss_limit.
        - If breached:
          - Activate lock.
@@ -476,6 +563,29 @@ def check_and_enforce_guardian() -> dict:
     limit = cfg["daily_loss_limit"]
     auto_close = cfg["auto_close_on_breach"]
     locked, lock_data = is_risk_locked()
+
+    # Outside market hours, Risk Guardian is strictly in STANDBY mode. Never lock or square-off!
+    if not is_market_hours():
+        return {
+            "status": "STANDBY",
+            "is_locked": False,
+            "enabled": cfg["enabled"],
+            "daily_loss_limit": limit,
+            "per_trade_loss_limit": cfg["per_trade_loss_limit"],
+            "per_trade_loss_pct": cfg["per_trade_loss_pct"],
+            "per_trade_auto_cut": cfg["per_trade_auto_cut"],
+            "current_pnl": 0.0,
+            "effective_pnl": 0.0,
+            "baseline_pnl": 0.0,
+            "remaining_buffer": limit,
+            "open_count": 0,
+            "lock_info": None,
+            "auto_closed": [],
+            "cancelled_orders": [],
+            "per_trade_cuts": [],
+            "checked_at": datetime.now(IST).strftime("%Y-%m-%d %H:%M:%S"),
+            "market_status": "CLOSED",
+        }
 
     metrics = get_current_metrics()
     net_pnl = metrics.get("net_pnl", 0.0)
@@ -602,14 +712,22 @@ def check_and_enforce_guardian() -> dict:
 
 _guardian_thread = None
 _guardian_running = False
+_last_session_date = today_str()
 
 
 def _guardian_loop():
-    global _guardian_running, _guardian_cached_state
+    global _guardian_running, _guardian_cached_state, _last_session_date
     logger.info("🛡️ [RISK GUARDIAN] Watcher loop running.")
     while _guardian_running:
         had_error = False
         try:
+            # Check for midnight date transition (runs automatically right at 00:00:00)
+            cur_date = today_str()
+            if cur_date != _last_session_date:
+                logger.info(f"🌙 [MIDNIGHT ROLLOVER] Date transition detected: {_last_session_date} -> {cur_date}. Triggering daily reset.")
+                daily_midnight_session_reset()
+                _last_session_date = cur_date
+
             res = check_and_enforce_guardian()
             if isinstance(res, dict):
                 _guardian_cached_state = res
@@ -625,11 +743,8 @@ def _guardian_loop():
             time.sleep(8.0)
             continue
 
-        # Poll during market hours (every 3.0 seconds is plenty fast and prevents connection starvation)
-        now_t = datetime.now(IST).time()
-        market_open = datetime.strptime("09:14", "%H:%M").time()
-        market_close = datetime.strptime("15:35", "%H:%M").time()
-        if market_open <= now_t <= market_close:
+        # Poll during market hours
+        if is_market_hours():
             time.sleep(3.0)
         else:
             time.sleep(10.0)

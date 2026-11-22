@@ -1,13 +1,16 @@
 {
   "symbol": "NIFTY",
   "trading_instruments": "BOTH",
-  "mode": "priority",
+  "mode": "concurrent",
   "max_trades_per_day": 2,
   "max_concurrent_positions": 1,
   "cross_instrument_concurrency": "FIRST_TRIGGERED",
+  "require_dual_activation": true,
+  "dual_activation_window_mins": 60,
   "setups": {
     "trend_runner": true,
-    "vix_trap": true
+    "vix_trap": true,
+    "williams_fractal": false
   },
   "spot_ratchet_settings": {
     "initial_sl_pts": 30.0,

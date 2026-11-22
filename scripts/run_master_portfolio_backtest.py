@@ -66,6 +66,7 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
         if trend_path.exists():
             t_df = pd.read_csv(trend_path)
             t_df['date'] = pd.to_datetime(t_df['date']).dt.strftime('%Y-%m-%d')
+            t_df['year'] = pd.to_datetime(t_df['date']).dt.year
             t_df['setup_id'] = 'trend_runner'
             t_df['engine'] = 'TREND_RUNNER'
             t_df['strategy_label'] = 'Trend Runner'
@@ -87,6 +88,7 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
         if trap_path.exists():
             tp_df = pd.read_csv(trap_path)
             tp_df['date'] = pd.to_datetime(tp_df['date']).dt.strftime('%Y-%m-%d')
+            tp_df['year'] = pd.to_datetime(tp_df['date']).dt.year
             tp_df['setup_id'] = 'vix_trap'
             tp_df['engine'] = 'VIX_TRAP'
             tp_df['strategy_label'] = 'VIX Trap'
@@ -109,6 +111,7 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
             w_raw = pd.read_csv(wil_path)
             w_df = pd.DataFrame()
             w_df['date'] = pd.to_datetime(w_raw['date']).dt.strftime('%Y-%m-%d')
+            w_df['year'] = pd.to_datetime(w_df['date']).dt.year
             w_df['trade_num'] = 1
             w_df['stage'] = 'WILLIAMS'
             w_df['side'] = w_raw['type'].map(lambda x: 'CALL' if 'CE' in str(x).upper() else 'PUT')
@@ -116,8 +119,9 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
             w_df['option_symbol'] = ''
             w_df['option_entry_price'] = w_raw.get('entry_prem', 0.0)
             w_df['option_exit_price'] = w_raw.get('exit_prem', 0.0)
-            w_df['option_pnl_points'] = w_raw.get('net_pts_base', 0.0)
-            w_df['option_pnl_rupees'] = w_raw.get('pnl_inr_base', 0.0)
+            net_pts_series = w_raw['net_pts_base'] if 'net_pts_base' in w_raw.columns else w_raw['net_pts']
+            w_df['option_pnl_points'] = net_pts_series
+            w_df['option_pnl_rupees'] = w_raw.get('pnl_inr_base', net_pts_series * float(lot_size))
             w_df['entry_time'] = w_raw['entry_time'].astype(str).str.slice(0, 5)
             w_df['entry_price'] = w_raw['entry_spot']
             w_df['exit_time'] = w_raw['exit_time'].astype(str).str.slice(0, 5)
@@ -126,7 +130,7 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
             w_df['final_sl'] = w_df['initial_sl']
             w_df['pnl_points'] = w_raw['spot_pts']
             w_df['weighted_pnl_points'] = w_raw['spot_pts']
-            w_df['pnl_rupees'] = w_raw['net_pts_base'] * float(lot_size)
+            w_df['pnl_rupees'] = net_pts_series * float(lot_size)
             w_df['futures_pnl_rupees'] = w_raw['spot_pts'] * float(lot_size)
             w_df['diff_rupees'] = 0.0
             w_df['max_fav'] = 0.0
@@ -154,8 +158,94 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
     raw_combined['sort_dt'] = pd.to_datetime(raw_combined['date'] + ' ' + raw_combined['entry_time_str'])
     raw_combined = raw_combined.sort_values('sort_dt').drop(columns=['sort_dt']).reset_index(drop=True)
 
+    # Load Dual Confluence settings from master_portfolio_config.json
+    cfg_path = ROOT / "master_portfolio_config.json"
+    port_cfg = {}
+    if cfg_path.exists():
+        try:
+            port_cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+    require_dual = bool(port_cfg.get("require_dual_activation", False))
+    window_mins = int(port_cfg.get("dual_activation_window_mins", 60))
+
+    # Load complete partner trades (Both Trend Runner & VIX Trap)
+    if not is_sx:
+        partner_files = [
+            ROOT / "performance" / "sensex_backtest_trades.csv",
+            ROOT / "performance" / "sensex_vix_divergence_trades.csv",
+        ]
+    else:
+        partner_files = [
+            ROOT / "performance" / "vix_trend_runner_trades.csv",
+            ROOT / "performance" / "vix_divergence_backtest_trades.csv",
+        ]
+
+    min_p_date, max_p_date = "9999-99-99", "0000-00-00"
+    p_df = None
+    if require_dual:
+        try:
+            p_dfs = []
+            for pf in partner_files:
+                if pf.exists():
+                    df_part = pd.read_csv(pf)
+                    df_part['date_str'] = pd.to_datetime(df_part['date']).dt.strftime('%Y-%m-%d')
+                    df_part['side_norm'] = df_part['side'].astype(str).str.upper().apply(
+                        lambda s: 'LONG' if s in ('LONG', 'CALL', 'CE', 'BUY') else 'SHORT'
+                    )
+                    df_part['t_str'] = df_part['entry_time'].astype(str).str.slice(0, 5)
+                    p_dfs.append(df_part)
+            if p_dfs:
+                p_df = pd.concat(p_dfs, ignore_index=True)
+                p_df = p_df.sort_values(['date_str', 't_str']).reset_index(drop=True)
+                min_p_date = p_df['date_str'].min()
+                max_p_date = p_df['date_str'].max()
+                print(f"[Dual Confluence Active] Loaded {len(p_df)} complete partner trades ({min_p_date} to {max_p_date}). Window = {window_mins}m")
+        except Exception as exc:
+            print(f"[Dual Confluence Error] {exc}")
+
+    raw_combined['side_norm'] = raw_combined['side'].astype(str).str.upper().apply(
+        lambda s: 'LONG' if s in ('LONG', 'CALL', 'CE', 'BUY') else 'SHORT'
+    )
+
     if mode == "concurrent":
-        final_trades = raw_combined
+        # Concurrent Mode: Keep all trades that triggered in BOTH (1-to-1 matching)
+        if not require_dual or p_df is None or p_df.empty:
+            final_trades = raw_combined
+        else:
+            from datetime import datetime as dt_cls
+            selected = []
+            # Pre-2023: Nifty trades only (no partner historical data exists)
+            for _, r in raw_combined[raw_combined['date'] < min_p_date].iterrows():
+                selected.append(r)
+
+            # 2023+: Only trades confirmed by partner index
+            for d, grp in raw_combined[raw_combined['date'] >= min_p_date].groupby('date'):
+                p_grp = p_df[p_df['date_str'] == d].copy()
+                if p_grp.empty:
+                    continue
+                used_p = set()
+                for _, r in grp.iterrows():
+                    rside = r['side_norm']
+                    t_str = r['entry_time_str']
+                    t_dt = dt_cls.strptime(t_str, "%H:%M")
+
+                    best_p_idx = None
+                    best_diff = 999999
+                    for p_idx, pr in p_grp.iterrows():
+                        if p_idx in used_p or pr['side_norm'] != rside:
+                            continue
+                        p_dt = dt_cls.strptime(pr['t_str'], "%H:%M")
+                        diff = abs((t_dt - p_dt).total_seconds()) / 60.0
+                        if diff <= window_mins and diff < best_diff:
+                            best_diff = diff
+                            best_p_idx = p_idx
+
+                    if best_p_idx is not None:
+                        used_p.add(best_p_idx)
+                        selected.append(r)
+
+            final_trades = pd.DataFrame(selected).reset_index(drop=True)
     else:
         # Priority Mode: Max 2 trades per day, max 1 morning (<11:30) and max 1 afternoon (>=12:00)
         selected = []
@@ -163,6 +253,9 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
             count_today = 0
             morn_taken = False
             aft_taken = False
+            p_grp = p_df[p_df['date_str'] == d].copy() if (require_dual and p_df is not None and not p_df.empty) else pd.DataFrame()
+            used_p = set()
+
             for _, r in grp.iterrows():
                 t_str = r['entry_time_str']
                 is_morn = t_str < '11:30'
@@ -174,6 +267,30 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
                     continue
                 if count_today >= 2:
                     break
+
+                # Dual Confluence Check on overlapping multi-year dates (from min_p_date 2023 onwards)
+                if require_dual and str(d) >= min_p_date:
+                    from datetime import datetime as dt_cls
+                    rside = r['side_norm']
+                    t_dt = dt_cls.strptime(t_str, "%H:%M")
+                    confirmed = False
+                    best_p_idx = None
+                    best_diff = 999999
+
+                    for p_idx, pr in p_grp.iterrows():
+                        if p_idx in used_p or pr['side_norm'] != rside:
+                            continue
+                        p_dt = dt_cls.strptime(pr['t_str'], "%H:%M")
+                        diff = abs((t_dt - p_dt).total_seconds()) / 60.0
+                        if diff <= window_mins and diff < best_diff:
+                            best_diff = diff
+                            best_p_idx = p_idx
+                            confirmed = True
+
+                    if not confirmed or best_p_idx is None:
+                        continue  # Filter single-index unconfirmed fakeout
+                    used_p.add(best_p_idx)
+
                 selected.append(r)
                 count_today += 1
                 if is_morn:
@@ -183,7 +300,7 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
 
         final_trades = pd.DataFrame(selected).reset_index(drop=True)
 
-    final_trades = final_trades.drop(columns=['entry_time_str'], errors='ignore')
+    final_trades = final_trades.drop(columns=['entry_time_str', 'side_norm'], errors='ignore')
     out_csv = ROOT / "performance" / f"master_portfolio_{symbol.lower()}_trades.csv"
     final_trades.to_csv(out_csv, index=False)
     print(f"\nSaved {len(final_trades)} trades to: {out_csv}")
@@ -224,10 +341,25 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
     return final_trades
 
 if __name__ == '__main__':
+    cfg_path = ROOT / "master_portfolio_config.json"
+    default_mode = "concurrent"
+    if cfg_path.exists():
+        try:
+            cfg = json.loads(cfg_path.read_text(encoding="utf-8"))
+            default_mode = cfg.get("mode", "concurrent")
+        except Exception:
+            pass
+
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=['priority', 'concurrent'], default='priority', help='Orchestration mode')
-    parser.add_argument('--symbol', choices=['nifty', 'sensex'], default='nifty', help='Underlying symbol')
+    parser.add_argument('--mode', choices=['priority', 'concurrent'], default=default_mode, help='Orchestration mode')
+    parser.add_argument('--symbol', choices=['nifty', 'sensex', 'both'], default='both', help='Underlying symbol')
     parser.add_argument('--setups', default=None, help='Comma-separated setups: trend_runner,vix_trap or all')
     args = parser.parse_args()
     setups_list = args.setups.split(',') if args.setups else None
-    run_master_backtest(mode=args.mode, symbol=args.symbol, enabled_setups=setups_list)
+
+    if args.symbol == 'both':
+        print(f"\n>>> Running Master Portfolio Backtest for BOTH Nifty and Sensex in {args.mode.upper()} mode...\n")
+        run_master_backtest(mode=args.mode, symbol='nifty', enabled_setups=setups_list)
+        run_master_backtest(mode=args.mode, symbol='sensex', enabled_setups=setups_list)
+    else:
+        run_master_backtest(mode=args.mode, symbol=args.symbol, enabled_setups=setups_list)

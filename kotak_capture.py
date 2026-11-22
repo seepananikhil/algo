@@ -31,7 +31,7 @@ KEY_LEVEL_DIR = ROOT / "captured_data" / "fyers" / "key_levels"
 CONFIG_FILE = ROOT / "fyers_config.json"
 IST = timezone(timedelta(hours=5, minutes=30))
 MARKET_OPEN = (9, 15)
-MARKET_CLOSE = (15, 30)
+MARKET_CLOSE = (15, 50)
 TS_FMT = "%Y-%m-%d %H:%M:%S"
 
 
@@ -99,7 +99,7 @@ def ensure_continuous_1min_candles(df: pd.DataFrame, day: str) -> pd.DataFrame:
 
         start_dt = pd.to_datetime(f"{day} 09:15:00")
         now_t = now_ist().replace(second=0, microsecond=0, tzinfo=None)
-        market_end = pd.to_datetime(f"{day} 15:30:00")
+        market_end = pd.to_datetime(f"{day} 15:50:00")
 
         if day == now_ist().strftime("%Y-%m-%d"):
             now_closed = (now_t - pd.Timedelta(minutes=1)) if now_t >= start_dt else start_dt
@@ -319,7 +319,7 @@ class KotakCapture:
         t_quote.start()
         t_candle.start()
 
-        print(f"Capturing to {self.nifty_min_file.name} and {self.sensex_min_file.name} until 15:30 IST")
+        print(f"Capturing to {self.nifty_min_file.name} and {self.sensex_min_file.name} until 15:50 IST")
         try:
             while now_ist() < close_dt:
                 time.sleep(1)

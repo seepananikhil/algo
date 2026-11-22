@@ -31,7 +31,6 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 }
 
 const ManualTradingPage = lazyWithRetry(() => import("@/pages/manual").then(m => ({ default: m.ManualTradingPage })))
-const DayPage = lazyWithRetry(() => import("@/pages/day").then(m => ({ default: m.DayPage })))
 const PaperPage = lazyWithRetry(() => import("@/pages/paper").then(m => ({ default: m.PaperPage })))
 const LoginPage = lazyWithRetry(() => import("@/pages/login").then(m => ({ default: m.LoginPage })))
 const SettingsPage = lazyWithRetry(() => import("@/pages/settings").then(m => ({ default: m.SettingsPage })))
@@ -127,7 +126,7 @@ export default function App() {
                       <Route path="trade" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
                       <Route path="mobile" element={<Navigate to="/trade" replace />} />
                       <Route path="manual" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
-                      <Route path="day" element={<Suspense fallback={<PageFallback />}><DayPage /></Suspense>} />
+                      <Route path="day" element={<Navigate to="/paper" replace />} />
                       <Route path="paper" element={<Suspense fallback={<PageFallback />}><PaperPage /></Suspense>} />
                       <Route path="swinger" element={<Suspense fallback={<PageFallback />}><SwingerPage /></Suspense>} />
                       <Route path="holdings" element={<Suspense fallback={<PageFallback />}><HoldingsPage /></Suspense>} />
