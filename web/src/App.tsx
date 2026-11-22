@@ -6,8 +6,6 @@ import { TooltipProvider } from "@/components/ui/tooltip"
 import { Layout } from "@/components/layout"
 import { StatusProvider } from "@/lib/status"
 import { AuthProvider, AuthGate } from "@/lib/auth"
-import { LivePage } from "@/pages/live"
-import { BacktestPage } from "@/pages/backtest"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 
@@ -30,6 +28,8 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
   })
 }
 
+const LivePage = lazyWithRetry(() => import("@/pages/live").then(m => ({ default: m.LivePage })))
+const BacktestPage = lazyWithRetry(() => import("@/pages/backtest").then(m => ({ default: m.BacktestPage })))
 const ManualTradingPage = lazyWithRetry(() => import("@/pages/manual").then(m => ({ default: m.ManualTradingPage })))
 const PaperPage = lazyWithRetry(() => import("@/pages/paper").then(m => ({ default: m.PaperPage })))
 const LoginPage = lazyWithRetry(() => import("@/pages/login").then(m => ({ default: m.LoginPage })))
@@ -122,7 +122,7 @@ export default function App() {
                 <BrowserRouter>
                   <Routes>
                     <Route element={<Layout />}>
-                      <Route index element={<LivePage />} />
+                      <Route index element={<Suspense fallback={<PageFallback />}><LivePage /></Suspense>} />
                       <Route path="trade" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
                       <Route path="mobile" element={<Navigate to="/trade" replace />} />
                       <Route path="manual" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
@@ -131,7 +131,7 @@ export default function App() {
                       <Route path="swinger" element={<Suspense fallback={<PageFallback />}><SwingerPage /></Suspense>} />
                       <Route path="holdings" element={<Suspense fallback={<PageFallback />}><HoldingsPage /></Suspense>} />
                       <Route path="portfolio" element={<Navigate to="/holdings" replace />} />
-                      <Route path="backtest" element={<BacktestPage />} />
+                      <Route path="backtest" element={<Suspense fallback={<PageFallback />}><BacktestPage /></Suspense>} />
                       <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
                       <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
                       <Route path="config" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
