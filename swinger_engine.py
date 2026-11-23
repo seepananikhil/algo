@@ -469,23 +469,29 @@ def fetch_chartink_signals(clause=None):
     return []
 
 def get_market_data(symbol):
-    ticker = f"{symbol}.NS"
+    """Fetch daily market data and compute indicators using official Kotak Neo candles."""
     try:
-        df = yf.download(ticker, period="1y", interval="1d", progress=False, auto_adjust=False)
-        if df.empty:
-            df = yf.download(f"{symbol}.BO", period="1y", interval="1d", progress=False, auto_adjust=False)
-        if df.empty:
+        from kotak_orders import get_kotak_candles
+        df = None
+        if _candles_cache and symbol in _candles_cache:
+            df = _candles_cache[symbol]
+        if df is None or df.empty or len(df) < 50:
+            df = get_kotak_candles(symbol, days=330)
+            if df is not None and not df.empty and _candles_cache is not None:
+                _candles_cache[symbol] = df
+        if df is None or df.empty:
             return None
-        if isinstance(df.columns, pd.MultiIndex):
-            df.columns = [c[0] for c in df.columns]
-        df.index = pd.to_datetime(df.index).tz_localize(None)
+        df = df.copy()
+        if not isinstance(df.index, pd.DatetimeIndex):
+            df.index = pd.to_datetime(df.index)
+        df.index = df.index.tz_localize(None)
         df["EMA20"] = df["Close"].ewm(span=20, adjust=False).mean()
         df["EMA50"] = df["Close"].ewm(span=50, adjust=False).mean()
         df["EMA200"] = df["Close"].ewm(span=200, adjust=False).mean()
         df["VolSMA60"] = df["Volume"].rolling(60, min_periods=10).mean()
         return df
     except Exception as e:
-        print(f"[Swinger] Failed to fetch market data for {symbol}: {e}")
+        print(f"[Swinger] Failed to fetch Kotak market data for {symbol}: {e}")
         return None
 
 def calculate_setup_star_rating(df, symbol):
@@ -634,16 +640,6 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
                 print(f"[Swinger] Refreshed {len(recent_df)} live candles for {symbol} via Kotak Neo API")
         except Exception as e:
             print(f"[Swinger] Kotak candle fetch error for {symbol}: {e}")
-
-        # 2. Secondary Fallback: only if Kotak failed AND we have no local df
-        if (recent_df is None or recent_df.empty) and (df is None or df.empty):
-            try:
-                period_req = "2y"
-                recent_df = yf.download(f"{symbol}.NS", period=period_req, interval="1d", progress=False, auto_adjust=False, timeout=2.0)
-                if recent_df is None or recent_df.empty:
-                    recent_df = yf.download(f"{symbol}.BO", period=period_req, interval="1d", progress=False, auto_adjust=False, timeout=2.0)
-            except Exception as e:
-                print(f"[Swinger] yfinance fallback error for {symbol}: {e}")
 
         if recent_df is not None and not recent_df.empty:
             if isinstance(recent_df.columns, pd.MultiIndex):
@@ -1228,27 +1224,16 @@ def update_positions_and_scan():
     
     print(f"[Swinger Paper] Updating {len(open_positions)} open positions...")
     
-    # Pre-fetch all open positions in a fast batch query
+    # Pre-fetch all open positions via Kotak Neo
     open_symbols = list(set([p["symbol"] for p in open_positions if "symbol" in p]))
     batch_market_data = {}
-    if open_symbols:
+    for s in open_symbols:
         try:
-            tickers = [f"{s}.NS" for s in open_symbols]
-            batch_df = yf.download(tickers, period="1y", interval="1d", progress=False, auto_adjust=False, group_by="ticker")
-            for s in open_symbols:
-                t = f"{s}.NS"
-                if len(open_symbols) == 1:
-                    s_df = batch_df.dropna(how="all").copy()
-                else:
-                    s_df = batch_df[t].dropna(how="all").copy() if t in batch_df else pd.DataFrame()
-                if not s_df.empty:
-                    s_df["EMA20"] = s_df["Close"].ewm(span=20, adjust=False).mean()
-                    s_df["EMA50"] = s_df["Close"].ewm(span=50, adjust=False).mean()
-                    s_df["EMA200"] = s_df["Close"].ewm(span=200, adjust=False).mean()
-                    s_df["VolSMA60"] = s_df["Volume"].rolling(60, min_periods=10).mean()
-                    batch_market_data[s] = s_df
+            s_df = get_market_data(s)
+            if s_df is not None and not s_df.empty:
+                batch_market_data[s] = s_df
         except Exception as e:
-            print(f"[Swinger] Batch pre-fetch note: {e}")
+            print(f"[Swinger] Market data fetch note for {s}: {e}")
             
     for pos in open_positions:
         sym = pos["symbol"]
@@ -2328,20 +2313,13 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
     except Exception as e:
         print(f"[OnDemand Backtest] Kotak candle delta error for {resolved_sym}: {e}")
 
-    # 2. Secondary Fallback: yfinance only if missing or short (< 50 bars)
+    # 2. Fetch full historical Kotak candles if missing or short (< 50 bars)
     if df is None or len(df) < 50:
         try:
-            ticker_ns = f"{resolved_sym}.NS" if not resolved_sym.endswith(".NS") and not resolved_sym.endswith(".BO") else resolved_sym
-            yf_df = yf.download(ticker_ns, period="5y", progress=False, auto_adjust=False, timeout=3.0)
-            if yf_df.empty and not resolved_sym.endswith(".BO"):
-                yf_df = yf.download(f"{resolved_sym}.BO", period="5y", progress=False, auto_adjust=False, timeout=3.0)
-            if not yf_df.empty:
-                if isinstance(yf_df.columns, pd.MultiIndex):
-                    yf_df.columns = [c[0] for c in yf_df.columns]
-                if not isinstance(yf_df.index, pd.DatetimeIndex):
-                    yf_df.index = pd.to_datetime(yf_df.index)
-                yf_df.index = yf_df.index.tz_localize(None)
-                df = yf_df
+            from kotak_orders import get_kotak_candles
+            kotak_df = get_kotak_candles(resolved_sym, days=600)
+            if kotak_df is not None and not kotak_df.empty:
+                df = kotak_df
         except Exception:
             pass
 
