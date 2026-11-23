@@ -95,8 +95,9 @@ function ActiveTradeCard({
   const pnl = trade.option_pnl_rs ?? trade.pnl_rs ?? (trade.futures_pnl_rs ?? 0)
   const pts = trade.nifty_points ?? trade.pnl_points ?? 0
   const isProfitable = pnl >= 0
-  const entryPx = Number(trade.buy_price || trade.spot_at_entry || trade.nifty_in || 0)
-  const curLtp = Number(trade.sell_price || (trade.buy_price ? trade.buy_price + pts : 0))
+  const isIndexSetup = Boolean(trade.spot_at_entry || trade.nifty_in)
+  const entryPx = Number((isIndexSetup ? (trade.spot_at_entry || trade.nifty_in) : trade.buy_price) || trade.spot_at_entry || trade.nifty_in || trade.buy_price || 0)
+  const curLtp = Number((isIndexSetup ? (trade.nifty_out || (entryPx ? (trade.side === "CALL" || trade.side === "BUY" ? entryPx + pts : entryPx - pts) : 0)) : trade.sell_price) || trade.sell_price || trade.nifty_out || (entryPx ? entryPx + pts : 0))
 
   const targetPx = tpVal > 0 && entryPx > 0 ? (entryPx + tpVal).toFixed(1) : null
   const stopPx = tlVal > 0 && entryPx > 0 ? Math.max(0.05, entryPx - tlVal).toFixed(1) : null
@@ -932,7 +933,7 @@ export function LivePage() {
         symbol: sym,
         tp_pts: tp,
         tl_pts: tl,
-        entry_price: tradeToUpdate.buy_price || tradeToUpdate.spot_at_entry || tradeToUpdate.nifty_in || 0,
+        entry_price: tradeToUpdate.spot_at_entry || tradeToUpdate.nifty_in || tradeToUpdate.buy_price || 0,
         qty: tradeToUpdate.qty || (isSensex ? 20 : 65),
       })
       toast.success(res.message || `Updated TP/TL for ${tradeToUpdate.option || sym} (TP: +${tp}pt | TL: -${tl}pt)`)
@@ -2185,8 +2186,9 @@ export function LivePage() {
                       const pnl = trade.net_rs ?? trade.pnl_rs ?? 0
                       const pts = trade.nifty_points ?? trade.pnl_points ?? 0
                       const isProfitable = pnl >= 0
-                      const entryPx = Number(trade.buy_price || trade.spot_at_entry || trade.nifty_in || 0)
-                      const exitPx = Number(trade.sell_price || trade.nifty_out || 0)
+                      const isIndexSetup = Boolean(trade.spot_at_entry || trade.nifty_in)
+                      const entryPx = Number((isIndexSetup ? (trade.spot_at_entry || trade.nifty_in) : trade.buy_price) || trade.spot_at_entry || trade.nifty_in || trade.buy_price || 0)
+                      const exitPx = Number((isIndexSetup ? trade.nifty_out : trade.sell_price) || trade.nifty_out || trade.sell_price || 0)
 
                       return (
                         <div
