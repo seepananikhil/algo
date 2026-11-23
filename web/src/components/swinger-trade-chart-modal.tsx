@@ -201,6 +201,10 @@ export function SwingerTradeChartModal({
   const mainSeriesRef = useRef<ISeriesApi<any> | null>(null)
   const volumeSeriesRef = useRef<ISeriesApi<"Histogram"> | null>(null)
   const emaSeriesRef = useRef<ISeriesApi<"Line"> | null>(null)
+  const userRangeRef = useRef<any>(null)
+  const isInternalRangeSetRef = useRef<boolean>(false)
+  const prevSymbolRef = useRef<string>("")
+  const prevTradeIndexRef = useRef<number>(0)
 
   const [loading, setLoading] = useState(false)
   const [candles, setCandles] = useState<CandleData[]>([])
@@ -478,7 +482,18 @@ export function SwingerTradeChartModal({
 
   // Build and render Clean Lightweight Chart
   useEffect(() => {
-    if (!containerRef.current || candles.length === 0 || !trade) return
+    if (!containerRef.current || candles.length === 0 || !trade?.symbol) return
+
+    const container = containerRef.current
+    const symbolChanged = prevSymbolRef.current !== trade.symbol
+    const tradeIndexChanged = prevTradeIndexRef.current !== activeTradeIndex
+    prevSymbolRef.current = trade.symbol
+    prevTradeIndexRef.current = activeTradeIndex
+
+    // Reset zoom only when user explicitly switches to a different stock or different trade
+    if (symbolChanged || tradeIndexChanged) {
+      userRangeRef.current = null
+    }
 
     // Clean up previous chart
     if (chartRef.current) {
@@ -486,7 +501,6 @@ export function SwingerTradeChartModal({
       chartRef.current = null
     }
 
-    const container = containerRef.current
     const chartHeight = container.clientHeight || (isMaximized ? 660 : 500)
 
     // Clean, modern, distraction-free chart setup
@@ -516,6 +530,13 @@ export function SwingerTradeChartModal({
           top: 0.08,
           bottom: showVolume ? 0.20 : 0.05
         }
+      }
+    })
+
+    // Track user zooming and panning interactions in real time to prevent auto-reset
+    chart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+      if (!isInternalRangeSetRef.current && range) {
+        userRangeRef.current = range
       }
     })
 
@@ -800,8 +821,12 @@ export function SwingerTradeChartModal({
       }
     })
 
-    // 7. Viewport Range: Auto-center on selected trade (or recent 1Y if no specific trade)
-    if (candles.length > 0) {
+    // 7. Viewport Range: Preserve user's zoom/pan if set, else auto-center on selected trade
+    isInternalRangeSetRef.current = true
+    if (userRangeRef.current) {
+      // Restore user's exact zoom and pan range
+      chart.timeScale().setVisibleLogicalRange(userRangeRef.current)
+    } else if (candles.length > 0) {
       let fromTime: string | null = null
       let toTime: string | null = null
 
@@ -848,6 +873,10 @@ export function SwingerTradeChartModal({
       chart.timeScale().fitContent()
     }
 
+    const timer = setTimeout(() => {
+      isInternalRangeSetRef.current = false
+    }, 60)
+
     // Precise Container & Window Resize Observers
     let resizeObserver: ResizeObserver | null = null
     if (typeof ResizeObserver !== "undefined") {
@@ -876,6 +905,7 @@ export function SwingerTradeChartModal({
     chartRef.current = chart
 
     return () => {
+      clearTimeout(timer)
       if (resizeObserver) resizeObserver.disconnect()
       window.removeEventListener("resize", handleResize)
       chart.remove()
@@ -886,16 +916,13 @@ export function SwingerTradeChartModal({
     }
   }, [
     candles,
-    trade,
-    currentTrade,
-    symbolTrades,
+    trade?.symbol,
     activeTradeIndex,
     showVolume,
     showEMA50,
     showEMA200,
     showLevels,
-    isMaximized,
-    stats
+    isMaximized
   ])
 
   // Update Price Scale Mode when user toggles Log / Linear scale
@@ -909,6 +936,7 @@ export function SwingerTradeChartModal({
 
   const handleFitContent = () => {
     if (chartRef.current) {
+      userRangeRef.current = null
       chartRef.current.timeScale().fitContent()
     }
   }
