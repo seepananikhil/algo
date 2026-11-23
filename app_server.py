@@ -1072,6 +1072,7 @@ def trend_runner_forward_loop() -> None:
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
                 engine = TrendRunnerPaperEngine(
                     symbol="NIFTY",
+                    trailing_mode=str(port_cfg.get("nifty_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower(),
                     sl_points=float(nifty_ratchet.get("initial_sl_pts", 30.0)),
                     sl_mode="fixed",
                     lots=lots_cfg,
@@ -1104,6 +1105,7 @@ def trend_runner_forward_loop() -> None:
             else:
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
+                engine.trailing_mode = str(port_cfg.get("nifty_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower()
                 engine.entry_gate_fn = check_nifty_cross_gate
                 LIVE_ENGINES["nifty"] = engine
                 if nifty_ratchet:
@@ -1292,6 +1294,7 @@ def sensex_runner_forward_loop() -> None:
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
                 engine = TrendRunnerPaperEngine(
                     symbol="SENSEX",
+                    trailing_mode=str(port_cfg.get("sensex_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower(),
                     sl_points=float(sx_ratchet.get("initial_sl_pts", 120.0)),
                     sl_mode="fixed",
                     lots=lots_cfg,
@@ -1322,6 +1325,7 @@ def sensex_runner_forward_loop() -> None:
             else:
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
+                engine.trailing_mode = str(port_cfg.get("sensex_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower()
                 engine.entry_gate_fn = check_sensex_cross_gate
                 LIVE_ENGINES["sensex"] = engine
                 if sx_ratchet:

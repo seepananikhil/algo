@@ -95,6 +95,7 @@ print(f"Historical files to process: {len(all_files)}")
 # Initialize strategy engine
 engine = TrendRunnerPaperEngine(
     symbol="NIFTY",
+    trailing_mode="ema20_5m",
     sl_points=30.0,
     reentry_sl_points=30.0,
     sl_mode="fixed",

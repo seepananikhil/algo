@@ -7,6 +7,9 @@
   "cross_instrument_concurrency": "FIRST_TRIGGERED",
   "require_dual_activation": true,
   "dual_activation_window_mins": 60,
+  "trailing_mode": "ema20_5m",
+  "sensex_trailing_mode": "ema20_5m",
+  "nifty_trailing_mode": "ema20_5m",
   "setups": {
     "trend_runner": true,
     "vix_trap": true,
