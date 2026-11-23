@@ -300,6 +300,77 @@ def delete_account(account_id: int) -> Dict[str, Any]:
         return {"ok": True, "message": f"Account '{acc['account_name']}' deleted"}
 
 
+def get_account_by_telegram_chat(chat_id: str, include_secrets: bool = False) -> Optional[Dict[str, Any]]:
+    """Retrieves an account by its Telegram chat_id."""
+    with _get_db() as conn:
+        r = conn.execute("SELECT * FROM accounts WHERE telegram_chat_id = ? ORDER BY is_primary ASC, id DESC LIMIT 1", (str(chat_id).strip(),)).fetchone()
+        if not r:
+            return None
+        d = dict(r)
+        if not include_secrets:
+            d["mpin_set"] = bool(d.get("mpin"))
+            d["totp_key_set"] = bool(d.get("totp_key"))
+            d["consumer_key_masked"] = _mask(d.get("consumer_key", ""))
+            d["mobile_masked"] = _mask_mobile(d.get("mobile_number", ""))
+            d.pop("mpin", None)
+            d.pop("totp_key", None)
+            d.pop("consumer_secret", None)
+            d.pop("session_token", None)
+        return d
+
+
+def upsert_telegram_account(
+    chat_id: str,
+    account_name: str,
+    ucc: str,
+    mobile: str,
+    consumer_key: str,
+    mpin: str,
+    totp_key: str,
+) -> Dict[str, Any]:
+    """Creates or updates a client account linked to their Telegram chat_id."""
+    chat_id = str(chat_id).strip()
+    ucc = str(ucc).strip().upper()
+    mobile = str(mobile).strip()
+    consumer_key = str(consumer_key).strip()
+    mpin = str(mpin).strip()
+    totp_key = str(totp_key).replace(" ", "").strip().upper()
+    now_str = datetime.now(IST).isoformat()
+
+    with _get_db() as conn:
+        existing = conn.execute(
+            "SELECT * FROM accounts WHERE telegram_chat_id = ? AND is_primary = 0 LIMIT 1",
+            (chat_id,),
+        ).fetchone()
+
+        if existing:
+            acc_id = existing["id"]
+            conn.execute(
+                """
+                UPDATE accounts
+                SET account_name = ?, ucc = ?, mobile_number = ?, consumer_key = ?,
+                    mpin = ?, totp_key = ?, is_active = 1, updated_at = ?
+                WHERE id = ?
+                """,
+                (account_name, ucc, mobile, consumer_key, mpin, totp_key, now_str, acc_id),
+            )
+            conn.commit()
+            return {"ok": True, "id": acc_id, "is_new": False, "message": f"Updated account for {account_name}"}
+        else:
+            cursor = conn.execute(
+                """
+                INSERT INTO accounts (
+                    account_name, is_primary, broker, consumer_key, mobile_number, ucc,
+                    mpin, totp_key, auth_mode, telegram_chat_id, lot_multiplier,
+                    max_daily_loss, is_active, created_at, updated_at
+                ) VALUES (?, 0, 'KOTAK_NEO', ?, ?, ?, ?, ?, 'AUTO_TOTP', ?, 1, 2500.0, 1, ?, ?)
+                """,
+                (account_name, consumer_key, mobile, ucc, mpin, totp_key, chat_id, now_str, now_str),
+            )
+            conn.commit()
+            return {"ok": True, "id": cursor.lastrowid, "is_new": True, "message": f"Created new account for {account_name}"}
+
+
 # =====================================================================
 # Authenticate & Live Funds & Individual Telegram Messaging
 # =====================================================================
@@ -430,6 +501,24 @@ def auth_account_and_notify(account_id: int, send_telegram: bool = True) -> Dict
         "available_funds": available_funds,
         "auth_time": auth_time_str,
     }
+
+
+def auth_all_morning_accounts() -> List[Dict[str, Any]]:
+    """Iterates through all active accounts, authenticates via Option B TOTP, checks limits, and sends individual Telegram alerts."""
+    with _get_db() as conn:
+        rows = conn.execute("SELECT id FROM accounts WHERE is_active = 1 ORDER BY is_primary DESC, id ASC").fetchall()
+        account_ids = [r["id"] for r in rows]
+
+    results = []
+    for aid in account_ids:
+        try:
+            res = auth_account_and_notify(aid, send_telegram=True)
+            results.append({"id": aid, **res})
+        except Exception as e:
+            logger.error("Error during batch morning auth for account %s: %s", aid, e)
+            results.append({"id": aid, "ok": False, "error": str(e)})
+        time.sleep(1.5)
+    return results
 
 
 def _update_session_failure(account_id: int, error_msg: str):

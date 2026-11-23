@@ -7216,6 +7216,17 @@ class Handler(BaseHTTPRequestHandler):
                 })
             except Exception as e:
                 self._json({"ok": False, "error": str(e)}, 500)
+        elif url.path == "/api/telegram-bot/status":
+            try:
+                import telegram_bot_service
+                self._json({
+                    "ok": True,
+                    "running": telegram_bot_service._bot_running,
+                    "bot_username": "NikhilAlgoAlertSBot",
+                    "direct_link": "https://t.me/NikhilAlgoAlertSBot",
+                })
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 500)
         elif url.path in ("/api/portfolio/config", "/api/portfolio-config"):
             try:
                 p = ROOT / "master_portfolio_config.json"
@@ -7634,13 +7645,8 @@ class Handler(BaseHTTPRequestHandler):
             self._json(res, 200 if res.get("ok") else 400)
         elif url.path == "/api/accounts/auth-all":
             import account_manager
-            accounts = account_manager.list_accounts(include_secrets=True)
-            results = []
-            for a in accounts:
-                if a.get("is_active"):
-                    r = account_manager.auth_account_and_notify(a["id"])
-                    results.append({"id": a["id"], "name": a["account_name"], "res": r})
-            self._json({"ok": True, "results": results})
+            res = account_manager.auth_all_morning_accounts()
+            self._json({"ok": True, "results": res})
         elif url.path.startswith("/api/accounts/"):
             parts = url.path.strip("/").split("/")
             if len(parts) == 4 and parts[2].isdigit() and parts[3] == "auth":
@@ -7704,6 +7710,11 @@ if __name__ == "__main__":
         start_risk_guardian()
     except Exception as exc:
         print(f"Error launching risk guardian: {exc}")
+    try:
+        from telegram_bot_service import start_telegram_bot_daemon
+        start_telegram_bot_daemon()
+    except Exception as exc:
+        print(f"Error launching telegram bot poller: {exc}")
     threading.Thread(target=sensex_runner_forward_loop, daemon=True, name="sensex-runner-forward").start()
 
     def _post_start_check():

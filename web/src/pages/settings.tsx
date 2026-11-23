@@ -848,6 +848,20 @@ function AccountsManagerSection() {
             <CardDescription className="mt-1">
               Connect customer accounts with Option B automated TOTP 2FA. Morning auth inspects live broker margin and sends 1-on-1 private Telegram DM alerts.
             </CardDescription>
+            <div className="mt-2.5 flex items-center gap-2 flex-wrap">
+              <a
+                href="https://t.me/NikhilAlgoAlertSBot"
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-sky-500/10 hover:bg-sky-500/20 text-sky-400 border border-sky-500/30 text-xs font-medium transition-colors"
+              >
+                <Send className="size-3" />
+                <span>Client Onboarding Bot: <strong>@NikhilAlgoAlertSBot</strong></span>
+              </a>
+              <span className="text-[11px] text-muted-foreground">
+                Zero static IP exposure · Clients onboard directly in Telegram DM via /onboard
+              </span>
+            </div>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <Button
