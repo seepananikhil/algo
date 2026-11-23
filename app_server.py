@@ -7316,11 +7316,13 @@ class Handler(BaseHTTPRequestHandler):
             is_spa_fallback = False
             if root not in target.parents or not target.is_file():
                 if path.startswith("/assets/"):
-                    asset_prefix = path.replace("/assets/", "").split("-")[0]
-                    matches = list((root / "assets").glob(f"{asset_prefix}-*.js")) or list((root / "assets").glob(f"{asset_prefix}-*.css"))
-                    if matches:
-                        target = matches[0]
-                    else:
+                    m = re.match(r"^/assets/(.+)-[A-Za-z0-9_-]+\.(js|css)$", path)
+                    if m:
+                        base_name, ext = m.group(1), m.group(2)
+                        matches = list((root / "assets").glob(f"{base_name}-*.{ext}"))
+                        if matches:
+                            target = matches[0]
+                    if not target.is_file():
                         self.send_response(404)
                         self.send_header("Content-Type", "text/plain")
                         self.end_headers()

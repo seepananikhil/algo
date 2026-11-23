@@ -8,6 +8,7 @@ import { StatusProvider } from "@/lib/status"
 import { AuthProvider, AuthGate } from "@/lib/auth"
 import { AlertCircle, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ManualTradingPage } from "@/pages/manual"
 
 function lazyWithRetry<T extends React.ComponentType<any>>(
   factory: () => Promise<{ default: T }>
@@ -30,7 +31,6 @@ function lazyWithRetry<T extends React.ComponentType<any>>(
 
 const LivePage = lazyWithRetry(() => import("@/pages/live").then(m => ({ default: m.LivePage })))
 const BacktestPage = lazyWithRetry(() => import("@/pages/backtest").then(m => ({ default: m.BacktestPage })))
-const ManualTradingPage = lazyWithRetry(() => import("@/pages/manual").then(m => ({ default: m.ManualTradingPage })))
 const PaperPage = lazyWithRetry(() => import("@/pages/paper").then(m => ({ default: m.PaperPage })))
 const LoginPage = lazyWithRetry(() => import("@/pages/login").then(m => ({ default: m.LoginPage })))
 const SettingsPage = lazyWithRetry(() => import("@/pages/settings").then(m => ({ default: m.SettingsPage })))
@@ -124,9 +124,9 @@ export default function App() {
                   <Routes>
                     <Route element={<Layout />}>
                       <Route index element={<Suspense fallback={<PageFallback />}><LivePage /></Suspense>} />
-                      <Route path="trade" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
+                      <Route path="trade" element={<ManualTradingPage />} />
                       <Route path="mobile" element={<Navigate to="/trade" replace />} />
-                      <Route path="manual" element={<Suspense fallback={<PageFallback />}><ManualTradingPage /></Suspense>} />
+                      <Route path="manual" element={<ManualTradingPage />} />
                       <Route path="day" element={<Navigate to="/paper" replace />} />
                       <Route path="paper" element={<Suspense fallback={<PageFallback />}><PaperPage /></Suspense>} />
                       <Route path="swinger" element={<Suspense fallback={<PageFallback />}><SwingerPage /></Suspense>} />
