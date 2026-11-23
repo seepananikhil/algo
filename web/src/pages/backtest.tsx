@@ -190,6 +190,24 @@ function getStrategyDisplayName(t: any, defaultStrategy: string): string {
 
 function getExitReasonBadge(reason: string) {
   const r = (reason || "").toUpperCase()
+  if (r.includes("EMA20") || r.includes("EMA")) {
+    return {
+      label: "5m 20-EMA Trail",
+      className: "bg-indigo-500/15 text-indigo-400 border border-indigo-500/20",
+    }
+  }
+  if (r.includes("EOD") || r.includes("1515")) {
+    return {
+      label: "EOD Runner (15:15)",
+      className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20",
+    }
+  }
+  if (r.includes("CATASTROPHIC")) {
+    return {
+      label: "Hard SL Hit",
+      className: "bg-rose-500/15 text-rose-400 border border-rose-500/20",
+    }
+  }
   if (r === "TARGET") {
     return {
       label: "Target Achieved",
@@ -815,6 +833,71 @@ export function BacktestPage() {
           {/* TAB 1: STATS & PAYOFF CURVE (DEFAULT VIEW) */}
           {analyticsView === "stats" && (
             <div className="flex-1 min-h-0 overflow-y-auto pr-1 flex flex-col gap-3 animate-in fade-in duration-150">
+              {/* Dual Instrument Cards: NIFTY & SENSEX Overall PnL Points */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 shrink-0">
+                {/* NIFTY CARD */}
+                <div className="p-3.5 rounded-xl border border-sky-500/25 bg-gradient-to-br from-card via-card/90 to-sky-950/10 shadow-xs flex flex-col justify-between relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/5 rounded-full blur-2xl pointer-events-none" />
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
+                      <span className="text-xs font-bold text-foreground tracking-wide uppercase">NIFTY 50 • Total P&L</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-sky-500/10 text-sky-400 font-mono font-medium">Lot 25</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-muted-foreground">{data?.nifty_summary?.trades ?? 0} Trades</span>
+                  </div>
+                  <div className="flex items-baseline justify-between mt-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className={cn("text-2xl lg:text-3xl font-extrabold font-mono tracking-tight", pnlClass(data?.nifty_summary?.total_points))}>
+                        {fmtPts(data?.nifty_summary?.total_points)}
+                      </span>
+                      <span className="text-xs font-semibold text-muted-foreground">pts</span>
+                    </div>
+                    <div className="text-right">
+                      <div className={cn("text-base font-bold font-mono", pnlClass(data?.nifty_summary?.total_rupees))}>
+                        ₹{fmtNum(data?.nifty_summary?.total_rupees ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono mt-3 pt-2.5 border-t border-border/40">
+                    <span>Win Rate: <strong className="text-foreground">{data?.nifty_summary?.win_rate_pct ?? 0}%</strong> ({data?.nifty_summary?.wins ?? 0}W · {data?.nifty_summary?.losses ?? 0}L)</span>
+                    <span>Edge: <strong className="text-emerald-400">{data?.nifty_summary?.profit_factor ?? 0}x</strong></span>
+                    <span>Max DD: <strong className="text-red-400">{fmtPts(data?.nifty_summary?.max_drawdown_pts)}</strong></span>
+                  </div>
+                </div>
+
+                {/* SENSEX CARD */}
+                <div className="p-3.5 rounded-xl border border-amber-500/25 bg-gradient-to-br from-card via-card/90 to-amber-950/10 shadow-xs flex flex-col justify-between relative overflow-hidden group">
+                  <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/5 rounded-full blur-2xl pointer-events-none" />
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-amber-500 shrink-0" />
+                      <span className="text-xs font-bold text-foreground tracking-wide uppercase">SENSEX • Total P&L</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-amber-500/10 text-amber-400 font-mono font-medium">Lot 10</span>
+                    </div>
+                    <span className="text-[11px] font-mono text-muted-foreground">{data?.sensex_summary?.trades ?? 0} Trades</span>
+                  </div>
+                  <div className="flex items-baseline justify-between mt-1">
+                    <div className="flex items-baseline gap-2">
+                      <span className={cn("text-2xl lg:text-3xl font-extrabold font-mono tracking-tight", pnlClass(data?.sensex_summary?.total_points))}>
+                        {fmtPts(data?.sensex_summary?.total_points)}
+                      </span>
+                      <span className="text-xs font-semibold text-muted-foreground">pts</span>
+                    </div>
+                    <div className="text-right">
+                      <div className={cn("text-base font-bold font-mono", pnlClass(data?.sensex_summary?.total_rupees))}>
+                        ₹{fmtNum(data?.sensex_summary?.total_rupees ?? 0)}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-muted-foreground font-mono mt-3 pt-2.5 border-t border-border/40">
+                    <span>Win Rate: <strong className="text-foreground">{data?.sensex_summary?.win_rate_pct ?? 0}%</strong> ({data?.sensex_summary?.wins ?? 0}W · {data?.sensex_summary?.losses ?? 0}L)</span>
+                    <span>Edge: <strong className="text-emerald-400">{data?.sensex_summary?.profit_factor ?? 0}x</strong></span>
+                    <span>Max DD: <strong className="text-red-400">{fmtPts(data?.sensex_summary?.max_drawdown_pts)}</strong></span>
+                  </div>
+                </div>
+              </div>
+
               {/* Top Row: 6 KPI Stat Cards */}
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 shrink-0">
                 <StatCard
