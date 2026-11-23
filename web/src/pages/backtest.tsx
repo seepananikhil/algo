@@ -1039,11 +1039,6 @@ export function BacktestPage() {
                   </div>
                 </Card>
               </div>
-
-              {/* Session Trades Ledger */}
-              <div className="w-full">
-                {renderTradesListCard()}
-              </div>
             </div>
           )}
 

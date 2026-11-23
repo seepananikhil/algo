@@ -575,7 +575,6 @@ export function PaperPage() {
             const isWin = rs > 0 || spotPts > 0
             const isLoss = rs < 0 || spotPts < 0
             const exitBadge = getExitBadge(t.exit_reason || (t as any).reason)
-            const stratName = t.strategy || t.mode || (isSensex ? "Sensex Runner" : "Trend Runner")
 
             // R-Multiple
             let rMultiple: number | null = null
@@ -620,7 +619,7 @@ export function PaperPage() {
                   setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
                 }}
                 className={cn(
-                  "group p-2.5 rounded-lg text-xs cursor-pointer transition-all duration-150 flex flex-col gap-1.5",
+                  "group p-3 rounded-xl text-xs cursor-pointer transition-all duration-150 flex flex-col gap-2 shadow-xs",
                   isSelected
                     ? isWin
                       ? "bg-emerald-500/10 border border-emerald-500/40"
@@ -634,119 +633,94 @@ export function PaperPage() {
                     : "bg-card hover:bg-muted/30 border border-border/40"
                 )}
               >
-                {/* Header: Direction Badge, Symbol, Contract, Time, and Net P&L */}
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
-                    <span
-                      className={cn(
-                        "px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider text-white shrink-0",
-                        isCall ? "bg-emerald-600" : "bg-rose-600"
-                      )}
-                    >
-                      {isCall ? "CALL" : "PUT"}
-                    </span>
-                    <span
-                      className={cn(
-                        "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-semibold shrink-0",
-                        isSensex
-                          ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
-                          : "bg-primary/15 text-primary border border-primary/20"
-                      )}
-                    >
-                      {isSensex ? "SENSEX" : "NIFTY"}
-                    </span>
-                    <span className="font-mono text-xs font-bold text-foreground/95 shrink-0">
-                      {t.option || (isSensex ? "SENSEX Option" : "NIFTY Option")}
-                    </span>
-                    <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-                      {t.entry} → {t.exit || "Open"}
-                      {durationStr && ` (${durationStr})`}
-                    </span>
+                {/* Top Section: Badges, Contract, Time + Prominent P&L with Sub-Points */}
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-1.5 flex-wrap">
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.5 rounded text-[9.5px] font-bold tracking-wider text-white shrink-0",
+                          isCall ? "bg-emerald-600" : "bg-rose-600"
+                        )}
+                      >
+                        {isCall ? "CALL" : "PUT"}
+                      </span>
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.5 rounded text-[10px] font-mono font-bold shrink-0",
+                          isSensex
+                            ? "bg-amber-500/15 text-amber-500 dark:text-amber-400 border border-amber-500/25"
+                            : "bg-primary/15 text-primary border border-primary/25"
+                        )}
+                      >
+                        {isSensex ? "SENSEX" : "NIFTY"}
+                      </span>
+                      <span className="font-bold text-xs text-foreground shrink-0 font-sans">
+                        {t.option || (isSensex ? "SENSEX Option" : "NIFTY Option")}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-muted-foreground font-mono">
+                      {t.entry} ➔ {t.exit || "Open"}
+                      {durationStr && ` · ${durationStr}`}
+                    </div>
                   </div>
 
-                  {/* Profit Points & Rupees */}
-                  <div className="text-right shrink-0 flex items-center gap-1.5 font-mono">
-                    <span
+                  {/* Highlighted PnL & Sub-Points */}
+                  <div className="text-right shrink-0">
+                    <div
                       className={cn(
-                        "text-sm font-black tabular-nums",
-                        isWin ? "text-emerald-400" : isLoss ? "text-rose-400" : "text-muted-foreground"
-                      )}
-                    >
-                      {spotPts >= 0 ? "+" : ""}{spotPts.toFixed(1)} pts
-                    </span>
-                    <span
-                      className={cn(
-                        "text-xs font-bold tabular-nums px-2 py-0.5 rounded",
-                        isWin
-                          ? "bg-emerald-500/15 text-emerald-300"
-                          : isLoss
-                          ? "bg-rose-500/15 text-rose-300"
-                          : "bg-muted text-muted-foreground"
+                        "text-sm sm:text-base font-black font-mono tracking-tight",
+                        isWin ? "text-emerald-500 dark:text-emerald-400" : isLoss ? "text-rose-500 dark:text-rose-400" : "text-muted-foreground"
                       )}
                     >
                       {rs >= 0 ? "+" : ""}{fmtRs(rs)}
-                    </span>
+                    </div>
+                    <div
+                      className={cn(
+                        "text-[11px] font-bold font-mono",
+                        isWin ? "text-emerald-600/80 dark:text-emerald-400/80" : isLoss ? "text-rose-600/80 dark:text-rose-400/80" : "text-muted-foreground"
+                      )}
+                    >
+                      {spotPts >= 0 ? `+${spotPts.toFixed(1)}` : spotPts.toFixed(1)} pts
+                    </div>
                   </div>
                 </div>
 
-                {/* Middle Price Panel: Spot & Option Premium Side-by-Side */}
-                <div className="p-2 rounded-lg bg-muted/40 border border-border/50 text-[11px] font-mono space-y-1">
-                  {/* Spot Movement */}
-                  {Number(t.spot_at_entry || t.nifty_in || 0) > 0 && (
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9.5px] font-semibold uppercase text-muted-foreground tracking-wider">Spot</span>
-                        <span className="text-foreground font-medium">{Number(t.spot_at_entry || t.nifty_in).toFixed(1)}</span>
-                        <span className="text-muted-foreground/60 text-[10px]">➔</span>
-                        <span className="text-foreground font-medium">
-                          {Number(t.nifty_out || (t as any).exit_spot || 0) > 0 ? Number(t.nifty_out || (t as any).exit_spot).toFixed(1) : "--"}
-                        </span>
-                      </div>
-                      {t.sl != null && Number(t.sl) > 0 && (
-                        <span className="text-[10px] text-rose-500/80">
-                          SL: {Number(t.sl).toFixed(1)}
-                        </span>
-                      )}
+                {/* Bottom Row: Clean Price Flow & Exit Reason / R-Multiple */}
+                <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[11px] font-mono">
+                  {Number(t.buy_price || 0) > 0 ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Price</span>
+                      <span className="font-bold text-foreground">₹{Number(t.buy_price).toFixed(1)}</span>
+                      <span className="text-muted-foreground/60 text-[10px]">➔</span>
+                      <span className="font-bold text-foreground">
+                        {Number(t.sell_price || 0) > 0 ? `₹${Number(t.sell_price).toFixed(1)}` : "Open"}
+                      </span>
                     </div>
-                  )}
-
-                  {/* Option Premium */}
-                  {Number(t.buy_price || 0) > 0 && (
-                    <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10.5px]">
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-[9.5px] font-semibold uppercase text-muted-foreground tracking-wider">Prem</span>
-                        <span className="text-foreground font-bold">₹{Number(t.buy_price).toFixed(1)}</span>
-                        <span className="text-muted-foreground/60 text-[10px]">➔</span>
-                        <span className="text-foreground font-bold">
-                          {Number(t.sell_price || 0) > 0 ? `₹${Number(t.sell_price).toFixed(1)}` : "Open"}
-                        </span>
-                      </div>
-                      {Number(t.buy_price || 0) > 0 && Number(t.sell_price || 0) > 0 && (
-                        <span className={`text-[10px] font-bold ${Number(t.sell_price) >= Number(t.buy_price) ? "text-emerald-500" : "text-rose-500"}`}>
-                          {Number(t.sell_price) >= Number(t.buy_price) ? `+${(Number(t.sell_price) - Number(t.buy_price)).toFixed(1)}` : (Number(t.sell_price) - Number(t.buy_price)).toFixed(1)} pt
-                        </span>
-                      )}
+                  ) : Number(t.spot_at_entry || t.nifty_in || 0) > 0 ? (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Spot</span>
+                      <span className="font-bold text-foreground">{Number(t.spot_at_entry || t.nifty_in).toFixed(1)}</span>
+                      <span className="text-muted-foreground/60 text-[10px]">➔</span>
+                      <span className="font-bold text-foreground">
+                        {Number(t.nifty_out || (t as any).exit_spot || 0) > 0 ? Number(t.nifty_out || (t as any).exit_spot).toFixed(1) : "--"}
+                      </span>
                     </div>
+                  ) : (
+                    <span className="text-[10px] text-muted-foreground">Market Price</span>
                   )}
-                </div>
-
-                {/* Footer: Strategy Name, Exit Badge, and R-Multiple */}
-                <div className="flex items-center justify-between gap-1.5 text-[10px]">
-                  <span className="font-semibold text-muted-foreground truncate" title={stratName}>
-                    {stratName}
-                  </span>
 
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className={cn("px-2 py-0.5 rounded text-[10px] font-medium", exitBadge.className)}>
+                    <span className={cn("px-1.5 py-0.2 rounded text-[9.5px] font-medium font-sans uppercase tracking-wider", exitBadge.className)}>
                       {exitBadge.label}
                     </span>
                     {rMultiple != null && (
                       <span
                         className={cn(
-                          "text-[9.5px] font-bold font-mono px-1.5 py-0.5 rounded shrink-0",
+                          "text-[9.5px] font-bold font-mono px-1.5 py-0.2 rounded shrink-0",
                           rMultiple >= 0
-                            ? "bg-emerald-500/15 text-emerald-400"
-                            : "bg-rose-500/15 text-rose-400"
+                            ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20"
+                            : "bg-rose-500/15 text-rose-400 border border-rose-500/20"
                         )}
                       >
                         {rMultiple >= 0 ? `+${rMultiple.toFixed(1)}R` : `${rMultiple.toFixed(1)}R`}
@@ -1770,11 +1744,6 @@ export function PaperPage() {
                   </Card>
                 </div>
               )}
-
-              {/* Session Trades Ledger */}
-              <div className="w-full">
-                {renderTradesListCard()}
-              </div>
             </div>
           )}
 
