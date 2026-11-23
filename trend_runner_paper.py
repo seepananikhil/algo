@@ -585,31 +585,8 @@ class TrendRunnerPaperEngine:
             exit_reason = "EOD"
 
             if self.trailing_mode == "ema20_5m":
-                # MODEL D: 5-Minute 20-EMA Dynamic Trailing Rail
-                cat_sl = 350.0 if self.symbol == "SENSEX" else 110.0
-
-                # 1. Catastrophic hard stop (2x base SL, protecting against rogue black swan spikes)
-                if sig == "LONG" and l <= entry_px - cat_sl:
-                    exit_px = entry_px - cat_sl
-                    exit_reason = "CATASTROPHIC_SL"
-                    closed = True
-                elif sig == "SHORT" and h >= entry_px + cat_sl:
-                    exit_px = entry_px + cat_sl
-                    exit_reason = "CATASTROPHIC_SL"
-                    closed = True
-
-                # 2. Initial Stop Loss protection (before trade reaches +0.75R profit)
-                if not closed and pos["max_fav"] < (self.sl_points * 0.75):
-                    if sig == "LONG" and l <= curr_sl:
-                        exit_px = curr_sl
-                        exit_reason = "STOP_LOSS"
-                        closed = True
-                    elif sig == "SHORT" and h >= curr_sl:
-                        exit_px = curr_sl
-                        exit_reason = "STOP_LOSS"
-                        closed = True
-
-                # 3. Dynamic 5m 20-EMA Trail (Evaluated strictly on completed 5-minute bar closes)
+                # MODEL D: Pure 5-Minute 20-EMA Dynamic Trailing Rail (No Arbitrary Hard Stops)
+                # Evaluated strictly on completed 5-minute bar closes beyond the 20-EMA
                 if not closed:
                     if self.ema20_5m is not None:
                         pos["current_sl"] = round(self.ema20_5m, 2)
@@ -625,9 +602,11 @@ class TrendRunnerPaperEngine:
                                 exit_reason = "EMA20_CROSS"
                                 closed = True
 
-                # 4. Market Close / Time Exit at 15:15 IST
+                # Market Close / Time Exit at 15:15 IST
                 if not closed and t_str >= "15:15":
                     exit_px = c
+                    exit_reason = "EOD_RUNNER_1515"
+                    closed = True
                     exit_reason = "EOD_RUNNER_1515"
                     closed = True
 
