@@ -3533,6 +3533,17 @@ def compression_scalp_report() -> dict:
     return build_paper_report(compression_scalp_live_paper_trades())
 
 
+def compute_option_expiry_str(date_str: str, is_sensex: bool = False) -> str:
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d").date()
+        target_weekday = 4 if is_sensex else 3  # 4=Friday (Sensex), 3=Thursday (Nifty)
+        days_ahead = (target_weekday - dt.weekday()) % 7
+        exp_dt = dt + timedelta(days=days_ahead)
+        return exp_dt.strftime("%d %b")
+    except Exception:
+        return "27 Nov" if is_sensex else "26 Nov"
+
+
 def trend_runner_live_paper_trades(date: str | None = None) -> list:
     """Live/forward paper trades for Trend Expansion (VIX Runner)."""
     csv_path = ROOT / "performance" / "trend_runner_paper_trades.csv"
@@ -3603,6 +3614,7 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
                 "date": r_date,
                 "side": side,
                 "option": opt_name,
+                "expiry": compute_option_expiry_str(r_date, is_sensex=False),
                 "option_available": True,
                 "qty": qty,
                 "entry": str(row.get("entry_time") or "")[:5],
@@ -3731,6 +3743,7 @@ def sensex_runner_live_paper_trades(date: str | None = None) -> list:
                 "date": r_date,
                 "side": side,
                 "option": opt_name,
+                "expiry": compute_option_expiry_str(r_date, is_sensex=True),
                 "option_available": True,
                 "qty": qty,
                 "entry": str(row.get("entry_time") or "")[:5],

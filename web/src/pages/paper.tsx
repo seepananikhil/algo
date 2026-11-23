@@ -716,7 +716,7 @@ export function PaperPage() {
                         {optContract}
                       </span>
                       <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
-                        1 Lot ({t.qty || (isSensex ? 10 : 25)}Q)
+                        1 Lot ({t.qty || (isSensex ? 20 : 25)}Q)
                       </span>
                       <span
                         className={cn(

@@ -191,6 +191,7 @@ export type OptionTrade = {
   date: string
   side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})
   option: string
+  expiry?: string
   qty: number
   entry: string
   nifty_in: number
