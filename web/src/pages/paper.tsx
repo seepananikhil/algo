@@ -759,7 +759,7 @@ export function PaperPage() {
                 {/* Bottom Row: Clean Price Flow & Exit Reason / R-Multiple */}
                 <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[11px] font-mono">
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Price</span>
+                    <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Option</span>
                     <span className="font-bold text-foreground">{entryPriceDisplay}</span>
                     <span className="text-muted-foreground/60 text-[10px]">➔</span>
                     <span className="font-bold text-foreground">{exitPriceDisplay}</span>

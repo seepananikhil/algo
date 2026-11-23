@@ -3544,10 +3544,7 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
         if date and r_date != date:
             continue
         try:
-            try:
-                qty = int(row.get("qty") or (int(row.get("total_lots") or 1) * 25))
-            except (ValueError, TypeError):
-            qty = 25  # Strictly 1 lot Nifty = 25
+            qty = 65  # Strictly 1 lot Nifty = 65 shares
             side = "CALL" if row.get("side") in ("LONG", "CALL") else "PUT"
             entry_spot = float(row.get("entry_price") or 0.0)
             exit_spot = float(row.get("exit_price") or 0.0)
@@ -3673,7 +3670,7 @@ def sensex_runner_live_paper_trades(date: str | None = None) -> list:
             if date and r_date != date:
                 continue
 
-            qty = 10  # Strictly 1 lot Sensex = 10
+            qty = 20  # Strictly 1 lot Sensex = 20 shares
             side_raw = str(row.get("side") or "").upper()
             side = "CALL" if side_raw in ("LONG", "CALL", "CE") else "PUT"
             entry_spot = round(float(row.get("entry_price") or 0.0), 2)

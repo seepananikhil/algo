@@ -240,7 +240,7 @@ class TrendRunnerPaperEngine:
         self.call_cutoff_time = call_cutoff_time
         self.allow_call_reentry = allow_call_reentry
         self.symbol = symbol.upper()
-        self.lot_size = 20 if self.symbol == "SENSEX" else 25
+        self.lot_size = 20 if self.symbol == "SENSEX" else 65
         self.sl_points = sl_points
         self.reentry_sl_points = reentry_sl_points
         self.reentry_be_trigger = reentry_be_trigger

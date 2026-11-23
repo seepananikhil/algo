@@ -81,7 +81,10 @@ def parse_expiry_from_trdsymbol(symbol: str) -> date | None:
         month = MONTH_MAP.get(mon_str)
         if month:
             last_day = calendar.monthrange(year, month)[1]
-            return date(year, month, last_day)
+            d = date(year, month, last_day)
+            while d.weekday() != 3:  # 3 is Thursday
+                d -= timedelta(days=1)
+            return d
 
     return None
 
@@ -189,13 +192,13 @@ def get_expiry_contracts(client, exch_seg: str, symbol_name: str, session: date,
     parsed_rows = []
     for _, row in df_filtered.iterrows():
         trd_sym = str(row.get("pTrdSymbol") or row.get("trading_symbol") or "")
-        exp_date = parse_expiry_from_trdsymbol(trd_sym)
-
-        # Fallback to column if trading symbol doesn't match
-        if exp_date is None and exp_col in row and pd.notna(row[exp_col]):
+        exp_date = None
+        if exp_col in row and pd.notna(row[exp_col]):
             val = str(row[exp_col])
             if val.isdigit() and int(val) > 1700000000:
                 exp_date = pd.to_datetime(int(val), unit="s", utc=True).tz_convert("Asia/Kolkata").date()
+        if exp_date is None:
+            exp_date = parse_expiry_from_trdsymbol(trd_sym)
 
         if exp_date and exp_date >= session:
             parsed_rows.append((exp_date, row))
@@ -238,13 +241,15 @@ def get_expiry_contracts(client, exch_seg: str, symbol_name: str, session: date,
 
 def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retries: int = 6) -> pd.DataFrame:
     """Fetch candles with rate limit handling and exponential backoff."""
+    session_date = date.fromisoformat(session_str)
+    next_day_str = (session_date + timedelta(days=1)).isoformat()
     for attempt in range(max_retries):
         try:
             res = client.historical_data(
                 neosymbol=neosymbol,
                 interval="1min",
                 from_date=session_str,
-                to_date=session_str,
+                to_date=next_day_str,
             )
             if isinstance(res, dict):
                 code = res.get("code") or res.get("status_code")
@@ -266,8 +271,10 @@ def fetch_candles_with_retry(client, neosymbol: str, session_str: str, max_retri
                 time.sleep(4.0 + attempt * 2.5)
             else:
                 break
-        time.sleep(1.0)
+        time.sleep(1.25)
     return pd.DataFrame()
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--index", choices=["NIFTY", "SENSEX", "BANKNIFTY"], required=True)
@@ -291,13 +298,17 @@ def main() -> None:
 
     client = get_neo_client()
     if client is None:
-        return
+        raise SystemExit("Error: Kotak Neo client failed to authenticate. Check secrets/credentials.")
 
     # Fetch spot index
     session_str = session.isoformat()
     spot = fetch_candles_with_retry(client, cfg["spot_neosymbol"], session_str)
     if spot.empty:
-        raise SystemExit(f"No spot index candles returned for {args.index} on {session}")
+        if session.weekday() in (5, 6):
+            print(f"Skipping: session {session} is a weekend (market closed).")
+            return
+        print(f"[WARNING] No spot index candles returned for {args.index} on {session} (possible market holiday or delayed feed).")
+        return
 
     reference = float(spot.iloc[0]["open"])
     contracts = get_expiry_contracts(client, cfg["exch_seg"], cfg["symbol_name"], session, expiry_only=args.expiry_only)
@@ -359,7 +370,7 @@ def main() -> None:
             "DuplicateCount": 1,
         })
         records.append(opt_out)
-        time.sleep(1.1)  # Rate limit respect
+        time.sleep(1.25)  # Rate limit respect
 
     df_out = pd.concat(records, ignore_index=True)
     df_out.to_csv(out_csv, index=False)

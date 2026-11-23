@@ -75,9 +75,9 @@ jobs:
           if [ -n "${{ github.event.inputs.target_date }}" ]; then
             DATE_ARG="--date ${{ github.event.inputs.target_date }}"
           fi
-          python3 scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG || echo "Nifty options fetch completed or not an expiry session"
-          python3 scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG || echo "Sensex options fetch completed or not an expiry session"
-          python3 scripts/fetch_weekly_options.py --index BANKNIFTY $DATE_ARG || echo "BankNifty options fetch completed or not an expiry session"
+          python3 scripts/fetch_weekly_options.py --index NIFTY $DATE_ARG
+          python3 scripts/fetch_weekly_options.py --index SENSEX $DATE_ARG
+          python3 scripts/fetch_weekly_options.py --index BANKNIFTY $DATE_ARG || echo "BankNifty options fetch completed or skipped"
 
       - name: Rebuild DuckDB Options Parquet Catalogs
         run: |
