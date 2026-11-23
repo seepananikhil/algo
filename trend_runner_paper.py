@@ -586,7 +586,7 @@ class TrendRunnerPaperEngine:
 
             if self.trailing_mode == "ema20_5m":
                 # MODEL D: 5-Minute 20-EMA Dynamic Trailing Rail
-                cat_sl = 350.0 if self.symbol == "SENSEX" else 75.0
+                cat_sl = 350.0 if self.symbol == "SENSEX" else 110.0
 
                 # 1. Catastrophic hard stop (2x base SL, protecting against rogue black swan spikes)
                 if sig == "LONG" and l <= entry_px - cat_sl:
