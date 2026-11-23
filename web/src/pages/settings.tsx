@@ -846,7 +846,7 @@ function AccountsManagerSection() {
               </Badge>
             </div>
             <CardDescription className="mt-1">
-              Connect customer accounts with Option B automated TOTP 2FA. Morning auth inspects live broker margin and sends 1-on-1 private Telegram DM alerts.
+              Connect customer accounts with automated daily TOTP login. Morning auth inspects live broker margin and sends 1-on-1 private Telegram DM alerts.
             </CardDescription>
             <div className="mt-2.5 flex items-center gap-2 flex-wrap">
               <a
@@ -907,7 +907,7 @@ function AccountsManagerSection() {
           </div>
           <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
             <span className="text-muted-foreground block text-[11px]">2FA TOTP Mode</span>
-            <span className="font-semibold text-sky-400 text-sm">Option B (Auto-Seed)</span>
+            <span className="font-semibold text-sky-400 text-sm">Auto-Auth (08:45 AM)</span>
           </div>
         </div>
       </CardHeader>

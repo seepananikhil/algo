@@ -132,33 +132,32 @@ def handle_start(chat_id: int, user: Dict[str, Any]):
     acc = get_account_by_telegram_chat(str(chat_id))
 
     if acc:
-        status_badge = "✅ ACTIVE & READY" if acc.get("is_active") else "⏸ PAUSED"
+        status_badge = "🟢 ACTIVE" if acc.get("is_active") else "⏸ PAUSED"
         funds_str = _format_rupees(acc.get("available_funds"))
         text = (
             f"👋 <b>Welcome back, {first_name}!</b>\n\n"
-            f"Your Kotak Neo account is connected:\n"
             f"• <b>Account:</b> {acc.get('account_name')} (<code>{acc.get('ucc', 'N/A')}</code>)\n"
-            f"• <b>Trading Status:</b> {status_badge}\n"
+            f"• <b>Status:</b> {status_badge}\n"
             f"• <b>Available Margin:</b> <b>{funds_str}</b>\n"
-            f"• <b>2FA Mode:</b> Option B (Auto-Seed 08:45 AM)\n"
+            f"• <b>2FA:</b> Auto-Auth (08:45 AM Daily)\n"
             f"• <b>Multiplier:</b> {acc.get('lot_multiplier', 1)}x\n\n"
-            f"⚡ <b>Quick Commands:</b>\n"
-            f"• /funds - Inspect live broker margin balance\n"
-            f"• /status - Check daily token & trading status\n"
-            f"• /pause - Pause algo trading on your account\n"
-            f"• /resume - Resume algo trading on your account\n"
-            f"• /onboard - Re-configure credentials or TOTP\n"
-            f"• /help - Instructions & FAQ"
+            f"<b>Commands:</b>\n"
+            f"• /funds - Live margin balance\n"
+            f"• /status - Daily session status\n"
+            f"• /pause - Pause algo trading\n"
+            f"• /resume - Resume algo trading\n"
+            f"• /onboard - Update credentials\n"
+            f"• /help - Help & commands"
         )
     else:
         text = (
             f"👋 <b>Hello, {first_name}!</b>\n\n"
             f"Welcome to the <b>Nikhil Algo Trading Network</b>.\n\n"
-            f"You can connect your Kotak Neo trading account directly from Telegram.\n"
-            f"✨ <b>No web links or static IPs required.</b>\n"
-            f"✨ <b>Option B Automated 2FA</b>: Hands-free 08:45 AM morning login without waiting for OTPs.\n"
-            f"✨ <b>Private Daily Updates</b>: Direct 1-on-1 margin alerts every morning.\n\n"
-            f"👉 Send <b>/onboard</b> to connect your account in 60 seconds."
+            f"Connect your Kotak Neo trading account directly in Telegram:\n"
+            f"✨ Zero web links or IP addresses needed\n"
+            f"✨ Automated 08:45 AM morning login without daily OTPs\n"
+            f"✨ Private 1-on-1 daily margin reports\n\n"
+            f"👉 Send <b>/onboard</b> to connect your account."
         )
 
     send_tg_message(chat_id, text)
@@ -230,7 +229,7 @@ def handle_status(chat_id: int):
         f"• <b>Account:</b> {acc.get('account_name')} (<code>{acc.get('ucc')}</code>)\n"
         f"• <b>Algo Trading:</b> {'🟢 ACTIVE' if is_active else '⏸ PAUSED'}\n"
         f"• <b>Session Auth:</b> {'🟢 Connected' if session_valid else '🟡 Expired / Pending'}\n"
-        f"• <b>2FA Mode:</b> Option B (Auto-Seed 08:45 AM)\n"
+        f"• <b>2FA:</b> Auto-Auth (08:45 AM Daily)\n"
         f"• <b>Available Margin:</b> {_format_rupees(acc.get('available_funds'))}\n\n"
         f"Use /pause to halt trading or /resume to re-enable."
     )
@@ -279,8 +278,8 @@ def handle_help(chat_id: int):
         f"• /pause - Temporarily pause automated trade execution\n"
         f"• /resume - Re-enable trade execution\n"
         f"• /cancel - Cancel active configuration wizard\n\n"
-        f"<b>🔐 What is Option B (Auto-Seed)?</b>\n"
-        f"Option B uses your 32-character TOTP secret key from the Kotak Neo app. Every morning at 08:45 AM, the server automatically generates the required 6-digit TOTP, acquires today's token, checks your margin, and alerts you.\n\n"
+        f"<b>🔐 Automated 2FA (08:45 AM Daily):</b>\n"
+        f"Uses your 32-character TOTP secret key from the Kotak Neo app. Every trading morning at 08:45 AM, the engine automatically logs in, checks your margin, and alerts you.\n\n"
         f"<b>Need Support?</b> Contact your algorithm manager."
     )
     send_tg_message(chat_id, text)
@@ -423,7 +422,7 @@ def process_wizard_step(chat_id: int, text: str, message_id: int, user: Dict[str
             state["step"] = "AWAIT_TOTP"
 
         msg = (
-            f"🔐 <b>Step 5 of 5: Option B Auto-Seed TOTP Key</b>\n\n"
+            f"🔐 <b>Step 5 of 5: Auto-Seed TOTP Key</b>\n\n"
             f"MPIN securely registered.\n\n"
             f"Now, please reply with your <b>32-character TOTP Secret Key</b> from Kotak Neo app:\n\n"
             f"📖 <b>How to get it in 30 seconds:</b>\n"
@@ -476,7 +475,7 @@ def process_wizard_step(chat_id: int, text: str, message_id: int, user: Dict[str
 
         acc_id = save_res["id"]
 
-        # Run instant Option B Auth + Live Margin fetch
+        # Run instant Auth + Live Margin fetch
         auth_res = auth_account_and_notify(acc_id, send_telegram=False)
 
         with _wizards_lock:
@@ -488,17 +487,16 @@ def process_wizard_step(chat_id: int, text: str, message_id: int, user: Dict[str
             funds_str = _format_rupees(funds_val)
 
             success_card = (
-                f"🎉 <b>ONBOARDING COMPLETE &amp; VERIFIED!</b>\n\n"
+                f"🎉 <b>Account Connected &amp; Verified!</b>\n\n"
                 f"Welcome aboard, <b>{account_name}</b>!\n\n"
-                f"• <b>Client Code (UCC):</b> <code>{d['ucc']}</code>\n"
-                f"• <b>Live Margin Balance:</b> <b>{funds_str}</b>\n"
-                f"• <b>2FA Mode:</b> Option B (Auto-Seed 08:45 AM)\n"
-                f"• <b>Session Status:</b> 🟢 Authorized &amp; Active\n\n"
-                f"🌅 <b>What happens next?</b>\n"
-                f"Every trading morning at 08:45 AM, your session will automatically log in hands-free. You will receive your daily margin update right here in this chat.\n\n"
-                f"Commands you can use anytime:\n"
-                f"• /funds - View live margin balance\n"
-                f"• /status - Check trading status\n"
+                f"• <b>Client Code:</b> <code>{d['ucc']}</code>\n"
+                f"• <b>Available Margin:</b> <b>{funds_str}</b>\n"
+                f"• <b>2FA:</b> Auto-Auth (08:45 AM Daily)\n"
+                f"• <b>Session:</b> 🟢 Authorized &amp; Active\n\n"
+                f"🌅 <i>Every market morning at 08:45 AM, your session logs in automatically with your daily margin update.</i>\n\n"
+                f"<b>Commands:</b>\n"
+                f"• /funds - Live margin balance\n"
+                f"• /status - Trading status\n"
                 f"• /pause - Pause execution\n"
                 f"• /resume - Resume execution"
             )

@@ -62,7 +62,7 @@ export function OnboardingPage() {
     }
     if (step === 3) {
       if (!form.totp_key.trim()) {
-        return toast.error("Please enter 32-character TOTP Secret Key for automated Option B login")
+        return toast.error("Please enter 32-character TOTP Secret Key for automated morning login")
       }
     }
     setStep((s) => Math.min(s + 1, 5))
@@ -133,7 +133,7 @@ export function OnboardingPage() {
           Connect Kotak Neo Account
         </h1>
         <p className="text-xs sm:text-sm text-muted-foreground max-w-md mx-auto">
-          Setup Option B automated TOTP authentication. Your proprietary strategies and code remain 100% private.
+          Setup automated daily TOTP authentication. Your proprietary strategies and code remain 100% private.
         </p>
       </div>
 
@@ -273,10 +273,10 @@ export function OnboardingPage() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-base font-bold text-foreground flex items-center gap-2">
                     <ShieldCheck className="size-4 text-amber-400" />
-                    <span>Step 3: Option B Automated TOTP Key</span>
+                    <span>Step 3: Automated Daily TOTP Key</span>
                   </h2>
                   <Badge variant="outline" className="bg-amber-500/10 text-amber-400 border-amber-500/30 text-[10px]">
-                    Option B · Hands-Free
+                    Automated · Hands-Free
                   </Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-0.5">
@@ -440,7 +440,7 @@ export function OnboardingPage() {
                   <span className="text-muted-foreground font-medium">Morning Auto-Auth:</span>
                   <span className="font-bold text-emerald-500 flex items-center gap-1">
                     <CheckCircle2 className="size-3" />
-                    <span>Enabled (08:45 AM Option B)</span>
+                    <span>Enabled (08:45 AM Auto-Auth)</span>
                   </span>
                 </div>
               </div>

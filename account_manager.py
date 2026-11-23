@@ -483,12 +483,12 @@ def auth_account_and_notify(account_id: int, send_telegram: bool = True) -> Dict
     if send_telegram and chat_id:
         funds_text = f"₹{available_funds:,.2f}" if available_funds > 0 else "Active"
         msg = (
-            f"<b>Good morning, {name}!</b> 👋\n\n"
-            f"✅ <b>Kotak Neo Session Authorized</b>\n"
+            f"🌅 <b>Good morning, {name}!</b>\n\n"
+            f"✅ <b>Kotak Neo Authorized &amp; Active</b>\n"
             f"• <b>Account:</b> {name} (<code>{ucc}</code>)\n"
-            f"• <b>Status:</b> Active &amp; Ready\n"
-            f"• <b>Available Margin:</b> {funds_text}\n"
-            f"• <b>Lot Multiplier:</b> {acc.get('lot_multiplier', 1)} Lot\n"
+            f"• <b>Available Margin:</b> <b>{funds_text}</b>\n"
+            f"• <b>2FA:</b> Auto-Auth (08:45 AM Daily)\n"
+            f"• <b>Multiplier:</b> {acc.get('lot_multiplier', 1)}x\n"
             f"• <b>Time:</b> {auth_time_str} IST\n\n"
             f"<i>Live trading engine monitoring market.</i>"
         )
