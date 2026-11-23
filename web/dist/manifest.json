@@ -1,9 +1,9 @@
 {
   "name": "AlgoNeo Scalper",
-  "short_name": "Scalper",
+  "short_name": "Scalp",
   "description": "Zero-Brokerage 1-Tap Mobile Option Scalper",
-  "id": "/trade",
-  "start_url": "/trade",
+  "id": "/scalp",
+  "start_url": "/scalp",
   "scope": "/",
   "display": "standalone",
   "background_color": "#09090b",

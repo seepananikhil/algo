@@ -12,7 +12,7 @@ const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
   { to: "/holdings", label: "Holdings", icon: Briefcase },
   { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },
-  { to: "/trade", label: "Quick Trade", icon: Zap },
+  { to: "/scalp", label: "Scalp", icon: Zap },
   { to: "/paper", label: "Paper", icon: Wallet },
   { to: "/backtest", label: "Backtest", icon: LineChart },
   { to: "/config", label: "Strategy Config", icon: Sliders },
@@ -30,7 +30,7 @@ export function Layout() {
   const dark = resolvedTheme !== "light"
   const location = useLocation()
   const isLive = location.pathname === "/"
-  const isTrade = location.pathname === "/trade" || location.pathname === "/manual" || location.pathname === "/mobile"
+  const isTrade = location.pathname === "/scalp" || location.pathname === "/trade" || location.pathname === "/manual" || location.pathname === "/mobile"
   const isSwinger = location.pathname === "/swinger"
   const isHoldings = location.pathname === "/holdings"
   const isPaper = location.pathname === "/paper"
@@ -236,7 +236,7 @@ export function Layout() {
             {[
               { to: "/", label: "Live", icon: Activity },
               { to: "/holdings", label: "Holdings", icon: Briefcase },
-              { to: "/trade", label: "Quick*", icon: Zap },
+              { to: "/scalp", label: "Scalp*", icon: Zap },
               { to: "/paper", label: "Paper", icon: Wallet },
               { to: "/settings", label: "Settings", icon: SettingsIcon },
             ].map(({ to, label, icon: Icon }) => (
@@ -257,7 +257,7 @@ export function Layout() {
                   <>
                     <div className="relative">
                       <Icon className={cn("size-4", isActive && "stroke-[2.5]")} />
-                      {to === "/trade" && (
+                      {(to === "/scalp" || to === "/trade") && (
                         <span className="absolute -top-0.5 -right-1 size-1.5 rounded-full bg-amber-400 animate-ping" />
                       )}
                     </div>
