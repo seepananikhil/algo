@@ -7172,25 +7172,25 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "nifty_vix_master_trades.csv",
                     ROOT / "performance" / "sensex_vix_master_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
                 ))
             elif strategy in ("trend_runner_all", "trend_runner_combined"):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "vix_trend_runner_trades.csv",
                     ROOT / "performance" / "sensex_backtest_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True, use_confluence=False
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False, use_confluence=False
                 ))
             elif strategy in ("vix_trap_all", "vix_divergence_all", "vix_trap_combined"):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "vix_divergence_backtest_trades.csv",
                     ROOT / "performance" / "sensex_vix_divergence_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
                 ))
             elif strategy in ("master_portfolio_all", "master_portfolio_combined"):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "master_portfolio_nifty_trades.csv",
                     ROOT / "performance" / "master_portfolio_sensex_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
                 ))
             elif strategy in ("master_portfolio", "master_portfolio_nifty", "portfolio", "unified_master"):
                 self._json(master_portfolio_backtest_report("nifty"))
