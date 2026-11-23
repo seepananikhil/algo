@@ -579,18 +579,21 @@ export function PaperPage() {
 
             // R-Multiple
             let rMultiple: number | null = null
-            if (t.buy_price > 0 && t.sl && t.sell_price > 0) {
+            const spotEntry = Number(t.spot_at_entry || t.nifty_in || (t as any).entry_spot || (t as any).entry_price || t.buy_price || 0)
+            const spotExit = Number(t.nifty_out || (t as any).exit_spot || (t as any).exit_price || t.sell_price || 0)
+            const slNum = Number(t.sl)
+            if (spotEntry > 0 && slNum > 0) {
+              const risk = Math.abs(spotEntry - slNum)
+              if (risk > 0) {
+                const ptsGain = t.pnl_points ?? t.nifty_points ?? (spotExit > 0 ? (isCall ? spotExit - spotEntry : spotEntry - spotExit) : 0)
+                if (ptsGain != null && ptsGain !== 0) {
+                  rMultiple = Math.round((Number(ptsGain) / risk) * 10) / 10
+                }
+              }
+            } else if (t.buy_price > 0 && t.sl && t.sell_price > 0) {
               const risk = Math.abs(t.buy_price - t.sl)
               if (risk > 0) {
                 rMultiple = Math.round(((t.sell_price - t.buy_price) / risk) * 10) / 10
-              }
-            } else if (t.pnl_points && t.sl) {
-              const spotEntry = t.nifty_in || (t as any).entry_spot || (t as any).entry_price
-              if (spotEntry && t.sl) {
-                const risk = Math.abs(spotEntry - t.sl)
-                if (risk > 0) {
-                  rMultiple = Math.round((t.pnl_points / risk) * 10) / 10
-                }
               }
             }
 
@@ -631,7 +634,7 @@ export function PaperPage() {
                     : "bg-card hover:bg-muted/30 border border-border/40"
                 )}
               >
-                {/* Row 1: Direction Badge, Symbol, Time Range, Duration & High-Contrast P&L */}
+                {/* Header: Direction Badge, Symbol, Contract, Time, and Net P&L */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                     <span
@@ -646,27 +649,26 @@ export function PaperPage() {
                       className={cn(
                         "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-semibold shrink-0",
                         isSensex
-                          ? "bg-amber-500/15 text-amber-400"
-                          : "bg-primary/15 text-primary"
+                          ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                          : "bg-primary/15 text-primary border border-primary/20"
                       )}
                     >
                       {isSensex ? "SENSEX" : "NIFTY"}
                     </span>
-                    <span className="font-mono text-xs font-semibold text-foreground/90 shrink-0">
-                      {t.entry} → {t.exit || "Open"}
+                    <span className="font-mono text-xs font-bold text-foreground/95 shrink-0">
+                      {t.option || (isSensex ? "SENSEX Option" : "NIFTY Option")}
                     </span>
-                    {durationStr && (
-                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-                        ({durationStr})
-                      </span>
-                    )}
+                    <span className="text-[10px] text-muted-foreground font-mono shrink-0">
+                      {t.entry} → {t.exit || "Open"}
+                      {durationStr && ` (${durationStr})`}
+                    </span>
                   </div>
 
                   {/* Profit Points & Rupees */}
                   <div className="text-right shrink-0 flex items-center gap-1.5 font-mono">
                     <span
                       className={cn(
-                        "text-sm sm:text-base font-black tabular-nums",
+                        "text-sm font-black tabular-nums",
                         isWin ? "text-emerald-400" : isLoss ? "text-rose-400" : "text-muted-foreground"
                       )}
                     >
@@ -687,23 +689,52 @@ export function PaperPage() {
                   </div>
                 </div>
 
-                {/* Row 2: Strategy Tag / Contract, Inline Price Trail, Exit Reason Badge & R-Multiple */}
-                <div className="flex items-center justify-between gap-1.5 text-[11px] flex-wrap">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-semibold text-foreground/90 truncate max-w-[130px]" title={stratName}>
-                      {stratName}
-                    </span>
-                    {t.buy_price > 0 && (
-                      <span className="text-[10px] font-mono text-muted-foreground/75 truncate">
-                        · ₹{fmtNum(Math.round(t.buy_price))} → ₹{t.sell_price > 0 ? fmtNum(Math.round(t.sell_price)) : "Open"}
-                      </span>
-                    )}
-                    {t.option && (
-                      <span className="text-[10px] font-mono text-muted-foreground/60 truncate max-w-[100px]">
-                        ({t.option})
-                      </span>
-                    )}
-                  </div>
+                {/* Middle Price Panel: Spot & Option Premium Side-by-Side */}
+                <div className="p-2 rounded-lg bg-muted/40 border border-border/50 text-[11px] font-mono space-y-1">
+                  {/* Spot Movement */}
+                  {Number(t.spot_at_entry || t.nifty_in || 0) > 0 && (
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9.5px] font-semibold uppercase text-muted-foreground tracking-wider">Spot</span>
+                        <span className="text-foreground font-medium">{Number(t.spot_at_entry || t.nifty_in).toFixed(1)}</span>
+                        <span className="text-muted-foreground/60 text-[10px]">➔</span>
+                        <span className="text-foreground font-medium">
+                          {Number(t.nifty_out || (t as any).exit_spot || 0) > 0 ? Number(t.nifty_out || (t as any).exit_spot).toFixed(1) : "--"}
+                        </span>
+                      </div>
+                      {t.sl != null && Number(t.sl) > 0 && (
+                        <span className="text-[10px] text-rose-500/80">
+                          SL: {Number(t.sl).toFixed(1)}
+                        </span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Option Premium */}
+                  {Number(t.buy_price || 0) > 0 && (
+                    <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10.5px]">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9.5px] font-semibold uppercase text-muted-foreground tracking-wider">Prem</span>
+                        <span className="text-foreground font-bold">₹{Number(t.buy_price).toFixed(1)}</span>
+                        <span className="text-muted-foreground/60 text-[10px]">➔</span>
+                        <span className="text-foreground font-bold">
+                          {Number(t.sell_price || 0) > 0 ? `₹${Number(t.sell_price).toFixed(1)}` : "Open"}
+                        </span>
+                      </div>
+                      {Number(t.buy_price || 0) > 0 && Number(t.sell_price || 0) > 0 && (
+                        <span className={`text-[10px] font-bold ${Number(t.sell_price) >= Number(t.buy_price) ? "text-emerald-500" : "text-rose-500"}`}>
+                          {Number(t.sell_price) >= Number(t.buy_price) ? `+${(Number(t.sell_price) - Number(t.buy_price)).toFixed(1)}` : (Number(t.sell_price) - Number(t.buy_price)).toFixed(1)} pt
+                        </span>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer: Strategy Name, Exit Badge, and R-Multiple */}
+                <div className="flex items-center justify-between gap-1.5 text-[10px]">
+                  <span className="font-semibold text-muted-foreground truncate" title={stratName}>
+                    {stratName}
+                  </span>
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className={cn("px-2 py-0.5 rounded text-[10px] font-medium", exitBadge.className)}>

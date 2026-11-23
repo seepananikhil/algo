@@ -279,7 +279,7 @@ class TrendRunnerPaperEngine:
         self.strike_mode = strike_mode
         self.log_trades: bool = kwargs.get("log_trades", True)
         self.notify_telegram: bool = kwargs.get("notify_telegram", False)
-        self.fetch_live_quotes: bool = kwargs.get("fetch_live_quotes", False)
+        self.fetch_live_quotes: bool = kwargs.get("fetch_live_quotes", True)
         cfg_setups = {}
         cfg_path = ROOT / "master_portfolio_config.json"
         if cfg_path.exists():
@@ -667,14 +667,14 @@ class TrendRunnerPaperEngine:
                 strike = pos.get("strike", 0)
                 opt_type = pos.get("opt_type", "CE")
 
-                if self.fetch_live_quotes and strike > 0:
+                if strike > 0:
                     try:
                         from live_option_pricing import get_live_option_ltp
                         q = get_live_option_ltp(self.symbol, strike, opt_type)
                         if q and q.get("ltp"):
-                            opt_exit_px = float(q.get("bid") or q.get("ltp"))
+                            opt_exit_px = float(q.get("bid") or q.get("ltp") or 0.0)
                             if not opt_symbol:
-                                opt_symbol = q["symbol"]
+                                opt_symbol = q.get("symbol", "")
                     except Exception as exc:
                         print(f"  [Warning] Live option exit quote fetch failed: {exc}")
 
@@ -684,6 +684,12 @@ class TrendRunnerPaperEngine:
                 else:
                     opt_pnl_pts = round(pnl_pts * 0.75, 2)
                     opt_pnl_rs = opt_pnl_pts * total_lots * self.lot_size
+                    if opt_entry_px > 0:
+                        opt_exit_px = max(0.05, round(opt_entry_px + opt_pnl_pts, 2))
+                    else:
+                        base_extrinsic = 450.0 if self.symbol == "SENSEX" else 145.0
+                        opt_entry_px = base_extrinsic
+                        opt_exit_px = max(0.05, round(opt_entry_px + opt_pnl_pts, 2))
 
                 diff_rs = futures_pnl_rs - opt_pnl_rs
 
@@ -933,15 +939,24 @@ class TrendRunnerPaperEngine:
 
             opt_symbol = ""
             opt_entry_px = 0.0
-            if self.fetch_live_quotes:
-                try:
-                    from live_option_pricing import get_live_option_ltp
-                    q = get_live_option_ltp(self.symbol, strike, opt_type)
-                    if q and q.get("ltp"):
-                        opt_symbol = q["symbol"]
-                        opt_entry_px = float(q.get("ask") or q.get("ltp"))
-                except Exception as exc:
-                    print(f"  [Warning] Live option quote fetch failed: {exc}")
+            # 1. Fetch live market option quote directly from broker feed
+            try:
+                from live_option_pricing import get_live_option_ltp
+                q = get_live_option_ltp(self.symbol, strike, opt_type)
+                if q and q.get("ltp"):
+                    opt_symbol = q.get("symbol", "")
+                    opt_entry_px = float(q.get("ask") or q.get("ltp") or 0.0)
+            except Exception as exc:
+                print(f"  [Warning] Live option quote fetch failed: {exc}")
+
+            # 2. If broker is offline/after-hours, calculate realistic option market entry price
+            if opt_entry_px <= 0.0:
+                if opt_type == "CE":
+                    intrinsic = max(0.0, entry_px - strike)
+                else:
+                    intrinsic = max(0.0, strike - entry_px)
+                base_extrinsic = 450.0 if self.symbol == "SENSEX" else 145.0
+                opt_entry_px = round(intrinsic + base_extrinsic, 1)
 
             self.active_position = {
                 "trade_num": trade_num,

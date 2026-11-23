@@ -1132,6 +1132,7 @@ def trend_runner_forward_loop() -> None:
                     r6_lock=float(nifty_ratchet.get("tier6_lock_pts", 270.0)),
                     reentry=True,
                     notify_telegram=True,
+                    fetch_live_quotes=True,
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
                     entry_gate_fn=check_nifty_cross_gate,
@@ -1141,6 +1142,7 @@ def trend_runner_forward_loop() -> None:
                 LIVE_ENGINES["nifty"] = engine
                 log_engine_telemetry("NIFTY", "Apex Duo", "SYSTEM", f"Apex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
             else:
+                engine.fetch_live_quotes = True
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
                 engine.trailing_mode = str(port_cfg.get("nifty_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower()
@@ -1354,6 +1356,7 @@ def sensex_runner_forward_loop() -> None:
                     r6_lock=float(sx_ratchet.get("tier6_lock_pts", 850.0)),
                     reentry=True,
                     notify_telegram=True,
+                    fetch_live_quotes=True,
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
                     entry_gate_fn=check_sensex_cross_gate,
@@ -1363,6 +1366,7 @@ def sensex_runner_forward_loop() -> None:
                 LIVE_ENGINES["sensex"] = engine
                 log_engine_telemetry("SENSEX", "Apex Duo", "SYSTEM", f"Sensex Engines Listening | Trend Runner: {'ON' if enable_trend else 'OFF'} | VIX Trap: {'ON' if enable_trap else 'OFF'}")
             else:
+                engine.fetch_live_quotes = True
                 engine.enable_trend_runner = enable_trend
                 engine.enable_vix_trap = enable_trap
                 engine.trailing_mode = str(port_cfg.get("sensex_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower()
@@ -3584,12 +3588,11 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
                 charges = est_charges(buy_val, sell_val)
                 net_rs = round(pnl_rs - charges, 2)
             else:
-                opt_pts = round(pnl_pts * 0.75, 2)
-                buy_px = 220.0
-                sell_px = max(0.05, round(buy_px + opt_pts, 2))
+                buy_px = entry_spot
+                sell_px = exit_spot
                 buy_val = round(buy_px * qty, 2)
                 sell_val = round(sell_px * qty, 2)
-                pnl_rs = float(row.get("pnl_rupees") or round((sell_px - buy_px) * qty, 2))
+                pnl_rs = float(row.get("pnl_rupees") or row.get("option_pnl_rupees") or round((sell_px - buy_px) * qty, 2))
                 charges = est_charges(buy_val, sell_val)
                 net_rs = round(pnl_rs - charges, 2)
             init_sl = float(row.get("initial_sl") or (entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0))
@@ -3702,12 +3705,11 @@ def sensex_runner_live_paper_trades(date: str | None = None) -> list:
                 charges = est_charges(buy_val, sell_val)
                 net_rs = round(pnl_rs - charges, 2)
             else:
-                opt_pts = round(pnl_pts * 0.65, 2)
-                buy_px = 350.0
-                sell_px = max(0.05, round(buy_px + opt_pts, 2))
+                buy_px = entry_spot
+                sell_px = exit_spot
                 buy_val = round(buy_px * qty, 2)
                 sell_val = round(sell_px * qty, 2)
-                pnl_rs = float(row.get("pnl_rupees") or round((sell_val - buy_val), 2))
+                pnl_rs = float(row.get("pnl_rupees") or row.get("option_pnl_rupees") or round((sell_val - buy_val), 2))
                 charges = est_charges(buy_val, sell_val)
                 net_rs = round(pnl_rs - charges, 2)
             init_sl = float(row.get("initial_sl") or (entry_spot - 120.0 if side == "CALL" else entry_spot + 120.0))
@@ -3805,15 +3807,14 @@ def sensex_key_levels_live_paper_trades(date: str | None = None) -> list:
             opt_type = "CE" if side == "CALL" else "PE"
             opt_name = str(row.get("option") or f"SENSEX {strike} {opt_type}")
 
-            opt_entry_px = float(row.get("option_entry_price") or 350.0)
+            opt_entry_px = float(row.get("option_entry_price") or 0.0)
             opt_exit_px = float(row.get("option_exit_price") or 0.0)
-            if opt_exit_px <= 0:
-                delta = 0.55
-                opt_pts = round(pnl_pts * delta, 2)
-                opt_exit_px = max(5.0, opt_entry_px + opt_pts)
-
-            buy_px = round(opt_entry_px, 2)
-            sell_px = round(opt_exit_px, 2)
+            if opt_entry_px > 0 and opt_exit_px > 0:
+                buy_px = round(opt_entry_px, 2)
+                sell_px = round(opt_exit_px, 2)
+            else:
+                buy_px = entry_spot
+                sell_px = exit_spot
             buy_val = round(buy_px * qty, 2)
             sell_val = round(sell_px * qty, 2)
 

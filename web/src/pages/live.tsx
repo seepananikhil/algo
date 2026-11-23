@@ -150,11 +150,11 @@ function ActiveTradeCard({
 
         <div className="flex items-center gap-2 shrink-0">
           <div className="text-right">
-            <div className={`text-xs font-bold font-mono ${isProfitable ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400"}`}>
+            <div className={`text-sm sm:text-base font-black font-mono tracking-tight ${isProfitable ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"}`}>
               {isProfitable ? "+" : ""}{fmtRs(pnl)}
             </div>
-            <div className="text-[9px] text-muted-foreground font-mono">
-              {pts >= 0 ? `+${pts}` : pts} pt
+            <div className={`text-[11px] font-bold font-mono ${isProfitable ? "text-emerald-600/80 dark:text-emerald-400/80" : "text-rose-600/80 dark:text-rose-400/80"}`}>
+              {pts >= 0 ? `+${pts.toFixed(1)}` : pts.toFixed(1)} pts
             </div>
           </div>
 
@@ -170,20 +170,19 @@ function ActiveTradeCard({
         </div>
       </div>
 
-      {/* Entry & LTP Summary Row */}
-      <div className="flex items-center justify-between text-[11px] font-mono px-2 py-1 rounded bg-muted/40 border border-border/60">
-        <div>
-          <span className="text-muted-foreground text-[10px]">Entry: </span>
-          <span className="font-bold text-foreground">₹{entryPx.toFixed(1)}</span>
+      {/* Clean Traded Price Summary Row */}
+      <div className="flex items-center justify-between p-2 rounded-lg bg-muted/40 border border-border/50 text-[11px] font-mono">
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Price</span>
+          <span className="font-bold text-foreground">
+            {Number(trade.buy_price || 0) > 0 ? `₹${Number(trade.buy_price).toFixed(1)}` : (entryPx > 0 ? `₹${entryPx.toFixed(1)}` : "--")}
+          </span>
+          <span className="text-muted-foreground/60 text-[10px]">➔</span>
+          <span className="font-bold text-foreground">
+            {curLtp > 0 ? `₹${curLtp.toFixed(1)}` : "--"}
+          </span>
         </div>
-        <div>
-          <span className="text-muted-foreground text-[10px]">LTP: </span>
-          <span className="font-bold text-foreground">₹{curLtp > 0 ? curLtp.toFixed(1) : entryPx.toFixed(1)}</span>
-        </div>
-        <div>
-          <span className="text-muted-foreground text-[10px]">Time: </span>
-          <span className="text-muted-foreground">{trade.entry || "09:30"}</span>
-        </div>
+        <span className="text-[10px] text-muted-foreground">{trade.entry || "09:30"}</span>
       </div>
 
       {/* Interactive Bracket Inputs: TP & TL */}
@@ -2186,64 +2185,80 @@ export function LivePage() {
                       const pnl = trade.net_rs ?? trade.pnl_rs ?? 0
                       const pts = trade.nifty_points ?? trade.pnl_points ?? 0
                       const isProfitable = pnl >= 0
-                      const isIndexSetup = Boolean(trade.spot_at_entry || trade.nifty_in)
-                      const entryPx = Number((isIndexSetup ? (trade.spot_at_entry || trade.nifty_in) : trade.buy_price) || trade.spot_at_entry || trade.nifty_in || trade.buy_price || 0)
-                      const exitPx = Number((isIndexSetup ? trade.nifty_out : trade.sell_price) || trade.nifty_out || trade.sell_price || 0)
+                      const buyPx = Number(trade.buy_price || 0)
+                      const sellPx = Number(trade.sell_price || 0)
+                      const isCall = trade.side === "CALL" || trade.side === "BUY" || trade.side === "CE"
 
                       return (
                         <div
                           key={`closed-card-${idx}`}
                           onClick={() => handleSelectTrade(trade)}
-                          className="p-2.5 rounded-lg border border-border bg-card hover:bg-muted/30 cursor-pointer transition-all shadow-2xs space-y-1.5"
+                          className="p-3 rounded-xl border border-border/70 bg-card hover:bg-muted/40 hover:border-border cursor-pointer transition-all shadow-xs space-y-2.5"
                         >
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-1.5 min-w-0">
-                              <span className="font-bold text-xs text-foreground truncate font-sans">
-                                {trade.option || trade.symbol}
-                              </span>
-                              {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shrink-0">
-                                  <span className="size-1 rounded-full bg-emerald-500" />
-                                  LIVE
+                          {/* Top Row: Side & Contract + Big Highlighted P&L */}
+                          <div className="flex items-start justify-between gap-2">
+                            <div className="space-y-1 min-w-0">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className={`px-1.5 py-0.5 rounded text-[9.5px] font-bold uppercase tracking-wider ${
+                                  isCall
+                                    ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/25"
+                                    : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border border-rose-500/25"
+                                }`}>
+                                  {trade.side}
                                 </span>
-                              ) : (
-                                <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0">
-                                  PAPER
+                                <span className="font-bold text-xs text-foreground font-sans">
+                                  {trade.option || trade.symbol}
                                 </span>
-                              )}
+                                {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shrink-0">
+                                    <span className="size-1 rounded-full bg-emerald-500" />
+                                    LIVE
+                                  </span>
+                                ) : (
+                                  <span className="px-1.5 py-0.2 rounded text-[9px] font-semibold bg-amber-500/15 text-amber-500 border border-amber-500/30 shrink-0">
+                                    PAPER
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground font-mono">
+                                {trade.entry || "09:30"} ➔ {trade.exit || "15:15"}
+                                {trade.qty != null && ` · ${trade.qty} Qty`}
+                              </div>
                             </div>
-                            <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
-                              trade.side === "CALL" || trade.side === "BUY"
-                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20"
-                                : "bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20"
-                            }`}>
-                              {trade.side}
-                            </span>
+
+                            {/* Highlighted PnL & Sub-Points */}
+                            <div className="text-right shrink-0">
+                              <div className={`text-sm sm:text-base font-black font-mono tracking-tight ${
+                                isProfitable ? "text-emerald-500 dark:text-emerald-400" : "text-rose-500 dark:text-rose-400"
+                              }`}>
+                                {isProfitable ? "+" : ""}{fmtRs(pnl)}
+                              </div>
+                              <div className={`text-[11px] font-bold font-mono ${
+                                isProfitable ? "text-emerald-600/80 dark:text-emerald-400/80" : "text-rose-600/80 dark:text-rose-400/80"
+                              }`}>
+                                {pts >= 0 ? `+${pts.toFixed(1)}` : pts.toFixed(1)} pts
+                              </div>
+                            </div>
                           </div>
 
-                          <div className="flex items-center justify-between text-[11px] font-mono text-muted-foreground">
-                            <span>
-                              {entryPx > 0 ? `₹${entryPx.toFixed(1)}` : "--"} ➔ {exitPx > 0 ? `₹${exitPx.toFixed(1)}` : "--"}
-                            </span>
-                            <span className="text-[10px]">
-                              {trade.entry || "09:30"} ➔ {trade.exit || "15:15"}
-                            </span>
-                          </div>
+                          {/* Bottom Row: Clean Price Flow & Exit Reason Badge */}
+                          <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[11px] font-mono">
+                            {buyPx > 0 ? (
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Price</span>
+                                <span className="font-bold text-foreground">₹{buyPx.toFixed(1)}</span>
+                                <span className="text-muted-foreground/60 text-[10px]">➔</span>
+                                <span className="font-bold text-foreground">{sellPx > 0 ? `₹${sellPx.toFixed(1)}` : "Open"}</span>
+                              </div>
+                            ) : (
+                              <span className="text-[10px] text-muted-foreground">Market Price</span>
+                            )}
 
-                          <div className="flex items-center justify-between pt-1 border-t border-border/50 font-mono">
-                            <div className="flex items-center gap-1.5">
-                              <span className="text-[10px] text-muted-foreground">
-                                {pts >= 0 ? `+${pts}` : pts} pt
+                            {trade.exit_reason && (
+                              <span className="px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-sans text-[9px] uppercase tracking-wider">
+                                {trade.exit_reason.replace(/_/g, " ")}
                               </span>
-                              {trade.exit_reason && (
-                                <span className="px-1.5 py-0.2 rounded bg-muted text-muted-foreground font-sans text-[9px] uppercase">
-                                  {trade.exit_reason}
-                                </span>
-                              )}
-                            </div>
-                            <span className={`text-xs font-bold ${pnlClass(pnl)}`}>
-                              {isProfitable ? "+" : ""}{fmtRs(pnl)}
-                            </span>
+                            )}
                           </div>
                         </div>
                       )
