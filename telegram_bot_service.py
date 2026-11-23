@@ -173,7 +173,7 @@ def handle_onboard_start(chat_id: int, user: Dict[str, Any]):
         }
 
     text = (
-        f"🚀 <b>Kotak Neo Account Onboarding (Step 1 of 4)</b>\n\n"
+        f"🚀 <b>Kotak Neo Account Onboarding (Step 1 of 5)</b>\n\n"
         f"Please reply with your <b>Kotak Client Code (UCC)</b>:\n"
         f"<i>(Example: <code>Y4KQT</code> or <code>123456</code>)</i>\n\n"
         f"Send /cancel at any time to exit."
@@ -357,7 +357,7 @@ def process_wizard_step(chat_id: int, text: str, message_id: int, user: Dict[str
             state["step"] = "AWAIT_MOBILE"
 
         msg = (
-            f"📱 <b>Step 2 of 4: Registered Mobile Number</b>\n\n"
+            f"📱 <b>Step 2 of 5: Registered Mobile Number</b>\n\n"
             f"UCC recorded: <code>{ucc}</code>\n\n"
             f"Please reply with your <b>10-digit registered mobile number</b> linked with Kotak Neo (e.g. <code>9876543210</code>):"
         )
@@ -377,60 +377,67 @@ def process_wizard_step(chat_id: int, text: str, message_id: int, user: Dict[str
 
         with _wizards_lock:
             state["data"]["mobile_number"] = mobile
-            state["step"] = "AWAIT_CREDS"
+            state["step"] = "AWAIT_CONSUMER_KEY"
 
         msg = (
-            f"🔑 <b>Step 3 of 4: Kotak Neo API Credentials</b>\n\n"
+            f"🔑 <b>Step 3 of 5: Kotak Neo Consumer Key</b>\n\n"
             f"Mobile recorded: <code>{mobile}</code>\n\n"
-            f"Please reply with your <b>Consumer Key</b> and <b>6-digit MPIN</b> separated by a space:\n"
-            f"<i>Example:</i> <code>1deb9014-xxxx-xxxx-xxxx 123456</code>\n\n"
-            f"🔒 <i>(For your privacy, your reply will be automatically deleted from this chat immediately upon receipt)</i>"
+            f"Please reply with your <b>Kotak Neo API Consumer Key</b>:\n"
+            f"<i>(From Kotak Neo Developer Portal, e.g. <code>1deb9014-xxxx-xxxx-xxxx</code>)</i>"
         )
         send_tg_message(chat_id, msg)
         return
 
-    # Step 3: Consumer Key & MPIN
-    if step == "AWAIT_CREDS":
-        # Immediately delete sensitive message for client privacy
-        delete_tg_message(chat_id, message_id)
-
-        parts = clean_text.split()
-        if len(parts) >= 2:
-            consumer_key = parts[0].strip()
-            mpin = parts[1].strip()
-        else:
-            send_tg_message(
-                chat_id,
-                "⚠️ Format error. Please provide Consumer Key and MPIN separated by a space:\n"
-                "Example: <code>your-consumer-key 123456</code>",
-            )
-            return
-
-        if len(mpin) != 6 or not mpin.isdigit():
-            send_tg_message(chat_id, "⚠️ MPIN must be exactly 6 digits. Please re-enter Consumer Key and 6-digit MPIN:")
+    # Step 3: Consumer Key
+    if step == "AWAIT_CONSUMER_KEY":
+        consumer_key = clean_text.replace(" ", "")
+        if len(consumer_key) < 8:
+            send_tg_message(chat_id, "⚠️ Invalid Consumer Key. Please paste your valid Kotak Neo Consumer Key:")
             return
 
         with _wizards_lock:
             state["data"]["consumer_key"] = consumer_key
-            state["data"]["mpin"] = mpin
-            state["step"] = "AWAIT_TOTP"
+            state["step"] = "AWAIT_MPIN"
 
         msg = (
-            f"🔐 <b>Step 4 of 4: Option B Auto-Seed TOTP Key</b>\n\n"
-            f"API Credentials securely registered.\n\n"
-            f"Now, please reply with your <b>32-character TOTP Secret Key</b> from Kotak Neo app:\n\n"
-            f"📖 <b>How to get it in 30 seconds:</b>\n"
-            f"1. Open <b>Kotak Neo App</b> → Tap <b>Profile Icon</b>\n"
-            f"2. <b>Security &amp; Settings</b> → <b>2-Step Verification</b>\n"
-            f"3. Select <b>Setup via Authenticator App</b>\n"
-            f"4. Tap <b>\"Can't scan QR code?\"</b> at the bottom\n"
-            f"5. <b>Copy the 32-character Secret Key</b> and paste it here:\n\n"
-            f"🔒 <i>(This message will also be auto-deleted immediately upon receipt for privacy)</i>"
+            f"🔒 <b>Step 4 of 5: 6-Digit MPIN</b>\n\n"
+            f"Consumer Key registered: <code>{consumer_key[:4]}••••{consumer_key[-4:]}</code>\n\n"
+            f"Please reply with your <b>6-digit Kotak Neo MPIN</b> (e.g. <code>123456</code>):\n\n"
+            f"🛡️ <i>(For your privacy, your reply will be automatically deleted from this chat immediately upon receipt)</i>"
         )
         send_tg_message(chat_id, msg)
         return
 
-    # Step 4: Option B TOTP Key & Instant Verification
+    # Step 4: 6-Digit MPIN
+    if step == "AWAIT_MPIN":
+        # Immediately delete sensitive MPIN from chat
+        delete_tg_message(chat_id, message_id)
+
+        mpin = re.sub(r"\D", "", clean_text)
+        if len(mpin) != 6:
+            send_tg_message(chat_id, "⚠️ MPIN must be exactly 6 digits. Please re-enter your 6-digit MPIN:")
+            return
+
+        with _wizards_lock:
+            state["data"]["mpin"] = mpin
+            state["step"] = "AWAIT_TOTP"
+
+        msg = (
+            f"🔐 <b>Step 5 of 5: Option B Auto-Seed TOTP Key</b>\n\n"
+            f"MPIN securely registered.\n\n"
+            f"Now, please reply with your <b>32-character TOTP Secret Key</b> from Kotak Neo app:\n\n"
+            f"📖 <b>How to get it in 30 seconds:</b>\n"
+            f"1. Open <b>Kotak Neo App</b> → Tap <b>Profile Icon</b> (top right)\n"
+            f"2. <b>Security &amp; Settings</b> → <b>2-Step Verification</b>\n"
+            f"3. Select <b>Setup via Authenticator App</b>\n"
+            f"4. Tap <b>\"Can't scan QR code?\"</b> at the bottom\n"
+            f"5. <b>Copy the 32-character Secret Key</b> and paste it here:\n\n"
+            f"🛡️ <i>(This message will also be auto-deleted immediately upon receipt for your privacy)</i>"
+        )
+        send_tg_message(chat_id, msg)
+        return
+
+    # Step 5: Option B TOTP Key & Instant Verification
     if step == "AWAIT_TOTP":
         # Immediately delete sensitive TOTP secret from chat
         delete_tg_message(chat_id, message_id)
