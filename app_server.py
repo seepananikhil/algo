@@ -1020,6 +1020,43 @@ def check_nifty_cross_gate(sym: str, sig: str, t_str: str) -> bool:
 def check_sensex_cross_gate(sym: str, sig: str, t_str: str) -> bool:
     return check_dual_activation_gate(sym, sig, t_str)
 
+def check_dual_ema_cross_exit(sym: str, sig: str, t_str: str, c_5m: float, ema20_5m: float) -> bool:
+    """
+    Model D Dual-Cross Confluence Exit:
+    An index only confirms exit on a 5m 20-EMA cross if its sister index has ALSO
+    crossed its respective 5m 20-EMA, filtering premature single-index shakeouts.
+    """
+    try:
+        port_cfg = load_portfolio_config()
+        if not port_cfg.get("require_dual_ema20_cross", True):
+            return True
+
+        other_sym = "SENSEX" if sym.upper() == "NIFTY" else "NIFTY"
+        other_engine = LIVE_ENGINES.get(other_sym.lower())
+        if not other_engine or other_engine.ema20_5m is None or not other_engine.current_5m_bar:
+            return True
+
+        other_c = float(other_engine.current_5m_bar.get("close") or 0.0)
+        other_ema = float(other_engine.ema20_5m)
+        if other_c == 0.0:
+            return True
+
+        # Check if other index crossed 20-EMA in the trade direction
+        if sig in ("SHORT", "PUT"):
+            other_crossed = (other_c > other_ema)
+        else:
+            other_crossed = (other_c < other_ema)
+
+        if not other_crossed:
+            log_engine_telemetry(sym, "Dual-Cross Confluence", "HOLD", f"5m EMA20 cross @ {c_5m:.2f} held. {other_sym} ({other_c:.2f} vs EMA {other_ema:.2f}) intact.")
+            return False
+
+        log_engine_telemetry(sym, "Dual-Cross Confluence", "EXIT_CONFIRMED", f"Both {sym} and {other_sym} crossed 5m 20-EMA. Exit confirmed @ {t_str}.")
+        return True
+    except Exception as exc:
+        print(f"Error checking dual ema exit: {exc}")
+        return True
+
 def trend_runner_forward_loop() -> None:
     """Continuously monitor today's live 1-min stream for Trend Catcher (VIX Runner) setups."""
     today_str = today()
@@ -1098,6 +1135,7 @@ def trend_runner_forward_loop() -> None:
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
                     entry_gate_fn=check_nifty_cross_gate,
+                    exit_gate_fn=check_dual_ema_cross_exit,
                 )
                 engine.current_day_str = today_str
                 LIVE_ENGINES["nifty"] = engine
@@ -1107,6 +1145,7 @@ def trend_runner_forward_loop() -> None:
                 engine.enable_vix_trap = enable_trap
                 engine.trailing_mode = str(port_cfg.get("nifty_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower()
                 engine.entry_gate_fn = check_nifty_cross_gate
+                engine.exit_gate_fn = check_dual_ema_cross_exit
                 LIVE_ENGINES["nifty"] = engine
                 if nifty_ratchet:
                     engine.r1_trigger = float(nifty_ratchet.get("tier1_trigger_pts", 70.0))
@@ -1318,6 +1357,7 @@ def sensex_runner_forward_loop() -> None:
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
                     entry_gate_fn=check_sensex_cross_gate,
+                    exit_gate_fn=check_dual_ema_cross_exit,
                 )
                 engine.current_day_str = today_str
                 LIVE_ENGINES["sensex"] = engine
@@ -1327,6 +1367,7 @@ def sensex_runner_forward_loop() -> None:
                 engine.enable_vix_trap = enable_trap
                 engine.trailing_mode = str(port_cfg.get("sensex_trailing_mode", port_cfg.get("trailing_mode", "ema20_5m"))).lower()
                 engine.entry_gate_fn = check_sensex_cross_gate
+                engine.exit_gate_fn = check_dual_ema_cross_exit
                 LIVE_ENGINES["sensex"] = engine
                 if sx_ratchet:
                     engine.r1_trigger = float(sx_ratchet.get("tier1_trigger_pts", 240.0))
@@ -7137,19 +7178,19 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "vix_trend_runner_trades.csv",
                     ROOT / "performance" / "sensex_backtest_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False, use_confluence=False
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True, use_confluence=False
                 ))
             elif strategy in ("vix_trap_all", "vix_divergence_all", "vix_trap_combined"):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "vix_divergence_backtest_trades.csv",
                     ROOT / "performance" / "sensex_vix_divergence_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
                 ))
             elif strategy in ("master_portfolio_all", "master_portfolio_combined"):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "master_portfolio_nifty_trades.csv",
                     ROOT / "performance" / "master_portfolio_sensex_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
                 ))
             elif strategy in ("master_portfolio", "master_portfolio_nifty", "portfolio", "unified_master"):
                 self._json(master_portfolio_backtest_report("nifty"))

@@ -6,6 +6,7 @@
   "max_concurrent_positions": 1,
   "cross_instrument_concurrency": "FIRST_TRIGGERED",
   "require_dual_activation": true,
+  "require_dual_ema20_cross": true,
   "dual_activation_window_mins": 60,
   "trailing_mode": "ema20_5m",
   "sensex_trailing_mode": "ema20_5m",

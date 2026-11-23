@@ -80,9 +80,7 @@ function forYear(data: Backtest, year: string, symbolFilter: "all" | "nifty" | "
 
   const nifty_trades = allTradesForYear.filter((t) => !(t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX")))
   const sensex_trades = allTradesForYear.filter((t) => t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX"))
-  // When year is "all", filter Nifty to match Sensex's multi-year trading span (2023 - Present) for fair comparison
-  const nifty_comparison_trades = year === "all" ? nifty_trades.filter((t) => t.date >= "2023-01-01") : nifty_trades
-  const nifty_summary = computeInstrumentStats(nifty_comparison_trades, 25)
+  const nifty_summary = computeInstrumentStats(nifty_trades, 25)
   const sensex_summary = computeInstrumentStats(sensex_trades, 10)
 
   const pnl_leader = nifty_summary.total_rupees >= sensex_summary.total_rupees ? "NIFTY" : "SENSEX"
@@ -844,7 +842,7 @@ export function BacktestPage() {
                     <div className="flex items-center gap-2">
                       <span className="w-2.5 h-2.5 rounded-full bg-sky-500 shrink-0" />
                       <span className="text-xs font-bold text-foreground tracking-wide uppercase">
-                        NIFTY 50 • Total P&L {year === "all" && <span className="text-[10px] text-muted-foreground font-normal">(2023–Present)</span>}
+                        NIFTY 50 • Total P&L {year === "all" && <span className="text-[10px] text-muted-foreground font-normal">(All-Time)</span>}
                       </span>
                       <span className="text-[10px] px-1.5 py-0.5 rounded-sm bg-sky-500/10 text-sky-400 font-mono font-medium">Lot 25</span>
                     </div>

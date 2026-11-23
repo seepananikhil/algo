@@ -224,9 +224,11 @@ class TrendRunnerPaperEngine:
         call_cutoff_time: str = "10:45",
         allow_call_reentry: bool = True,
         entry_gate_fn: Optional[Callable[[str, str, str], bool]] = None,
+        exit_gate_fn: Optional[Callable[[str, str, str, float, float], bool]] = None,
         **kwargs,
     ) -> None:
         self.entry_gate_fn = entry_gate_fn
+        self.exit_gate_fn = exit_gate_fn
         self.sl_points = sl_points
         self.reentry_sl_points = reentry_sl_points
         self.reentry_be_trigger = reentry_be_trigger
@@ -593,14 +595,21 @@ class TrendRunnerPaperEngine:
                         curr_sl = pos["current_sl"]
                         if is_5m_close:
                             c_5m = self.current_5m_bar["close"] if self.current_5m_bar else c
-                            if sig == "LONG" and c_5m < self.ema20_5m:
-                                exit_px = c_5m
-                                exit_reason = "EMA20_CROSS"
-                                closed = True
-                            elif sig == "SHORT" and c_5m > self.ema20_5m:
-                                exit_px = c_5m
-                                exit_reason = "EMA20_CROSS"
-                                closed = True
+                            crossed = (sig == "LONG" and c_5m < self.ema20_5m) or (sig == "SHORT" and c_5m > self.ema20_5m)
+                            if crossed:
+                                can_exit = True
+                                if self.exit_gate_fn is not None:
+                                    try:
+                                        can_exit = bool(self.exit_gate_fn(self.symbol, sig, t_str, float(c_5m), float(self.ema20_5m)))
+                                    except Exception as exc:
+                                        logger.warning(f"Error in exit_gate_fn: {exc}")
+                                        can_exit = True
+                                if can_exit:
+                                    exit_px = c_5m
+                                    exit_reason = "EMA20_CROSS"
+                                    closed = True
+                                else:
+                                    logger.info(f"[{self.symbol}] 5m EMA20 cross detected @ {c_5m:.2f} but partner index has NOT crossed yet. Holding trade under Dual-Cross Confluence.")
 
                 # Market Close / Time Exit at 15:15 IST
                 if not closed and t_str >= "15:15":
