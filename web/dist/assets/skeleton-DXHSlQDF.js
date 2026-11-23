@@ -1,1 +1,0 @@
-import{t as e}from"./vendor-react-1OsQFvuo.js";import{v as t}from"./api-Dj2IEC-o.js";var n=e();function r({className:e,...r}){return(0,n.jsx)(`div`,{"data-slot":`skeleton`,className:t(`animate-pulse rounded-md bg-muted`,e),...r})}export{r as t};

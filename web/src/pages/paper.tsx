@@ -310,13 +310,21 @@ export function PaperPage() {
   }, [capital.data, filteredTrades, apexFilter])
 
   // Calendar Daily Data
-  const calendarDaily: CalendarDay[] = useMemo(() => {
-    const map = new Map<string, { date: string; value: number; pnl: number; trades: number }>()
+  const calendarDaily = useMemo(() => {
+    const map = new Map<string, { date: string; value: number; pnl: number; trades: number; nifty_points: number; sensex_points: number }>()
     for (const t of filteredTrades) {
-      const cur = map.get(t.date) || { date: t.date, value: 0, pnl: 0, trades: 0 }
-      cur.value += t.net_rs ?? 0
-      cur.pnl += t.net_rs ?? 0
+      const cur = map.get(t.date) || { date: t.date, value: 0, pnl: 0, trades: 0, nifty_points: 0, sensex_points: 0 }
+      const rs = t.net_rs ?? t.pnl_rs ?? 0
+      cur.value += rs
+      cur.pnl += rs
       cur.trades += 1
+      const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX"))
+      const pts = t.nifty_points ?? t.pnl_points ?? 0
+      if (isSensex) {
+        cur.sensex_points = Math.round((cur.sensex_points + pts) * 10) / 10
+      } else {
+        cur.nifty_points = Math.round((cur.nifty_points + pts) * 10) / 10
+      }
       map.set(t.date, cur)
     }
     return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date))
@@ -488,12 +496,13 @@ export function PaperPage() {
       <TravelCalendarPopup
         open={calendarModalOpen}
         onClose={() => setCalendarModalOpen(false)}
-        daily={calendarDaily.map((d) => ({ ...d, value: d.pnl }))}
+        daily={calendarDaily}
         selectedDate={activeDate}
         onSelectDate={(newDate) => {
           handleDayClick(newDate)
           setCalendarModalOpen(false)
         }}
+        unit="rupees"
         format={fmtRs}
         triggerRef={calendarTriggerRef}
       />
@@ -610,6 +619,54 @@ export function PaperPage() {
               } catch {}
             }
 
+            // Entry & Exit Price resolution
+            const optBuy = Number(t.buy_price || 0)
+            const optSell = Number(t.sell_price || 0)
+            const spotIn = Number(t.entry_price || t.spot_at_entry || t.nifty_in || (t as any).entry_spot || 0)
+            const spotOut = Number(t.exit_price || t.nifty_out || (t as any).exit_spot || 0)
+            const hasOptionPremium = optBuy > 0 && optBuy < 10000
+
+            const entryPriceDisplay = hasOptionPremium
+              ? `₹${optBuy.toFixed(1)}`
+              : spotIn > 0
+              ? spotIn.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+              : "--"
+            const exitPriceDisplay = hasOptionPremium
+              ? optSell > 0
+                ? `₹${optSell.toFixed(1)}`
+                : "Open"
+              : spotOut > 0
+              ? spotOut.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+              : "Open"
+
+            // Option Contract Name
+            const optContract = (() => {
+              const opt = (t.option || "").trim()
+              const m = opt.match(/(\d{5})\s*(CE|PE)/i)
+              if (m) return `${m[1]} ${m[2].toUpperCase()}`
+              const optType = isCall ? "CE" : "PE"
+              if (spotEntry > 0) {
+                if (isSensex) {
+                  const strike = Math.round(spotEntry / 100) * 100
+                  return `${strike} ${optType}`
+                } else {
+                  const strike = Math.round((isCall ? spotEntry - 150 : spotEntry + 150) / 50) * 50
+                  return `${strike} ${optType}`
+                }
+              }
+              return opt || (isSensex ? "83400 PE" : "25800 PE")
+            })()
+
+            // Strategy Triggered (Trend Runner vs VIX Trap)
+            const stageRaw = String((t as any).stage || (t as any).setup || t.trigger_label || t.mode || "").toUpperCase()
+            const stratRaw = String(t.strategy || "").toUpperCase()
+            const isVixTrap = stageRaw.includes("TRAP") || stratRaw.includes("TRAP")
+            const isReentry = stageRaw.includes("REENTRY") || stratRaw.includes("REENTRY")
+            const triggeredStrategy = {
+              label: isVixTrap ? "VIX Trap" : isReentry ? "Re-Entry Runner" : "Trend Runner",
+              isTrap: isVixTrap,
+            }
+
             return (
               <div
                 key={`${t.date}-${t.entry}-${idx}`}
@@ -633,7 +690,7 @@ export function PaperPage() {
                     : "bg-card hover:bg-muted/30 border border-border/40"
                 )}
               >
-                {/* Top Section: Badges, Contract, Time + Prominent P&L with Sub-Points */}
+                {/* Top Section: Badges, Contract, Strategy Triggered + Prominent P&L */}
                 <div className="flex items-start justify-between gap-2">
                   <div className="space-y-1 min-w-0">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -655,8 +712,21 @@ export function PaperPage() {
                       >
                         {isSensex ? "SENSEX" : "NIFTY"}
                       </span>
-                      <span className="font-bold text-xs text-foreground shrink-0 font-sans">
-                        {t.option || (isSensex ? "SENSEX Option" : "NIFTY Option")}
+                      <span className="font-bold text-xs text-foreground shrink-0 font-mono tracking-tight">
+                        {optContract}
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
+                        1 Lot ({t.qty || (isSensex ? 10 : 25)}Q)
+                      </span>
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.2 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0 font-sans",
+                          triggeredStrategy.isTrap
+                            ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/25"
+                            : "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/25"
+                        )}
+                      >
+                        {triggeredStrategy.label}
                       </span>
                     </div>
                     <div className="text-[10px] text-muted-foreground font-mono">
@@ -688,27 +758,12 @@ export function PaperPage() {
 
                 {/* Bottom Row: Clean Price Flow & Exit Reason / R-Multiple */}
                 <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[11px] font-mono">
-                  {Number(t.buy_price || 0) > 0 ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Price</span>
-                      <span className="font-bold text-foreground">₹{Number(t.buy_price).toFixed(1)}</span>
-                      <span className="text-muted-foreground/60 text-[10px]">➔</span>
-                      <span className="font-bold text-foreground">
-                        {Number(t.sell_price || 0) > 0 ? `₹${Number(t.sell_price).toFixed(1)}` : "Open"}
-                      </span>
-                    </div>
-                  ) : Number(t.spot_at_entry || t.nifty_in || 0) > 0 ? (
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Spot</span>
-                      <span className="font-bold text-foreground">{Number(t.spot_at_entry || t.nifty_in).toFixed(1)}</span>
-                      <span className="text-muted-foreground/60 text-[10px]">➔</span>
-                      <span className="font-bold text-foreground">
-                        {Number(t.nifty_out || (t as any).exit_spot || 0) > 0 ? Number(t.nifty_out || (t as any).exit_spot).toFixed(1) : "--"}
-                      </span>
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-muted-foreground">Market Price</span>
-                  )}
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Price</span>
+                    <span className="font-bold text-foreground">{entryPriceDisplay}</span>
+                    <span className="text-muted-foreground/60 text-[10px]">➔</span>
+                    <span className="font-bold text-foreground">{exitPriceDisplay}</span>
+                  </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     <span className={cn("px-1.5 py-0.2 rounded text-[9.5px] font-medium font-sans uppercase tracking-wider", exitBadge.className)}>

@@ -679,19 +679,16 @@ class TrendRunnerPaperEngine:
                         print(f"  [Warning] Live option exit quote fetch failed: {exc}")
 
                 if opt_entry_px > 0 and opt_exit_px > 0:
-                    opt_pnl_pts = opt_exit_px - opt_entry_px
-                    opt_pnl_rs = opt_pnl_pts * total_lots * self.lot_size
+                    opt_pnl_pts = round(opt_exit_px - opt_entry_px, 2)
+                    opt_pnl_rs = round(opt_pnl_pts * total_lots * self.lot_size, 2)
                 else:
-                    opt_pnl_pts = round(pnl_pts * 0.75, 2)
-                    opt_pnl_rs = opt_pnl_pts * total_lots * self.lot_size
-                    if opt_entry_px > 0:
-                        opt_exit_px = max(0.05, round(opt_entry_px + opt_pnl_pts, 2))
-                    else:
-                        base_extrinsic = 450.0 if self.symbol == "SENSEX" else 145.0
-                        opt_entry_px = base_extrinsic
-                        opt_exit_px = max(0.05, round(opt_entry_px + opt_pnl_pts, 2))
+                    # Do NOT fabricate synthetic option prices if real option quotes were not captured
+                    opt_pnl_pts = None
+                    opt_pnl_rs = None
+                    opt_entry_px = None
+                    opt_exit_px = None
 
-                diff_rs = futures_pnl_rs - opt_pnl_rs
+                diff_rs = round(futures_pnl_rs - (opt_pnl_rs if opt_pnl_rs is not None else futures_pnl_rs), 2)
 
                 trade_result = {
                     "date": self.current_day_str,
@@ -700,10 +697,10 @@ class TrendRunnerPaperEngine:
                     "side": pos["side"],
                     "option": pos["option"],
                     "option_symbol": opt_symbol,
-                    "option_entry_price": round(opt_entry_px, 2),
-                    "option_exit_price": round(opt_exit_px, 2),
-                    "option_pnl_points": round(opt_pnl_pts, 2),
-                    "option_pnl_rupees": round(opt_pnl_rs, 2),
+                    "option_entry_price": opt_entry_px,
+                    "option_exit_price": opt_exit_px,
+                    "option_pnl_points": opt_pnl_pts,
+                    "option_pnl_rupees": opt_pnl_rs,
                     "entry_time": pos["entry_time"],
                     "entry_price": round(entry_px, 2),
                     "exit_time": t_str,
@@ -711,7 +708,7 @@ class TrendRunnerPaperEngine:
                     "initial_sl": round(pos["initial_sl"], 2),
                     "final_sl": round(curr_sl, 2),
                     "pnl_points": round(pnl_pts, 2),
-                    "pnl_rupees": round(opt_pnl_rs, 2),
+                    "pnl_rupees": opt_pnl_rs if opt_pnl_rs is not None else futures_pnl_rs,
                     "futures_pnl_rupees": round(futures_pnl_rs, 2),
                     "diff_rupees": round(diff_rs, 2),
                     "max_fav": round(pos["max_fav"], 2),
@@ -937,14 +934,14 @@ class TrendRunnerPaperEngine:
             else:
                 base_lots = self.lots
 
-            opt_symbol = ""
+            opt_symbol = opt_str
             opt_entry_px = 0.0
             # 1. Fetch live market option quote directly from broker feed
             try:
                 from live_option_pricing import get_live_option_ltp
                 q = get_live_option_ltp(self.symbol, strike, opt_type)
                 if q and q.get("ltp"):
-                    opt_symbol = q.get("symbol", "")
+                    opt_symbol = q.get("symbol") or opt_str
                     opt_entry_px = float(q.get("ask") or q.get("ltp") or 0.0)
             except Exception as exc:
                 print(f"  [Warning] Live option quote fetch failed: {exc}")

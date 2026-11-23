@@ -2188,6 +2188,11 @@ export function LivePage() {
                       const buyPx = Number(trade.buy_price || 0)
                       const sellPx = Number(trade.sell_price || 0)
                       const isCall = trade.side === "CALL" || trade.side === "BUY" || trade.side === "CE"
+                      const stageRaw = String((trade as any).stage || (trade as any).setup || trade.trigger_label || trade.mode || "").toUpperCase()
+                      const stratRaw = String(trade.strategy || "").toUpperCase()
+                      const isVixTrap = stageRaw.includes("TRAP") || stratRaw.includes("TRAP")
+                      const isReentry = stageRaw.includes("REENTRY") || stratRaw.includes("REENTRY")
+                      const setupLabel = isVixTrap ? "VIX Trap" : isReentry ? "Re-Entry Runner" : "Trend Runner"
 
                       return (
                         <div
@@ -2208,6 +2213,14 @@ export function LivePage() {
                                 </span>
                                 <span className="font-bold text-xs text-foreground font-sans">
                                   {trade.option || trade.symbol}
+                                </span>
+                                <span className={cn(
+                                  "px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider shrink-0",
+                                  isVixTrap
+                                    ? "bg-purple-500/15 text-purple-600 dark:text-purple-400 border border-purple-500/25"
+                                    : "bg-sky-500/15 text-sky-600 dark:text-sky-400 border border-sky-500/25"
+                                )}>
+                                  {setupLabel}
                                 </span>
                                 {trade.mode && trade.mode.toUpperCase().includes("LIVE") ? (
                                   <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded text-[9px] font-bold bg-emerald-500/15 text-emerald-500 border border-emerald-500/30 shrink-0">

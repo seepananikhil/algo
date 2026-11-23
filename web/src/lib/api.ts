@@ -216,6 +216,8 @@ export type OptionTrade = {
   net_rs?: number
   mode?: string
   spot_at_entry?: number
+  entry_price?: number
+  exit_price?: number
   level?: number | null
   strategy?: string
   symbol?: string
@@ -487,8 +489,8 @@ export type Backtest = {
     option_delta?: number
   }
   trades: BacktestTrade[]
-  monthly: { month: string; trades: number; points: number; win_rate_pct: number }[]
-  daily: { date: string; trades: number; net_rs: number; points: number }[]
+  monthly: { month: string; trades: number; points: number; nifty_points?: number; sensex_points?: number; win_rate_pct: number }[]
+  daily: { date: string; trades: number; net_rs: number; points: number; nifty_points?: number; sensex_points?: number }[]
   exit_reasons: { reason: string; count: number; points?: number }[]
   nifty_summary?: any
   sensex_summary?: any

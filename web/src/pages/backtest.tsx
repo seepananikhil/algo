@@ -116,23 +116,37 @@ function forYear(data: Backtest, year: string, symbolFilter: "all" | "nifty" | "
   })
 
   // Recompute daily aggregated for the filtered view
-  const dailyMap = new Map<string, { date: string; trades: number; net_rs: number; points: number }>()
+  const dailyMap = new Map<string, { date: string; trades: number; net_rs: number; points: number; nifty_points: number; sensex_points: number }>()
   trades.forEach((t) => {
-    const d = dailyMap.get(t.date) ?? { date: t.date, trades: 0, net_rs: 0, points: 0 }
+    const d = dailyMap.get(t.date) ?? { date: t.date, trades: 0, net_rs: 0, points: 0, nifty_points: 0, sensex_points: 0 }
     d.trades += 1
-    d.points = Math.round((d.points + t.pnl_points) * 100) / 100
+    const isSensex = t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX") || (t as any).option?.includes("SENSEX")
+    const p = t.pnl_points ?? 0
+    if (isSensex) {
+      d.sensex_points = Math.round((d.sensex_points + p) * 10) / 10
+    } else {
+      d.nifty_points = Math.round((d.nifty_points + p) * 10) / 10
+    }
+    d.points = Math.round((d.points + p) * 10) / 10
     d.net_rs += (t.pnl_rupees ?? 0)
     dailyMap.set(t.date, d)
   })
   const daily = [...dailyMap.values()].sort((a, b) => a.date.localeCompare(b.date))
 
   // Recompute monthly aggregated for the filtered view
-  const monthlyMap = new Map<string, { month: string; trades: number; points: number; win_rate_pct: number }>()
+  const monthlyMap = new Map<string, { month: string; trades: number; points: number; nifty_points: number; sensex_points: number; win_rate_pct: number }>()
   trades.forEach((t) => {
     const m = t.date.slice(0, 7)
-    const cur = monthlyMap.get(m) ?? { month: m, trades: 0, points: 0, win_rate_pct: 0 }
+    const cur = monthlyMap.get(m) ?? { month: m, trades: 0, points: 0, nifty_points: 0, sensex_points: 0, win_rate_pct: 0 }
     cur.trades += 1
-    cur.points = Math.round((cur.points + t.pnl_points) * 100) / 100
+    const isSensex = t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX") || (t as any).option?.includes("SENSEX")
+    const p = t.pnl_points ?? 0
+    if (isSensex) {
+      cur.sensex_points = Math.round((cur.sensex_points + p) * 10) / 10
+    } else {
+      cur.nifty_points = Math.round((cur.nifty_points + p) * 10) / 10
+    }
+    cur.points = Math.round((cur.points + p) * 10) / 10
     monthlyMap.set(m, cur)
   })
   const monthly = [...monthlyMap.values()].sort((a, b) => a.month.localeCompare(b.month))
@@ -261,6 +275,7 @@ export function BacktestPage() {
   })
   const [sessionSymbol, setSessionSymbol] = useState<"NIFTY" | "SENSEX" | null>(null)
   const [sessionInstrumentTab, setSessionInstrumentTab] = useState<"ALL" | "NIFTY" | "SENSEX">("ALL")
+  const [monthlyInstrument, setMonthlyInstrument] = useState<"ALL" | "NIFTY" | "SENSEX">("ALL")
   const [selectedTradeIndex, setSelectedTradeIndex] = useState<number>(0)
   const [calendarModalOpen, setCalendarModalOpen] = useState(false)
   const calendarTriggerRef = useRef<HTMLButtonElement>(null)
@@ -441,6 +456,20 @@ export function BacktestPage() {
     return filteredPickedTrades.reduce((acc, t) => acc + (t.pnl_points ?? 0), 0)
   }, [filteredPickedTrades])
 
+  const sessionNiftyPts = useMemo(() => {
+    return Math.round(filteredPickedTrades.filter(t => !(t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX"))).reduce((acc, t) => acc + (t.pnl_points ?? 0), 0) * 10) / 10
+  }, [filteredPickedTrades])
+
+  const sessionSensexPts = useMemo(() => {
+    return Math.round(filteredPickedTrades.filter(t => (t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX"))).reduce((acc, t) => acc + (t.pnl_points ?? 0), 0) * 10) / 10
+  }, [filteredPickedTrades])
+
+  const sessionHasBoth = useMemo(() => {
+    const hasN = filteredPickedTrades.some(t => !(t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX")))
+    const hasS = filteredPickedTrades.some(t => (t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX")))
+    return hasN && hasS
+  }, [filteredPickedTrades])
+
   const s: any = data?.summary ?? {}
   const curve = useMemo(() => {
     if (!data?.trades) return []
@@ -457,6 +486,14 @@ export function BacktestPage() {
 
   const reversedMonthly = useMemo(() => {
     return [...(data?.monthly ?? [])].reverse()
+  }, [data?.monthly])
+
+  const totalNiftyMonthlyPts = useMemo(() => {
+    return Math.round((data?.monthly ?? []).reduce((acc, m) => acc + (m.nifty_points || 0), 0) * 10) / 10
+  }, [data?.monthly])
+
+  const totalSensexMonthlyPts = useMemo(() => {
+    return Math.round((data?.monthly ?? []).reduce((acc, m) => acc + (m.sensex_points || 0), 0) * 10) / 10
   }, [data?.monthly])
 
   const renderTradesListCard = () => (
@@ -507,9 +544,20 @@ export function BacktestPage() {
 
         <div className="text-right shrink-0 flex items-center gap-1">
           <span className="text-[9px] text-muted-foreground font-mono">Net:</span>
-          <span className={cn("text-[11px] font-black font-mono tabular-nums px-1.5 py-0.2 rounded", sessionNetPts >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
-            {fmtPts(sessionNetPts)}
-          </span>
+          {sessionHasBoth ? (
+            <div className="flex items-center gap-1 font-mono text-[10px]">
+              <span className={cn("px-1 py-0.2 rounded font-bold", sessionNiftyPts >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
+                N:{sessionNiftyPts >= 0 ? "+" : ""}{sessionNiftyPts.toFixed(1)}pt
+              </span>
+              <span className={cn("px-1 py-0.2 rounded font-bold", sessionSensexPts >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
+                S:{sessionSensexPts >= 0 ? "+" : ""}{sessionSensexPts.toFixed(1)}pt
+              </span>
+            </div>
+          ) : (
+            <span className={cn("text-[11px] font-black font-mono tabular-nums px-1.5 py-0.2 rounded", sessionNetPts >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
+              {fmtPts(sessionNetPts)} pt
+            </span>
+          )}
         </div>
       </div>
 
@@ -679,13 +727,13 @@ export function BacktestPage() {
       <TravelCalendarPopup
         open={calendarModalOpen}
         onClose={() => setCalendarModalOpen(false)}
-        daily={(raw?.daily ?? []).map((d) => ({ ...d, value: d.points }))}
+        daily={data?.daily ?? []}
         selectedDate={picked}
         onSelectDate={(newDate) => {
           handleSelectDate(newDate)
           setCalendarModalOpen(false)
         }}
-        format={fmtPts}
+        unit="points"
         triggerRef={calendarTriggerRef}
       />
     </div>
@@ -989,24 +1037,99 @@ export function BacktestPage() {
                 </Card>
 
                 {/* Right: Clickable Horizontally-Scrollable Monthly Distribution Bar Chart */}
-                <Card className="w-full lg:w-[460px] xl:w-[520px] shrink-0 min-h-0 flex flex-col overflow-hidden border border-border/60 shadow-xs bg-card/90">
-                  <CardHeader className="p-2 sm:px-3 border-b border-border/40 flex flex-row items-center justify-between shrink-0 bg-muted/15">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <BarChart2 className="size-3.5 text-sky-400 shrink-0" />
-                      <h3 className="text-xs font-bold text-foreground truncate">Monthly P&amp;L Distribution</h3>
-                      {data?.monthly && data.monthly.length > 0 && (
-                        <span className="text-[10px] font-mono text-muted-foreground shrink-0">
-                          (<span className="text-emerald-500 font-bold">{data.monthly.filter((m: any) => m.points > 0).length}</span>/{data.monthly.length})
-                        </span>
-                      )}
+                <Card className="w-full lg:w-[480px] xl:w-[560px] shrink-0 min-h-0 flex flex-col overflow-hidden border border-border/60 shadow-xs bg-card/90">
+                  <CardHeader className="p-2 sm:px-3 border-b border-border/40 flex flex-col gap-1.5 shrink-0 bg-muted/15">
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <BarChart2 className="size-3.5 text-sky-400 shrink-0" />
+                        <h3 className="text-xs font-bold text-foreground truncate">Monthly P&amp;L Distribution</h3>
+                      </div>
+
+                      {/* Instrument Selector Tabs: All, Nifty, Sensex */}
+                      <div className="inline-flex rounded-lg border border-border/60 bg-muted/40 p-0.5 text-xs shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setMonthlyInstrument("ALL")}
+                          className={cn(
+                            "rounded px-2 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
+                            monthlyInstrument === "ALL"
+                              ? "bg-background text-foreground shadow-2xs font-black"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          All (Both)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMonthlyInstrument("NIFTY")}
+                          className={cn(
+                            "rounded px-2 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
+                            monthlyInstrument === "NIFTY"
+                              ? "bg-sky-500/20 text-sky-400 font-black border border-sky-500/30"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          Nifty
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMonthlyInstrument("SENSEX")}
+                          className={cn(
+                            "rounded px-2 py-0.5 text-[10px] font-bold transition-colors cursor-pointer",
+                            monthlyInstrument === "SENSEX"
+                              ? "bg-amber-500/20 text-amber-400 font-black border border-amber-500/30"
+                              : "text-muted-foreground hover:text-foreground"
+                          )}
+                        >
+                          Sensex
+                        </button>
+                      </div>
                     </div>
-                    <span className="text-[9.5px] font-mono text-primary flex items-center gap-1 cursor-default shrink-0">
-                      <span>💡</span>
-                      <span>Click bar to view</span>
-                    </span>
+
+                    {/* Total Points Badge according to selection */}
+                    <div className="flex items-center justify-between text-[10.5px] font-mono shrink-0">
+                      {monthlyInstrument === "NIFTY" && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-sky-500/10 text-sky-400 border border-sky-500/20 font-bold">
+                            <span>Nifty Total:</span>
+                            <span>{totalNiftyMonthlyPts >= 0 ? `+${fmtPts(totalNiftyMonthlyPts)}` : fmtPts(totalNiftyMonthlyPts)} pt</span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-normal">
+                            ({(data?.monthly ?? []).filter((m) => (m.nifty_points || 0) > 0).length}/{(data?.monthly ?? []).length} Months Win)
+                          </span>
+                        </div>
+                      )}
+                      {monthlyInstrument === "SENSEX" && (
+                        <div className="flex items-center gap-1.5">
+                          <span className="flex items-center gap-1 px-2 py-0.5 rounded bg-amber-500/10 text-amber-400 border border-amber-500/20 font-bold">
+                            <span>Sensex Total:</span>
+                            <span>{totalSensexMonthlyPts >= 0 ? `+${fmtPts(totalSensexMonthlyPts)}` : fmtPts(totalSensexMonthlyPts)} pt</span>
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-normal">
+                            ({(data?.monthly ?? []).filter((m) => (m.sensex_points || 0) > 0).length}/{(data?.monthly ?? []).length} Months Win)
+                          </span>
+                        </div>
+                      )}
+                      {monthlyInstrument === "ALL" && (
+                        <div className="flex items-center gap-2">
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-sky-500/10 text-sky-400 font-bold text-[10px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-sky-400" />
+                            N: {totalNiftyMonthlyPts >= 0 ? `+${fmtPts(totalNiftyMonthlyPts)}` : fmtPts(totalNiftyMonthlyPts)} pt
+                          </span>
+                          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-400 font-bold text-[10px]">
+                            <span className="w-1.5 h-1.5 rounded-full bg-amber-400" />
+                            S: {totalSensexMonthlyPts >= 0 ? `+${fmtPts(totalSensexMonthlyPts)}` : fmtPts(totalSensexMonthlyPts)} pt
+                          </span>
+                        </div>
+                      )}
+                      <span className="text-[9.5px] font-mono text-primary flex items-center gap-1 cursor-default shrink-0">
+                        <span>💡</span>
+                        <span>Click bar to view</span>
+                      </span>
+                    </div>
                   </CardHeader>
                   <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden p-1.5 sm:px-2 scrollbar-thin">
-                    <div style={{ minWidth: "100%", width: `${Math.max(100, (data?.monthly?.length || 0) * 44)}px`, height: "100%" }}>
+                    <div style={{ minWidth: "100%", width: `${Math.max(100, (data?.monthly?.length || 0) * (monthlyInstrument === "ALL" ? 64 : 46))}px`, height: "100%" }}>
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={reversedMonthly} margin={{ top: 6, right: 10, left: -20, bottom: 0 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" vertical={false} opacity={0.5} />
@@ -1014,25 +1137,92 @@ export function BacktestPage() {
                           <YAxis {...axis} tickFormatter={(v) => `${v}`} />
                           <Tooltip
                             {...tooltip}
-                            formatter={(v: any) => [`${fmtPts(Number(v))} (Click to view session)`, "Points"]}
-                          />
-                          <Bar
-                            dataKey="points"
-                            radius={[3, 3, 0, 0]}
-                            className="cursor-pointer"
-                            onClick={(entry: any) => {
-                              const m = entry?.month || entry?.payload?.month
-                              if (m) handleMonthClick(m)
+                            formatter={(v: any, name: any) => {
+                              const num = Number(v)
+                              const label = name === "sensex_points" || name === "Sensex" ? "Sensex" : name === "nifty_points" || name === "Nifty" ? "Nifty" : "Points"
+                              return [`${fmtPts(num)} pt (Click to view session)`, label]
                             }}
-                          >
-                            {reversedMonthly.map((m, i) => (
-                              <Cell
-                                key={i}
-                                fill={m.points >= 0 ? "#10b981" : "#ef4444"}
-                                className="cursor-pointer hover:opacity-75 transition-opacity"
-                              />
-                            ))}
-                          </Bar>
+                          />
+                          {monthlyInstrument === "NIFTY" && (
+                            <Bar
+                              dataKey="nifty_points"
+                              name="Nifty"
+                              radius={[3, 3, 0, 0]}
+                              className="cursor-pointer"
+                              onClick={(entry: any) => {
+                                const m = entry?.month || entry?.payload?.month
+                                if (m) handleMonthClick(m)
+                              }}
+                            >
+                              {reversedMonthly.map((m, i) => (
+                                <Cell
+                                  key={`n-${i}`}
+                                  fill={(m.nifty_points ?? 0) >= 0 ? "#10b981" : "#ef4444"}
+                                  className="cursor-pointer hover:opacity-75 transition-opacity"
+                                />
+                              ))}
+                            </Bar>
+                          )}
+                          {monthlyInstrument === "SENSEX" && (
+                            <Bar
+                              dataKey="sensex_points"
+                              name="Sensex"
+                              radius={[3, 3, 0, 0]}
+                              className="cursor-pointer"
+                              onClick={(entry: any) => {
+                                const m = entry?.month || entry?.payload?.month
+                                if (m) handleMonthClick(m)
+                              }}
+                            >
+                              {reversedMonthly.map((m, i) => (
+                                <Cell
+                                  key={`s-${i}`}
+                                  fill={(m.sensex_points ?? 0) >= 0 ? "#10b981" : "#ef4444"}
+                                  className="cursor-pointer hover:opacity-75 transition-opacity"
+                                />
+                              ))}
+                            </Bar>
+                          )}
+                          {monthlyInstrument === "ALL" && (
+                            <>
+                              <Bar
+                                dataKey="nifty_points"
+                                name="Nifty"
+                                radius={[3, 3, 0, 0]}
+                                className="cursor-pointer"
+                                onClick={(entry: any) => {
+                                  const m = entry?.month || entry?.payload?.month
+                                  if (m) handleMonthClick(m)
+                                }}
+                              >
+                                {reversedMonthly.map((m, i) => (
+                                  <Cell
+                                    key={`all-n-${i}`}
+                                    fill={(m.nifty_points ?? 0) >= 0 ? "#0284c7" : "#f43f5e"}
+                                    className="cursor-pointer hover:opacity-75 transition-opacity"
+                                  />
+                                ))}
+                              </Bar>
+                              <Bar
+                                dataKey="sensex_points"
+                                name="Sensex"
+                                radius={[3, 3, 0, 0]}
+                                className="cursor-pointer"
+                                onClick={(entry: any) => {
+                                  const m = entry?.month || entry?.payload?.month
+                                  if (m) handleMonthClick(m)
+                                }}
+                              >
+                                {reversedMonthly.map((m, i) => (
+                                  <Cell
+                                    key={`all-s-${i}`}
+                                    fill={(m.sensex_points ?? 0) >= 0 ? "#f59e0b" : "#e11d48"}
+                                    className="cursor-pointer hover:opacity-75 transition-opacity"
+                                  />
+                                ))}
+                              </Bar>
+                            </>
+                          )}
                         </BarChart>
                       </ResponsiveContainer>
                     </div>
