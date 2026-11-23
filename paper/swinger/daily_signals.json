@@ -1,31 +1,82 @@
 {
-  "last_scan_time": "2026-11-22T11:48:25.976853+05:30",
-  "count": 2,
+  "last_scan_time": "2026-11-23T15:31:00.642577+05:30",
+  "count": 3,
   "signals": [
     {
       "sr": 1,
-      "nsecode": "TATAELXSI",
-      "name": "Tata Elxsi Limited",
-      "bsecode": "500408",
-      "close": 3850,
-      "per_chg": 3.36,
-      "volume": 843476,
+      "nsecode": "TCS",
+      "name": "Tata Consultancy Services Limited",
+      "bsecode": "532540",
+      "close": 2453.1,
+      "per_chg": 3.24,
+      "volume": 7295868,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 2,
-      "nsecode": "SYNGENE",
-      "name": "Syngene International Limited",
-      "bsecode": "539268",
-      "close": 451.7,
-      "per_chg": 3.28,
-      "volume": 2557651,
+      "nsecode": "SIYSIL",
+      "name": "Siyaram Silk Mills Limited",
+      "bsecode": "503811",
+      "close": 523.75,
+      "per_chg": 2.79,
+      "volume": 69045,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 3,
+      "nsecode": "HITECH",
+      "name": "Hi-Tech Pipes Ltd",
+      "bsecode": "532601",
+      "close": 85.65,
+      "per_chg": 13.53,
+      "volume": 26500526,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     }
   ],
   "history": [
+    {
+      "date": "2026-11-23",
+      "scan_time": "2026-11-23T15:31:00.642577+05:30",
+      "count": 3,
+      "signals": [
+        {
+          "sr": 1,
+          "nsecode": "TCS",
+          "name": "Tata Consultancy Services Limited",
+          "bsecode": "532540",
+          "close": 2453.1,
+          "per_chg": 3.24,
+          "volume": 7295868,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 2,
+          "nsecode": "SIYSIL",
+          "name": "Siyaram Silk Mills Limited",
+          "bsecode": "503811",
+          "close": 523.75,
+          "per_chg": 2.79,
+          "volume": 69045,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 3,
+          "nsecode": "HITECH",
+          "name": "Hi-Tech Pipes Ltd",
+          "bsecode": "532601",
+          "close": 85.65,
+          "per_chg": 13.53,
+          "volume": 26500526,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        }
+      ]
+    },
     {
       "date": "2026-11-22",
       "scan_time": "2026-11-22T11:48:25.976853+05:30",
