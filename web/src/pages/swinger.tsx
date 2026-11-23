@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react"
+import { useState, useEffect, useMemo, useRef } from "react"
 import {
   TrendingUp,
   RefreshCw,
@@ -538,8 +538,80 @@ export function SwingerPage() {
     })
   }, [distinctStocks, distinctFilter, distinctSort, searchQuery])
 
-  // Auto-select first stock for the right-side embedded chart on tab change / load
+  const prevTabRef = useRef(activeTab)
+  const selectedSymbolRef = useRef<string | null>(null)
+
+  // Keep selectedSymbolRef in sync with user's chart selection
   useEffect(() => {
+    selectedSymbolRef.current = selectedTradeForChart?.symbol || null
+  }, [selectedTradeForChart])
+
+  // Auto-select stock for embedded chart: only on tab change or initial load if none selected
+  useEffect(() => {
+    const tabChanged = prevTabRef.current !== activeTab
+    prevTabRef.current = activeTab
+    const currentSymbol = selectedSymbolRef.current
+
+    // 1. If user already has a stock selected and tab did NOT change, preserve it!
+    if (!tabChanged && currentSymbol) {
+      if (activeTab === "all") {
+        const stillInList = filteredDistinctStocks.some((s) => s.symbol === currentSymbol)
+        if (stillInList) return
+      } else if (activeTab === "holdings") {
+        const stillInList = positions.some((p) => p.symbol === currentSymbol)
+        if (stillInList) return
+      } else if (activeTab === "radar") {
+        const stillInList = activeRadarList.some((r) => r.symbol === currentSymbol)
+        if (stillInList) return
+      }
+    }
+
+    // 2. If tab changed, check if the currently selected symbol exists in the new tab to keep context
+    if (tabChanged && currentSymbol) {
+      if (activeTab === "all") {
+        const found = filteredDistinctStocks.find((s) => s.symbol === currentSymbol)
+        if (found) {
+          const targetTrade = (found.activePosition as any) || found.trades[0]
+          if (targetTrade) {
+            setSelectedTradeForChart({
+              ...targetTrade,
+              symbol: found.symbol,
+              name: found.name,
+              stockTrades: [
+                ...(found.activePosition ? [found.activePosition as any] : []),
+                ...found.trades,
+              ],
+            })
+            return
+          }
+        }
+      } else if (activeTab === "holdings") {
+        const found = positions.find((p) => p.symbol === currentSymbol)
+        if (found) {
+          setSelectedTradeForChart(found as any)
+          return
+        }
+      } else if (activeTab === "radar") {
+        const found = activeRadarList.find((r) => r.symbol === currentSymbol)
+        if (found) {
+          setSelectedTradeForChart({
+            symbol: found.symbol,
+            name: found.name || found.symbol,
+            alert_date: found.alert_date,
+            alert_price: found.alert_price,
+            cmp: found.current_price,
+            status: "RADAR",
+            reason: found.notes,
+            pnl: 0,
+            pct_return: found.pullback_pct || 0,
+            holding_days: 0,
+          })
+          return
+        }
+      }
+    }
+
+    // 3. Fallback: Default to first stock in the current active tab
     if (activeTab === "radar" && activeRadarList.length > 0) {
       const first = activeRadarList[0]
       setSelectedTradeForChart({
