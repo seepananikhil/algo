@@ -3576,6 +3576,7 @@ def trend_runner_live_paper_trades(date: str | None = None) -> list:
                 "option_pnl_rs": opt_pnl,
                 "diff_rs": diff,
                 "nifty_points": pnl_pts,
+                "pnl_points": pnl_pts,
                 "exit_reason": row.get("exit_reason", ""),
                 "mode": "TREND CATCHER PAPER",
                 "spot_at_entry": entry_spot,
@@ -3693,6 +3694,7 @@ def sensex_runner_live_paper_trades(date: str | None = None) -> list:
                 "option_pnl_rs": opt_pnl,
                 "diff_rs": diff,
                 "nifty_points": pnl_pts,
+                "pnl_points": pnl_pts,
                 "exit_reason": row.get("exit_reason", ""),
                 "mode": "SENSEX RUNNER PAPER",
                 "spot_at_entry": entry_spot,
@@ -3802,6 +3804,7 @@ def sensex_key_levels_live_paper_trades(date: str | None = None) -> list:
                 "option_pnl_rs": opt_pnl,
                 "diff_rs": diff,
                 "nifty_points": pnl_pts,
+                "pnl_points": pnl_pts,
                 "exit_reason": row.get("exit_reason", ""),
                 "mode": "SENSEX KEY LEVELS PAPER",
                 "spot_at_entry": entry_spot,
@@ -3905,6 +3908,7 @@ def nifty_key_levels_live_paper_trades(date: str | None = None) -> list:
                 "option_pnl_rs": opt_pnl,
                 "diff_rs": diff,
                 "nifty_points": pnl_pts,
+                "pnl_points": pnl_pts,
                 "exit_reason": row.get("exit_reason", ""),
                 "mode": "NIFTY KEY LEVELS PAPER",
                 "spot_at_entry": entry_spot,
@@ -5488,13 +5492,14 @@ def combined_strategy_backtest_report(
     nifty_lot: int = 25,
     sensex_lot: int = 10,
     option_delta: float = 0.60,
-    use_weighted: bool = False
+    use_weighted: bool = False,
+    use_confluence: bool = False
 ) -> dict:
     """Historical combined portfolio performance merging Nifty and Sensex trade logs."""
     raw_nifty = read_csv_rows(nifty_csv) if nifty_csv.exists() else []
     raw_sensex = read_csv_rows(sensex_csv) if sensex_csv.exists() else []
 
-    if raw_nifty and raw_sensex:
+    if raw_nifty and raw_sensex and use_confluence:
         raw_nifty, raw_sensex = sync_trades_dual_confluence(raw_nifty, raw_sensex, window_mins=60)
 
     parsed_trades = []
@@ -7132,7 +7137,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "vix_trend_runner_trades.csv",
                     ROOT / "performance" / "sensex_backtest_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=True
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False, use_confluence=False
                 ))
             elif strategy in ("vix_trap_all", "vix_divergence_all", "vix_trap_combined"):
                 self._json(combined_strategy_backtest_report(

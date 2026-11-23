@@ -233,13 +233,22 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
                     best_p_idx = None
                     best_diff = 999999
                     for p_idx, pr in p_grp.iterrows():
-                        if p_idx in used_p or pr['side_norm'] != rside:
+                        if pr['side_norm'] != rside:
                             continue
                         p_dt = dt_cls.strptime(pr['t_str'], "%H:%M")
+                        p_exit_str = str(pr.get('exit_time') or pr.get('exit_time_str') or '15:15')[:5]
+                        try:
+                            p_exit_dt = dt_cls.strptime(p_exit_str, "%H:%M")
+                        except Exception:
+                            p_exit_dt = dt_cls.strptime('15:15', "%H:%M")
+
                         diff = abs((t_dt - p_dt).total_seconds()) / 60.0
-                        if diff <= window_mins and diff < best_diff:
+                        is_partner_active = (p_dt <= t_dt <= p_exit_dt)
+                        if (diff <= window_mins and (p_idx not in used_p) and diff < best_diff) or is_partner_active:
                             best_diff = diff
                             best_p_idx = p_idx
+                            if is_partner_active:
+                                break
 
                     if best_p_idx is not None:
                         used_p.add(best_p_idx)

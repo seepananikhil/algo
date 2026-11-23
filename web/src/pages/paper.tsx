@@ -69,8 +69,17 @@ export interface CalendarDay {
 function getExitBadge(reason?: string) {
   if (!reason) return { label: "Open", className: "bg-muted text-muted-foreground" }
   const r = reason.toUpperCase()
+  if (r.includes("EMA20") || r.includes("EMA")) {
+    return { label: "5m 20-EMA Trail", className: "bg-indigo-500/15 text-indigo-400 border border-indigo-500/20" }
+  }
+  if (r.includes("EOD") || r.includes("1515")) {
+    return { label: "EOD Runner (15:15)", className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" }
+  }
   if (r.includes("TARGET") || r === "TP") {
     return { label: "Target Achieved", className: "bg-emerald-500/15 text-emerald-400" }
+  }
+  if (r.includes("CATASTROPHIC") || r.includes("HARD")) {
+    return { label: "Hard SL Hit", className: "bg-rose-500/15 text-rose-400 border border-rose-500/20" }
   }
   if (r.includes("SL") || r.includes("STOP") || r.includes("LOSS")) {
     return { label: "Stop Loss Hit", className: "bg-rose-500/15 text-rose-400" }
@@ -81,7 +90,7 @@ function getExitBadge(reason?: string) {
   if (r.includes("TRAIL")) {
     return { label: "Trailing Stop", className: "bg-amber-500/15 text-amber-400" }
   }
-  if (r.includes("EOD") || r.includes("SQUARE")) {
+  if (r.includes("SQUARE")) {
     return { label: "Intraday Square-off", className: "bg-purple-500/15 text-purple-400" }
   }
   return { label: reason, className: "bg-muted/70 text-muted-foreground" }
@@ -559,12 +568,12 @@ export function PaperPage() {
         {sessionDayTrades.length > 0 ? (
           sessionDayTrades.map((t, idx) => {
             const isSelected = activeTrade === t
-            const optPts = t.sell_price > 0 ? t.sell_price - t.buy_price : (t.pnl_points ?? 0)
+            const spotPts = t.pnl_points ?? t.nifty_points ?? (t.sell_price > 0 ? t.sell_price - t.buy_price : 0)
             const rs = t.net_rs ?? t.pnl_rs ?? 0
             const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE"
             const isSensex = t.symbol === "SENSEX" || t.option?.includes("SENSEX")
-            const isWin = rs > 0 || optPts > 0
-            const isLoss = rs < 0 || optPts < 0
+            const isWin = rs > 0 || spotPts > 0
+            const isLoss = rs < 0 || spotPts < 0
             const exitBadge = getExitBadge(t.exit_reason || (t as any).reason)
             const stratName = t.strategy || t.mode || (isSensex ? "Sensex Runner" : "Trend Runner")
 
@@ -661,7 +670,7 @@ export function PaperPage() {
                         isWin ? "text-emerald-400" : isLoss ? "text-rose-400" : "text-muted-foreground"
                       )}
                     >
-                      {optPts >= 0 ? "+" : ""}{optPts.toFixed(1)} pts
+                      {spotPts >= 0 ? "+" : ""}{spotPts.toFixed(1)} pts
                     </span>
                     <span
                       className={cn(
@@ -735,9 +744,9 @@ export function PaperPage() {
             Gross {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.pnl_rs ?? 0), 0))} · Fees {fmtRs(activeDayTrades.reduce((acc, t) => acc + (t.charges_rs ?? 0), 0))}
           </span>
           <span>
-            Spot Move: <strong className={activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "text-emerald-400" : "text-red-400"}>
-              {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0) >= 0 ? "+" : ""}
-              {activeDayTrades.reduce((acc, t) => acc + (t.nifty_points ?? 0), 0).toFixed(1)} pts
+            Spot Move: <strong className={activeDayTrades.reduce((acc, t) => acc + (t.pnl_points ?? t.nifty_points ?? 0), 0) >= 0 ? "text-emerald-400" : "text-red-400"}>
+              {activeDayTrades.reduce((acc, t) => acc + (t.pnl_points ?? t.nifty_points ?? 0), 0) >= 0 ? "+" : ""}
+              {activeDayTrades.reduce((acc, t) => acc + (t.pnl_points ?? t.nifty_points ?? 0), 0).toFixed(1)} pts
             </strong>
           </span>
         </div>
