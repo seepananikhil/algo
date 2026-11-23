@@ -3,7 +3,7 @@ import { Lock, ShieldCheck, KeyRound, AlertCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { getJSON, postJSON } from "@/lib/api"
+import { postJSON } from "@/lib/api"
 import { toast } from "sonner"
 
 type AuthContextType = {
@@ -34,13 +34,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   async function checkStatus() {
     try {
-      const res = await getJSON<{ authenticated: boolean }>("/api/auth/status")
-      setAuthenticated(res.authenticated)
-      if (!res.authenticated) {
-        localStorage.removeItem("algo_auth")
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), 3500)
+      const token = typeof window !== "undefined" ? localStorage.getItem("algo_auth") : null
+      const headers: Record<string, string> = {}
+      if (token) headers["Authorization"] = `Bearer ${token}`
+      const res = await fetch("/api/auth/status", {
+        signal: controller.signal,
+        cache: "no-store",
+        headers,
+      })
+      clearTimeout(timer)
+      if (res.ok) {
+        const data = await res.json()
+        setAuthenticated(Boolean(data.authenticated))
+        if (!data.authenticated) {
+          localStorage.removeItem("algo_auth")
+        }
       }
     } catch {
-      // If endpoint fails, keep current state or allow retry
+      // If endpoint fails or times out, proceed without blocking
     } finally {
       setLoading(false)
     }

@@ -8,9 +8,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="theme-color" content="#09090b" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-    <meta name="apple-mobile-web-app-title" content="Scalper" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black" />
+    <meta name="apple-mobile-web-app-title" content="Scalp" />
     <title>AlgoNeo Scalper</title>
+    <script>
+      window.addEventListener('error', function(e) {
+        console.error('PWA Startup Error:', e);
+        var el = document.getElementById('pwa-err');
+        if (!el) {
+          el = document.createElement('div');
+          el.id = 'pwa-err';
+          el.style.cssText = 'position:fixed;bottom:12px;left:12px;right:12px;background:#dc2626;color:#fff;padding:10px 14px;border-radius:10px;font-size:11px;z-index:999999;font-family:monospace;word-break:break-all;box-shadow:0 10px 25px rgba(0,0,0,0.5);';
+          document.body.appendChild(el);
+        }
+        el.textContent = 'App Init Error: ' + (e.message || String(e));
+      });
+    </script>
   </head>
   <body style="margin:0;background:#09090b;color:#f4f4f5;">
     <div id="root">
