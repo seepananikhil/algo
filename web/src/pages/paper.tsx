@@ -626,6 +626,26 @@ export function PaperPage() {
             const spotOut = Number(t.exit_price || t.nifty_out || (t as any).exit_spot || 0)
             const hasOptionPremium = optBuy > 0 && optBuy < 10000
 
+            const tradeQty = Number(t.qty || (isSensex ? 20 : 65))
+            const investedCapital = Math.round(optBuy * tradeQty)
+            const pctGain = optBuy > 0 && optSell > 0
+              ? Math.round(((optSell - optBuy) / optBuy) * 1000) / 10
+              : null
+
+            const expiryStr = (t as any).expiry || (() => {
+              try {
+                const [y, m, d] = (t.date || "").split("-").map(Number)
+                const dt = new Date(y, m - 1, d)
+                const targetDay = isSensex ? 5 : 4
+                const curDay = dt.getDay()
+                const diff = (targetDay - curDay + 7) % 7
+                dt.setDate(dt.getDate() + diff)
+                return `${dt.getDate()} ${dt.toLocaleString("en-US", { month: "short" })}`
+              } catch {
+                return isSensex ? "27 Nov" : "26 Nov"
+              }
+            })()
+
             const entryPriceDisplay = hasOptionPremium
               ? `₹${optBuy.toFixed(1)}`
               : spotIn > 0
@@ -715,8 +735,11 @@ export function PaperPage() {
                       <span className="font-bold text-xs text-foreground shrink-0 font-mono tracking-tight">
                         {optContract}
                       </span>
-                      <span className="px-1.5 py-0.2 rounded text-[9px] font-mono font-bold bg-muted/80 text-muted-foreground border border-border/50 shrink-0">
-                        1 Lot ({t.qty || (isSensex ? 20 : 25)}Q)
+                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-mono font-bold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/25 shrink-0">
+                        Exp: {expiryStr}
+                      </span>
+                      <span className="px-1.5 py-0.2 rounded text-[9.5px] font-mono font-black bg-muted/80 text-foreground border border-border/60 shrink-0">
+                        1L
                       </span>
                       <span
                         className={cn(
@@ -747,22 +770,33 @@ export function PaperPage() {
                     </div>
                     <div
                       className={cn(
-                        "text-[11px] font-bold font-mono",
-                        isWin ? "text-emerald-600/80 dark:text-emerald-400/80" : isLoss ? "text-rose-600/80 dark:text-rose-400/80" : "text-muted-foreground"
+                        "text-[11px] font-bold font-mono flex items-center justify-end gap-1",
+                        isWin ? "text-emerald-600/85 dark:text-emerald-400/85" : isLoss ? "text-rose-600/85 dark:text-rose-400/85" : "text-muted-foreground"
                       )}
                     >
-                      {spotPts >= 0 ? `+${spotPts.toFixed(1)}` : spotPts.toFixed(1)} pts
+                      {pctGain != null && (
+                        <span className="font-black">
+                          {pctGain >= 0 ? `+${pctGain.toFixed(1)}%` : `${pctGain.toFixed(1)}%`}
+                        </span>
+                      )}
+                      {pctGain != null && <span className="opacity-40">·</span>}
+                      <span>{spotPts >= 0 ? `+${spotPts.toFixed(1)}` : spotPts.toFixed(1)} pts</span>
                     </div>
                   </div>
                 </div>
 
                 {/* Bottom Row: Clean Price Flow & Exit Reason / R-Multiple */}
                 <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[11px] font-mono">
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <span className="text-[10px] uppercase font-semibold text-muted-foreground tracking-wider">Option</span>
                     <span className="font-bold text-foreground">{entryPriceDisplay}</span>
                     <span className="text-muted-foreground/60 text-[10px]">➔</span>
                     <span className="font-bold text-foreground">{exitPriceDisplay}</span>
+                    {investedCapital > 0 && (
+                      <span className="text-[10.5px] text-muted-foreground ml-1 font-mono">
+                        · Invested: <span className="font-bold text-foreground">₹{investedCapital.toLocaleString("en-IN")}</span>
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
