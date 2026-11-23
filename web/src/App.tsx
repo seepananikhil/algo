@@ -37,6 +37,7 @@ const SettingsPage = lazyWithRetry(() => import("@/pages/settings").then(m => ({
 const ConfigPage = lazyWithRetry(() => import("@/pages/config").then(m => ({ default: m.ConfigPage })))
 const SwingerPage = lazyWithRetry(() => import("@/pages/swinger").then(m => ({ default: m.SwingerPage })))
 const HoldingsPage = lazyWithRetry(() => import("@/pages/holdings").then(m => ({ default: m.HoldingsPage })))
+const OnboardingPage = lazyWithRetry(() => import("@/pages/onboard").then(m => ({ default: m.OnboardingPage })))
 
 function PageFallback() {
   return (
@@ -134,6 +135,7 @@ export default function App() {
                       <Route path="backtest" element={<Suspense fallback={<PageFallback />}><BacktestPage /></Suspense>} />
                       <Route path="login" element={<Suspense fallback={<PageFallback />}><LoginPage /></Suspense>} />
                       <Route path="settings" element={<Suspense fallback={<PageFallback />}><SettingsPage /></Suspense>} />
+                      <Route path="onboard" element={<Suspense fallback={<PageFallback />}><OnboardingPage /></Suspense>} />
                       <Route path="config" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
                       <Route path="strategy" element={<Suspense fallback={<PageFallback />}><ConfigPage /></Suspense>} />
                       <Route path="broker" element={<Navigate to="/settings?tab=broker" replace />} />

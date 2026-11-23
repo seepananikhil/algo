@@ -7181,6 +7181,26 @@ class Handler(BaseHTTPRequestHandler):
 
         elif url.path == "/api/settings":
             self._json(public_settings())
+        elif url.path == "/api/accounts":
+            try:
+                import account_manager
+                self._json({"ok": True, "accounts": account_manager.list_accounts()})
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 500)
+        elif url.path.startswith("/api/accounts/"):
+            try:
+                parts = url.path.strip("/").split("/")
+                if len(parts) == 3 and parts[2].isdigit():
+                    import account_manager
+                    acc = account_manager.get_account(int(parts[2]))
+                    if acc:
+                        self._json({"ok": True, "account": acc})
+                    else:
+                        self._json({"ok": False, "error": "Account not found"}, 404)
+                else:
+                    self._json({"ok": False, "error": "Invalid account path"}, 400)
+            except Exception as e:
+                self._json({"ok": False, "error": str(e)}, 500)
         elif url.path == "/api/telegram/config":
             try:
                 import telegram_notifier
@@ -7553,6 +7573,11 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = read_config()
                 cfg["kotak_neo"] = k_cfg
                 write_config(cfg)
+                try:
+                    from account_manager import migrate_primary_account
+                    migrate_primary_account()
+                except Exception:
+                    pass
             except Exception as exc:
                 print(f"Warning: could not write config files: {exc}")
 
@@ -7602,6 +7627,40 @@ class Handler(BaseHTTPRequestHandler):
             from scripts.midnight_cleanup_job import run_midnight_cleanup
             res = run_midnight_cleanup()
             self._json(res)
+        elif url.path == "/api/accounts":
+            body = self._body()
+            import account_manager
+            res = account_manager.add_account(body)
+            self._json(res, 200 if res.get("ok") else 400)
+        elif url.path == "/api/accounts/auth-all":
+            import account_manager
+            accounts = account_manager.list_accounts(include_secrets=True)
+            results = []
+            for a in accounts:
+                if a.get("is_active"):
+                    r = account_manager.auth_account_and_notify(a["id"])
+                    results.append({"id": a["id"], "name": a["account_name"], "res": r})
+            self._json({"ok": True, "results": results})
+        elif url.path.startswith("/api/accounts/"):
+            parts = url.path.strip("/").split("/")
+            if len(parts) == 4 and parts[2].isdigit() and parts[3] == "auth":
+                acc_id = int(parts[2])
+                import account_manager
+                res = account_manager.auth_account_and_notify(acc_id)
+                self._json(res, 200 if res.get("ok") else 400)
+            elif len(parts) == 4 and parts[2].isdigit() and parts[3] == "delete":
+                acc_id = int(parts[2])
+                import account_manager
+                res = account_manager.delete_account(acc_id)
+                self._json(res, 200 if res.get("ok") else 400)
+            elif len(parts) == 3 and parts[2].isdigit():
+                acc_id = int(parts[2])
+                body = self._body()
+                import account_manager
+                res = account_manager.update_account(acc_id, body)
+                self._json(res, 200 if res.get("ok") else 400)
+            else:
+                self._json({"ok": False, "error": "Invalid endpoint"}, 400)
         else:
             self._json({"error": "not found"}, 404)
 

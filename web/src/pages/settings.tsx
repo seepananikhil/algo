@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react"
-import { useSearchParams } from "react-router-dom"
+import { useSearchParams, useNavigate } from "react-router-dom"
 import { ConfigPage } from "./config"
 import { toast } from "sonner"
 import {
@@ -20,6 +20,11 @@ import {
   Lock,
   Bell,
   Send,
+  Users,
+  Plus,
+  Trash2,
+  Wallet,
+  UserCheck,
 } from "lucide-react"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -365,6 +370,9 @@ export function SettingsPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Multi-Account & Client Manager (SQLite Engine + Automated TOTP 2FA) */}
+      <AccountsManagerSection />
 
       {/* Main 2-Column Responsive Grid on Desktop */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
@@ -733,6 +741,290 @@ export function SettingsPage() {
         </>
       )}
     </div>
+  )
+}
+
+interface ClientAccount {
+  id: number
+  account_name: string
+  is_primary: number
+  consumer_key: string
+  mobile_number: string
+  ucc: string
+  totp_set: boolean
+  mpin_set: boolean
+  telegram_chat_id: string
+  lot_multiplier: number
+  max_daily_loss: number
+  is_active: number
+  session_valid: number
+  session_auth_time: string | null
+  available_funds: number | null
+}
+
+function AccountsManagerSection() {
+  const navigate = useNavigate()
+  const { data: accountsData, reload } = usePoll<{ ok: boolean; accounts: ClientAccount[] }>("/api/accounts", 6000)
+  const [authenticatingId, setAuthenticatingId] = useState<number | null>(null)
+  const [authAllLoading, setAuthAllLoading] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+
+  const accounts = accountsData?.accounts || []
+
+  const handleAuth = async (acc: ClientAccount) => {
+    setAuthenticatingId(acc.id)
+    try {
+      const res = await postJSON<{
+        ok: boolean
+        error?: string
+        available_funds?: number
+        ucc?: string
+        account_name?: string
+      }>(`/api/accounts/${acc.id}/auth`, {})
+      if (res.ok) {
+        toast.success(`Authenticated ${acc.account_name}! Margin: ₹${(res.available_funds ?? 0).toLocaleString("en-IN", { minimumFractionDigits: 2 })}. Telegram alert sent.`)
+        reload()
+      } else {
+        toast.error(`Auth failed for ${acc.account_name}: ${res.error || "Unknown error"}`)
+      }
+    } catch (e: any) {
+      toast.error(`Error authenticating: ${e.message || e}`)
+    } finally {
+      setAuthenticatingId(null)
+    }
+  }
+
+  const handleAuthAll = async () => {
+    setAuthAllLoading(true)
+    try {
+      const res = await postJSON<{ ok: boolean; results?: any[] }>("/api/accounts/auth-all", {})
+      if (res.ok) {
+        const successes = res.results?.filter(r => r.ok).length || 0
+        const fails = (res.results?.length || 0) - successes
+        toast.success(`Morning Auth Done: ${successes} successful, ${fails} failed. Telegram alerts dispatched.`)
+        reload()
+      } else {
+        toast.error("Failed to run morning authentication.")
+      }
+    } catch (e: any) {
+      toast.error(`Error: ${e.message || e}`)
+    } finally {
+      setAuthAllLoading(false)
+    }
+  }
+
+  const handleDelete = async (id: number, name: string) => {
+    if (!confirm(`Are you sure you want to remove account "${name}"?`)) return
+    setDeletingId(id)
+    try {
+      const res = await postJSON<{ ok: boolean; error?: string }>(`/api/accounts/${id}/delete`, {})
+      if (res.ok) {
+        toast.success(`Account "${name}" removed.`)
+        reload()
+      } else {
+        toast.error(res.error || "Failed to remove account")
+      }
+    } catch (e: any) {
+      toast.error(`Error: ${e.message || e}`)
+    } finally {
+      setDeletingId(null)
+    }
+  }
+
+  const totalFunds = accounts.reduce((acc, a) => acc + (a.available_funds || 0), 0)
+
+  return (
+    <Card className="border-indigo-500/40 bg-gradient-to-br from-indigo-950/20 via-card to-background">
+      <CardHeader>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Users className="size-5 text-indigo-400" />
+              <CardTitle className="text-lg">Multi-Account &amp; Customer Portfolios</CardTitle>
+              <Badge variant="outline" className="text-[10px] border-indigo-500/40 text-indigo-300">
+                SQLite Engine
+              </Badge>
+            </div>
+            <CardDescription className="mt-1">
+              Connect customer accounts with Option B automated TOTP 2FA. Morning auth inspects live broker margin and sends 1-on-1 private Telegram DM alerts.
+            </CardDescription>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleAuthAll}
+              disabled={authAllLoading || accounts.length === 0}
+              className="border-indigo-500/50 hover:bg-indigo-950/40 text-indigo-200 text-xs gap-1.5 cursor-pointer"
+            >
+              <Zap className={cn("size-3.5 text-amber-400", authAllLoading && "animate-spin")} />
+              {authAllLoading ? "Authenticating All..." : "Auth All Accounts"}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => navigate("/onboard")}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white text-xs gap-1.5 cursor-pointer"
+            >
+              <Plus className="size-3.5" />
+              Onboard Client
+            </Button>
+          </div>
+        </div>
+
+        {/* Aggregate Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-4 pt-3 border-t border-border/40 text-xs">
+          <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
+            <span className="text-muted-foreground block text-[11px]">Total Accounts</span>
+            <span className="font-semibold text-foreground text-sm">{accounts.length} ({accounts.filter(a => a.is_active).length} Active)</span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
+            <span className="text-muted-foreground block text-[11px]">Primary Master</span>
+            <span className="font-semibold text-amber-400 text-sm truncate block">
+              {accounts.find(a => a.is_primary)?.account_name || "Nikhil (Primary)"}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
+            <span className="text-muted-foreground block text-[11px]">Total Live Margin</span>
+            <span className="font-semibold text-emerald-400 text-sm">
+              ₹{totalFunds > 0 ? totalFunds.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "0.00"}
+            </span>
+          </div>
+          <div className="p-2.5 rounded-lg bg-card/60 border border-border/50">
+            <span className="text-muted-foreground block text-[11px]">2FA TOTP Mode</span>
+            <span className="font-semibold text-sky-400 text-sm">Option B (Auto-Seed)</span>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-3">
+        {accounts.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground text-sm">
+            <p>No trading accounts configured in database yet.</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => navigate("/onboard")}
+              className="mt-3 gap-1.5"
+            >
+              <Plus className="size-3.5" /> Onboard First Client
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-3">
+            {accounts.map((acc) => (
+              <div
+                key={acc.id}
+                className={cn(
+                  "p-3.5 rounded-xl border transition-all flex flex-col md:flex-row md:items-center justify-between gap-3",
+                  acc.is_primary
+                    ? "bg-amber-500/5 border-amber-500/30"
+                    : "bg-card/40 border-border/60 hover:border-indigo-500/30"
+                )}
+              >
+                <div className="flex items-start gap-3 min-w-0">
+                  <div
+                    className={cn(
+                      "size-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
+                      acc.is_primary ? "bg-amber-500/20 text-amber-400" : "bg-indigo-500/20 text-indigo-400"
+                    )}
+                  >
+                    {acc.is_primary ? <ShieldCheck className="size-5" /> : <UserCheck className="size-5" />}
+                  </div>
+                  <div className="space-y-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-semibold text-sm text-foreground">{acc.account_name}</span>
+                      {acc.is_primary ? (
+                        <Badge variant="outline" className="border-amber-500/50 text-amber-400 bg-amber-500/10 text-[10px]">
+                          Primary Master
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="border-indigo-500/40 text-indigo-400 bg-indigo-500/10 text-[10px]">
+                          Client #{acc.id}
+                        </Badge>
+                      )}
+                      <Badge variant="outline" className="text-[10px] font-mono">
+                        UCC: {acc.ucc || "N/A"}
+                      </Badge>
+                      {acc.session_valid ? (
+                        <Badge className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/40 text-[10px]">
+                          ● Token Active
+                        </Badge>
+                      ) : (
+                        <Badge variant="outline" className="text-amber-400 border-amber-500/40 text-[10px]">
+                          ○ Auth Needed
+                        </Badge>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-3 text-xs text-muted-foreground flex-wrap">
+                      <span className="flex items-center gap-1 font-mono">
+                        <Wallet className="size-3 text-emerald-400" />
+                        Margin:{" "}
+                        <strong className="text-emerald-400">
+                          {acc.available_funds !== null && acc.available_funds !== undefined
+                            ? `₹${acc.available_funds.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                            : "Not checked"}
+                        </strong>
+                      </span>
+                      <span>•</span>
+                      <span>Multiplier: <strong className="text-foreground">{acc.lot_multiplier}x</strong></span>
+                      <span>•</span>
+                      <span>Max Loss: <strong className="text-foreground">₹{acc.max_daily_loss.toLocaleString("en-IN")}</strong></span>
+                      {acc.telegram_chat_id && (
+                        <>
+                          <span>•</span>
+                          <span className="text-sky-400 font-mono text-[11px] truncate max-w-[140px]">
+                            TG: {acc.telegram_chat_id}
+                          </span>
+                        </>
+                      )}
+                      {acc.session_auth_time && (
+                        <>
+                          <span>•</span>
+                          <span className="text-muted-foreground text-[10px]">
+                            Auth: {acc.session_auth_time.split("T")[1]?.split(".")[0] || acc.session_auth_time}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 shrink-0 self-end md:self-center">
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
+                    disabled={authenticatingId === acc.id}
+                    onClick={() => handleAuth(acc)}
+                    className="border-emerald-500/40 hover:bg-emerald-500/10 text-emerald-400 text-xs gap-1.5 h-8 cursor-pointer"
+                  >
+                    <RefreshCw className={cn("size-3", authenticatingId === acc.id && "animate-spin")} />
+                    {authenticatingId === acc.id ? "Authenticating..." : "Auth & Check Margin"}
+                  </Button>
+
+                  {!acc.is_primary && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      disabled={deletingId === acc.id}
+                      onClick={() => handleDelete(acc.id, acc.account_name)}
+                      className="text-red-400 hover:text-red-300 hover:bg-red-500/10 text-xs h-8 px-2 cursor-pointer"
+                      title="Remove Client"
+                    >
+                      <Trash2 className="size-3.5" />
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </CardContent>
+    </Card>
   )
 }
 

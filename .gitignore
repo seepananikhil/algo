@@ -57,3 +57,7 @@ performance/live_*.csv
 # Build caches
 .parcel-cache/
 .eslintcache
+
+# Multi-tenant SQLite database & client credentials
+data/*.db
+data/accounts.db
