@@ -696,19 +696,10 @@ export function PaperPage() {
                   setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
                 }}
                 className={cn(
-                  "group p-3 rounded-xl text-xs cursor-pointer transition-all duration-150 flex flex-col gap-2 border-l-4 shadow-xs",
-                  isWin ? "border-l-emerald-500" : isLoss ? "border-l-rose-500" : "border-l-muted-foreground",
+                  "group p-3 rounded-xl text-xs cursor-pointer transition-all duration-150 flex flex-col gap-2 border shadow-xs",
                   isSelected
-                    ? isWin
-                      ? "bg-emerald-500/[0.08] dark:bg-emerald-500/10 border-t border-r border-b border-emerald-500/50 ring-1 ring-emerald-500/30"
-                      : isLoss
-                      ? "bg-rose-500/[0.08] dark:bg-rose-500/10 border-t border-r border-b border-rose-500/50 ring-1 ring-rose-500/30"
-                      : "bg-muted/70 border border-primary/50"
-                    : isWin
-                    ? "bg-card hover:bg-emerald-500/[0.03] border-t border-r border-b border-border/80 hover:border-emerald-500/30"
-                    : isLoss
-                    ? "bg-card hover:bg-rose-500/[0.03] border-t border-r border-b border-border/80 hover:border-rose-500/30"
-                    : "bg-card hover:bg-muted/30 border-t border-r border-b border-border/80"
+                    ? "bg-zinc-900/95 dark:bg-[#0f1117] border-zinc-600 dark:border-zinc-700 ring-1 ring-zinc-500/30 shadow-sm"
+                    : "bg-card dark:bg-[#090b0e] hover:bg-zinc-900/50 dark:hover:bg-[#12151c] border-border/70 dark:border-zinc-800/80 hover:border-zinc-700/80"
                 )}
               >
                 {/* ROW 1: Direction Pill, Instrument, Contract, Qty, Expiry, Strategy + Hero PnL */}
