@@ -802,9 +802,6 @@ export function PaperPage() {
                     <span className={cn("px-1.5 py-0.2 rounded text-[9px] font-medium font-sans border", exitBadge.className)}>
                       {exitBadge.label}
                     </span>
-                    {isSelected && (
-                      <span className="size-1.5 rounded-full bg-primary animate-pulse ml-0.5" title="Viewing on chart" />
-                    )}
                   </div>
                 </div>
               </div>
