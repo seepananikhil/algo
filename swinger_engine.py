@@ -1904,22 +1904,13 @@ def update_positions_and_scan():
     if closed_this_cycle:
         trade_db["trades"].extend(closed_this_cycle)
         save_trades(trade_db)
-        try:
-            from telegram_notifier import notify_swinger_trade_exit
-            for ct in closed_this_cycle:
-                notify_swinger_trade_exit(
-                    symbol=ct.get("symbol", ""),
-                    name=ct.get("name", ct.get("symbol", "")),
-                    exit_price=float(ct.get("exit_price", 0.0)),
-                    avg_price=float(ct.get("avg_price", 0.0)),
-                    qty=int(ct.get("qty", 1)),
-                    pnl=float(ct.get("pnl", 0.0)),
-                    pnl_pct=float(ct.get("pnl_pct", 0.0)),
-                    days_held=int(ct.get("days_held", 0)),
-                    reason=str(ct.get("reason", "Exit")),
-                )
-        except Exception as tg_err:
-            print(f"[Swinger Paper] Telegram exit alert note: {tg_err}")
+        # Telegram notifications disabled for swinger positions (FnO only)
+        # try:
+        #     from telegram_notifier import notify_swinger_trade_exit
+        #     for ct in closed_this_cycle:
+        #         notify_swinger_trade_exit(...)
+        # except Exception:
+        #     pass
         
     print(f"[Swinger Paper] Cycle complete. Active positions: {len(updated_positions)}, Invested: Rs.{total_invested}, Unrealized: Rs.{total_unrealized}")
     return {

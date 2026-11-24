@@ -372,17 +372,8 @@ def notify_swinger_trade_entry(
     sl_pct: float,
     force: bool = False,
 ) -> None:
-    """Sends a clean alert when a Phoenix Swinger equity position is entered."""
-    text = (
-        f"🦅 <b>NEW SWING ENTRY · {symbol}</b>\n\n"
-        f"🏢 <b>Company:</b> {name}\n"
-        f"⚡ <b>Setup:</b> Leg {leg} Breakout\n"
-        f"📦 <b>Position:</b> {qty} shares @ ₹{entry_price:,.2f} (₹{invested:,.0f})\n\n"
-        f"🛑 <b>Initial SL:</b> ₹{sl_price:,.2f} ({sl_pct:.1f}%)\n"
-        f"🛡️ <b>BE Shield:</b> Active at +15% gain\n"
-        f"🏃 <b>Runner Trail:</b> 25% from highest close"
-    )
-    send_telegram_message(text, force=force)
+    """Disabled: Swinger cash equity positions disabled (system is FnO only)."""
+    return None
 
 
 def notify_swinger_trade_exit(
@@ -397,21 +388,8 @@ def notify_swinger_trade_exit(
     reason: str,
     force: bool = False,
 ) -> None:
-    """Sends a clean alert when a Phoenix Swinger equity position is closed."""
-    if pnl >= 0:
-        badge = f"🟢 <b>+₹{pnl:,.0f} (+{pnl_pct:.1f}%)</b>"
-    else:
-        badge = f"🔴 <b>-₹{abs(pnl):,.0f} ({pnl_pct:.1f}%)</b>"
-
-    text = (
-        f"🏁 <b>SWING EXIT · {symbol}</b>\n\n"
-        f"💰 <b>Realized PnL:</b> {badge}\n"
-        f"🏢 <b>Company:</b> {name}\n"
-        f"📦 <b>Size:</b> {qty} shares (Held {days_held} days)\n\n"
-        f"💵 <b>Prices:</b> Entry ₹{avg_price:,.2f} ➔ Exit ₹{exit_price:,.2f}\n"
-        f"📍 <b>Exit Trigger:</b> {reason}"
-    )
-    send_telegram_message(text, force=force)
+    """Disabled: Swinger cash equity positions disabled (system is FnO only)."""
+    return None
 
 
 def notify_eod_report(
@@ -450,7 +428,7 @@ def notify_eod_report(
     pnl_dot = "🟢" if total_realized >= 0 else "🔴"
 
     lines = [
-        f"📊 <b>EOD PERFORMANCE REPORT</b>",
+        f"📊 <b>EOD FnO PERFORMANCE REPORT</b>",
         f"📅 <b>Date:</b> {date_str}",
         f"",
         f"💰 <b>Final Realized PnL:</b> {pnl_dot} <b>{pnl_formatted}</b>",
@@ -461,7 +439,7 @@ def notify_eod_report(
             f"🎯 <b>Win Rate:</b> {win_rate:.1f}% ({win_count}W / {loss_count}L)",
             f"⚖️ <b>Profit Factor:</b> {pf:.2f} (Total {total_trades} trades)",
             f"",
-            f"<b>Trades Closed Today:</b>",
+            f"<b>FnO Trades Closed Today:</b>",
         ])
 
         for t in trades:
@@ -478,29 +456,14 @@ def notify_eod_report(
         lines.append(f"ℹ️ <i>No trades closed today.</i>")
 
     lines.append("")
-    if open_positions:
-        lines.append(f"📌 <b>Active Open Positions:</b> {len(open_positions)} active")
-        for op in open_positions[:5]:
-            op_sym = op.get("symbol", "")
-            unreal = float(op.get("unrealized_pnl", 0.0))
-            u_dot = "🟢" if unreal >= 0 else "🔴"
-            lines.append(f"  └ {u_dot} {op_sym}: {unreal:+,.0f}")
-        if len(open_positions) > 5:
-            lines.append(f"  └ <i>...and {len(open_positions) - 5} more</i>")
-    else:
-        lines.append(f"📌 <b>Active Open Positions:</b> None")
-
-    if portfolio_value:
-        lines.append(f"💼 <b>Portfolio NAV:</b> ₹{portfolio_value:,.0f}")
-
-    lines.append(f"⚡ <i>Algo Trading Engine</i>")
+    lines.append(f"⚡ <i>Nikhil Algo FnO Trading Engine</i>")
 
     text = "\n".join(lines)
     return send_telegram_message(text, force=force)
 
 
 def dispatch_daily_eod_report(target_date: Optional[str] = None, force: bool = False) -> bool:
-    """Collects today's closed trades across all strategies and dispatches the EOD report.
+    """Collects today's closed FnO trades (NIFTY & SENSEX options) and dispatches the EOD report.
     
     Only sends if at least one trade was taken today, unless force=True.
     """
@@ -544,48 +507,15 @@ def dispatch_daily_eod_report(target_date: Optional[str] = None, force: bool = F
         except Exception as e:
             logger.warning("Error reading Sensex paper trades: %s", e)
 
-    # 3. Check Phoenix Swinger Trades
-    sw_file = ROOT / "paper" / "swinger" / "trade_history.json"
-    if sw_file.exists():
-        try:
-            sw_data = json.loads(sw_file.read_text(encoding="utf-8"))
-            for st in sw_data.get("trades", []):
-                if st.get("exit_date") == today_s:
-                    trades_today.append({
-                        "symbol": st.get("symbol", ""),
-                        "contract": st.get("name", st.get("symbol", "")),
-                        "pnl": float(st.get("pnl", 0.0)),
-                        "reason": st.get("reason", "Exit"),
-                    })
-        except Exception as e:
-            logger.warning("Error reading Swinger trade history: %s", e)
-
-    # Open positions and portfolio value
-    open_positions: list[dict[str, Any]] = []
-    portfolio_value: Optional[float] = None
-    sw_port_file = ROOT / "paper" / "swinger" / "portfolio.json"
-    if sw_port_file.exists():
-        try:
-            p_data = json.loads(sw_port_file.read_text(encoding="utf-8"))
-            open_positions = p_data.get("positions", [])
-            base_cap = float(p_data.get("base_capital", 500000.0))
-            unreal = float(p_data.get("total_unrealized_pnl", 0.0))
-            # compute current portfolio NAV
-            invested = float(p_data.get("total_invested", 0.0))
-            cash = base_cap - invested
-            portfolio_value = round(base_cap + unreal, 2)
-        except Exception as e:
-            logger.warning("Error reading Swinger portfolio: %s", e)
-
     if not trades_today and not force:
-        logger.info("No trades closed today on %s; skipping EOD report.", today_s)
+        logger.info("No FnO trades closed today on %s; skipping EOD report.", today_s)
         return False
 
     return notify_eod_report(
         date_str=today_s,
         trades=trades_today,
-        open_positions=open_positions,
-        portfolio_value=portfolio_value,
+        open_positions=None,
+        portfolio_value=None,
         force=force,
     )
 

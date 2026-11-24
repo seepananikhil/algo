@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useLocation } from "react-router-dom"
 import { useTheme } from "next-themes"
-import { Activity, Briefcase, LineChart, Lock, Moon, Power, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, TrendingUp, Sliders, Zap } from "lucide-react"
+import { Activity, LineChart, Lock, Moon, Power, Settings as SettingsIcon, ShieldAlert, Sun, Wallet, Sliders } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -10,10 +10,7 @@ import { useAuth } from "@/lib/auth"
 
 const nav = [
   { to: "/", label: "Live Algo", icon: Activity },
-  { to: "/holdings", label: "Holdings", icon: Briefcase },
-  { to: "/swinger", label: "Swinger Portfolio", icon: TrendingUp },
-  { to: "/scalp", label: "Scalp", icon: Zap },
-  { to: "/paper", label: "Paper", icon: Wallet },
+  { to: "/paper", label: "Paper Trading", icon: Wallet },
   { to: "/backtest", label: "Backtest", icon: LineChart },
   { to: "/config", label: "Strategy Config", icon: Sliders },
   { to: "/settings", label: "Settings", icon: SettingsIcon },
@@ -235,9 +232,9 @@ export function Layout() {
           <nav className="flex md:hidden h-12 shrink-0 items-center justify-around border-t bg-background/95 backdrop-blur z-20 px-1">
             {[
               { to: "/", label: "Live", icon: Activity },
-              { to: "/holdings", label: "Holdings", icon: Briefcase },
-              { to: "/scalp", label: "Scalp*", icon: Zap },
               { to: "/paper", label: "Paper", icon: Wallet },
+              { to: "/backtest", label: "Backtest", icon: LineChart },
+              { to: "/config", label: "Config", icon: Sliders },
               { to: "/settings", label: "Settings", icon: SettingsIcon },
             ].map(({ to, label, icon: Icon }) => (
               <NavLink

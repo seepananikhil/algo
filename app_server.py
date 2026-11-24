@@ -188,45 +188,8 @@ def trigger_backtest_sync(reason: str = "manual") -> dict:
 _last_swinger_run = {"last_run_date": None, "last_scan_ts": 0, "status": "idle"}
 
 def swinger_daily_cycle_loop() -> None:
-    """Automated real-time Swinger scan and paper portfolio update during market hours (every 15 min 09:30-15:30 IST) + final daily close at 15:25 IST on weekdays."""
-    while True:
-        try:
-            now = datetime.now(IST)
-            today_str = now.strftime("%Y-%m-%d")
-            is_weekday = now.weekday() < 5
-            is_market_hours = is_weekday and ((now.hour == 9 and now.minute >= 30) or (10 <= now.hour < 15) or (now.hour == 15 and now.minute <= 30))
-
-            # 1. Periodic Real-Time Scanner (every 15 minutes during market hours)
-            if is_market_hours:
-                now_ts = time.time()
-                if now_ts - _last_swinger_run.get("last_scan_ts", 0) >= 900:  # 15 minutes
-                    print(f"[{datetime.now(IST)}] [Swinger Live Scanner] Running real-time Chartink scan & paper update...")
-                    from swinger_engine import update_positions_and_scan
-                    update_positions_and_scan()
-                    try:
-                        import telegram_notifier
-                        telegram_notifier.dispatch_daily_eod_report()
-                    except Exception as tg_err:
-                        print(f"[Swinger Scheduler] EOD Telegram dispatch note: {tg_err}")
-                    _last_swinger_run["last_scan_ts"] = now_ts
-                    _last_swinger_run["status"] = f"Real-time scan completed at {now.strftime('%H:%M:%S')}"
-
-            # 2. Final Daily Cycle at 15:25 IST on weekdays
-            if is_weekday and (now.hour == 15 and now.minute >= 25):
-                if _last_swinger_run.get("last_run_date") != today_str:
-                    print(f"[{datetime.now(IST)}] [Swinger Scheduler] Triggering automated daily closing cycle for {today_str}...")
-                    from swinger_engine import update_positions_and_scan
-                    update_positions_and_scan()
-                    try:
-                        import telegram_notifier
-                        telegram_notifier.dispatch_daily_eod_report()
-                    except Exception as tg_err:
-                        print(f"[Swinger Scheduler] EOD Telegram dispatch note: {tg_err}")
-                    _last_swinger_run["last_run_date"] = today_str
-                    _last_swinger_run["status"] = f"Completed for {today_str}"
-        except Exception as exc:
-            print(f"[Swinger Scheduler Error]: {exc}")
-        time.sleep(30)
+    """Disabled: Swinger cash equity positions disabled; engine is FnO only."""
+    return
 
 def daily_backtest_sync_loop() -> None:
     """Trigger daily backtest sync after market close (15:55 and 16:35 IST on weekdays)."""
@@ -4201,7 +4164,7 @@ def master_portfolio_backtest_report(symbol: str = "nifty") -> dict:
         csv_path = ROOT / "performance" / "master_portfolio_nifty_trades.csv"
     return vix_trend_runner_backtest_report(
         csv_path,
-        lot_size=10 if symbol.lower() == "sensex" else 25,
+        lot_size=20 if symbol.lower() == "sensex" else 65,
         option_delta=0.60,
         use_weighted=False
     )
@@ -5559,11 +5522,11 @@ def sync_trades_dual_confluence(raw_n: list, raw_s: list, window_mins: int = 60)
 def combined_strategy_backtest_report(
     nifty_csv: Path,
     sensex_csv: Path,
-    nifty_lot: int = 25,
-    sensex_lot: int = 10,
+    nifty_lot: int = 65,
+    sensex_lot: int = 20,
     option_delta: float = 0.60,
     use_weighted: bool = False,
-    use_confluence: bool = False
+    use_confluence: bool = True
 ) -> dict:
     """Historical combined portfolio performance merging Nifty and Sensex trade logs."""
     raw_nifty = read_csv_rows(nifty_csv) if nifty_csv.exists() else []
@@ -7802,7 +7765,8 @@ if __name__ == "__main__":
     threading.Thread(target=hero_zero_capture_loop, daemon=True, name="hero-zero-capture").start()
     threading.Thread(target=sensex_expiry_collector_loop, daemon=True, name="sensex-expiry-collector").start()
     threading.Thread(target=auto_start_loop, daemon=True).start()
-    threading.Thread(target=swinger_daily_cycle_loop, daemon=True, name="swinger-daily-cycle").start()
+    # Swinger cash equity loop disabled (system is FnO only)
+    # threading.Thread(target=swinger_daily_cycle_loop, daemon=True, name="swinger-daily-cycle").start()
     threading.Thread(target=daily_backtest_sync_loop, daemon=True, name="daily-backtest-sync").start()
     threading.Thread(target=daily_trade_git_sync_loop, daemon=True, name="daily-trade-git-sync").start()
     threading.Thread(target=scalper_forward_loop, daemon=True, name="micro-scalper-forward").start()
