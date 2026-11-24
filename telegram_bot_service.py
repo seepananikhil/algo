@@ -150,14 +150,17 @@ def _format_rupees(amt: Optional[float]) -> str:
     return f"₹{amt:,.2f}"
 
 
-def handle_start(chat_id: int | str, user: Dict[str, Any], is_group: bool = False):
+def handle_start(chat_id: int | str, user: Dict[str, Any], is_group: bool = False, chat_title: str = ""):
     first_name = user.get("first_name", "Trader")
     if is_group:
+        title = chat_title or "Trading Group"
         send_tg_message(
             chat_id,
-            f"👋 <b>Welcome to Nikhil's Algo Trading Room!</b>\n\n"
-            f"This bot provides automated trade signals and portfolio tracking.\n\n"
-            f"To connect your individual Kotak Neo account privately, open @NikhilAlgoAlertSBot directly and send <b>/onboard</b>."
+            f"👋 <b>Welcome to {title}!</b>\n\n"
+            f"This bot provides automated FnO signals and real-time execution updates.\n\n"
+            f"• Type <b>/samples</b> to preview sample trade alerts.\n"
+            f"• Type <b>/setalerts</b> to route all live signals to this group.\n"
+            f"• To connect your Kotak Neo account privately, open @NikhilAlgoAlertSBot directly and send <b>/onboard</b>."
         )
         return
 
@@ -333,6 +336,9 @@ def handle_help(chat_id: int | str, is_group: bool = False):
         text = (
             f"📖 <b>Nikhil Algo Trading Group Guide</b>\n\n"
             f"This channel receives automated live market signals and daily execution updates.\n\n"
+            f"<b>Group Commands:</b>\n"
+            f"• /samples - Preview sample FnO alerts (Entry, Ratchet, Exit, EOD Report)\n"
+            f"• /setalerts - Link this group to receive live FnO alerts\n\n"
             f"<b>🔒 Individual Client Commands (Direct Message @NikhilAlgoAlertSBot):</b>\n"
             f"• /onboard - Connect Kotak Neo 100% privately\n"
             f"• /funds - View private margin balance\n"
@@ -345,6 +351,7 @@ def handle_help(chat_id: int | str, is_group: bool = False):
             f"📖 <b>Kotak Neo Algo Trading Help</b>\n\n"
             f"<b>Commands:</b>\n"
             f"• /start - Welcome menu & status\n"
+            f"• /samples - Preview sample FnO trade alerts\n"
             f"• /onboard - Connect or re-configure Kotak Neo\n"
             f"• /funds - Check live trading margin\n"
             f"• /status - Check system and session token status\n"
@@ -355,6 +362,79 @@ def handle_help(chat_id: int | str, is_group: bool = False):
             f"Uses your 32-character TOTP secret key from the Kotak Neo app. Every trading morning at 08:45 AM, the engine automatically logs in, checks your margin, and alerts you.\n\n"
             f"<b>Need Support?</b> Contact your algorithm manager."
         )
+    send_tg_message(chat_id, text)
+
+
+def handle_samples(chat_id: int | str):
+    """Sends 4 formatted FnO alert samples (Entry, Ratchet, Exit, EOD Performance Report)."""
+    samples = [
+        (
+            "🚀 <b>TRADE ENTRY · NIFTY</b>\n\n"
+            "⚡ <b>Setup:</b> Trend Runner (15m ORB)\n"
+            "🎯 <b>Option:</b> <b>NIFTY 25800 PE</b>\n"
+            "📦 <b>Lots:</b> 1 Lot (25 qty)\n\n"
+            "📍 <b>Spot Entry:</b> 25,633.40\n"
+            "🛑 <b>Stop Loss:</b> 25,663.40 (30.0 pts)\n"
+            "🌊 <b>India VIX Δ:</b> +5.77% (Bearish Momentum Confirmed)\n\n"
+            "⏰ <b>Entry Time:</b> 09:32 IST\n"
+            "🛡️ <i>Ratchet trail & 5m 20-EMA active</i>"
+        ),
+        (
+            "📈 <b>PROFIT RATCHET · SENSEX</b>\n\n"
+            "⚡ <b>Tier 1 Triggered:</b> +240 pts MFE\n"
+            "🎯 <b>Option:</b> SENSEX 83400 PE\n"
+            "🔒 <b>New Stop Loss Locked:</b> <b>+80.0 pts</b> (Risk: Zero / In the green)\n"
+            "🏃 <b>Max Favorable Move:</b> +312.50 pts\n\n"
+            "⏰ <b>Time:</b> 10:14 IST\n"
+            "🛡️ <i>Profits secured. Letting runner ride to 15:15 EOD.</i>"
+        ),
+        (
+            "🏁 <b>TRADE EXIT · SENSEX</b>\n\n"
+            "💰 <b>Realized PnL:</b> 🟢 <b>+₹11,542.00 (+577.10 pts)</b>\n"
+            "🎯 <b>Option Contract:</b> SENSEX 83400 PE\n"
+            "📦 <b>Size:</b> 1 Lot (20 qty)\n\n"
+            "💵 <b>Option Price:</b> ₹666.70 ➔ <b>₹1,243.80</b>\n"
+            "📍 <b>Exit Reason:</b> <b>EOD 15:15 Runner Close</b>\n"
+            "📊 <b>Spot Capture:</b> +972.25 pts\n\n"
+            "⚡ <i>Strategy: Trend Runner (Dual Confluence)</i>"
+        ),
+        (
+            "📊 <b>EOD FnO PERFORMANCE REPORT</b>\n"
+            "📅 <b>Date:</b> 2026-11-24\n\n"
+            "💰 <b>Final Realized PnL:</b> 🟢 <b>+₹16,524.50</b>\n"
+            "🎯 <b>Win Rate:</b> 100.0% (2W / 0L)\n"
+            "⚖️ <b>Profit Factor:</b> 99.00 (Total 2 trades)\n\n"
+            "<b>FnO Trades Closed Today:</b>\n"
+            "• 🟢 <b>SENSEX 83400 PE:</b> +₹11,542 · <i>Eod 1515 Runner</i>\n"
+            "• 🟢 <b>NIFTY 25800 PE:</b> +₹4,982 · <i>Eod 1515 Runner</i>\n\n"
+            "⚡ <i>Nikhil Algo FnO Trading Engine</i>"
+        ),
+    ]
+    for s in samples:
+        send_tg_message(chat_id, s)
+        time.sleep(0.3)
+
+
+def handle_link_group(chat_id: int | str, chat_title: str):
+    """Links this group as the primary alerts channel in telegram_config.json."""
+    try:
+        cfg_path = ROOT / "telegram_config.json"
+        with open(cfg_path, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+        cfg["chat_id"] = str(chat_id)
+        cfg["group_name"] = chat_title or "Nikhil’s Trading Room Alerts"
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            json.dump(cfg, f, indent=2)
+        send_tg_message(
+            chat_id,
+            f"✅ <b>Group Connected for Live FnO Alerts!</b>\n\n"
+            f"• <b>Group:</b> {chat_title or 'Trading Alerts Room'}\n"
+            f"• <b>Chat ID:</b> <code>{chat_id}</code>\n"
+            f"• <b>Status:</b> Active\n\n"
+            f"All FnO Trade Entries, Ratchets, Exits, and EOD Reports will be delivered to this group."
+        )
+    except Exception as e:
+        logger.error("Failed to link group: %s", e)
     send_tg_message(chat_id, text)
 
 
@@ -620,6 +700,27 @@ def process_telegram_update(update: Dict[str, Any]):
                 _processed_updates.discard(old_id)
             del _processed_order[:500]
 
+    # Check if bot was added to a group or permissions updated
+    my_chat_member = update.get("my_chat_member")
+    if my_chat_member:
+        chat = my_chat_member.get("chat", {})
+        cid = chat.get("id")
+        title = chat.get("title", "New Group")
+        new_status = my_chat_member.get("new_chat_member", {}).get("status")
+        if cid and new_status in ("member", "administrator"):
+            logger.info("Bot added to group: %s (%s)", title, cid)
+            send_tg_message(
+                cid,
+                f"👋 <b>Welcome to {title}!</b>\n\n"
+                f"Nikhil Algo Alerts Bot is connected to this group.\n"
+                f"• Group Chat ID: <code>{cid}</code>\n\n"
+                f"• Type <b>/samples</b> to preview live FnO trade alert samples.\n"
+                f"• Type <b>/setalerts</b> to link this group as the main FnO alert channel.\n"
+                f"• Type <b>/help</b> for commands."
+            )
+            handle_samples(cid)
+            return
+
     msg = update.get("message")
     if not msg:
         return
@@ -651,7 +752,13 @@ def process_telegram_update(update: Dict[str, Any]):
     cmd = first_token.split("@")[0]
 
     if cmd == "/start":
-        handle_start(chat_id, user, is_group=is_group)
+        handle_start(chat_id, user, is_group=is_group, chat_title=chat.get("title", ""))
+        return
+    elif cmd in ("/samples", "/sample"):
+        handle_samples(chat_id)
+        return
+    elif cmd in ("/setalerts", "/linkgroup", "/connect"):
+        handle_link_group(chat_id, chat.get("title", "Nikhil’s Trading Room Alerts"))
         return
     elif cmd in ("/onboard", "/register"):
         handle_onboard_start(chat_id, user, is_group=is_group)
