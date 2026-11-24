@@ -565,7 +565,7 @@ export function BacktestPage() {
       </div>
 
       {/* Scrollable Trades List */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden divide-y divide-border/30 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 flex flex-col gap-2 scrollbar-thin">
         {filteredPickedTrades.length > 0 ? (
           filteredPickedTrades.map((t, idx) => {
             const realIdx = pickedTrades.indexOf(t)
@@ -605,10 +605,10 @@ export function BacktestPage() {
                   setSessionSymbol(isSensex ? "SENSEX" : "NIFTY")
                 }}
                 className={cn(
-                  "group px-3.5 py-2.5 text-xs cursor-pointer transition-colors flex flex-col gap-1.5",
+                  "group p-3 rounded-xl text-xs cursor-pointer transition-all flex flex-col gap-2 border bg-card text-card-foreground shadow-2xs",
                   isSelected
-                    ? "bg-muted/70 dark:bg-muted/40"
-                    : "hover:bg-muted/30 dark:hover:bg-muted/20"
+                    ? "border-primary/50 bg-accent/40 ring-1 ring-primary/25 shadow-xs"
+                    : "border-border/60 hover:border-border hover:bg-muted/40 hover:shadow-xs"
                 )}
               >
                 {/* ROW 1: Direction Pill, Instrument, Strategy + Hero Net Points */}
