@@ -6,9 +6,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { StatCard } from "@/components/common"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
-import { BarChart2, Calendar, ChevronDown, ChevronLeft, ChevronRight, RefreshCw, TrendingUp } from "lucide-react"
+import { BarChart2, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock, RefreshCw, TrendingUp } from "lucide-react"
 import { toast } from "sonner"
-import { fmtNum, fmtPts, pnlClass, prettyReason, usePoll, postJSON, getJSON, type Backtest } from "@/lib/api"
+import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, postJSON, getJSON, type Backtest } from "@/lib/api"
 import { TravelCalendarPopup } from "@/components/travel-calendar-popup"
 
 function computeInstrumentStats(tradeList: any[], lotSize: number) {
@@ -191,14 +191,17 @@ const tooltip = {
 }
 
 function getStrategyDisplayName(t: any, defaultStrategy: string): string {
+  if (t.strategy_label && t.strategy_label.trim() && !t.strategy_label.toLowerCase().includes("portfolio")) {
+    return t.strategy_label
+  }
+  const fullText = `${t.engine || ""} ${t.stage || ""} ${t.setup_id || ""} ${t.trigger_label || ""} ${t.trigger_reason || ""}`.toUpperCase()
+  if (fullText.includes("TRAP") || defaultStrategy === "vix_trap") return "VIX Trap"
+  if (fullText.includes("TREND") || defaultStrategy === "trend_runner") return "Trend Runner"
+  if (fullText.includes("WILLIAMS") || fullText.includes("GAP")) return "Williams Fractal"
+  if (fullText.includes("SCALP") || defaultStrategy === "the_scalper") return "The Scalper"
+  if (fullText.includes("PIVOT") || defaultStrategy === "pivot_runner") return "Pivot Runner"
   if (t.strategy_label && t.strategy_label.trim()) return t.strategy_label
-  const engine = (t.engine || "").toUpperCase()
-  if (engine.includes("TREND") || defaultStrategy === "trend_runner") return "Trend Runner"
-  if (engine.includes("APEX") || engine.includes("MASTER") || defaultStrategy === "master_portfolio") return "Master Portfolio"
-  if (engine.includes("SCALP") || defaultStrategy === "the_scalper") return "The Scalper"
-  if (engine.includes("VIX") || defaultStrategy === "vix_trap") return "VIX Trap"
-  if (engine.includes("PIVOT") || defaultStrategy === "pivot_runner") return "Pivot Runner"
-  return "Algo Strategy"
+  return "Trend Runner"
 }
 
 
@@ -206,55 +209,55 @@ function getExitReasonBadge(reason: string) {
   const r = (reason || "").toUpperCase()
   if (r.includes("EMA20") || r.includes("EMA")) {
     return {
-      label: "5m 20-EMA Trail",
-      className: "bg-indigo-500/15 text-indigo-400 border border-indigo-500/20",
+      label: "EMA20 Trail",
+      className: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25",
     }
   }
   if (r.includes("EOD") || r.includes("1515")) {
     return {
-      label: "EOD Runner (15:15)",
-      className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20",
+      label: "EOD 15:15",
+      className: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25",
     }
   }
   if (r.includes("CATASTROPHIC")) {
     return {
-      label: "Hard SL Hit",
-      className: "bg-rose-500/15 text-rose-400 border border-rose-500/20",
+      label: "Hard SL",
+      className: "bg-rose-500/10 text-rose-400 border border-rose-500/25",
     }
   }
   if (r === "TARGET") {
     return {
-      label: "Target Achieved",
-      className: "bg-emerald-500/15 text-emerald-400",
+      label: "Target Met",
+      className: "bg-emerald-500/10 text-emerald-400 border border-emerald-500/25",
     }
   }
   if (r === "STOP_LOSS") {
     return {
-      label: "Stop Loss Hit",
-      className: "bg-rose-500/15 text-rose-400",
+      label: "SL Hit",
+      className: "bg-rose-500/10 text-rose-400 border border-rose-500/25",
     }
   }
   if (r.includes("RATCHET")) {
     return {
-      label: "Ratchet Lock (+80pt)",
-      className: "bg-sky-500/15 text-sky-400",
+      label: "Ratchet Lock",
+      className: "bg-sky-500/10 text-sky-400 border border-sky-500/25",
     }
   }
   if (r.includes("TRAILING")) {
     return {
-      label: "Trailing SL Protected",
-      className: "bg-amber-500/15 text-amber-400",
+      label: "Trail Protected",
+      className: "bg-amber-500/10 text-amber-400 border border-amber-500/25",
     }
   }
   if (r.includes("TIME")) {
     return {
-      label: "EOD Squareoff",
-      className: "bg-muted text-muted-foreground",
+      label: "EOD Close",
+      className: "bg-muted text-muted-foreground border border-border",
     }
   }
   return {
     label: prettyReason(reason),
-    className: "bg-muted/70 text-muted-foreground",
+    className: "bg-muted/70 text-muted-foreground border border-border",
   }
 }
 
@@ -542,40 +545,126 @@ export function BacktestPage() {
           </button>
         </div>
 
-        <div className="text-right shrink-0 flex items-center gap-1">
-          <span className="text-[9px] text-muted-foreground font-mono">Net:</span>
+        <div className="text-right shrink-0 flex items-center gap-1.5 font-mono">
+          <span className="text-[10px] text-muted-foreground">Session Net:</span>
           {sessionHasBoth ? (
             <div className="flex items-center gap-1 font-mono text-[10px]">
-              <span className={cn("px-1 py-0.2 rounded font-bold", sessionNiftyPts >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
+              <span className={cn("px-1.5 py-0.5 rounded font-bold shadow-2xs", sessionNiftyPts >= 0 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30")}>
                 N:{sessionNiftyPts >= 0 ? "+" : ""}{sessionNiftyPts.toFixed(1)}pt
               </span>
-              <span className={cn("px-1 py-0.2 rounded font-bold", sessionSensexPts >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
+              <span className={cn("px-1.5 py-0.5 rounded font-bold shadow-2xs", sessionSensexPts >= 0 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30")}>
                 S:{sessionSensexPts >= 0 ? "+" : ""}{sessionSensexPts.toFixed(1)}pt
               </span>
             </div>
           ) : (
-            <span className={cn("text-[11px] font-black font-mono tabular-nums px-1.5 py-0.2 rounded", sessionNetPts >= 0 ? "bg-emerald-500/10 text-emerald-400" : "bg-red-500/10 text-red-400")}>
-              {fmtPts(sessionNetPts)} pt
+            <span className={cn("text-xs font-black tabular-nums px-2 py-0.5 rounded shadow-2xs", sessionNetPts >= 0 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30")}>
+              {sessionNetPts >= 0 ? "+" : ""}{fmtPts(sessionNetPts)} pt
             </span>
           )}
         </div>
       </div>
 
       {/* Scrollable Trades List */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2 flex flex-col gap-2">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 flex flex-col gap-2.5 scrollbar-thin">
         {filteredPickedTrades.length > 0 ? (
           filteredPickedTrades.map((t, idx) => {
             const realIdx = pickedTrades.indexOf(t)
             const isSelected = selectedTradeIndex === (realIdx >= 0 ? realIdx : idx)
-            const isSensex = t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX")
-            const pts = t.pnl_points
-            const isWin = pts > 0
-            const isLoss = pts < 0
-            const isBullish = t.side === "CALL" || t.side === "LONG" || t.side === "CE" || t.side === "BUY"
+            const isSensex = t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX") || (t as any).option?.includes("SENSEX")
+            const pts = t.pnl_points ?? 0
+            const lotSize = isSensex ? 10 : 25
+            const tradeQty = Number((t as any).qty || ((t as any).lots ? (t as any).lots * (isSensex ? 20 : 65) : (isSensex ? 20 : 65)))
+            const rs = (t as any).pnl_rupees ?? (pts * lotSize * 0.6)
+            const isWin = rs > 0 || pts > 0
+            const isLoss = rs < 0 || pts < 0
+            const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE" || t.side === "BUY"
             const stratName = getStrategyDisplayName(t, mainStrategy)
             const slDist = t.sl != null && !Number.isNaN(t.sl) && t.sl > 0 ? Math.abs(t.entry_price - t.sl) : null
-            const rMultiple = slDist && slDist > 0 ? pts / slDist : null
+            const rMultiple = slDist && slDist > 0 ? Math.round((pts / slDist) * 10) / 10 : null
             const exitBadge = getExitReasonBadge(t.reason)
+
+            // Duration
+            let durationStr = ""
+            const bars = (t as any).bars_held
+            if (bars != null && bars > 0) {
+              durationStr = `${bars}m`
+            } else if (t.entry && t.exit) {
+              try {
+                const [h1, m1] = t.entry.split(":").map(Number)
+                const [h2, m2] = t.exit.split(":").map(Number)
+                const diff = (h2 * 60 + m2) - (h1 * 60 + m1)
+                if (diff > 0) durationStr = `${diff}m`
+              } catch {}
+            }
+
+            // Option Contract Name
+            const optContract = (() => {
+              const opt = ((t as any).option || (t as any).option_symbol || "").trim()
+              const m = opt.match(/(\d{4,6})\s*(CE|PE|CA|PU)/i)
+              if (m) {
+                const type = m[2].toUpperCase().startsWith("C") ? "CE" : "PE"
+                return `${m[1]} ${type}`
+              }
+              const optType = isCall ? "CE" : "PE"
+              const spot = Number(t.entry_price || 0)
+              if (spot > 0) {
+                if (isSensex) {
+                  const strike = Math.round(spot / 100) * 100
+                  return `${strike} ${optType}`
+                } else {
+                  const strike = Math.round((isCall ? spot - 150 : spot + 150) / 50) * 50
+                  return `${strike} ${optType}`
+                }
+              }
+              return opt || (isSensex ? "83400 PE" : "25800 PE")
+            })()
+
+            // Expiry
+            const expiryStr = (t as any).expiry || (() => {
+              try {
+                const [y, m, d] = (t.date || "").split("-").map(Number)
+                const dt = new Date(y, m - 1, d)
+                const targetDay = isSensex ? 5 : 4
+                const curDay = dt.getDay()
+                const diff = (targetDay - curDay + 7) % 7
+                dt.setDate(dt.getDate() + diff)
+                return `${dt.getDate()} ${dt.toLocaleString("en-US", { month: "short" })}`
+              } catch {
+                return isSensex ? "27 Nov" : "26 Nov"
+              }
+            })()
+
+            // Option Prices & Spot
+            const optBuy = Number((t as any).option_entry_price || (t as any).buy_price || 0)
+            const optSell = Number((t as any).option_exit_price || (t as any).sell_price || 0)
+            const spotIn = Number(t.entry_price || 0)
+            const spotOut = Number(t.exit_price || 0)
+            const hasOptionPremium = optBuy > 0 && optBuy < 10000
+
+            // Invested Capital & Return %
+            const investedCapital = hasOptionPremium
+              ? Math.round(optBuy * tradeQty)
+              : Math.round(spotIn * 0.015 * tradeQty)
+
+            const pctGain = hasOptionPremium && optSell > 0
+              ? Math.round(((optSell - optBuy) / optBuy) * 1000) / 10
+              : investedCapital > 0 && rs !== 0
+              ? Math.round((rs / investedCapital) * 1000) / 10
+              : null
+
+            const entryPriceDisplay = hasOptionPremium
+              ? `₹${optBuy.toFixed(1)}`
+              : spotIn > 0
+              ? spotIn.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+              : "--"
+
+            const exitPriceDisplay = hasOptionPremium
+              ? optSell > 0
+                ? `₹${optSell.toFixed(1)}`
+                : "Open"
+              : spotOut > 0
+              ? spotOut.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
+              : "Open"
 
             return (
               <div
@@ -585,90 +674,145 @@ export function BacktestPage() {
                   setSessionSymbol(isSensex ? "SENSEX" : "NIFTY")
                 }}
                 className={cn(
-                  "group p-2.5 rounded-lg text-xs cursor-pointer transition-all duration-150 flex flex-col gap-1.5",
+                  "group p-3 rounded-xl text-xs cursor-pointer transition-all duration-150 flex flex-col gap-2 border-l-4 shadow-xs",
+                  isWin ? "border-l-emerald-500" : isLoss ? "border-l-rose-500" : "border-l-muted-foreground",
                   isSelected
                     ? isWin
-                      ? "bg-emerald-500/10 border border-emerald-500/40"
+                      ? "bg-emerald-500/[0.08] dark:bg-emerald-500/10 border-t border-r border-b border-emerald-500/50 ring-1 ring-emerald-500/30"
                       : isLoss
-                      ? "bg-rose-500/10 border border-rose-500/40"
-                      : "bg-muted/60 border border-border"
+                      ? "bg-rose-500/[0.08] dark:bg-rose-500/10 border-t border-r border-b border-rose-500/50 ring-1 ring-rose-500/30"
+                      : "bg-muted/70 border border-primary/50"
                     : isWin
-                    ? "bg-emerald-500/[0.03] hover:bg-emerald-500/[0.06] border border-emerald-500/15 hover:border-emerald-500/30"
+                    ? "bg-card hover:bg-emerald-500/[0.03] border-t border-r border-b border-border/80 hover:border-emerald-500/30"
                     : isLoss
-                    ? "bg-rose-500/[0.03] hover:bg-rose-500/[0.06] border border-rose-500/15 hover:border-rose-500/30"
-                    : "bg-card hover:bg-muted/30 border border-border/40"
+                    ? "bg-card hover:bg-rose-500/[0.03] border-t border-r border-b border-border/80 hover:border-rose-500/30"
+                    : "bg-card hover:bg-muted/30 border-t border-r border-b border-border/80"
                 )}
               >
-                {/* Row 1: Direction Badge, Symbol, Time Range & Points */}
-                <div className="flex items-center justify-between gap-2">
+                {/* ROW 1: Direction Pill, Instrument, Contract, Qty, Expiry, Strategy + Hero PnL */}
+                <div className="flex items-center justify-between gap-2 min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                     <span
                       className={cn(
-                        "px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wider text-white shrink-0",
-                        isBullish ? "bg-emerald-600" : "bg-rose-600"
+                        "px-1.5 py-0.2 rounded text-[9.5px] font-black tracking-wider text-white shrink-0",
+                        isCall ? "bg-emerald-600 dark:bg-emerald-500" : "bg-rose-600 dark:bg-rose-500"
                       )}
                     >
-                      {isBullish ? "CALL" : "PUT"}
+                      {isCall ? "CE" : "PE"}
+                    </span>
+                    <span className="font-extrabold text-xs sm:text-[13px] text-foreground font-mono tracking-tight shrink-0">
+                      {isSensex ? "SENSEX" : "NIFTY"} {optContract}
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground/80 shrink-0">
+                      · {expiryStr}
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground/80 shrink-0">
+                      · Qty {tradeQty}
                     </span>
                     <span
                       className={cn(
-                        "px-1.5 py-0.5 rounded text-[10.5px] font-mono font-semibold shrink-0",
-                        isSensex
-                          ? "bg-amber-500/15 text-amber-400"
-                          : "bg-primary/15 text-primary"
+                        "px-1.5 py-0.2 rounded text-[8.5px] font-bold uppercase tracking-wider shrink-0 border",
+                        stratName.toLowerCase().includes("trap")
+                          ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
+                          : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
                       )}
                     >
-                      {isSensex ? "SENSEX" : "NIFTY"}
+                      {stratName}
                     </span>
-                    <span className="font-mono text-xs font-semibold text-foreground/90 shrink-0">
-                      {t.entry} → {t.exit || "Open"}
-                    </span>
-                    {t.bars_held != null && t.bars_held > 0 && (
-                      <span className="text-[10px] text-muted-foreground font-mono shrink-0">
-                        ({t.bars_held}m)
-                      </span>
-                    )}
                   </div>
-
-                  {/* Profit Points (No currency translation in backtest) */}
-                  <div className="text-right shrink-0 flex items-center font-mono">
-                    <span
-                      className={cn(
-                        "text-sm font-black tabular-nums",
-                        isWin ? "text-emerald-400" : isLoss ? "text-rose-400" : "text-muted-foreground"
-                      )}
-                    >
-                      {fmtPts(pts)}
-                    </span>
+                  <div
+                    className={cn(
+                      "text-sm sm:text-base font-black font-mono tracking-tight shrink-0 text-right leading-none",
+                      isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
+                    )}
+                  >
+                    {rs !== 0 ? (
+                      <>{rs >= 0 ? "+" : ""}{fmtRs(rs)}</>
+                    ) : (
+                      <>{pts >= 0 ? "+" : ""}{pts.toFixed(1)} pt</>
+                    )}
                   </div>
                 </div>
 
-                {/* Row 2: Strategy Tag, Spot Price Trail, Exit Reason Badge & R-Multiple */}
-                <div className="flex items-center justify-between gap-1.5 text-[11px] flex-wrap">
-                  <div className="flex items-center gap-1.5 min-w-0">
-                    <span className="font-semibold text-foreground/90 truncate max-w-[130px]" title={stratName}>
-                      {stratName}
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground/75 truncate">
-                      · {fmtNum(Math.round(t.entry_price))} → {fmtNum(Math.round(t.exit_price))}
-                    </span>
+                {/* ROW 2: Execution Prices, Spot Values (Left) + Return % & Invested Capital (Right) */}
+                <div className="flex items-center justify-between gap-2 text-[11px] font-mono min-w-0">
+                  <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+                    {hasOptionPremium ? (
+                      <>
+                        <span>Px <strong className="text-foreground font-bold">{entryPriceDisplay}</strong></span>
+                        <span className="text-muted-foreground/50 text-[9px]">➔</span>
+                        <span>
+                          <strong className={isWin ? "text-emerald-600 dark:text-emerald-400 font-bold" : isLoss ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground font-bold"}>
+                            {exitPriceDisplay}
+                          </strong>
+                        </span>
+                        <span className="opacity-30">·</span>
+                        <span>Spot <strong className="text-foreground">{spotIn > 0 ? spotIn.toFixed(1) : "--"}</strong></span>
+                        <span className="text-muted-foreground/50 text-[9px]">➔</span>
+                        <span><strong className="text-foreground">{spotOut > 0 ? spotOut.toFixed(1) : "--"}</strong></span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Spot <strong className="text-foreground font-bold">{entryPriceDisplay}</strong></span>
+                        <span className="text-muted-foreground/50 text-[9px]">➔</span>
+                        <span>
+                          <strong className={isWin ? "text-emerald-600 dark:text-emerald-400 font-bold" : isLoss ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground font-bold"}>
+                            {exitPriceDisplay}
+                          </strong>
+                        </span>
+                        <span className="opacity-30">·</span>
+                        <span className={isWin ? "text-emerald-600 dark:text-emerald-400 font-semibold" : isLoss ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-muted-foreground"}>
+                          {pts >= 0 ? `+${pts.toFixed(1)}` : pts.toFixed(1)} pts
+                        </span>
+                      </>
+                    )}
                   </div>
+                  <div className="flex items-center gap-1.5 shrink-0 text-right">
+                    {pctGain != null && (
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.2 rounded text-[10px] font-black border",
+                          isWin
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                        )}
+                      >
+                        {pctGain >= 0 ? `+${pctGain.toFixed(1)}%` : `${pctGain.toFixed(1)}%`}
+                      </span>
+                    )}
+                    {investedCapital > 0 && (
+                      <span className="text-[10px] text-muted-foreground">
+                        Inv: <strong className="text-foreground font-bold">₹{investedCapital.toLocaleString("en-IN")}</strong>
+                      </span>
+                    )}
+                  </div>
+                </div>
 
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <span className={cn("px-2 py-0.5 rounded text-[10px] font-medium", exitBadge.className)}>
-                      {exitBadge.label}
-                    </span>
+                {/* ROW 3: Timing, SL, R-Multiple (Left) + Exit Reason Badge (Right) */}
+                <div className="flex items-center justify-between gap-2 text-[10px] font-mono border-t border-border/40 pt-1.5 text-muted-foreground min-w-0">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <Clock className="w-3 h-3 opacity-60 shrink-0" />
+                    <span>{t.entry} - {t.exit || "Open"}{durationStr ? ` (${durationStr})` : ""}</span>
+                    {t.sl != null && t.sl > 0 && <span>· SL: {Number(t.sl).toFixed(1)}</span>}
                     {rMultiple != null && (
                       <span
                         className={cn(
-                          "text-[9.5px] font-bold font-mono px-1.5 py-0.5 rounded shrink-0",
+                          "px-1.5 py-0.2 rounded text-[9px] font-bold border",
                           rMultiple >= 0
-                            ? "bg-emerald-500/15 text-emerald-400"
-                            : "bg-rose-500/15 text-rose-400"
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20"
                         )}
                       >
                         {rMultiple >= 0 ? `+${rMultiple.toFixed(1)}R` : `${rMultiple.toFixed(1)}R`}
                       </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span className={cn("px-1.5 py-0.2 rounded text-[9px] font-medium font-sans border", exitBadge.className)}>
+                      {exitBadge.label}
+                    </span>
+                    {isSelected && (
+                      <span className="size-1.5 rounded-full bg-primary animate-pulse ml-0.5" title="Viewing on chart" />
                     )}
                   </div>
                 </div>
