@@ -1,4 +1,5 @@
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState, useEffect } from "react"
+import { useSearchParams } from "react-router-dom"
 import {
   ArrowDownRight,
   ArrowUpRight,
@@ -100,7 +101,9 @@ export type ApexFilter = "ALL" | "NIFTY" | "SENSEX" | "WIN" | "LOSS"
 export type PortfolioFilter = ApexFilter | "SWINGER"
 
 export function PaperPage() {
-  const [mainTab] = useState<MainStrategyTab>("APEX")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const initialTab = searchParams.get("tab")?.toUpperCase() === "SWINGER" ? "SWINGER" : "APEX"
+  const [mainTab, setMainTab] = useState<MainStrategyTab>(initialTab)
   const [apexFilter, setApexFilter] = useState<ApexFilter>("ALL")
   const [swingerActiveFilter, setSwingerActiveFilter] = useState<"ALL" | "GAINERS" | "LOSERS">("ALL")
   const [sessionInstrumentTab, setSessionInstrumentTab] = useState<"ALL" | "NIFTY" | "SENSEX">("ALL")
@@ -117,9 +120,9 @@ export function PaperPage() {
   })
   const terminalRef = useRef<HTMLDivElement>(null)
 
-  // Swinger Data Poll (Disabled: FnO only)
-  const swingerPaper = usePoll<PaperHoldingsResponse>("/api/holdings/paper", 0)
-  const swingerSignals = usePoll<any>("/api/swinger/daily-signals", 0)
+  // Swinger Data Poll
+  const swingerPaper = usePoll<PaperHoldingsResponse>("/api/holdings/paper", 15000)
+  const swingerSignals = usePoll<any>("/api/swinger/daily-signals", 15000)
   const [isScanningSwinger, setIsScanningSwinger] = useState(false)
 
   const handleScanNow = async () => {
@@ -164,6 +167,20 @@ export function PaperPage() {
   const [swingerSubTab, setSwingerSubTab] = useState<"ACTIVE" | "CLOSED" | "RADAR">("ACTIVE")
   const [swingerSearch, setSwingerSearch] = useState("")
   const [selectedSwingerTrade, setSelectedSwingerTrade] = useState<SwingerTradeTarget | null>(null)
+
+  useEffect(() => {
+    const tabParam = searchParams.get("tab")?.toUpperCase()
+    if (tabParam === "SWINGER") {
+      setMainTab("SWINGER")
+    } else if (tabParam === "APEX") {
+      setMainTab("APEX")
+    }
+  }, [searchParams])
+
+  const handleMainTabChange = (tab: MainStrategyTab) => {
+    setMainTab(tab)
+    setSearchParams({ tab: tab.toLowerCase() })
+  }
 
   const filteredSwingerPositions = useMemo(() => {
     let list = swingerPositions
@@ -835,16 +852,42 @@ export function PaperPage() {
     <div className="w-full h-full min-h-0 flex-1 flex flex-col gap-2 p-2 overflow-hidden select-none">
       {/* 1. TOP COMMAND BAR: STRATEGY ENGINE + FILTERS + VIEW SWITCHER */}
       <div className="relative z-40 flex items-center justify-between gap-2 p-1.5 px-2.5 rounded-xl border border-border/60 bg-card/90 shadow-2xs backdrop-blur-md shrink-0 flex-wrap sm:flex-nowrap">
-        {/* Left Side: FnO Options Badge */}
+        {/* Left Side: Strategy Engine Switcher (Apex Duo vs Swinger) */}
         <div className="flex items-center gap-2 min-w-0 flex-wrap">
           <div className="flex items-center p-0.5 bg-muted/40 rounded-lg border border-border/40 shrink-0">
-            <div className="rounded px-2.5 py-1 text-xs font-bold flex items-center gap-1.5 bg-background text-foreground shadow-2xs font-black border border-border/40">
+            <button
+              type="button"
+              onClick={() => handleMainTabChange("APEX")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                mainTab === "APEX"
+                  ? "bg-background text-foreground shadow-2xs font-black border border-border/40"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
               <Zap className="size-3 text-amber-400" />
-              <span>FnO Options Engine</span>
+              <span>Apex Duo</span>
               <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-500/15 text-amber-400 font-mono font-semibold">
-                {allTrades.length} trades
+                {allTrades.length}
               </span>
-            </div>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => handleMainTabChange("SWINGER")}
+              className={cn(
+                "rounded px-2.5 py-1 text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5",
+                mainTab === "SWINGER"
+                  ? "bg-background text-foreground shadow-2xs font-black border border-border/40"
+                  : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <TrendingUp className="size-3 text-purple-400" />
+              <span>Swinger</span>
+              <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-purple-500/15 text-purple-400 font-mono font-semibold">
+                {swingerPositions.length} pos
+              </span>
+            </button>
           </div>
 
           {mainTab === "APEX" && (
