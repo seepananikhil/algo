@@ -763,7 +763,7 @@ export function ManualTradingPage() {
           : "max(env(safe-area-inset-top, 0px), 36px)",
         paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)",
       }}
-      className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto"
+      className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto overflow-x-hidden box-border"
     >
       {/* ─── PULL TO REFRESH INDICATOR ─── */}
       {(pullDistance > 0 || isRefreshing) && (
@@ -1412,7 +1412,7 @@ export function ManualTradingPage() {
               <select
                 value={currentExpiry}
                 onChange={(e) => setExpiry(e.target.value)}
-                className="w-full h-11 px-3.5 pr-9 rounded-2xl bg-card border border-border/70 text-xs sm:text-sm font-mono font-bold text-foreground appearance-none focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer shadow-2xs transition-all"
+                className="w-full h-11 px-3.5 pr-9 rounded-2xl bg-card border border-border/70 text-xs sm:text-sm font-mono font-bold text-foreground [appearance:none] [-webkit-appearance:none] [&::-ms-expand]:hidden focus:outline-none focus:ring-2 focus:ring-primary/40 cursor-pointer shadow-2xs transition-all"
               >
                 {expiries.length === 0 ? (
                   <option value="">Loading expiries...</option>
