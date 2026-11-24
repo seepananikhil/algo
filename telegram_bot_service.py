@@ -49,9 +49,15 @@ ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "telegram_config.json"
 IST = pytz.timezone("Asia/Kolkata")
 
-# In-memory onboarding wizards: chat_id -> state
+# In-memory onboarding wizards: chat_id -> state (strictly for private chats)
 _wizards: Dict[int, Dict[str, Any]] = {}
 _wizards_lock = threading.Lock()
+
+# Anti-spam deduplication & rate limiting
+_last_sent_cache: Dict[str, tuple[float, str]] = {}
+_send_lock = threading.Lock()
+_processed_updates: set = set()
+_processed_order: list = []
 
 _bot_thread: Optional[threading.Thread] = None
 _bot_running = False
@@ -85,10 +91,27 @@ def send_tg_message(
     parse_mode: str = "HTML",
     reply_markup: Optional[Dict[str, Any]] = None,
 ) -> Optional[int]:
-    """Sends a message to a chat_id. Returns the message_id if successful."""
+    """Sends a message to a chat_id with anti-spam duplicate protection."""
     token = _get_bot_token()
-    if not token:
+    if not token or not text:
         return None
+
+    now = time.time()
+    chat_key = str(chat_id).strip()
+    clean_text = text.strip()
+
+    with _send_lock:
+        last_t, last_txt = _last_sent_cache.get(chat_key, (0.0, ""))
+        # Anti-spam protection: drop duplicate messages to the same chat within 10 seconds
+        if clean_text == last_txt and (now - last_t) < 10.0:
+            logger.warning("Dropped duplicate spam message to %s (sent %.1fs ago): %s", chat_id, now - last_t, clean_text[:50])
+            return None
+        _last_sent_cache[chat_key] = (now, clean_text)
+        if len(_last_sent_cache) > 200:
+            oldest = sorted(_last_sent_cache.keys(), key=lambda k: _last_sent_cache[k][0])[:50]
+            for k in oldest:
+                _last_sent_cache.pop(k, None)
+
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     payload: Dict[str, Any] = {
         "chat_id": chat_id,
@@ -127,8 +150,17 @@ def _format_rupees(amt: Optional[float]) -> str:
     return f"₹{amt:,.2f}"
 
 
-def handle_start(chat_id: int, user: Dict[str, Any]):
+def handle_start(chat_id: int | str, user: Dict[str, Any], is_group: bool = False):
     first_name = user.get("first_name", "Trader")
+    if is_group:
+        send_tg_message(
+            chat_id,
+            f"👋 <b>Welcome to Nikhil's Algo Trading Room!</b>\n\n"
+            f"This bot provides automated trade signals and portfolio tracking.\n\n"
+            f"To connect your individual Kotak Neo account privately, open @NikhilAlgoAlertSBot directly and send <b>/onboard</b>."
+        )
+        return
+
     acc = get_account_by_telegram_chat(str(chat_id))
 
     if acc:
@@ -163,7 +195,16 @@ def handle_start(chat_id: int, user: Dict[str, Any]):
     send_tg_message(chat_id, text)
 
 
-def handle_onboard_start(chat_id: int, user: Dict[str, Any]):
+def handle_onboard_start(chat_id: int | str, user: Dict[str, Any], is_group: bool = False):
+    if is_group:
+        send_tg_message(
+            chat_id,
+            "🔒 <b>Security & Privacy Protection:</b>\n\n"
+            "Kotak Neo account credentials (Client Code, Mobile, MPIN & TOTP Key) <b>cannot be shared in a group chat</b>.\n\n"
+            "👉 Please open a direct private chat with @NikhilAlgoAlertSBot and send <b>/onboard</b> to connect safely."
+        )
+        return
+
     with _wizards_lock:
         _wizards[chat_id] = {
             "step": "AWAIT_UCC",
@@ -180,7 +221,9 @@ def handle_onboard_start(chat_id: int, user: Dict[str, Any]):
     send_tg_message(chat_id, text)
 
 
-def handle_cancel(chat_id: int):
+def handle_cancel(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        return
     with _wizards_lock:
         if chat_id in _wizards:
             del _wizards[chat_id]
@@ -189,7 +232,14 @@ def handle_cancel(chat_id: int):
             send_tg_message(chat_id, "No active wizard. Send /help for commands.")
 
 
-def handle_funds(chat_id: int):
+def handle_funds(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        send_tg_message(
+            chat_id,
+            "🔒 <b>Privacy Protection:</b> Personal margins cannot be displayed in a public group. Please message @NikhilAlgoAlertSBot privately with <b>/funds</b>."
+        )
+        return
+
     acc = get_account_by_telegram_chat(str(chat_id))
     if not acc:
         send_tg_message(
@@ -215,7 +265,14 @@ def handle_funds(chat_id: int):
     send_tg_message(chat_id, text)
 
 
-def handle_status(chat_id: int):
+def handle_status(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        send_tg_message(
+            chat_id,
+            "🔒 <b>Privacy Protection:</b> Please check account status directly via private chat with @NikhilAlgoAlertSBot."
+        )
+        return
+
     acc = get_account_by_telegram_chat(str(chat_id))
     if not acc:
         send_tg_message(chat_id, "⚠️ No account found. Send /onboard to get started.")
@@ -236,7 +293,9 @@ def handle_status(chat_id: int):
     send_tg_message(chat_id, text)
 
 
-def handle_pause(chat_id: int):
+def handle_pause(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        return
     acc = get_account_by_telegram_chat(str(chat_id))
     if not acc:
         send_tg_message(chat_id, "⚠️ No account found. Send /onboard to connect.")
@@ -252,7 +311,9 @@ def handle_pause(chat_id: int):
     )
 
 
-def handle_resume(chat_id: int):
+def handle_resume(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        return
     acc = get_account_by_telegram_chat(str(chat_id))
     if not acc:
         send_tg_message(chat_id, "⚠️ No account found. Send /onboard to connect.")
@@ -267,25 +328,41 @@ def handle_resume(chat_id: int):
     )
 
 
-def handle_help(chat_id: int):
-    text = (
-        f"📖 <b>Kotak Neo Algo Trading Help</b>\n\n"
-        f"<b>Commands:</b>\n"
-        f"• /start - Welcome menu & status\n"
-        f"• /onboard - Connect or re-configure Kotak Neo\n"
-        f"• /funds - Check live trading margin\n"
-        f"• /status - Check system and session token status\n"
-        f"• /pause - Temporarily pause automated trade execution\n"
-        f"• /resume - Re-enable trade execution\n"
-        f"• /cancel - Cancel active configuration wizard\n\n"
-        f"<b>🔐 Automated 2FA (08:45 AM Daily):</b>\n"
-        f"Uses your 32-character TOTP secret key from the Kotak Neo app. Every trading morning at 08:45 AM, the engine automatically logs in, checks your margin, and alerts you.\n\n"
-        f"<b>Need Support?</b> Contact your algorithm manager."
-    )
+def handle_help(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        text = (
+            f"📖 <b>Nikhil Algo Trading Group Guide</b>\n\n"
+            f"This channel receives automated live market signals and daily execution updates.\n\n"
+            f"<b>🔒 Individual Client Commands (Direct Message @NikhilAlgoAlertSBot):</b>\n"
+            f"• /onboard - Connect Kotak Neo 100% privately\n"
+            f"• /funds - View private margin balance\n"
+            f"• /status - View account status\n"
+            f"• /pause - Pause automated execution\n"
+            f"• /resume - Resume execution"
+        )
+    else:
+        text = (
+            f"📖 <b>Kotak Neo Algo Trading Help</b>\n\n"
+            f"<b>Commands:</b>\n"
+            f"• /start - Welcome menu & status\n"
+            f"• /onboard - Connect or re-configure Kotak Neo\n"
+            f"• /funds - Check live trading margin\n"
+            f"• /status - Check system and session token status\n"
+            f"• /pause - Temporarily pause automated trade execution\n"
+            f"• /resume - Re-enable trade execution\n"
+            f"• /cancel - Cancel active configuration wizard\n\n"
+            f"<b>🔐 Automated 2FA (08:45 AM Daily):</b>\n"
+            f"Uses your 32-character TOTP secret key from the Kotak Neo app. Every trading morning at 08:45 AM, the engine automatically logs in, checks your margin, and alerts you.\n\n"
+            f"<b>Need Support?</b> Contact your algorithm manager."
+        )
     send_tg_message(chat_id, text)
 
 
-def handle_admin(chat_id: int):
+def handle_admin(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        send_tg_message(chat_id, "⛔ Admin commands cannot be run in public group chats. Please message the bot privately.")
+        return
+
     primary_chat = _get_primary_chat_id()
     if str(chat_id) != primary_chat:
         send_tg_message(chat_id, "⛔ Unauthorized. Admin command only.")
@@ -315,7 +392,11 @@ def handle_admin(chat_id: int):
     send_tg_message(chat_id, "\n".join(lines))
 
 
-def handle_authall(chat_id: int):
+def handle_authall(chat_id: int | str, is_group: bool = False):
+    if is_group:
+        send_tg_message(chat_id, "⛔ Admin commands cannot be run in public group chats.")
+        return
+
     primary_chat = _get_primary_chat_id()
     if str(chat_id) != primary_chat:
         send_tg_message(chat_id, "⛔ Unauthorized.")
@@ -527,61 +608,91 @@ def process_wizard_step(chat_id: int, text: str, message_id: int, user: Dict[str
 
 
 def process_telegram_update(update: Dict[str, Any]):
-    """Processes a single update object from Telegram."""
+    """Processes a single update object from Telegram with strict anti-spam & group privacy controls."""
+    update_id = update.get("update_id")
+    if update_id is not None:
+        if update_id in _processed_updates:
+            return
+        _processed_updates.add(update_id)
+        _processed_order.append(update_id)
+        if len(_processed_order) > 2000:
+            for old_id in _processed_order[:500]:
+                _processed_updates.discard(old_id)
+            del _processed_order[:500]
+
     msg = update.get("message")
     if not msg:
         return
 
+    user = msg.get("from", {})
+    # 1. Ignore messages from all bots (prevents bot-to-bot ping pong loops)
+    if user.get("is_bot", False):
+        return
+
     chat = msg.get("chat", {})
     chat_id = chat.get("id")
+    chat_type = chat.get("type", "private")
+    is_group = chat_type in ("group", "supergroup", "channel")
     text = (msg.get("text") or "").strip()
     msg_id = msg.get("message_id")
-    user = msg.get("from", {})
 
     if not chat_id or not text:
         return
 
-    # Check for top-level commands
-    lower_text = text.lower()
-    if lower_text.startswith("/start"):
-        handle_start(chat_id, user)
-        return
-    elif lower_text.startswith("/onboard") or lower_text.startswith("/register"):
-        handle_onboard_start(chat_id, user)
-        return
-    elif lower_text.startswith("/cancel"):
-        handle_cancel(chat_id)
-        return
-    elif lower_text.startswith("/funds") or lower_text.startswith("/margin") or lower_text.startswith("/balance"):
-        handle_funds(chat_id)
-        return
-    elif lower_text.startswith("/status"):
-        handle_status(chat_id)
-        return
-    elif lower_text.startswith("/pause"):
-        handle_pause(chat_id)
-        return
-    elif lower_text.startswith("/resume"):
-        handle_resume(chat_id)
-        return
-    elif lower_text.startswith("/help"):
-        handle_help(chat_id)
-        return
-    elif lower_text.startswith("/admin"):
-        handle_admin(chat_id)
-        return
-    elif lower_text.startswith("/authall"):
-        handle_authall(chat_id)
+    # 2. Strict Group Chat Anti-Spam:
+    # If this message is in a group chat and does NOT start with '/', IGNORE IT COMPLETELY!
+    # Never reply to group banter, general messages, reactions, or emojis.
+    if is_group and not text.startswith("/"):
         return
 
-    # If user is in an active wizard step
+    # Normalize command (handles /cmd@BotName syntax in groups)
+    lower_text = text.lower()
+    first_token = lower_text.split()[0]
+    cmd = first_token.split("@")[0]
+
+    if cmd == "/start":
+        handle_start(chat_id, user, is_group=is_group)
+        return
+    elif cmd in ("/onboard", "/register"):
+        handle_onboard_start(chat_id, user, is_group=is_group)
+        return
+    elif cmd == "/cancel":
+        handle_cancel(chat_id, is_group=is_group)
+        return
+    elif cmd in ("/funds", "/margin", "/balance"):
+        handle_funds(chat_id, is_group=is_group)
+        return
+    elif cmd == "/status":
+        handle_status(chat_id, is_group=is_group)
+        return
+    elif cmd == "/pause":
+        handle_pause(chat_id, is_group=is_group)
+        return
+    elif cmd == "/resume":
+        handle_resume(chat_id, is_group=is_group)
+        return
+    elif cmd == "/help":
+        handle_help(chat_id, is_group=is_group)
+        return
+    elif cmd == "/admin":
+        handle_admin(chat_id, is_group=is_group)
+        return
+    elif cmd == "/authall":
+        handle_authall(chat_id, is_group=is_group)
+        return
+
+    # If it's a group and an unrecognized command, ignore completely (do NOT spam group with fallback)
+    if is_group:
+        return
+
+    # 3. Private 1-on-1 Chat only: check wizard or send friendly private fallback
     with _wizards_lock:
         in_wizard = chat_id in _wizards
 
     if in_wizard:
         process_wizard_step(chat_id, text, msg_id, user)
     else:
-        # Unknown message fallback
+        # Unknown message fallback ONLY sent in 1-on-1 private chat
         send_tg_message(
             chat_id,
             "👋 Send /help to view available commands or /onboard to connect your Kotak Neo account.",

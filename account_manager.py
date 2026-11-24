@@ -15,6 +15,8 @@ import json
 import logging
 import os
 import sqlite3
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
@@ -530,16 +532,30 @@ def _update_session_failure(account_id: int, error_msg: str):
         conn.commit()
 
 
+_last_direct_sent: Dict[str, tuple[float, str]] = {}
+_direct_send_lock = threading.Lock()
+
+
 def _send_telegram_direct(chat_id: str, message: str) -> bool:
-    """Sends a Telegram message to an individual chat ID using telegram_config.json bot_token."""
+    """Sends a Telegram message to an individual chat ID using telegram_config.json bot_token with anti-spam."""
     try:
         import requests
         if not TELEGRAM_CONFIG_PATH.exists():
             return False
         cfg = json.loads(TELEGRAM_CONFIG_PATH.read_text(encoding="utf-8"))
         bot_token = cfg.get("bot_token")
-        if not bot_token or not chat_id:
+        if not bot_token or not chat_id or not message:
             return False
+
+        now = time.time()
+        c_key = str(chat_id).strip()
+        c_msg = message.strip()
+        with _direct_send_lock:
+            last_t, last_m = _last_direct_sent.get(c_key, (0.0, ""))
+            if c_msg == last_m and (now - last_t) < 10.0:
+                logger.warning("Suppressed duplicate direct telegram message to %s", chat_id)
+                return False
+            _last_direct_sent[c_key] = (now, c_msg)
 
         url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
         payload = {

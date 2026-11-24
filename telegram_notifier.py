@@ -27,6 +27,7 @@ import re
 import logging
 import os
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Dict, Optional
@@ -44,6 +45,8 @@ ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "telegram_config.json"
 
 _executor = concurrent.futures.ThreadPoolExecutor(max_workers=2, thread_name_prefix="tg_worker")
+_last_sent_cache: Dict[str, tuple[float, str]] = {}
+_send_lock = threading.Lock()
 
 
 def is_deployed_environment() -> bool:
@@ -158,6 +161,21 @@ def _post_telegram_sync(
 
     if not force and not cfg.get("enabled", True):
         return False, "Telegram notifications are currently turned OFF."
+
+    now = time.time()
+    chat_key = str(chat_id).strip()
+    clean_text = text.strip()
+
+    with _send_lock:
+        last_t, last_txt = _last_sent_cache.get(chat_key, (0.0, ""))
+        if clean_text == last_txt and (now - last_t) < 10.0:
+            logger.warning("Dropped duplicate notification to %s (sent %.1fs ago): %s", chat_id, now - last_t, clean_text[:50])
+            return False, "Duplicate message suppressed by anti-spam."
+        _last_sent_cache[chat_key] = (now, clean_text)
+        if len(_last_sent_cache) > 200:
+            oldest = sorted(_last_sent_cache.keys(), key=lambda k: _last_sent_cache[k][0])[:50]
+            for k in oldest:
+                _last_sent_cache.pop(k, None)
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {
