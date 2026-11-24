@@ -565,7 +565,7 @@ export function BacktestPage() {
       </div>
 
       {/* Scrollable Trades List */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden p-2.5 flex flex-col gap-2.5 scrollbar-thin">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden divide-y divide-border/30 scrollbar-thin">
         {filteredPickedTrades.length > 0 ? (
           filteredPickedTrades.map((t, idx) => {
             const realIdx = pickedTrades.indexOf(t)
@@ -605,10 +605,10 @@ export function BacktestPage() {
                   setSessionSymbol(isSensex ? "SENSEX" : "NIFTY")
                 }}
                 className={cn(
-                  "group p-3 rounded-xl text-xs cursor-pointer transition-all duration-150 flex flex-col gap-2 border shadow-xs",
+                  "group px-3.5 py-2.5 text-xs cursor-pointer transition-colors flex flex-col gap-1.5",
                   isSelected
-                    ? "bg-zinc-900/95 dark:bg-[#0f1117] border-zinc-600 dark:border-zinc-700 ring-1 ring-zinc-500/30 shadow-sm"
-                    : "bg-card dark:bg-[#090b0e] hover:bg-zinc-900/50 dark:hover:bg-[#12151c] border-border/70 dark:border-zinc-800/80 hover:border-zinc-700/80"
+                    ? "bg-muted/70 dark:bg-muted/40"
+                    : "hover:bg-muted/30 dark:hover:bg-muted/20"
                 )}
               >
                 {/* ROW 1: Direction Pill, Instrument, Strategy + Hero Net Points */}
@@ -677,7 +677,7 @@ export function BacktestPage() {
                 </div>
 
                 {/* ROW 3: Timing, SL, R-Multiple (Left) + Exit Reason Badge (Right) */}
-                <div className="flex items-center justify-between gap-2 text-[10px] font-mono border-t border-border/40 pt-1.5 text-muted-foreground min-w-0">
+                <div className="flex items-center justify-between gap-2 text-[10px] font-mono text-muted-foreground min-w-0 pt-0.5">
                   <div className="flex items-center gap-1.5 truncate">
                     <Clock className="w-3 h-3 opacity-60 shrink-0" />
                     <span>{t.entry} - {t.exit || "Open"}</span>
