@@ -192,12 +192,24 @@ def swinger_daily_cycle_loop() -> None:
     return
 
 def daily_backtest_sync_loop() -> None:
-    """Trigger daily backtest sync after market close (15:55 and 16:35 IST on weekdays)."""
+    """Trigger daily backtest sync and EOD FnO performance report after market close."""
     while True:
         try:
             now = datetime.now(IST)
+            today_str = now.strftime("%Y-%m-%d")
+            # 15:30 IST Weekdays: Dispatch EOD FnO Performance Report (Algo Trades Only)
+            if now.weekday() < 5 and now.hour == 15 and now.minute == 30:
+                eod_tag = f"{today_str}_15_30_eod"
+                if _sync_state.get("last_eod_report_tag") != eod_tag:
+                    _sync_state["last_eod_report_tag"] = eod_tag
+                    try:
+                        import telegram_notifier
+                        telegram_notifier.dispatch_daily_eod_report()
+                    except Exception as e:
+                        print(f"Error dispatching EOD report: {e}")
+
+            # 15:55 and 16:35 IST Weekdays: Master backtest sync
             if now.weekday() < 5 and ((now.hour == 15 and now.minute == 55) or (now.hour == 16 and now.minute == 35)):
-                today_str = now.strftime("%Y-%m-%d")
                 tag = f"{today_str}_{now.hour}_{now.minute}"
                 if _sync_state.get("last_sched_tag") != tag:
                     _sync_state["last_sched_tag"] = tag
@@ -5560,6 +5572,10 @@ def combined_strategy_backtest_report(
                 "futures_rupees": fut_rs,
                 "lots": int(r.get("total_lots") or 1),
                 "lot_size": nifty_lot,
+                "engine": str(r.get("engine") or r.get("origin") or ""),
+                "strategy_label": str(r.get("strategy_label") or ""),
+                "trigger_label": str(r.get("trigger_label") or ""),
+                "trigger_reason": str(r.get("trigger_reason") or ""),
             })
         except Exception:
             continue
@@ -5588,6 +5604,10 @@ def combined_strategy_backtest_report(
                 "futures_rupees": fut_rs,
                 "lots": int(r.get("total_lots") or 1),
                 "lot_size": sensex_lot,
+                "engine": str(r.get("engine") or r.get("origin") or ""),
+                "strategy_label": str(r.get("strategy_label") or ""),
+                "trigger_label": str(r.get("trigger_label") or ""),
+                "trigger_reason": str(r.get("trigger_reason") or ""),
             })
         except Exception:
             continue
