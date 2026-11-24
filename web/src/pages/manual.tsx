@@ -101,10 +101,10 @@ export function ManualTradingPage() {
   // Instrument: NIFTY vs SENSEX
   const [indexSymbol, setIndexSymbol] = useState<"NIFTY" | "SENSEX">("NIFTY")
 
-  // Fast live polling during market hours (1000ms), relaxed when market is closed (30s)
+  // Fast live polling during market hours (2000ms), relaxed when market is closed (30s)
   const positionsPoll = usePoll<PositionsResponse>(
     isKotakConnected ? "/api/positions" : null,
-    isMarketOpen ? 1000 : 30000
+    isMarketOpen ? 2000 : 30000
   )
   const fundsPoll = usePoll<FundsStatus>(
     isKotakConnected ? "/api/funds" : null,
@@ -416,60 +416,8 @@ export function ManualTradingPage() {
   // Action busy states
   const [actionBusy, setActionBusy] = useState(false)
 
-  // Mobile Pull-to-Refresh
-  const containerRef = useRef<HTMLDivElement>(null)
-  const touchStartY = useRef<number | null>(null)
-  const [pullDistance, setPullDistance] = useState(0)
+  // Refresh state
   const [isRefreshing, setIsRefreshing] = useState(false)
-
-  const handleTouchStart = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (containerRef.current && containerRef.current.scrollTop <= 0) {
-      touchStartY.current = e.touches[0].clientY
-    } else {
-      touchStartY.current = null
-    }
-  }
-
-  const handleTouchMove = (e: React.TouchEvent<HTMLDivElement>) => {
-    if (touchStartY.current !== null && !isRefreshing) {
-      const currentY = e.touches[0].clientY
-      const diff = currentY - touchStartY.current
-      if (diff > 0 && containerRef.current && containerRef.current.scrollTop <= 0) {
-        // Progressive resistance
-        const resistance = Math.min(diff * 0.45, 80)
-        setPullDistance(resistance)
-      } else {
-        setPullDistance(0)
-      }
-    }
-  }
-
-  const handleTouchEnd = async () => {
-    if (pullDistance > 50 && !isRefreshing) {
-      setIsRefreshing(true)
-      setPullDistance(44)
-      if (typeof navigator !== "undefined" && navigator.vibrate) {
-        navigator.vibrate(25)
-      }
-      try {
-        fetchOptionsFor("NIFTY")
-        fetchOptionsFor("SENSEX")
-        await Promise.allSettled([
-          positionsPoll.reload(),
-          fundsPoll.reload(),
-        ])
-      } finally {
-        setTimeout(() => {
-          setIsRefreshing(false)
-          setPullDistance(0)
-          touchStartY.current = null
-        }, 300)
-      }
-    } else {
-      setPullDistance(0)
-      touchStartY.current = null
-    }
-  }
 
   // Fetch Quotes for both CE and PE in a single batch request
   useEffect(() => {
@@ -525,7 +473,7 @@ export function ManualTradingPage() {
         cancelled = true
       }
     }
-    const timer = setInterval(() => void loadQuotes(), 3500)
+    const timer = setInterval(() => void loadQuotes(), 4000)
     return () => {
       cancelled = true
       clearInterval(timer)
@@ -753,34 +701,14 @@ export function ManualTradingPage() {
 
   return (
     <div
-      ref={containerRef}
-      onTouchStart={handleTouchStart}
-      onTouchMove={handleTouchMove}
-      onTouchEnd={handleTouchEnd}
       style={{
         paddingTop: isPositionFocused
           ? "max(env(safe-area-inset-top, 0px), 24px)"
           : "max(env(safe-area-inset-top, 0px), 36px)",
         paddingBottom: "max(env(safe-area-inset-bottom, 0px), 16px)",
       }}
-      className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto overflow-x-hidden box-border"
+      className="flex flex-col w-full max-w-sm mx-auto px-2.5 h-full flex-1 justify-between select-none text-foreground bg-background overflow-y-auto overscroll-contain touch-manipulation box-border"
     >
-      {/* ─── PULL TO REFRESH INDICATOR ─── */}
-      {(pullDistance > 0 || isRefreshing) && (
-        <div
-          style={{ height: `${isRefreshing ? 42 : pullDistance}px` }}
-          className="flex items-center justify-center overflow-hidden transition-all duration-150 shrink-0 mb-1"
-        >
-          <div className="flex items-center gap-1.5 py-1 px-3 rounded-full bg-card border border-border/70 shadow-xs text-xs font-mono font-bold text-muted-foreground">
-            <RefreshCw
-              className={cn("size-3.5 text-primary", isRefreshing ? "animate-spin" : "")}
-              style={{ transform: isRefreshing ? undefined : `rotate(${pullDistance * 4}deg)` }}
-            />
-            <span>{isRefreshing ? "Refreshing live data..." : pullDistance > 50 ? "Release to refresh" : "Pull down to refresh"}</span>
-          </div>
-        </div>
-      )}
-      
       {/* ─── TOP & MIDDLE SECTION ─── */}
       <div className="flex flex-col gap-2">
         {/* ─── 0. APP BRANDING & THEME HEADER ─── */}
