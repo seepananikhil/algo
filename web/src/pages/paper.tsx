@@ -791,59 +791,45 @@ export function PaperPage() {
                   </div>
                 </div>
 
-                {/* 2. MIDDLE SECTION: Two Balanced Execution & Market Panels */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] font-mono">
-                  {/* Panel A: Option Execution Flow & Capital */}
-                  <div className="p-2.5 rounded-lg bg-muted/40 dark:bg-muted/20 border border-border/50 flex flex-col gap-1.5">
-                    <div className="text-[9.5px] uppercase font-bold text-muted-foreground/80 tracking-wider">
-                      Option Execution
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-semibold">
-                      <span className="text-muted-foreground font-normal">Buy:</span>
-                      <span className="text-foreground font-bold">{entryPriceDisplay}</span>
+                {/* 2. SIMPLIFIED STATS STRIP: Invested, Option Entry ➔ Exit, and Spot Values */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 p-2.5 rounded-lg bg-muted/40 dark:bg-muted/20 border border-border/50 text-[11px] font-mono">
+                  {/* Metric 1: Invested Capital */}
+                  <div className="flex sm:flex-col items-center sm:items-start justify-between sm:justify-start gap-0.5">
+                    <span className="text-[9.5px] uppercase font-bold text-muted-foreground/80 tracking-wider">
+                      Invested
+                    </span>
+                    <span className="font-bold text-foreground text-xs sm:text-sm">
+                      {investedCapital > 0 ? `₹${investedCapital.toLocaleString("en-IN")}` : "--"}
+                      <span className="text-[10px] text-muted-foreground font-normal ml-1">({tradeQty} qty)</span>
+                    </span>
+                  </div>
+
+                  {/* Metric 2: Option Price Flow (Entry ➔ Exit) */}
+                  <div className="flex sm:flex-col items-center sm:items-start justify-between sm:justify-start gap-0.5">
+                    <span className="text-[9.5px] uppercase font-bold text-muted-foreground/80 tracking-wider">
+                      Entry ➔ Exit Price
+                    </span>
+                    <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-foreground">
+                      <span>{entryPriceDisplay}</span>
                       <span className="text-muted-foreground/60 text-[10px]">➔</span>
-                      <span className="text-muted-foreground font-normal">Exit:</span>
-                      <span className={isWin ? "text-emerald-600 dark:text-emerald-400 font-bold" : isLoss ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground"}>
+                      <span className={isWin ? "text-emerald-600 dark:text-emerald-400 font-extrabold" : isLoss ? "text-rose-600 dark:text-rose-400 font-extrabold" : "text-foreground"}>
                         {exitPriceDisplay}
                       </span>
                     </div>
-                    {investedCapital > 0 && (
-                      <div className="text-[10.5px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/30">
-                        <span>Capital Deployed:</span>
-                        <strong className="text-foreground font-bold">₹{investedCapital.toLocaleString("en-IN")}</strong>
-                      </div>
-                    )}
                   </div>
 
-                  {/* Panel B: Underlying Spot Movement & Risk Matrix */}
-                  <div className="p-2.5 rounded-lg bg-muted/40 dark:bg-muted/20 border border-border/50 flex flex-col gap-1.5">
-                    <div className="text-[9.5px] uppercase font-bold text-muted-foreground/80 tracking-wider">
-                      Underlying Spot &amp; Risk
-                    </div>
-                    <div className="flex items-center gap-1.5 text-xs font-semibold">
-                      <span className="text-foreground">{spotIn > 0 ? spotIn.toFixed(1) : "--"}</span>
+                  {/* Metric 3: Spot Values (In ➔ Out) */}
+                  <div className="flex sm:flex-col items-center sm:items-start justify-between sm:justify-start gap-0.5">
+                    <span className="text-[9.5px] uppercase font-bold text-muted-foreground/80 tracking-wider">
+                      Spot Values
+                    </span>
+                    <div className="flex items-center gap-1.5 font-bold text-xs sm:text-sm text-foreground">
+                      <span>{spotIn > 0 ? spotIn.toFixed(1) : "--"}</span>
                       <span className="text-muted-foreground/60 text-[10px]">➔</span>
-                      <span className="text-foreground">{spotOut > 0 ? spotOut.toFixed(1) : "--"}</span>
-                      <span className={cn("text-[10.5px] font-bold ml-auto", spotPts >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
+                      <span>{spotOut > 0 ? spotOut.toFixed(1) : "--"}</span>
+                      <span className={cn("text-[10.5px] font-bold ml-1", spotPts >= 0 ? "text-emerald-600 dark:text-emerald-400" : "text-rose-600 dark:text-rose-400")}>
                         ({spotPts >= 0 ? `+${spotPts.toFixed(1)}` : spotPts.toFixed(1)} pts)
                       </span>
-                    </div>
-                    <div className="text-[10.5px] text-muted-foreground flex items-center justify-between pt-1 border-t border-border/30">
-                      <span>SL: <strong className="text-foreground font-semibold">{slNum > 0 ? slNum.toFixed(1) : "--"}</strong></span>
-                      {rMultiple != null ? (
-                        <span
-                          className={cn(
-                            "px-1.5 py-0.2 rounded text-[9.5px] font-bold border",
-                            rMultiple >= 0
-                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                              : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25"
-                          )}
-                        >
-                          {rMultiple >= 0 ? `+${rMultiple.toFixed(1)}R` : `${rMultiple.toFixed(1)}R`} Return
-                        </span>
-                      ) : (
-                        <span>Risk: Fixed</span>
-                      )}
                     </div>
                   </div>
                 </div>
@@ -851,10 +837,22 @@ export function PaperPage() {
                 {/* 3. FOOTER: Exit Reason Badge & Chart Inspection Status */}
                 <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[11px]">
                   <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground/75 uppercase text-[9.5px] font-bold tracking-wider">Exit Reason:</span>
+                    <span className="text-muted-foreground/75 uppercase text-[9.5px] font-bold tracking-wider">Exit:</span>
                     <span className={cn("px-2 py-0.5 rounded-md text-[10px] font-medium font-sans border", exitBadge.className)}>
                       {exitBadge.label}
                     </span>
+                    {rMultiple != null && (
+                      <span
+                        className={cn(
+                          "px-1.5 py-0.5 rounded-md text-[9.5px] font-bold font-mono border",
+                          rMultiple >= 0
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
+                            : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25"
+                        )}
+                      >
+                        {rMultiple >= 0 ? `+${rMultiple.toFixed(1)}R` : `${rMultiple.toFixed(1)}R`}
+                      </span>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 font-mono text-[10.5px]">
