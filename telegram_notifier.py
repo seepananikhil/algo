@@ -475,9 +475,10 @@ def dispatch_daily_eod_report(target_date: Optional[str] = None, force: bool = F
             if not df.empty and "date" in df.columns:
                 t_rows = df[df["date"].astype(str) == today_s]
                 for _, r in t_rows.iterrows():
+                    contract_val = str(r.get("option") or r.get("option_str") or r.get("symbol") or "NIFTY")
                     trades_today.append({
                         "symbol": str(r.get("symbol", "NIFTY")),
-                        "contract": str(r.get("option_str", r.get("symbol", "NIFTY"))),
+                        "contract": contract_val,
                         "pnl": float(r.get("pnl_rupees", 0.0)),
                         "reason": str(r.get("exit_reason", "EOD")),
                     })
@@ -493,9 +494,10 @@ def dispatch_daily_eod_report(target_date: Optional[str] = None, force: bool = F
             if not df_s.empty and "date" in df_s.columns:
                 t_s_rows = df_s[df_s["date"].astype(str) == today_s]
                 for _, r in t_s_rows.iterrows():
+                    contract_val = str(r.get("option") or r.get("option_str") or r.get("symbol") or "SENSEX")
                     trades_today.append({
                         "symbol": str(r.get("symbol", "SENSEX")),
-                        "contract": str(r.get("option_str", r.get("symbol", "SENSEX"))),
+                        "contract": contract_val,
                         "pnl": float(r.get("pnl_rupees", 0.0)),
                         "reason": str(r.get("exit_reason", "EOD")),
                     })
