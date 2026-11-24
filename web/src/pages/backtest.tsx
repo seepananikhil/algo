@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { BarChart2, Calendar, ChevronDown, ChevronLeft, ChevronRight, Clock, RefreshCw, TrendingUp } from "lucide-react"
 import { toast } from "sonner"
-import { fmtNum, fmtPts, fmtRs, pnlClass, prettyReason, usePoll, postJSON, getJSON, type Backtest } from "@/lib/api"
+import { fmtNum, fmtPts, pnlClass, prettyReason, usePoll, postJSON, getJSON, type Backtest } from "@/lib/api"
 import { TravelCalendarPopup } from "@/components/travel-calendar-popup"
 
 function computeInstrumentStats(tradeList: any[], lotSize: number) {
@@ -572,11 +572,8 @@ export function BacktestPage() {
             const isSelected = selectedTradeIndex === (realIdx >= 0 ? realIdx : idx)
             const isSensex = t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX") || (t as any).option?.includes("SENSEX")
             const pts = t.pnl_points ?? 0
-            const lotSize = isSensex ? 10 : 25
-            const tradeQty = Number((t as any).qty || ((t as any).lots ? (t as any).lots * (isSensex ? 20 : 65) : (isSensex ? 20 : 65)))
-            const rs = (t as any).pnl_rupees ?? (pts * lotSize * 0.6)
-            const isWin = rs > 0 || pts > 0
-            const isLoss = rs < 0 || pts < 0
+            const isWin = pts > 0
+            const isLoss = pts < 0
             const isCall = t.side === "CALL" || t.side === "LONG" || t.side === "CE" || t.side === "BUY"
             const stratName = getStrategyDisplayName(t, mainStrategy)
             const slDist = t.sl != null && !Number.isNaN(t.sl) && t.sl > 0 ? Math.abs(t.entry_price - t.sl) : null
@@ -597,74 +594,8 @@ export function BacktestPage() {
               } catch {}
             }
 
-            // Option Contract Name
-            const optContract = (() => {
-              const opt = ((t as any).option || (t as any).option_symbol || "").trim()
-              const m = opt.match(/(\d{4,6})\s*(CE|PE|CA|PU)/i)
-              if (m) {
-                const type = m[2].toUpperCase().startsWith("C") ? "CE" : "PE"
-                return `${m[1]} ${type}`
-              }
-              const optType = isCall ? "CE" : "PE"
-              const spot = Number(t.entry_price || 0)
-              if (spot > 0) {
-                if (isSensex) {
-                  const strike = Math.round(spot / 100) * 100
-                  return `${strike} ${optType}`
-                } else {
-                  const strike = Math.round((isCall ? spot - 150 : spot + 150) / 50) * 50
-                  return `${strike} ${optType}`
-                }
-              }
-              return opt || (isSensex ? "83400 PE" : "25800 PE")
-            })()
-
-            // Expiry
-            const expiryStr = (t as any).expiry || (() => {
-              try {
-                const [y, m, d] = (t.date || "").split("-").map(Number)
-                const dt = new Date(y, m - 1, d)
-                const targetDay = isSensex ? 5 : 4
-                const curDay = dt.getDay()
-                const diff = (targetDay - curDay + 7) % 7
-                dt.setDate(dt.getDate() + diff)
-                return `${dt.getDate()} ${dt.toLocaleString("en-US", { month: "short" })}`
-              } catch {
-                return isSensex ? "27 Nov" : "26 Nov"
-              }
-            })()
-
-            // Option Prices & Spot
-            const optBuy = Number((t as any).option_entry_price || (t as any).buy_price || 0)
-            const optSell = Number((t as any).option_exit_price || (t as any).sell_price || 0)
             const spotIn = Number(t.entry_price || 0)
             const spotOut = Number(t.exit_price || 0)
-            const hasOptionPremium = optBuy > 0 && optBuy < 10000
-
-            // Invested Capital & Return %
-            const investedCapital = hasOptionPremium
-              ? Math.round(optBuy * tradeQty)
-              : Math.round(spotIn * 0.015 * tradeQty)
-
-            const pctGain = hasOptionPremium && optSell > 0
-              ? Math.round(((optSell - optBuy) / optBuy) * 1000) / 10
-              : investedCapital > 0 && rs !== 0
-              ? Math.round((rs / investedCapital) * 1000) / 10
-              : null
-
-            const entryPriceDisplay = hasOptionPremium
-              ? `₹${optBuy.toFixed(1)}`
-              : spotIn > 0
-              ? spotIn.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-              : "--"
-
-            const exitPriceDisplay = hasOptionPremium
-              ? optSell > 0
-                ? `₹${optSell.toFixed(1)}`
-                : "Open"
-              : spotOut > 0
-              ? spotOut.toLocaleString("en-IN", { minimumFractionDigits: 1, maximumFractionDigits: 1 })
-              : "Open"
 
             return (
               <div
@@ -680,7 +611,7 @@ export function BacktestPage() {
                     : "bg-card dark:bg-[#090b0e] hover:bg-zinc-900/50 dark:hover:bg-[#12151c] border-border/70 dark:border-zinc-800/80 hover:border-zinc-700/80"
                 )}
               >
-                {/* ROW 1: Direction Pill, Instrument, Contract, Qty, Expiry, Strategy + Hero PnL */}
+                {/* ROW 1: Direction Pill, Instrument, Strategy + Hero Net Points */}
                 <div className="flex items-center justify-between gap-2 min-w-0">
                   <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                     <span
@@ -689,16 +620,10 @@ export function BacktestPage() {
                         isCall ? "bg-emerald-600 dark:bg-emerald-500" : "bg-rose-600 dark:bg-rose-500"
                       )}
                     >
-                      {isCall ? "CE" : "PE"}
+                      {isCall ? "CALL" : "PUT"}
                     </span>
                     <span className="font-extrabold text-xs sm:text-[13px] text-foreground font-mono tracking-tight shrink-0">
-                      {isSensex ? "SENSEX" : "NIFTY"} {optContract}
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground/80 shrink-0">
-                      · {expiryStr}
-                    </span>
-                    <span className="text-[10px] font-mono text-muted-foreground/80 shrink-0">
-                      · Qty {tradeQty}
+                      {isSensex ? "SENSEX" : "NIFTY"}
                     </span>
                     <span
                       className={cn(
@@ -717,63 +642,35 @@ export function BacktestPage() {
                       isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
                     )}
                   >
-                    {rs !== 0 ? (
-                      <>{rs >= 0 ? "+" : ""}{fmtRs(rs)}</>
-                    ) : (
-                      <>{pts >= 0 ? "+" : ""}{pts.toFixed(1)} pt</>
-                    )}
+                    {pts >= 0 ? `+${pts.toFixed(1)}` : pts.toFixed(1)} pt
                   </div>
                 </div>
 
-                {/* ROW 2: Execution Prices, Spot Values (Left) + Return % & Invested Capital (Right) */}
+                {/* ROW 2: Spot Values Trajectory + Points Captured Badge */}
                 <div className="flex items-center justify-between gap-2 text-[11px] font-mono min-w-0">
                   <div className="flex items-center gap-1.5 text-muted-foreground truncate">
-                    {hasOptionPremium ? (
-                      <>
-                        <span>Px <strong className="text-foreground font-bold">{entryPriceDisplay}</strong></span>
-                        <span className="text-muted-foreground/50 text-[9px]">➔</span>
-                        <span>
-                          <strong className={isWin ? "text-emerald-600 dark:text-emerald-400 font-bold" : isLoss ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground font-bold"}>
-                            {exitPriceDisplay}
-                          </strong>
-                        </span>
-                        <span className="opacity-30">·</span>
-                        <span>Spot <strong className="text-foreground">{spotIn > 0 ? spotIn.toFixed(1) : "--"}</strong></span>
-                        <span className="text-muted-foreground/50 text-[9px]">➔</span>
-                        <span><strong className="text-foreground">{spotOut > 0 ? spotOut.toFixed(1) : "--"}</strong></span>
-                      </>
-                    ) : (
-                      <>
-                        <span>Spot <strong className="text-foreground font-bold">{entryPriceDisplay}</strong></span>
-                        <span className="text-muted-foreground/50 text-[9px]">➔</span>
-                        <span>
-                          <strong className={isWin ? "text-emerald-600 dark:text-emerald-400 font-bold" : isLoss ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground font-bold"}>
-                            {exitPriceDisplay}
-                          </strong>
-                        </span>
-                        <span className="opacity-30">·</span>
-                        <span className={isWin ? "text-emerald-600 dark:text-emerald-400 font-semibold" : isLoss ? "text-rose-600 dark:text-rose-400 font-semibold" : "text-muted-foreground"}>
-                          {pts >= 0 ? `+${pts.toFixed(1)}` : pts.toFixed(1)} pts
-                        </span>
-                      </>
-                    )}
+                    <span>Spot <strong className="text-foreground font-bold">{spotIn > 0 ? fmtNum(Math.round(spotIn)) : "--"}</strong></span>
+                    <span className="text-muted-foreground/50 text-[9px]">➔</span>
+                    <span>
+                      <strong className={isWin ? "text-emerald-600 dark:text-emerald-400 font-bold" : isLoss ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground font-bold"}>
+                        {spotOut > 0 ? fmtNum(Math.round(spotOut)) : "Open"}
+                      </strong>
+                    </span>
                   </div>
                   <div className="flex items-center gap-1.5 shrink-0 text-right">
-                    {pctGain != null && (
-                      <span
-                        className={cn(
-                          "px-1.5 py-0.2 rounded text-[10px] font-black border",
-                          isWin
-                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
-                            : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20"
-                        )}
-                      >
-                        {pctGain >= 0 ? `+${pctGain.toFixed(1)}%` : `${pctGain.toFixed(1)}%`}
-                      </span>
-                    )}
-                    {investedCapital > 0 && (
-                      <span className="text-[10px] text-muted-foreground">
-                        Inv: <strong className="text-foreground font-bold">₹{investedCapital.toLocaleString("en-IN")}</strong>
+                    <span
+                      className={cn(
+                        "px-1.5 py-0.2 rounded text-[10px] font-black border",
+                        isWin
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                          : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                      )}
+                    >
+                      {pts >= 0 ? `+${pts.toFixed(1)}` : pts.toFixed(1)} pts
+                    </span>
+                    {durationStr && (
+                      <span className="text-[10px] text-muted-foreground/80 font-normal">
+                        ({durationStr})
                       </span>
                     )}
                   </div>
@@ -783,7 +680,7 @@ export function BacktestPage() {
                 <div className="flex items-center justify-between gap-2 text-[10px] font-mono border-t border-border/40 pt-1.5 text-muted-foreground min-w-0">
                   <div className="flex items-center gap-1.5 truncate">
                     <Clock className="w-3 h-3 opacity-60 shrink-0" />
-                    <span>{t.entry} - {t.exit || "Open"}{durationStr ? ` (${durationStr})` : ""}</span>
+                    <span>{t.entry} - {t.exit || "Open"}</span>
                     {t.sl != null && t.sl > 0 && <span>· SL: {Number(t.sl).toFixed(1)}</span>}
                     {rMultiple != null && (
                       <span
