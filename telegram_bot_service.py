@@ -366,36 +366,42 @@ def handle_help(chat_id: int | str, is_group: bool = False):
 
 
 def handle_samples(chat_id: int | str):
-    """Sends 4 formatted FnO alert samples (Entry, Ratchet, Exit, EOD Performance Report)."""
+    """Sends clean FnO alert samples: Entry (with full position taken), Exit (with realized PnL), and EOD Report."""
     samples = [
         (
-            "🚀 <b>TRADE ENTRY · NIFTY</b>\n\n"
+            "🔴 <b>TRADE ENTRY · NIFTY</b>\n\n"
             "⚡ <b>Setup:</b> Trend Runner (15m ORB)\n"
-            "🎯 <b>Option:</b> <b>NIFTY 25800 PE</b>\n"
-            "📦 <b>Lots:</b> 1 Lot (25 qty)\n\n"
+            "🎯 <b>Position Taken:</b> <b>BUY PUT · NIFTY 25800 PE</b>\n"
+            "📦 <b>Size:</b> 1 Lot (25 qty)\n"
+            "💵 <b>Option Entry Price:</b> ₹145.20\n"
+            "💼 <b>Capital Deployed:</b> ₹3,630.00\n\n"
             "📍 <b>Spot Entry:</b> 25,633.40\n"
             "🛑 <b>Stop Loss:</b> 25,663.40 (30.0 pts)\n"
             "🌊 <b>India VIX Δ:</b> +5.77% (Bearish Momentum Confirmed)\n\n"
             "⏰ <b>Entry Time:</b> 09:32 IST\n"
-            "🛡️ <i>Ratchet trail & 5m 20-EMA active</i>"
+            "🛡️ <i>Trailing 5m 20-EMA active (No ratchets · Clean exit on signal)</i>"
         ),
         (
-            "📈 <b>PROFIT RATCHET · SENSEX</b>\n\n"
-            "⚡ <b>Tier 1 Triggered:</b> +240 pts MFE\n"
-            "🎯 <b>Option:</b> SENSEX 83400 PE\n"
-            "🔒 <b>New Stop Loss Locked:</b> <b>+80.0 pts</b> (Risk: Zero / In the green)\n"
-            "🏃 <b>Max Favorable Move:</b> +312.50 pts\n\n"
-            "⏰ <b>Time:</b> 10:14 IST\n"
-            "🛡️ <i>Profits secured. Letting runner ride to 15:15 EOD.</i>"
+            "🔴 <b>TRADE ENTRY · SENSEX</b>\n\n"
+            "⚡ <b>Setup:</b> Trend Runner (15m ORB)\n"
+            "🎯 <b>Position Taken:</b> <b>BUY PUT · SENSEX 83400 PE</b>\n"
+            "📦 <b>Size:</b> 1 Lot (20 qty)\n"
+            "💵 <b>Option Entry Price:</b> ₹666.70\n"
+            "💼 <b>Capital Deployed:</b> ₹13,334.00\n\n"
+            "📍 <b>Spot Entry:</b> 83,850.10\n"
+            "🛑 <b>Stop Loss:</b> 83,950.10 (100.0 pts)\n"
+            "🌊 <b>India VIX Δ:</b> +6.12% (High Volatility Expansion)\n\n"
+            "⏰ <b>Entry Time:</b> 09:35 IST\n"
+            "🛡️ <i>Trailing 5m 20-EMA active (No ratchets · Clean exit on signal)</i>"
         ),
         (
             "🏁 <b>TRADE EXIT · SENSEX</b>\n\n"
-            "💰 <b>Realized PnL:</b> 🟢 <b>+₹11,542.00 (+577.10 pts)</b>\n"
-            "🎯 <b>Option Contract:</b> SENSEX 83400 PE\n"
-            "📦 <b>Size:</b> 1 Lot (20 qty)\n\n"
+            "💰 <b>Realized PnL:</b> 🟢 <b>+₹11,542.00</b> (+577.10 pts)\n"
+            "🎯 <b>Position Closed:</b> SENSEX 83400 PE (1 Lot / 20 qty)\n\n"
             "💵 <b>Option Price:</b> ₹666.70 ➔ <b>₹1,243.80</b>\n"
-            "📍 <b>Exit Reason:</b> <b>EOD 15:15 Runner Close</b>\n"
-            "📊 <b>Spot Capture:</b> +972.25 pts\n\n"
+            "📍 <b>Exit Reason:</b> <b>EOD 15:15 Close</b>\n"
+            "⏰ <b>Exit Time:</b> 15:15 IST\n"
+            "📊 <b>Spot Movement:</b> +972.25 pts\n\n"
             "⚡ <i>Strategy: Trend Runner (Dual Confluence)</i>"
         ),
         (

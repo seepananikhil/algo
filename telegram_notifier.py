@@ -271,24 +271,33 @@ def notify_trade_entry(
     strategy: Optional[str] = None,
     force: bool = False,
 ) -> None:
-    """Sends a clean, spaced trade entry alert with clear visual hierarchy."""
+    """Sends a clean, spaced trade entry alert with clear visual hierarchy and full position details."""
     action = "BUY CALL" if side.upper() == "LONG" else "BUY PUT"
     dot = "🟢" if side.upper() == "LONG" else "🔴"
     strat_name = format_strategy_name(strategy or stage)
-
     clean_opt = clean_option_name(option_str)
-    opt_px = f" @ ₹{option_entry_price:,.1f}" if option_entry_price else ""
+
+    prem_lines = []
+    if option_entry_price and option_entry_price > 0:
+        prem_lines.append(f"💵 <b>Option Entry Price:</b> ₹{option_entry_price:,.2f}")
+        total_prem = option_entry_price * qty
+        prem_lines.append(f"💼 <b>Capital Deployed:</b> ₹{total_prem:,.2f}")
+    prem_block = ("\n" + "\n".join(prem_lines)) if prem_lines else ""
+
+    vix_line = f"\n🌊 <b>India VIX Δ:</b> {vix_chg:+.2f}% (Momentum Confirmed)" if vix_chg is not None else ""
     target_line = f"\n🎯 <b>Target:</b> +{target_pts:.0f} pts" if target_pts else ""
 
     text = (
-        f"{dot} <b>ENTRY ALERT · {action}</b>\n\n"
-        f"📊 <b>Symbol:</b> {symbol}\n"
-        f"📈 <b>Strategy:</b> {strat_name}\n"
-        f"📜 <b>Contract:</b> {clean_opt}{opt_px}\n"
-        f"📦 <b>Size:</b> {lots} Lot{'s' if lots > 1 else ''} ({qty} qty)\n\n"
-        f"🎯 <b>Spot Entry:</b> {spot_entry:,.1f}\n"
-        f"🛑 <b>Initial SL:</b> {initial_sl:,.1f} (-{sl_pts:.0f} pts)"
+        f"{dot} <b>TRADE ENTRY · {symbol}</b>\n\n"
+        f"⚡ <b>Setup:</b> {strat_name}\n"
+        f"🎯 <b>Position Taken:</b> <b>{action} · {clean_opt}</b>\n"
+        f"📦 <b>Size:</b> {lots} Lot{'s' if lots > 1 else ''} ({qty} qty)"
+        f"{prem_block}\n\n"
+        f"📍 <b>Spot Entry:</b> {spot_entry:,.2f}\n"
+        f"🛑 <b>Stop Loss:</b> {initial_sl:,.2f} ({sl_pts:.1f} pts)"
         f"{target_line}"
+        f"{vix_line}\n\n"
+        f"🛡️ <i>Trailing 5m 20-EMA active (No ratchets · Clean exit on signal)</i>"
     )
     send_telegram_message(text, force=force)
 
@@ -305,20 +314,8 @@ def notify_ratchet(
     strategy: Optional[str] = "Trend Runner",
     force: bool = False,
 ) -> None:
-    """Sends a clean, spaced profit ratchet / trail stop lock alert."""
-    strat_name = format_strategy_name(strategy)
-    pyr = f"\n\n🔥 <b>Pyramid:</b> {pyramid_info}" if (pyramided and pyramid_info) else ""
-    
-    text = (
-        f"🎯 <b>PROFIT RATCHET LOCKED · {symbol}</b>\n\n"
-        f"📈 <b>Strategy:</b> {strat_name}\n"
-        f"🔒 <b>Milestone:</b> {tier_name}\n"
-        f"💰 <b>Guaranteed Profit:</b> +{locked_pts:.0f} pts\n\n"
-        f"🛡️ <b>New Stop Loss:</b> {new_sl:,.1f}\n"
-        f"🚀 <b>Peak Run:</b> +{max_fav:.0f} pts"
-        f"{pyr}"
-    )
-    send_telegram_message(text, force=force)
+    """Silenced: Ratchet alerts removed per user instruction (FnO alerts are Entry & Exit only)."""
+    return
 
 
 def notify_trade_exit(
@@ -337,26 +334,24 @@ def notify_trade_exit(
     force: bool = False,
 ) -> None:
     """Sends a clean, spaced trade exit & PnL alert."""
-    if pnl_rupees >= 0:
-        badge_icon = "🟢"
-        badge_pnl = f"+₹{pnl_rupees:,.0f}"
-    else:
-        badge_icon = "🔴"
-        badge_pnl = f"-₹{abs(pnl_rupees):,.0f}"
+    badge_icon = "🟢" if pnl_rupees >= 0 else "🔴"
+    badge_pnl = f"+₹{pnl_rupees:,.2f}" if pnl_rupees >= 0 else f"-₹{abs(pnl_rupees):,.2f}"
 
     strat_name = format_strategy_name(strategy)
     clean_opt = clean_option_name(option_str)
     clean_reason = exit_reason.replace("_", " ").title()
 
-    opt_pts_str = f" ({option_pnl_pts:+.1f} pts)" if option_pnl_pts != 0 else ""
+    opt_pts_str = f" ({option_pnl_pts:+.2f} pts)" if option_pnl_pts != 0 else ""
 
     text = (
-        f"{badge_icon} <b>TRADE CLOSED · {symbol}</b>\n\n"
-        f"💰 <b>Realized PnL:</b> <b>{badge_pnl}</b>{opt_pts_str}\n"
-        f"📈 <b>Strategy:</b> {strat_name}\n"
-        f"📜 <b>Contract:</b> {clean_opt} ({total_lots} Lot{'s' if total_lots > 1 else ''})\n\n"
-        f"📍 <b>Exit Reason:</b> {clean_reason} @ {exit_time}\n"
-        f"📊 <b>Spot Movement:</b> {pnl_pts:+.1f} pts"
+        f"🏁 <b>TRADE EXIT · {symbol}</b>\n\n"
+        f"💰 <b>Realized PnL:</b> {badge_icon} <b>{badge_pnl}</b>{opt_pts_str}\n"
+        f"🎯 <b>Position Closed:</b> {clean_opt} ({total_lots} Lot{'s' if total_lots > 1 else ''} / {qty} qty)\n\n"
+        f"💵 <b>Exit Price:</b> ₹{exit_price:,.2f}\n"
+        f"📍 <b>Exit Reason:</b> <b>{clean_reason}</b>\n"
+        f"⏰ <b>Exit Time:</b> {exit_time}\n"
+        f"📊 <b>Spot Movement:</b> {pnl_pts:+.1f} pts\n\n"
+        f"⚡ <i>Strategy: {strat_name}</i>"
     )
     send_telegram_message(text, force=force)
 
