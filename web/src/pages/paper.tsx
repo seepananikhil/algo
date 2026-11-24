@@ -696,184 +696,134 @@ export function PaperPage() {
                   setSelectedInstrument(isSensex ? "SENSEX" : "NIFTY")
                 }}
                 className={cn(
-                  "group p-3 rounded-xl text-xs cursor-pointer transition-all duration-150 flex flex-col gap-2.5 shadow-2xs",
+                  "group p-2.5 rounded-xl text-xs cursor-pointer transition-all duration-150 flex flex-col gap-1.5 shadow-2xs",
                   isSelected
                     ? isWin
-                      ? "bg-emerald-500/[0.08] dark:bg-emerald-500/10 border-2 border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/20"
+                      ? "bg-emerald-500/[0.08] dark:bg-emerald-500/10 border border-emerald-500/50 shadow-xs ring-1 ring-emerald-500/20"
                       : isLoss
-                      ? "bg-rose-500/[0.08] dark:bg-rose-500/10 border-2 border-rose-500/50 shadow-xs ring-1 ring-rose-500/20"
-                      : "bg-muted/70 border-2 border-primary/50"
+                      ? "bg-rose-500/[0.08] dark:bg-rose-500/10 border border-rose-500/50 shadow-xs ring-1 ring-rose-500/20"
+                      : "bg-muted/70 border border-primary/50"
                     : isWin
-                    ? "bg-emerald-500/[0.02] hover:bg-emerald-500/[0.05] border border-emerald-500/20 hover:border-emerald-500/35"
+                    ? "bg-card hover:bg-emerald-500/[0.03] border border-border/60 hover:border-emerald-500/30"
                     : isLoss
-                    ? "bg-rose-500/[0.02] hover:bg-rose-500/[0.05] border border-rose-500/20 hover:border-rose-500/35"
+                    ? "bg-card hover:bg-rose-500/[0.03] border border-border/60 hover:border-rose-500/30"
                     : "bg-card hover:bg-muted/30 border border-border/60"
                 )}
               >
-                {/* 1. Header: Instrument, Contract & Strategy + Prominent P&L */}
-                <div className="flex items-start justify-between gap-2">
-                  <div className="space-y-1 min-w-0">
-                    <div className="flex items-center gap-1.5 flex-wrap">
-                      {/* Integrated Direction + Instrument Badge */}
-                      <div className="flex items-center rounded-md overflow-hidden border border-border/60 text-[10px] font-mono font-bold shrink-0 shadow-2xs">
-                        <span
-                          className={cn(
-                            "px-1.5 py-0.5 text-white font-black tracking-wider",
-                            isCall ? "bg-emerald-600 dark:bg-emerald-500" : "bg-rose-600 dark:bg-rose-500"
-                          )}
-                        >
-                          {isCall ? "CALL" : "PUT"}
-                        </span>
-                        <span
-                          className={cn(
-                            "px-1.5 py-0.5 font-bold",
-                            isSensex ? "bg-amber-500/15 text-amber-600 dark:text-amber-400" : "bg-primary/10 text-primary"
-                          )}
-                        >
-                          {isSensex ? "SENSEX" : "NIFTY"}
-                        </span>
-                      </div>
+                {/* LINE 1: Position Title, Qty, Badges & Realized PnL */}
+                <div className="flex items-center justify-between gap-2 min-w-0">
+                  <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
+                    {/* Qty Pill */}
+                    <span className="px-1.5 py-0.2 rounded text-[10px] font-mono font-bold bg-muted text-muted-foreground border border-border/60 shrink-0">
+                      Qty {tradeQty}
+                    </span>
 
-                      {/* Contract Strike */}
-                      <span className="font-extrabold text-sm text-foreground shrink-0 font-mono tracking-tight">
-                        {optContract}
-                      </span>
-
-                      {/* Strategy Pill */}
-                      <span
-                        className={cn(
-                          "px-1.5 py-0.5 rounded-md text-[9px] font-bold uppercase tracking-wider shrink-0 border",
-                          triggeredStrategy.isTrap
-                            ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/25"
-                            : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/25"
-                        )}
-                      >
-                        {triggeredStrategy.label}
-                      </span>
-                    </div>
-
-                    {/* Subline: Timing & Expiry */}
-                    <div className="flex items-center gap-1.5 text-[10.5px] text-muted-foreground font-mono">
-                      <Clock className="w-3 h-3 opacity-60 shrink-0" />
-                      <span>{t.entry} ➔ {t.exit || "Open"}</span>
-                      {durationStr && <span className="opacity-75">({durationStr})</span>}
-                      <span className="opacity-30">·</span>
-                      <span className="text-amber-600 dark:text-amber-400/90 font-medium">Exp: {expiryStr}</span>
-                    </div>
-                  </div>
-
-                  {/* Prominent Realized P&L */}
-                  <div className="text-right shrink-0">
-                    <div
+                    {/* CE/PE Pill */}
+                    <span
                       className={cn(
-                        "text-base sm:text-lg font-black font-mono tracking-tight leading-none",
-                        isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
+                        "px-1.5 py-0.2 rounded text-[9.5px] font-black tracking-wider text-white shrink-0",
+                        isCall ? "bg-emerald-600 dark:bg-emerald-500" : "bg-rose-600 dark:bg-rose-500"
                       )}
                     >
-                      {rs >= 0 ? "+" : ""}{fmtRs(rs)}
-                    </div>
-                    <div className="flex items-center justify-end gap-1 mt-1 text-[11px] font-bold font-mono">
-                      {pctGain != null && (
-                        <span
-                          className={cn(
-                            "px-1 py-0.2 rounded text-[10px] font-black",
-                            isWin ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
-                          )}
-                        >
-                          {pctGain >= 0 ? `+${pctGain.toFixed(1)}%` : `${pctGain.toFixed(1)}%`}
-                        </span>
+                      {isCall ? "CE" : "PE"}
+                    </span>
+
+                    {/* Instrument & Contract Strike */}
+                    <span className="font-extrabold text-xs text-foreground font-mono tracking-tight shrink-0">
+                      {isSensex ? "SENSEX" : "NIFTY"} {optContract}
+                    </span>
+
+                    {/* Expiry Date */}
+                    <span className="text-[9.5px] font-mono text-muted-foreground/80 shrink-0">
+                      · {expiryStr}
+                    </span>
+
+                    {/* Strategy Tag */}
+                    <span
+                      className={cn(
+                        "px-1.5 py-0.2 rounded text-[9px] font-bold uppercase tracking-wider shrink-0 border",
+                        triggeredStrategy.isTrap
+                          ? "bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20"
+                          : "bg-sky-500/10 text-sky-600 dark:text-sky-400 border-sky-500/20"
                       )}
-                      <span
-                        className={cn(
-                          "text-[10.5px]",
-                          isWin ? "text-emerald-600/80 dark:text-emerald-400/80" : isLoss ? "text-rose-600/80 dark:text-rose-400/80" : "text-muted-foreground"
-                        )}
-                      >
-                        {spotPts >= 0 ? `+${spotPts.toFixed(1)}` : spotPts.toFixed(1)} pts
-                      </span>
-                    </div>
-                  </div>
-                </div>
-
-                {/* 2. Structured Execution Metrics Grid (Option Flow, Capital, Spot, Risk/Return) */}
-                <div className="grid grid-cols-2 gap-1.5 p-2 rounded-lg bg-muted/40 dark:bg-muted/20 border border-border/40 text-[10.5px] font-mono">
-                  {/* Metric 1: Option Premium Flow */}
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground/80 tracking-wider">Option Premium</span>
-                    <div className="flex items-center gap-1 font-semibold text-foreground">
-                      <span>{entryPriceDisplay}</span>
-                      <span className="text-muted-foreground/60 text-[9.5px]">➔</span>
-                      <span className={isWin ? "text-emerald-600 dark:text-emerald-400 font-bold" : isLoss ? "text-rose-600 dark:text-rose-400 font-bold" : "text-foreground"}>
-                        {exitPriceDisplay}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Metric 2: Capital Deployed */}
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground/80 tracking-wider">Capital Deployed</span>
-                    <div className="font-semibold text-foreground">
-                      {investedCapital > 0 ? `₹${investedCapital.toLocaleString("en-IN")}` : "--"}
-                      <span className="text-[9.5px] text-muted-foreground font-normal ml-1">({tradeQty} qty)</span>
-                    </div>
-                  </div>
-
-                  {/* Metric 3: Spot Movement */}
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground/80 tracking-wider">Spot Movement</span>
-                    <div className="flex items-center gap-1 font-semibold text-foreground">
-                      <span>{spotIn > 0 ? spotIn.toFixed(1) : "--"}</span>
-                      <span className="text-muted-foreground/60 text-[9.5px]">➔</span>
-                      <span>{spotOut > 0 ? spotOut.toFixed(1) : "--"}</span>
-                    </div>
-                  </div>
-
-                  {/* Metric 4: Risk / Return */}
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-[9px] uppercase font-bold text-muted-foreground/80 tracking-wider">Risk / Return</span>
-                    <div className="flex items-center gap-1.5 font-semibold">
-                      {rMultiple != null ? (
-                        <span
-                          className={cn(
-                            "px-1.5 py-0.2 rounded text-[9.5px] font-bold border",
-                            rMultiple >= 0
-                              ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/25"
-                              : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/25"
-                          )}
-                        >
-                          {rMultiple >= 0 ? `+${rMultiple.toFixed(1)}R` : `${rMultiple.toFixed(1)}R`}
-                        </span>
-                      ) : (
-                        <span className="text-muted-foreground">--</span>
-                      )}
-                      {slNum > 0 && (
-                        <span className="text-[9.5px] text-muted-foreground font-normal">
-                          SL: {slNum.toFixed(1)}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* 3. Bottom Footer: Exit Reason & Interactive Inspection State */}
-                <div className="flex items-center justify-between pt-1 border-t border-border/40 text-[10.5px]">
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-muted-foreground/70 uppercase text-[9px] font-bold tracking-wider">Exit:</span>
-                    <span className={cn("px-1.5 py-0.5 rounded text-[9.5px] font-medium font-sans border", exitBadge.className)}>
-                      {exitBadge.label}
+                    >
+                      {triggeredStrategy.label}
                     </span>
                   </div>
 
-                  <div className="flex items-center gap-1 font-mono text-[10px]">
-                    {isSelected ? (
-                      <span className="inline-flex items-center gap-1 text-primary font-bold">
-                        <span className="size-1.5 rounded-full bg-primary animate-pulse" />
-                        Viewing on Chart
+                  {/* Realized Rupee PnL */}
+                  <div
+                    className={cn(
+                      "text-sm font-black font-mono tracking-tight shrink-0 text-right leading-none",
+                      isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
+                    )}
+                  >
+                    {rs >= 0 ? "+" : ""}{fmtRs(rs)}
+                  </div>
+                </div>
+
+                {/* LINE 2: Option Buy/Exit Flow, Invested Capital & Return % / Captured Points */}
+                <div className="flex items-center justify-between gap-2 text-[10.5px] font-mono min-w-0">
+                  <div className="flex items-center gap-1.5 text-muted-foreground truncate">
+                    <span>Avg <strong className="text-foreground">{entryPriceDisplay}</strong></span>
+                    <span className="text-muted-foreground/50 text-[9.5px]">➔</span>
+                    <span>Exit <strong className={isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-foreground"}>{exitPriceDisplay}</strong></span>
+                    {investedCapital > 0 && (
+                      <span className="opacity-80">
+                        · Inv <strong className="text-foreground">₹{investedCapital.toLocaleString("en-IN")}</strong>
                       </span>
-                    ) : (
-                      <span className="text-muted-foreground group-hover:text-foreground transition-colors flex items-center gap-0.5">
-                        Inspect trade ➔
+                    )}
+                  </div>
+
+                  {/* Return % & Points */}
+                  <div className="flex items-center gap-1.5 shrink-0 text-right">
+                    {pctGain != null && (
+                      <span
+                        className={cn(
+                          "px-1 py-0.2 rounded text-[10px] font-black",
+                          isWin ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                        )}
+                      >
+                        {pctGain >= 0 ? `+${pctGain.toFixed(1)}%` : `${pctGain.toFixed(1)}%`}
                       </span>
+                    )}
+                    <span
+                      className={cn(
+                        "text-[10.5px] font-bold",
+                        isWin ? "text-emerald-600 dark:text-emerald-400" : isLoss ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
+                      )}
+                    >
+                      {spotPts >= 0 ? `+${spotPts.toFixed(1)}` : spotPts.toFixed(1)} pts
+                    </span>
+                  </div>
+                </div>
+
+                {/* LINE 3: Underlying Spot In ➔ Out, Stop Loss, R-Multiple, Time & Exit Reason */}
+                <div className="flex items-center justify-between gap-2 text-[10px] font-mono border-t border-border/30 pt-1 text-muted-foreground min-w-0">
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span>Spot <strong className="text-foreground">{spotIn > 0 ? spotIn.toFixed(1) : "--"}</strong> ➔ <strong className="text-foreground">{spotOut > 0 ? spotOut.toFixed(1) : "--"}</strong></span>
+                    {slNum > 0 && <span>· SL {slNum.toFixed(1)}</span>}
+                    {rMultiple != null && (
+                      <span
+                        className={cn(
+                          "px-1 py-0.2 rounded text-[9px] font-bold border",
+                          rMultiple >= 0
+                            ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/20"
+                            : "bg-rose-500/15 text-rose-600 dark:text-rose-400 border-rose-500/20"
+                        )}
+                      >
+                        {rMultiple >= 0 ? `+${rMultiple.toFixed(1)}R` : `${rMultiple.toFixed(1)}R`}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <span>{t.entry} - {t.exit || "Open"}{durationStr ? ` (${durationStr})` : ""}</span>
+                    <span className={cn("px-1.5 py-0.2 rounded text-[9px] font-medium font-sans border", exitBadge.className)}>
+                      {exitBadge.label}
+                    </span>
+                    {isSelected && (
+                      <span className="size-1.5 rounded-full bg-primary animate-pulse ml-0.5" title="Viewing on chart" />
                     )}
                   </div>
                 </div>
