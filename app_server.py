@@ -208,6 +208,18 @@ def daily_backtest_sync_loop() -> None:
                     except Exception as e:
                         print(f"Error dispatching EOD report: {e}")
 
+            # 15:40 IST Weekdays: Automated Swinger EOD Cycle (Update positions, trailing SL, and scan Chartink)
+            if now.weekday() < 5 and now.hour == 15 and now.minute == 40:
+                swinger_tag = f"{today_str}_15_40_swinger"
+                if _sync_state.get("last_swinger_tag") != swinger_tag:
+                    _sync_state["last_swinger_tag"] = swinger_tag
+                    try:
+                        from swinger_engine import update_positions_and_scan
+                        print("[Scheduler] Running automatic EOD Swinger cycle...")
+                        update_positions_and_scan()
+                    except Exception as e:
+                        print(f"Error running automated Swinger cycle: {e}")
+
             # 15:55 and 16:35 IST Weekdays: Master backtest sync
             if now.weekday() < 5 and ((now.hour == 15 and now.minute == 55) or (now.hour == 16 and now.minute == 35)):
                 tag = f"{today_str}_{now.hour}_{now.minute}"
@@ -1008,11 +1020,19 @@ def check_dual_ema_cross_exit(sym: str, sig: str, t_str: str, c_5m: float, ema20
 
         other_sym = "SENSEX" if sym.upper() == "NIFTY" else "NIFTY"
         other_engine = LIVE_ENGINES.get(other_sym.lower())
-        if not other_engine or other_engine.ema20_5m is None or not other_engine.current_5m_bar:
+        if not other_engine:
             return True
 
-        other_c = float(other_engine.current_5m_bar.get("close") or 0.0)
-        other_ema = float(other_engine.ema20_5m)
+        other_c = getattr(other_engine, "last_completed_5m_close", None)
+        other_ema = getattr(other_engine, "last_completed_5m_ema20", None)
+        if other_c is None or other_ema is None:
+            if other_engine.ema20_5m is None or not other_engine.current_5m_bar:
+                return True
+            other_c = float(other_engine.current_5m_bar.get("close") or 0.0)
+            other_ema = float(other_engine.ema20_5m)
+        else:
+            other_c = float(other_c)
+            other_ema = float(other_ema)
         if other_c == 0.0:
             return True
 
@@ -7202,7 +7222,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._json(combined_strategy_backtest_report(
                     ROOT / "performance" / "master_portfolio_nifty_trades.csv",
                     ROOT / "performance" / "master_portfolio_sensex_trades.csv",
-                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False
+                    nifty_lot=25, sensex_lot=10, option_delta=0.60, use_weighted=False, use_confluence=False
                 ))
             elif strategy in ("master_portfolio", "master_portfolio_nifty", "portfolio", "unified_master"):
                 self._json(master_portfolio_backtest_report("nifty"))
