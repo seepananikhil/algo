@@ -138,6 +138,7 @@ interface WatchlistItem {
 
 export function SwingerPage() {
   const [positions, setPositions] = useState<Position[]>([])
+  const [config, setConfig] = useState<any>(null)
   const [watchlist, setWatchlist] = useState<WatchlistItem[]>([])
   const [trades, setTrades] = useState<Trade[]>([])
   const [yearly, setYearly] = useState<any[]>([])
@@ -269,6 +270,7 @@ export function SwingerPage() {
       if (posRes.ok) {
         const d = await posRes.json()
         setPositions(d.portfolio?.positions || [])
+        if (d.config) setConfig(d.config)
       }
       if (watchRes.ok) {
         const d = await watchRes.json()
@@ -1060,7 +1062,7 @@ export function SwingerPage() {
           <Activity className="size-4 text-indigo-500 shrink-0" />
           <span className="text-slate-500 font-sans">Active:</span>
           <span className="font-bold text-slate-800 text-sm">
-            ₹{(totalInvested / 100000).toFixed(2)}L · {positions.length}/20 Slots
+            ₹{(totalInvested / 100000).toFixed(2)}L · {positions.length} {config?.mode === "paper" || (config?.max_open_positions && config.max_open_positions >= 50) ? "Positions (Unlimited Paper)" : `/${config?.max_open_positions || 20} Slots`}
           </span>
           <span className={`text-[11px] font-bold font-mono ${totalUnrealizedPnl >= 0 ? "text-emerald-600" : "text-rose-600"}`}>
             ({totalUnrealizedPnl >= 0 ? "+" : ""}₹{Math.round(totalUnrealizedPnl).toLocaleString("en-IN")})

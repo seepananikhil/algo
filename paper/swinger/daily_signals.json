@@ -1,42 +1,232 @@
 {
-  "last_scan_time": "2026-11-23T15:31:00.642577+05:30",
-  "count": 3,
+  "last_scan_time": "2026-11-25T22:44:49.968150+05:30",
+  "count": 8,
   "signals": [
     {
       "sr": 1,
-      "nsecode": "TCS",
-      "name": "Tata Consultancy Services Limited",
-      "bsecode": "532540",
-      "close": 2453.1,
-      "per_chg": 3.24,
-      "volume": 7295868,
+      "nsecode": "JWL",
+      "name": "Jupiter Wagons Ltd",
+      "bsecode": "533272",
+      "close": 222.46,
+      "per_chg": 20,
+      "volume": 63678666,
+      "leg": 1,
+      "strategy_leg": "LEG1_TURNAROUND"
+    },
+    {
+      "sr": 1,
+      "nsecode": "TRENT",
+      "name": "Trent Limited",
+      "bsecode": "500251",
+      "close": 3319.6,
+      "per_chg": 3.48,
+      "volume": 1846939,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 2,
-      "nsecode": "SIYSIL",
-      "name": "Siyaram Silk Mills Limited",
-      "bsecode": "503811",
-      "close": 523.75,
-      "per_chg": 2.79,
-      "volume": 69045,
+      "nsecode": "COLPAL",
+      "name": "Colgate Palmolive (india) Limited",
+      "bsecode": "500830",
+      "close": 1825,
+      "per_chg": 3.96,
+      "volume": 889057,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 3,
-      "nsecode": "HITECH",
-      "name": "Hi-Tech Pipes Ltd",
-      "bsecode": "532601",
-      "close": 85.65,
-      "per_chg": 13.53,
-      "volume": 26500526,
+      "nsecode": "ARMANFIN",
+      "name": "Arman Financial Services Limited",
+      "bsecode": "531179",
+      "close": 1602.4,
+      "per_chg": 4.42,
+      "volume": 62887,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 4,
+      "nsecode": "UNICHEMLAB",
+      "name": "Unichem Laboratories Limited",
+      "bsecode": "506690",
+      "close": 504.1,
+      "per_chg": 7.6,
+      "volume": 356871,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 5,
+      "nsecode": "JWL",
+      "name": "Jupiter Wagons Ltd",
+      "bsecode": "533272",
+      "close": 222.46,
+      "per_chg": 20,
+      "volume": 63678666,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 6,
+      "nsecode": "KANSAINER",
+      "name": "Kansai Nerolac Paints Limited",
+      "bsecode": "500165",
+      "close": 202.49,
+      "per_chg": 4.78,
+      "volume": 541366,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 7,
+      "nsecode": "JISLJALEQS",
+      "name": "Jain Irrigation Systems Limited",
+      "bsecode": "500219",
+      "close": 26.66,
+      "per_chg": 7.03,
+      "volume": 15791962,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     }
   ],
   "history": [
+    {
+      "date": "2026-11-25",
+      "scan_time": "2026-11-25T22:44:49.968150+05:30",
+      "count": 8,
+      "signals": [
+        {
+          "sr": 1,
+          "nsecode": "JWL",
+          "name": "Jupiter Wagons Ltd",
+          "bsecode": "533272",
+          "close": 222.46,
+          "per_chg": 20,
+          "volume": 63678666,
+          "leg": 1,
+          "strategy_leg": "LEG1_TURNAROUND"
+        },
+        {
+          "sr": 1,
+          "nsecode": "TRENT",
+          "name": "Trent Limited",
+          "bsecode": "500251",
+          "close": 3319.6,
+          "per_chg": 3.48,
+          "volume": 1846939,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 2,
+          "nsecode": "COLPAL",
+          "name": "Colgate Palmolive (india) Limited",
+          "bsecode": "500830",
+          "close": 1825,
+          "per_chg": 3.96,
+          "volume": 889057,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 3,
+          "nsecode": "ARMANFIN",
+          "name": "Arman Financial Services Limited",
+          "bsecode": "531179",
+          "close": 1602.4,
+          "per_chg": 4.42,
+          "volume": 62887,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 4,
+          "nsecode": "UNICHEMLAB",
+          "name": "Unichem Laboratories Limited",
+          "bsecode": "506690",
+          "close": 504.1,
+          "per_chg": 7.6,
+          "volume": 356871,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 5,
+          "nsecode": "JWL",
+          "name": "Jupiter Wagons Ltd",
+          "bsecode": "533272",
+          "close": 222.46,
+          "per_chg": 20,
+          "volume": 63678666,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 6,
+          "nsecode": "KANSAINER",
+          "name": "Kansai Nerolac Paints Limited",
+          "bsecode": "500165",
+          "close": 202.49,
+          "per_chg": 4.78,
+          "volume": 541366,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 7,
+          "nsecode": "JISLJALEQS",
+          "name": "Jain Irrigation Systems Limited",
+          "bsecode": "500219",
+          "close": 26.66,
+          "per_chg": 7.03,
+          "volume": 15791962,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        }
+      ]
+    },
+    {
+      "date": "2026-11-24",
+      "scan_time": "2026-11-24T09:30:32.219779+05:30",
+      "count": 3,
+      "signals": [
+        {
+          "sr": 1,
+          "nsecode": "TCS",
+          "name": "Tata Consultancy Services Limited",
+          "bsecode": "532540",
+          "close": 2460,
+          "per_chg": 3.53,
+          "volume": 7386320,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 2,
+          "nsecode": "SIYSIL",
+          "name": "Siyaram Silk Mills Limited",
+          "bsecode": "503811",
+          "close": 524.05,
+          "per_chg": 2.85,
+          "volume": 70162,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 3,
+          "nsecode": "HITECH",
+          "name": "Hi-Tech Pipes Ltd",
+          "bsecode": "532601",
+          "close": 85.63,
+          "per_chg": 13.51,
+          "volume": 27132206,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        }
+      ]
+    },
     {
       "date": "2026-11-23",
       "scan_time": "2026-11-23T15:31:00.642577+05:30",

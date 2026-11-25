@@ -205,7 +205,8 @@ def compute_swinger_summary(trades, positions=None):
     cfg = load_config()
     base_cap = float(cfg.get("capital_allocated", 500000.0))
     slot_size = float(cfg.get("base_position_size", 25000.0))
-    max_slots = int(cfg.get("max_open_positions", 20))
+    is_paper = str(cfg.get("mode", "paper")).lower() == "paper"
+    max_slots = 999 if is_paper else int(cfg.get("max_open_positions", 20))
 
     # Active positions integration
     if positions is None:
@@ -1560,7 +1561,8 @@ def update_positions_and_scan():
     print(f"[Swinger Paper] Chartink returned {len(raw_signals_leg1)} Leg 1 and {len(raw_signals_leg2)} Leg 2 trigger candidates.")
     
     # --- FILL AVAILABLE SLOTS IN PAPER MODE ---
-    max_slots = cfg.get("max_open_positions", 20)
+    is_paper = str(cfg.get("mode", "paper")).lower() == "paper"
+    max_slots = 999 if is_paper else int(cfg.get("max_open_positions", 20))
     available_slots = max_slots - len(updated_positions)
     blacklist = set(cfg.get("blacklist", ["V2RETAIL"]))
     held_symbols = {p["symbol"] for p in updated_positions} | blacklist
@@ -1699,7 +1701,7 @@ def update_positions_and_scan():
             delta = df["Close"].diff()
             gain = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
             loss = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
-            rsi_val = float((100 - (100 / (1 + (gain / (loss + 1e-9)))))[-1]) if len(df) >= 15 else 55.0
+            rsi_val = float((100 - (100 / (1 + (gain / (loss + 1e-9))))).iloc[-1]) if len(df) >= 15 else 55.0
 
             # If slots are available and not overextended and stars qualified, enter directly
             if available_slots > 0 and candle_gain_pct <= max_direct_gain and stars >= min_stars:
@@ -1758,7 +1760,7 @@ def update_positions_and_scan():
             if not any(w.get("symbol") == sym for w in remaining_wl):
                 is_ready = bool(abs(dist_20) <= 2.5)
                 status_text = "OVEREXTENDED BLAST" if candle_gain_pct > max_direct_gain else ("READY (Awaiting Slot)" if (available_slots <= 0 and is_ready) else "COOLING TOWARDS 20 EMA")
-                reason_note = f"Leg 1 Turnaround (+{candle_gain_pct:.1f}%). {stars}-Star setup. {'All 20 slots full - queued on radar.' if available_slots <= 0 else f'Waiting for retracement to ~Rs.{target_pb} (or 20 EMA).'}"
+                reason_note = f"Leg 1 Turnaround (+{candle_gain_pct:.1f}%). {stars}-Star setup. {'Slots full - queued on radar.' if available_slots <= 0 else f'Waiting for retracement to ~Rs.{target_pb} (or 20 EMA).'}"
                 print(f"[Swinger Paper] RADAR CANDIDATE (LEG 1): {sym} @ Rs.{last_close:.2f} ({status_text}) | Pullback Target: Rs.{target_pb:.2f}")
                 remaining_wl.append({
                     "symbol": sym,
@@ -1909,7 +1911,7 @@ def update_positions_and_scan():
                     delta2 = m_df2["Close"].diff() if m_df2 is not None else pd.Series([0])
                     gain2 = delta2.clip(lower=0).ewm(com=13, min_periods=14).mean()
                     loss2 = (-delta2.clip(upper=0)).ewm(com=13, min_periods=14).mean()
-                    rsi_2 = float((100 - (100 / (1 + (gain2 / (loss2 + 1e-9)))))[-1]) if len(m_df2) >= 15 else 58.0
+                    rsi_2 = float((100 - (100 / (1 + (gain2 / (loss2 + 1e-9))))).iloc[-1]) if len(m_df2) >= 15 else 58.0
 
                     print(f"[Swinger Paper] RADAR CANDIDATE (LEG 2): {sym2} @ Rs.{c_p:.2f} (Breakout trigger, awaiting slot)")
                     remaining_wl.append({
@@ -1930,7 +1932,7 @@ def update_positions_and_scan():
                         "leg": 2,
                         "cooldown_ready": is_ready_2,
                         "status": "READY (Awaiting Slot)" if is_ready_2 else "BASE BREAKOUT TRIGGERED",
-                        "notes": f"Leg 2 Base Breakout. {cand2.get('today_vol_mult', 1.5)}x vol surge. All 20 slots full - queued on radar."
+                        "notes": f"Leg 2 Base Breakout. {cand2.get('today_vol_mult', 1.5)}x vol surge. {'Slots full - queued on radar.' if available_slots <= 0 else 'Breakout trigger queued.'}"
                     })
 
         except Exception as e:

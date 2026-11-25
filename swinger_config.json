@@ -9,7 +9,7 @@
   ],
   "strategy": "Phoenix Pure Breakout Swinger \u00b7 Backtest Calibrated (Leg 1 Turnaround + Leg 2 Base Breakout)",
   "capital_allocated": 500000.0,
-  "max_open_positions": 20,
+  "max_open_positions": 999,
   "base_position_size": 25000.0,
   "min_stock_price": 20.0,
   "min_market_cap_cr": 1500.0,
