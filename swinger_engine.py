@@ -1571,7 +1571,7 @@ def update_positions_and_scan():
     cur_wl = cur_wl_data.get("watchlist", [])
     remaining_wl = []
 
-    if available_slots > 0 and cfg.get("enabled", True):
+    if cfg.get("enabled", True):
         for item in cur_wl:
             w_sym = item.get("symbol")
             if not w_sym or w_sym in held_symbols:
@@ -1587,6 +1587,14 @@ def update_positions_and_scan():
             w_ema20 = float(w_df["EMA20"].iloc[-1]) if "EMA20" in w_df else w_close
             target_pb = float(item.get("target_pb_price", item.get("alert_price", w_close) * 0.95))
             blast_low = float(item.get("blast_low", item.get("alert_price", w_close) * 0.88))
+            alert_px = float(item.get("alert_price", w_close))
+
+            # Update live fields
+            item["current_price"] = round(w_close, 2)
+            item["ema20"] = round(w_ema20, 2)
+            dist_20 = round((w_close - w_ema20) / w_ema20 * 100.0, 1) if w_ema20 > 0 else 0.0
+            item["distance_to_ema20_pct"] = dist_20
+            item["pullback_pct"] = round((w_close - alert_px) / alert_px * 100.0, 1) if alert_px > 0 else 0.0
 
             # 1. Invalidation Check: Did it break down below blast low?
             if w_close < blast_low:
@@ -1596,6 +1604,7 @@ def update_positions_and_scan():
             # 2. Retracement Check: Did it reach pullback zone (target_pb with buffer or 20 EMA) while holding blast low?
             entry_buf = 1.0 + float(cfg.get("cooldown_entry_buffer_pct", 1.5)) / 100.0
             retrace_hit = (w_low <= target_pb * entry_buf or (w_ema20 > 0 and w_low <= w_ema20 * (entry_buf + 0.005))) and (w_close >= blast_low)
+            item["cooldown_ready"] = bool(retrace_hit or abs(dist_20) <= 2.5)
 
             if retrace_hit and available_slots > 0:
                 stars, star_details = calculate_setup_star_rating(w_df, w_sym)
@@ -1627,7 +1636,7 @@ def update_positions_and_scan():
                         "tp_50_hit": False,
                         "tp_target_price": tp_target,
                         "runner_mode": False,
-                "status": "ACTIVE",
+                        "status": "ACTIVE",
                         "runner_peak_price": round(w_close, 2),
                         "runner_trail_sl": None,
                         "days_held": 0,
@@ -1650,16 +1659,16 @@ def update_positions_and_scan():
                     available_slots -= 1
                     continue
 
+            if item["cooldown_ready"]:
+                item["status"] = "READY (Awaiting Slot)" if available_slots <= 0 else "AT 20 EMA SUPPORT"
+            else:
+                item["status"] = "COOLING TOWARDS 20 EMA" if dist_20 > 2.0 else "TESTING 20 EMA"
+
             remaining_wl.append(item)
 
-        cur_wl_data["watchlist"] = remaining_wl
-        save_watchlist(cur_wl_data)
-    
-    if available_slots > 0 and cfg.get("enabled", True):
+    if cfg.get("enabled", True):
         for cand in raw_signals:
-            if available_slots <= 0:
-                break
-            sym = cand.get("nsecode")
+            sym = cand.get("nsecode") or cand.get("symbol")
             if not sym or sym in held_symbols:
                 continue
                 
@@ -1672,99 +1681,105 @@ def update_positions_and_scan():
             if last_close < min_price:
                 continue
                 
-            # Check single-day blast gain: If > 10%, DO NOT enter immediately at close!
-            # Route directly to Cooldown Radar to wait for retracement/20 EMA retest instead of chasing high.
             prev_close = float(df["Close"].iloc[-2]) if len(df) >= 2 else last_close
             candle_gain_pct = round(((last_close / prev_close) - 1.0) * 100.0, 2)
             max_direct_gain = float(cfg.get("max_direct_entry_gain_pct", 10.0))
-            
-            if candle_gain_pct > max_direct_gain:
-                print(f"[Swinger Paper] OVEREXTENDED BLAST (+{candle_gain_pct:.1f}% > {max_direct_gain:.0f}%): {sym} routed to Cooldown Radar (waiting for retracement / 20 EMA retest instead of buying at top).")
-                cur_wl = load_watchlist().get("watchlist", [])
-                if not any(w.get("symbol") == sym for w in cur_wl):
-                    cur_c_dt = (df.index[-1].strftime("%Y-%m-%d") if hasattr(df.index[-1], "strftime") else str(df.index[-1])[:10]) if not df.empty else datetime.now(IST).strftime("%Y-%m-%d")
-                    b_open = float(df["Open"].iloc[-1]) if "Open" in df else last_close
-                    b_low = float(df["Low"].iloc[-1]) if "Low" in df else round(last_close * 0.90, 2)
-                    retrace_frac = float(cfg.get("cooldown_target_retrace_pct", 30.0)) / 100.0
-                    target_pb = round(last_close - retrace_frac * (last_close - b_open), 2)
-                    cur_wl.append({
-                        "symbol": sym,
-                        "name": cand.get("name", sym),
-                        "alert_date": cur_c_dt,
-                        "alert_price": round(last_close, 2),
-                        "alert_gain_pct": candle_gain_pct,
-                        "current_price": round(last_close, 2),
-                        "target_pb_price": target_pb,
-                        "blast_low": b_low,
-                        "ema20": round(float(df["EMA20"].iloc[-1]), 2) if "EMA20" in df else None,
-                        "cooldown_ready": False,
-                        "status": "WAITING_RETRACEMENT",
-                        "notes": f"Overextended blast (+{candle_gain_pct:.1f}%). On radar waiting for retracement to ~Rs.{target_pb} (or 20 EMA) instead of buying at top."
-                    })
-                    save_watchlist({"watchlist": cur_wl})
-                continue
-                
+            cur_ema20 = float(df["EMA20"].iloc[-1]) if "EMA20" in df else last_close
+            dist_20 = round((last_close - cur_ema20) / cur_ema20 * 100.0, 1) if cur_ema20 > 0 else 0.0
+            cur_c_dt = (df.index[-1].strftime("%Y-%m-%d") if hasattr(df.index[-1], "strftime") else str(df.index[-1])[:10]) if not df.empty else datetime.now(IST).strftime("%Y-%m-%d")
+            b_open = float(df["Open"].iloc[-1]) if "Open" in df else last_close
+            b_low = float(df["Low"].iloc[-1]) if "Low" in df else round(last_close * 0.90, 2)
+            retrace_frac = float(cfg.get("cooldown_target_retrace_pct", 30.0)) / 100.0
+            target_pb = round(last_close - retrace_frac * (last_close - b_open), 2)
             stars, star_details = calculate_setup_star_rating(df, sym)
             cand["stars"] = stars
             cand["star_details"] = star_details
-            
-            if stars < min_stars:
-                print(f"[Swinger Paper] Skipping {sym}: Setup scored {stars} Stars (min {min_stars} required for Elite tier).")
-                continue
-                
-            alloc_per_slot = cfg.get("base_position_size", 25000.0)
-            qty = int(alloc_per_slot // last_close)
-            if qty <= 0:
-                continue
-                
-            trig_low = float(df["Low"].iloc[-1]) if ("Low" in df and len(df) > 0) else round(last_close * 0.95, 2)
-            initial_sl = round(last_close * (1.0 + initial_sl_pct / 100.0), 2)
-            be_trigger = round(last_close * (1.0 + be_shield_trigger_pct / 100.0), 2)
-            tp_target = round(last_close * (1.0 + tp_target_pct / 100.0), 2)
-            
-            cur_c_dt = (df.index[-1].strftime("%Y-%m-%d") if hasattr(df.index[-1], "strftime") else str(df.index[-1])[:10]) if not df.empty else datetime.now(IST).strftime("%Y-%m-%d")
-            new_pos = {
-                "symbol": sym,
-                "name": cand.get("name", sym),
-                "entry_date": cand.get("date", cur_c_dt),
-                "entry_price": round(last_close, 2),
-                "avg_price": round(last_close, 2),
-                "cmp": round(last_close, 2),
-                "initial_qty": qty,
-                "current_qty": qty,
-                "shares": qty,
-                "invested": round(qty * last_close, 2),
-                "initial_sl_pct": round((initial_sl / last_close - 1.0) * 100.0, 1),
-                "sl_price": initial_sl,
-                "trigger_sl": trig_low,
-                "be_active": False,
-                "be_trigger_price": be_trigger,
-                "tp_hit": False,
-                "tp_50_hit": False,
-                "tp_target_price": tp_target,
-                "runner_mode": False,
-                "status": "ACTIVE",
-                "runner_peak_price": round(last_close, 2),
-                "runner_trail_sl": None,
-                "days_held": 0,
-                "booked_pnl": 0.0,
-                "unrealized_pnl": 0.0,
-                "unrealized_pnl_pct": 0.0,
-                "unrealized_pct": 0.0,
-                "leg": 1,
-                "strategy_leg": "LEG1_TURNAROUND",
-                "status": f"ACTIVE ({stars}-Star)",
-                "stars": stars,
-                "star_details": star_details,
-                "exit_rule": f"Initial SL {initial_sl_pct:.0f}% - BE Shield @ +{be_shield_trigger_pct:.0f}% - Pyramid @ +20% - 50 EMA Vol Breakdown + {trail_pct:.0f}% Close Trail",
-                "ema20": round(float(df["EMA20"].iloc[-1]), 2) if "EMA20" in df else None,
-                "peak_price": round(last_close, 2)
-            }
-            
-            print(f"[Swinger Paper] NEW ELITE PAPER BUY (LEG 1): {sym} ({cand.get('name', sym)}) @ Rs.{last_close} [{stars}-Star Setup] | Qty: {qty} | Invested: Rs.{new_pos['invested']} | SL ({initial_sl_pct:.0f}%): Rs.{initial_sl}")
-            updated_positions.append(new_pos)
-            held_symbols.add(sym)
-            available_slots -= 1
+
+            # Calculate RSI
+            delta = df["Close"].diff()
+            gain = delta.clip(lower=0).ewm(com=13, min_periods=14).mean()
+            loss = (-delta.clip(upper=0)).ewm(com=13, min_periods=14).mean()
+            rsi_val = float((100 - (100 / (1 + (gain / (loss + 1e-9)))))[-1]) if len(df) >= 15 else 55.0
+
+            # If slots are available and not overextended and stars qualified, enter directly
+            if available_slots > 0 and candle_gain_pct <= max_direct_gain and stars >= min_stars:
+                alloc_per_slot = cfg.get("base_position_size", 25000.0)
+                qty = int(alloc_per_slot // last_close)
+                if qty > 0:
+                    trig_low = float(df["Low"].iloc[-1]) if ("Low" in df and len(df) > 0) else round(last_close * 0.95, 2)
+                    initial_sl = round(last_close * (1.0 + initial_sl_pct / 100.0), 2)
+                    be_trigger = round(last_close * (1.0 + be_shield_trigger_pct / 100.0), 2)
+                    tp_target = round(last_close * (1.0 + tp_target_pct / 100.0), 2)
+                    
+                    new_pos = {
+                        "symbol": sym,
+                        "name": cand.get("name", sym),
+                        "entry_date": cand.get("date", cur_c_dt),
+                        "entry_price": round(last_close, 2),
+                        "avg_price": round(last_close, 2),
+                        "cmp": round(last_close, 2),
+                        "initial_qty": qty,
+                        "current_qty": qty,
+                        "shares": qty,
+                        "invested": round(qty * last_close, 2),
+                        "initial_sl_pct": round((initial_sl / last_close - 1.0) * 100.0, 1),
+                        "sl_price": initial_sl,
+                        "trigger_sl": trig_low,
+                        "be_active": False,
+                        "be_trigger_price": be_trigger,
+                        "tp_hit": False,
+                        "tp_50_hit": False,
+                        "tp_target_price": tp_target,
+                        "runner_mode": False,
+                        "status": "ACTIVE",
+                        "runner_peak_price": round(last_close, 2),
+                        "runner_trail_sl": None,
+                        "days_held": 0,
+                        "booked_pnl": 0.0,
+                        "unrealized_pnl": 0.0,
+                        "unrealized_pnl_pct": 0.0,
+                        "unrealized_pct": 0.0,
+                        "leg": 1,
+                        "strategy_leg": "LEG1_TURNAROUND",
+                        "status": f"ACTIVE ({stars}-Star)",
+                        "stars": stars,
+                        "star_details": star_details,
+                        "exit_rule": f"Initial SL {initial_sl_pct:.0f}% - BE Shield @ +{be_shield_trigger_pct:.0f}% - Pyramid @ +20% - 50 EMA Vol Breakdown + {trail_pct:.0f}% Close Trail",
+                        "ema20": round(float(df["EMA20"].iloc[-1]), 2) if "EMA20" in df else None,
+                        "peak_price": round(last_close, 2)
+                    }
+                    print(f"[Swinger Paper] NEW ELITE PAPER BUY (LEG 1): {sym} ({cand.get('name', sym)}) @ Rs.{last_close} [{stars}-Star Setup] | Qty: {qty} | Invested: Rs.{new_pos['invested']} | SL ({initial_sl_pct:.0f}%): Rs.{initial_sl}")
+                    updated_positions.append(new_pos)
+                    held_symbols.add(sym)
+                    available_slots -= 1
+                    continue
+
+            # Otherwise, place on Cooldown Radar!
+            if not any(w.get("symbol") == sym for w in remaining_wl):
+                is_ready = bool(abs(dist_20) <= 2.5)
+                status_text = "OVEREXTENDED BLAST" if candle_gain_pct > max_direct_gain else ("READY (Awaiting Slot)" if (available_slots <= 0 and is_ready) else "COOLING TOWARDS 20 EMA")
+                reason_note = f"Leg 1 Turnaround (+{candle_gain_pct:.1f}%). {stars}-Star setup. {'All 20 slots full - queued on radar.' if available_slots <= 0 else f'Waiting for retracement to ~Rs.{target_pb} (or 20 EMA).'}"
+                print(f"[Swinger Paper] RADAR CANDIDATE (LEG 1): {sym} @ Rs.{last_close:.2f} ({status_text}) | Pullback Target: Rs.{target_pb:.2f}")
+                remaining_wl.append({
+                    "symbol": sym,
+                    "name": cand.get("name", sym),
+                    "alert_date": cur_c_dt,
+                    "alert_price": round(last_close, 2),
+                    "alert_gain_pct": candle_gain_pct,
+                    "alert_rsi": round(rsi_val, 1),
+                    "current_price": round(last_close, 2),
+                    "current_rsi": round(rsi_val, 1),
+                    "ema20": round(cur_ema20, 2),
+                    "distance_to_ema20_pct": dist_20,
+                    "pullback_pct": 0.0,
+                    "target_pb_price": target_pb,
+                    "blast_low": b_low,
+                    "stars": stars,
+                    "leg": 1,
+                    "cooldown_ready": is_ready,
+                    "status": status_text,
+                    "notes": reason_note
+                })
 
     # --- FILL REMAINING SLOTS WITH LEG 2 HIGH-BASE BREAKOUT CANDIDATES ---
     leg2_enabled = cfg.get("leg2_enabled", True)
@@ -1772,7 +1787,7 @@ def update_positions_and_scan():
     leg2_be_pct = cfg.get("leg2_be_trigger_pct", 10.0)
     alloc_per_slot = cfg.get("base_position_size", 25000.0)
     
-    if available_slots > 0 and leg2_enabled and cfg.get("enabled", True):
+    if leg2_enabled and cfg.get("enabled", True):
         try:
             trig_leg2 = []
             coiled_leg2 = []
@@ -1826,8 +1841,6 @@ def update_positions_and_scan():
                 json.dump({"coiled": coiled_leg2, "updated_at": datetime.now(IST).isoformat()}, f, indent=2)
 
             for cand2 in trig_leg2:
-                if available_slots <= 0:
-                    break
                 sym2 = cand2["symbol"]
                 if sym2 in held_symbols:
                     continue
@@ -1841,55 +1854,92 @@ def update_positions_and_scan():
                 tp2 = round(c_p * 1.30, 2)
                 s_leg2 = cand2.get("strategy_leg", "LEG2_BASE_BREAKOUT")
 
-                new_pos2 = {
-                    "symbol": sym2,
-                    "name": sym2,
-                    "leg": 2,
-                    "strategy_leg": s_leg2,
-                    "entry_date": cand2.get("date", datetime.now(IST).strftime("%Y-%m-%d")),
-                    "entry_price": c_p,
-                    "avg_price": c_p,
-                    "cmp": c_p,
-                    "initial_qty": qty2,
-                    "current_qty": qty2,
-                    "shares": qty2,
-                    "invested": round(qty2 * c_p, 2),
-                    "initial_sl_pct": round((sl2 / c_p - 1.0) * 100.0, 1),
-                    "sl_price": sl2,
-                    "trigger_sl": trig_low2,
-                    "be_active": False,
-                    "be_trigger_price": be2,
-                    "tp_hit": False,
-                    "tp_50_hit": False,
-                    "tp_target_price": tp2,
-                    "runner_mode": False,
-                    "status": "ACTIVE",
-                    "runner_peak_price": c_p,
-                    "runner_trail_sl": None,
-                    "base_high": cand2.get("base_high", c_p),
-                    "base_low": cand2.get("base_low", c_p),
-                    "surge_date": cand2.get("surge_date", datetime.now(IST).strftime("%Y-%m-%d")),
-                    "consol_days": cand2.get("consol_days", 15),
-                    "days_held": 0,
-                    "booked_pnl": 0.0,
-                    "unrealized_pnl": 0.0,
-                    "unrealized_pnl_pct": 0.0,
-                    "unrealized_pct": 0.0,
-                    "stars": 5,
-                    "exit_rule": f"Leg 2 SL {leg2_sl_pct:.0f}% - BE Shield @ +{leg2_be_pct:.0f}% - 50 EMA Vol Breakdown + 20% Trail",
-                    "peak_price": c_p
-                }
-                print(f"[Swinger Paper] NEW LEG 2 BREAKOUT BUY: {sym2} @ Rs.{c_p} | Ceiling: Rs.{cand2.get('base_high', c_p)} | Vol: {cand2.get('today_vol_mult', 1.5)}x | SL ({leg2_sl_pct:.0f}%): Rs.{sl2}")
-                updated_positions.append(new_pos2)
-                held_symbols.add(sym2)
-                available_slots -= 1
+                # If available slots exist, enter directly
+                if available_slots > 0:
+                    new_pos2 = {
+                        "symbol": sym2,
+                        "name": sym2,
+                        "leg": 2,
+                        "strategy_leg": s_leg2,
+                        "entry_date": cand2.get("date", datetime.now(IST).strftime("%Y-%m-%d")),
+                        "entry_price": c_p,
+                        "avg_price": c_p,
+                        "cmp": c_p,
+                        "initial_qty": qty2,
+                        "current_qty": qty2,
+                        "shares": qty2,
+                        "invested": round(qty2 * c_p, 2),
+                        "initial_sl_pct": round((sl2 / c_p - 1.0) * 100.0, 1),
+                        "sl_price": sl2,
+                        "trigger_sl": trig_low2,
+                        "be_active": False,
+                        "be_trigger_price": be2,
+                        "tp_hit": False,
+                        "tp_50_hit": False,
+                        "tp_target_price": tp2,
+                        "runner_mode": False,
+                        "status": "ACTIVE",
+                        "runner_peak_price": c_p,
+                        "runner_trail_sl": None,
+                        "base_high": cand2.get("base_high", c_p),
+                        "base_low": cand2.get("base_low", c_p),
+                        "surge_date": cand2.get("surge_date", datetime.now(IST).strftime("%Y-%m-%d")),
+                        "consol_days": cand2.get("consol_days", 15),
+                        "days_held": 0,
+                        "booked_pnl": 0.0,
+                        "unrealized_pnl": 0.0,
+                        "unrealized_pnl_pct": 0.0,
+                        "unrealized_pct": 0.0,
+                        "stars": 5,
+                        "exit_rule": f"Leg 2 SL {leg2_sl_pct:.0f}% - BE Shield @ +{leg2_be_pct:.0f}% - 50 EMA Vol Breakdown + 20% Trail",
+                        "peak_price": c_p
+                    }
+                    print(f"[Swinger Paper] NEW LEG 2 BREAKOUT BUY: {sym2} @ Rs.{c_p} | Ceiling: Rs.{cand2.get('base_high', c_p)} | Vol: {cand2.get('today_vol_mult', 1.5)}x | SL ({leg2_sl_pct:.0f}%): Rs.{sl2}")
+                    updated_positions.append(new_pos2)
+                    held_symbols.add(sym2)
+                    available_slots -= 1
+                    continue
 
-            # Dynamically update watchlist.json with true cooldown candidates (excluding all held symbols)
-            if 'u_data' in locals():
-                radar_candidates = scan_cooldown_radar(u_data, held_symbols=held_symbols)
-                save_watchlist({"watchlist": radar_candidates})
+                # Otherwise, place on Cooldown Radar!
+                if not any(w.get("symbol") == sym2 for w in remaining_wl):
+                    m_df2 = get_market_data(sym2)
+                    ema20_2 = float(m_df2["EMA20"].iloc[-1]) if (m_df2 is not None and "EMA20" in m_df2) else c_p
+                    dist_20_2 = round((c_p - ema20_2) / ema20_2 * 100.0, 1) if ema20_2 > 0 else 0.0
+                    is_ready_2 = bool(abs(dist_20_2) <= 3.5)
+                    delta2 = m_df2["Close"].diff() if m_df2 is not None else pd.Series([0])
+                    gain2 = delta2.clip(lower=0).ewm(com=13, min_periods=14).mean()
+                    loss2 = (-delta2.clip(upper=0)).ewm(com=13, min_periods=14).mean()
+                    rsi_2 = float((100 - (100 / (1 + (gain2 / (loss2 + 1e-9)))))[-1]) if len(m_df2) >= 15 else 58.0
+
+                    print(f"[Swinger Paper] RADAR CANDIDATE (LEG 2): {sym2} @ Rs.{c_p:.2f} (Breakout trigger, awaiting slot)")
+                    remaining_wl.append({
+                        "symbol": sym2,
+                        "name": cand2.get("name", sym2),
+                        "alert_date": cand2.get("date", datetime.now(IST).strftime("%Y-%m-%d")),
+                        "alert_price": round(c_p, 2),
+                        "alert_gain_pct": round(cand2.get("today_vol_mult", 1.5) * 2.0, 1),
+                        "alert_rsi": round(rsi_2, 1),
+                        "current_price": round(c_p, 2),
+                        "current_rsi": round(rsi_2, 1),
+                        "ema20": round(ema20_2, 2),
+                        "distance_to_ema20_pct": dist_20_2,
+                        "pullback_pct": 0.0,
+                        "target_pb_price": round(c_p * 0.95, 2),
+                        "blast_low": trig_low2,
+                        "stars": 5,
+                        "leg": 2,
+                        "cooldown_ready": is_ready_2,
+                        "status": "READY (Awaiting Slot)" if is_ready_2 else "BASE BREAKOUT TRIGGERED",
+                        "notes": f"Leg 2 Base Breakout. {cand2.get('today_vol_mult', 1.5)}x vol surge. All 20 slots full - queued on radar."
+                    })
+
         except Exception as e:
             print(f"[Swinger Paper] Error during Leg 2 scan: {e}")
+
+    # Always persist updated Radar Watchlist
+    cur_wl_data["watchlist"] = remaining_wl
+    cur_wl_data["last_updated"] = datetime.now(IST).isoformat()
+    save_watchlist(cur_wl_data)
 
     # Update summary aggregates
     total_invested = round(sum(p.get("invested", 0.0) for p in updated_positions), 2)
