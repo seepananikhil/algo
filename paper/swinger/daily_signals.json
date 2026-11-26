@@ -1,97 +1,104 @@
 {
-  "last_scan_time": "2026-11-25T22:44:49.968150+05:30",
-  "count": 8,
+  "last_scan_time": "2026-11-26T22:24:25.409776+05:30",
+  "count": 4,
   "signals": [
     {
       "sr": 1,
-      "nsecode": "JWL",
-      "name": "Jupiter Wagons Ltd",
-      "bsecode": "533272",
-      "close": 222.46,
-      "per_chg": 20,
-      "volume": 63678666,
-      "leg": 1,
-      "strategy_leg": "LEG1_TURNAROUND"
-    },
-    {
-      "sr": 1,
-      "nsecode": "TRENT",
-      "name": "Trent Limited",
-      "bsecode": "500251",
-      "close": 3319.6,
-      "per_chg": 3.48,
-      "volume": 1846939,
+      "nsecode": "SOBHA",
+      "name": "Sobha Limited",
+      "bsecode": "532784",
+      "close": 1289.8,
+      "per_chg": 3.65,
+      "volume": 390697,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 2,
-      "nsecode": "COLPAL",
-      "name": "Colgate Palmolive (india) Limited",
-      "bsecode": "500830",
-      "close": 1825,
-      "per_chg": 3.96,
-      "volume": 889057,
+      "nsecode": "ZAGGLE",
+      "name": "Zaggle Prepaid Ocean Services Ltd",
+      "bsecode": "543985",
+      "close": 162.51,
+      "per_chg": 9,
+      "volume": 4335241,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 3,
-      "nsecode": "ARMANFIN",
-      "name": "Arman Financial Services Limited",
-      "bsecode": "531179",
-      "close": 1602.4,
-      "per_chg": 4.42,
-      "volume": 62887,
+      "nsecode": "TEXRAIL",
+      "name": "Texmaco Rail & Engineering Limited",
+      "bsecode": "533326",
+      "close": 118.05,
+      "per_chg": 4.86,
+      "volume": 5526482,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 4,
-      "nsecode": "UNICHEMLAB",
-      "name": "Unichem Laboratories Limited",
-      "bsecode": "506690",
-      "close": 504.1,
-      "per_chg": 7.6,
-      "volume": 356871,
-      "leg": 2,
-      "strategy_leg": "LEG2_BASE_BREAKOUT"
-    },
-    {
-      "sr": 5,
-      "nsecode": "JWL",
-      "name": "Jupiter Wagons Ltd",
-      "bsecode": "533272",
-      "close": 222.46,
-      "per_chg": 20,
-      "volume": 63678666,
-      "leg": 2,
-      "strategy_leg": "LEG2_BASE_BREAKOUT"
-    },
-    {
-      "sr": 6,
-      "nsecode": "KANSAINER",
-      "name": "Kansai Nerolac Paints Limited",
-      "bsecode": "500165",
-      "close": 202.49,
-      "per_chg": 4.78,
-      "volume": 541366,
-      "leg": 2,
-      "strategy_leg": "LEG2_BASE_BREAKOUT"
-    },
-    {
-      "sr": 7,
       "nsecode": "JISLJALEQS",
       "name": "Jain Irrigation Systems Limited",
       "bsecode": "500219",
-      "close": 26.66,
-      "per_chg": 7.03,
-      "volume": 15791962,
+      "close": 27.67,
+      "per_chg": 3.79,
+      "volume": 89438549,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     }
   ],
   "history": [
+    {
+      "date": "2026-11-26",
+      "scan_time": "2026-11-26T22:24:25.409776+05:30",
+      "count": 4,
+      "signals": [
+        {
+          "sr": 1,
+          "nsecode": "SOBHA",
+          "name": "Sobha Limited",
+          "bsecode": "532784",
+          "close": 1289.8,
+          "per_chg": 3.65,
+          "volume": 390697,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 2,
+          "nsecode": "ZAGGLE",
+          "name": "Zaggle Prepaid Ocean Services Ltd",
+          "bsecode": "543985",
+          "close": 162.51,
+          "per_chg": 9,
+          "volume": 4335241,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 3,
+          "nsecode": "TEXRAIL",
+          "name": "Texmaco Rail & Engineering Limited",
+          "bsecode": "533326",
+          "close": 118.05,
+          "per_chg": 4.86,
+          "volume": 5526482,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 4,
+          "nsecode": "JISLJALEQS",
+          "name": "Jain Irrigation Systems Limited",
+          "bsecode": "500219",
+          "close": 27.67,
+          "per_chg": 3.79,
+          "volume": 89438549,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        }
+      ]
+    },
     {
       "date": "2026-11-25",
       "scan_time": "2026-11-25T22:44:49.968150+05:30",

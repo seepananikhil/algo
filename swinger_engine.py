@@ -1955,7 +1955,7 @@ def update_positions_and_scan():
     
     if closed_this_cycle:
         trade_db["trades"].extend(closed_this_cycle)
-        save_trades(trade_db)
+    save_trades(trade_db, updated_positions)
         # Telegram notifications disabled for swinger positions (FnO only)
         # try:
         #     from telegram_notifier import notify_swinger_trade_exit

@@ -208,9 +208,9 @@ def daily_backtest_sync_loop() -> None:
                     except Exception as e:
                         print(f"Error dispatching EOD report: {e}")
 
-            # 15:40 IST Weekdays: Automated Swinger EOD Cycle (Update positions, trailing SL, and scan Chartink)
-            if now.weekday() < 5 and now.hour == 15 and now.minute == 40:
-                swinger_tag = f"{today_str}_15_40_swinger"
+            # Post 15:40 IST Weekdays: Automated Swinger EOD Cycle (Update positions, trailing SL, and scan Chartink)
+            if now.weekday() < 5 and (now.hour > 15 or (now.hour == 15 and now.minute >= 40)):
+                swinger_tag = f"{today_str}_eod_swinger"
                 if _sync_state.get("last_swinger_tag") != swinger_tag:
                     _sync_state["last_swinger_tag"] = swinger_tag
                     try:
