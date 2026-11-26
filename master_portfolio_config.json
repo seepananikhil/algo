@@ -18,7 +18,7 @@
     "williams_fractal": false
   },
   "spot_ratchet_settings": {
-    "initial_sl_pts": 50.0,
+    "initial_sl_pts": 55.0,
     "call_cutoff_time": "10:45",
     "reentry_cooloff_bars": 20.0,
     "tier0a_trigger_pts": 40.0,
@@ -39,7 +39,7 @@
     "tier6_lock_pts": 270.0
   },
   "sensex_spot_ratchet_settings": {
-    "initial_sl_pts": 200.0,
+    "initial_sl_pts": 220.0,
     "call_cutoff_time": "10:45",
     "reentry_cooloff_bars": 20.0,
     "tier0a_trigger_pts": 115.0,

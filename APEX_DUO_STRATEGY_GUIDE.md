@@ -23,7 +23,7 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 | **Rejection Wick Limit** | Upper/Lower wick `≤ 30%` of range or `≤ 4` pts | Upper/Lower wick `≤ 30%` of range or `≤ 15` pts |
 | **VIX Bias Filter** | CALL: `≤ -1.8%` (`≤ 0%` if `80%+` body) · PUT: `≥ 0.0%` | CALL: `≤ -1.8%` (`≤ 0%` if `80%+` body) · PUT: `≥ 0.0%` |
 | **Dual-Activation Window** | Both indices must agree within `60` minutes | Both indices must agree within `60` minutes |
-| **Protective Initial SL** | **`50` spot points** (checked every `1m` bar) | **`200` spot points** (checked every `1m` bar) |
+| **Protective Initial SL** | **`55` spot points** (checked every `1m` bar) | **`220` spot points** (checked every `1m` bar) |
 | **5m 20-EMA Arming** | Activates after **`+50` spot points** favorable move | Activates after **`+150` spot points** favorable move |
 | **5m 20-EMA Exit Buffer** | `2.5` spot points beyond 5m 20-EMA | `7.5` spot points beyond 5m 20-EMA |
 | **Re-Entry Cool-Off** | `20` minutes after Trade 1 exit (max `2` trades/day) | `20` minutes after Trade 1 exit (max `2` trades/day) |
@@ -53,8 +53,8 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
   - In **Backtest (`CONCURRENT` mode)**: Both indices' trades are simulated together to measure full dual-index edge.
 
 ### Step 3: Trade Management & Exits
-1. **Protective Initial Stop Loss (`50` pts NIFTY / `200` pts SENSEX)**:
-   - Checked on **every 1-minute bar** from entry. If price moves against the trade by `50` pts (NIFTY) or `200` pts (SENSEX), it exits immediately to cap loss.
+1. **Protective Initial Stop Loss (`55` pts NIFTY / `220` pts SENSEX)**:
+   - Checked on **every 1-minute bar** from entry. If price moves against the trade by `55` pts (NIFTY) or `220` pts (SENSEX), it exits immediately to cap loss.
 2. **Armed 5m 20-EMA Dual-Cross Trail**:
    - Once the trade moves **`+50` pts** (NIFTY) or **`+150` pts** (SENSEX) in your favor, the `5m 20-EMA` trailing exit arms.
    - At each **5-minute candle close**, the engine checks whether **both** NIFTY and SENSEX have closed beyond their `5m 20-EMA` (past the `2.5p / 7.5p` noise buffer).
@@ -69,6 +69,6 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 ---
 
 ## 4. Historical Performance Summary (10-Year Backtest, 1 Lot)
-- **NIFTY (`2017–2026`, 65 Qty)**: `2,013` trades · **`54.0%` Win Rate** · `+38,927.2` pts · Max Drawdown `453.2` pts · Calmar **`85.9x`** · Profit Factor **`2.05`** · **`₹25,30,266.70`**
-- **SENSEX (`2023–2026`, 20 Qty)**: `838` trades · **`55.6%` Win Rate** · `+67,903.6` pts · Max Drawdown `1,596.2` pts · Calmar **`42.5x`** · Profit Factor **`2.22`** · **`₹13,58,072.00`**
-- **Combined 1-Lot Master Portfolio**: **`₹38,88,338.70`**
+- **NIFTY (`2017–2026`, 65 Qty)**: `1,983` trades · **`54.9%` Win Rate** · `+38,361.5` pts · Max Drawdown `503.2` pts · Calmar **`76.2x`** · Profit Factor **`2.03`** · **`₹24,93,496.20`**
+- **SENSEX (`2023–2026`, 20 Qty)**: `825` trades · **`57.7%` Win Rate** · `+70,321.5` pts · Max Drawdown `1,401.6` pts · Calmar **`50.2x`** · Profit Factor **`2.29`** · **`₹14,06,430.20`**
+- **Combined 1-Lot Master Portfolio**: **`₹38,99,926.40`**
