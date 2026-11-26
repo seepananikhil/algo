@@ -110,3 +110,22 @@ def check_ema20_cross(symbol: str, side: str, close_5m: float, ema20_5m: float) 
     buf = get_ema_buffer_pts(symbol)
     is_long = side.upper() in ("LONG", "CALL", "CE")
     return (close_5m < (ema20_5m - buf)) if is_long else (close_5m > (ema20_5m + buf))
+
+
+def get_vix_trap_sl_dist(
+    symbol: str,
+    side: str,
+    entry_px: float,
+    rolling_low: float,
+    rolling_high: float,
+) -> float:
+    """Return swing-anchored VIX Trap stop distance bounded by static floor/cap."""
+    is_sx = symbol.upper() == "SENSEX"
+    is_long = side.upper() in ("LONG", "CALL", "CE")
+    if is_sx:
+        swing_ref = (rolling_low if rolling_low < 900000 else entry_px - 60.0) if is_long else (rolling_high if rolling_high > 0 else entry_px + 60.0)
+        raw = (entry_px - swing_ref + 10.0) if is_long else (swing_ref - entry_px + 10.0)
+        return max(60.0, min(SENSEX_INITIAL_SL_PTS, raw))
+    swing_ref = (rolling_low if rolling_low < 900000 else entry_px - 25.0) if is_long else (rolling_high if rolling_high > 0 else entry_px + 25.0)
+    raw = (entry_px - swing_ref + 2.0) if is_long else (swing_ref - entry_px + 2.0)
+    return max(25.0, min(80.0, raw))

@@ -45,6 +45,8 @@ from apex_duo_rules import (
     check_initial_sl,
     is_ema20_armed,
     check_ema20_cross,
+    get_initial_sl_pts,
+    get_vix_trap_sl_dist,
 )
 
 try:
@@ -320,10 +322,11 @@ class TrendRunnerPaperEngine:
         self.ema20_5m: Optional[float] = None
         self.last_day_processed: str = ""
 
+        # Static SL from Single Source of Truth (apex_duo_rules)
+        self.sl_points = get_initial_sl_pts(self.symbol)
+        self.reentry_sl_points = get_initial_sl_pts(self.symbol)
+
         if self.symbol == "SENSEX":
-            if sl_points == 30.0:
-                self.sl_points = 120.0
-                self.reentry_sl_points = 120.0
             if r1_trigger == 70.0:
                 self.r1_trigger = 240.0
                 self.r1_lock = 80.0
@@ -882,25 +885,8 @@ class TrendRunnerPaperEngine:
             is_sx = (self.symbol == "SENSEX")
 
             if stage_name == "VIX_TRAP":
-                # Swing High / Low stop loss with floor and cap (from update_vix_trap_backtests.py)
-                if is_sx:
-                    if sig == "LONG":
-                        swing_low = self.rolling_day_low if self.rolling_day_low < 900000 else entry_px - 60.0
-                        sl_dist = max(60.0, min(120.0, entry_px - swing_low + 10.0))
-                        sl_px = entry_px - sl_dist
-                    else:
-                        swing_high = self.rolling_day_high if self.rolling_day_high > 0 else entry_px + 60.0
-                        sl_dist = max(60.0, min(120.0, swing_high - entry_px + 10.0))
-                        sl_px = entry_px + sl_dist
-                else:
-                    if sig == "LONG":
-                        swing_low = self.rolling_day_low if self.rolling_day_low < 900000 else entry_px - 25.0
-                        sl_dist = max(25.0, min(80.0, entry_px - swing_low + 2.0))
-                        sl_px = entry_px - sl_dist
-                    else:
-                        swing_high = self.rolling_day_high if self.rolling_day_high > 0 else entry_px + 25.0
-                        sl_dist = max(25.0, min(80.0, swing_high - entry_px + 2.0))
-                        sl_px = entry_px + sl_dist
+                sl_dist = get_vix_trap_sl_dist(self.symbol, sig, entry_px, self.rolling_day_low, self.rolling_day_high)
+                sl_px = (entry_px - sl_dist) if sig == "LONG" else (entry_px + sl_dist)
                 effective_sl_pts = sl_dist
             else:
                 sl_floor = 100.0 if is_sx else 35.0
