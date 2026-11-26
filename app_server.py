@@ -1036,11 +1036,9 @@ def check_dual_ema_cross_exit(sym: str, sig: str, t_str: str, c_5m: float, ema20
         if other_c == 0.0:
             return True
 
-        # Check if other index crossed 20-EMA in the trade direction
-        if sig in ("SHORT", "PUT"):
-            other_crossed = (other_c > other_ema)
-        else:
-            other_crossed = (other_c < other_ema)
+        # Check if other index crossed 20-EMA in the trade direction via Single Source of Truth (apex_duo_rules)
+        from apex_duo_rules import check_ema20_cross
+        other_crossed = check_ema20_cross(other_sym, sig, other_c, other_ema)
 
         if not other_crossed:
             log_engine_telemetry(sym, "Dual-Cross Confluence", "HOLD", f"5m EMA20 cross @ {c_5m:.2f} held. {other_sym} ({other_c:.2f} vs EMA {other_ema:.2f}) intact.")

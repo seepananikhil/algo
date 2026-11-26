@@ -6,8 +6,6 @@ import {
   Save,
   RotateCcw,
   Zap,
-  ChevronDown,
-  ChevronUp,
   Layers,
   AlertTriangle,
   Flame,
@@ -117,7 +115,6 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   const [config, setConfig] = useState<PortfolioConfig | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
-  const [showAdvancedRatchets, setShowAdvancedRatchets] = useState(false)
 
   const [capitalSettings, setCapitalSettings] = useState({
     lots: 1,
@@ -240,28 +237,6 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
   function resetToDefaults() {
     setConfig(DEFAULT_CONFIG)
     toast.info("Reset to 10-year verified defaults. Click Save to persist.")
-  }
-
-  const updateNiftyRatchet = (field: keyof SpotRatchetSettings, val: number) => {
-    if (!config) return
-    setConfig({
-      ...config,
-      spot_ratchet_settings: {
-        ...(config.spot_ratchet_settings || DEFAULT_NIFTY_RATCHET),
-        [field]: val,
-      },
-    })
-  }
-
-  const updateSensexRatchet = (field: keyof SpotRatchetSettings, val: number) => {
-    if (!config) return
-    setConfig({
-      ...config,
-      sensex_spot_ratchet_settings: {
-        ...(config.sensex_spot_ratchet_settings || DEFAULT_SENSEX_RATCHET),
-        [field]: val,
-      },
-    })
   }
 
   if (loading || !config) {
@@ -646,176 +621,6 @@ export function ConfigPage({ embedded = false }: { embedded?: boolean } = {}) {
             </div>
           </div>
         </CardContent>
-      </Card>
-
-      {/* 4. ADVANCED RATCHET LADDERS (COLLAPSIBLE / ACCORDION) */}
-      <Card className="border-border bg-card shadow-xs">
-        <CardHeader
-          onClick={() => setShowAdvancedRatchets(!showAdvancedRatchets)}
-          className="py-3 px-4 sm:px-5 cursor-pointer flex flex-row items-center justify-between hover:bg-muted/10 transition-colors"
-        >
-          <div className="flex items-center gap-2.5">
-            <ShieldCheck className="size-4 text-emerald-400" />
-            <div>
-              <CardTitle className="text-xs font-bold text-foreground">
-                Advanced Spot Ratchet Ladders (10-Year Verified Combo B)
-              </CardTitle>
-              <CardDescription className="text-[11px]">
-                Nifty: 30pt SL | R1: +70/20 | R2: +110/50 | R3: +180/110 · Sensex: 120pt SL | R1: +240/80 | R2: +340/180
-              </CardDescription>
-            </div>
-          </div>
-          <Button variant="ghost" size="sm" className="h-7 w-7 p-0 shrink-0 text-muted-foreground">
-            {showAdvancedRatchets ? <ChevronUp className="size-4" /> : <ChevronDown className="size-4" />}
-          </Button>
-        </CardHeader>
-
-        {showAdvancedRatchets && (
-          <CardContent className="px-4 sm:px-5 pb-4 pt-2 border-t border-border/40 space-y-4">
-            <p className="text-xs text-muted-foreground">
-              These ladders were calibrated across 2,107 trading days. It is recommended to keep these verified defaults.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {/* Nifty Ladder */}
-              <div className="p-3 rounded-xl border bg-muted/15 space-y-2.5">
-                <span className="text-xs font-bold text-emerald-400 block border-b pb-1">
-                  🟢 NIFTY Ratchet Ladder
-                </span>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Initial SL (pts)</Label>
-                    <Input
-                      type="number"
-                      value={config.spot_ratchet_settings?.initial_sl_pts ?? 30.0}
-                      onChange={(e) => updateNiftyRatchet("initial_sl_pts", parseFloat(e.target.value) || 30.0)}
-                      className="h-7 text-xs font-mono font-bold"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Tier 1 (+Trigger / Lock)</Label>
-                    <div className="flex gap-1">
-                      <Input
-                        type="number"
-                        value={config.spot_ratchet_settings?.tier1_trigger_pts ?? 70.0}
-                        onChange={(e) => updateNiftyRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 70.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                      <Input
-                        type="number"
-                        value={config.spot_ratchet_settings?.tier1_lock_pts ?? 20.0}
-                        onChange={(e) => updateNiftyRatchet("tier1_lock_pts", parseFloat(e.target.value) || 20.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Tier 2 (+Trigger / Lock)</Label>
-                    <div className="flex gap-1">
-                      <Input
-                        type="number"
-                        value={config.spot_ratchet_settings?.tier2_trigger_pts ?? 110.0}
-                        onChange={(e) => updateNiftyRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 110.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                      <Input
-                        type="number"
-                        value={config.spot_ratchet_settings?.tier2_lock_pts ?? 50.0}
-                        onChange={(e) => updateNiftyRatchet("tier2_lock_pts", parseFloat(e.target.value) || 50.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Tier 3 (+Trigger / Lock)</Label>
-                    <div className="flex gap-1">
-                      <Input
-                        type="number"
-                        value={config.spot_ratchet_settings?.tier3_trigger_pts ?? 180.0}
-                        onChange={(e) => updateNiftyRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 180.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                      <Input
-                        type="number"
-                        value={config.spot_ratchet_settings?.tier3_lock_pts ?? 110.0}
-                        onChange={(e) => updateNiftyRatchet("tier3_lock_pts", parseFloat(e.target.value) || 110.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sensex Ladder */}
-              <div className="p-3 rounded-xl border bg-muted/15 space-y-2.5">
-                <span className="text-xs font-bold text-sky-400 block border-b pb-1">
-                  🔵 SENSEX Ratchet Ladder
-                </span>
-                <div className="grid grid-cols-2 gap-2 text-xs">
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Initial SL (pts)</Label>
-                    <Input
-                      type="number"
-                      value={config.sensex_spot_ratchet_settings?.initial_sl_pts ?? 120.0}
-                      onChange={(e) => updateSensexRatchet("initial_sl_pts", parseFloat(e.target.value) || 120.0)}
-                      className="h-7 text-xs font-mono font-bold"
-                    />
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Tier 1 (+Trigger / Lock)</Label>
-                    <div className="flex gap-1">
-                      <Input
-                        type="number"
-                        value={config.sensex_spot_ratchet_settings?.tier1_trigger_pts ?? 240.0}
-                        onChange={(e) => updateSensexRatchet("tier1_trigger_pts", parseFloat(e.target.value) || 240.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                      <Input
-                        type="number"
-                        value={config.sensex_spot_ratchet_settings?.tier1_lock_pts ?? 80.0}
-                        onChange={(e) => updateSensexRatchet("tier1_lock_pts", parseFloat(e.target.value) || 80.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Tier 2 (+Trigger / Lock)</Label>
-                    <div className="flex gap-1">
-                      <Input
-                        type="number"
-                        value={config.sensex_spot_ratchet_settings?.tier2_trigger_pts ?? 340.0}
-                        onChange={(e) => updateSensexRatchet("tier2_trigger_pts", parseFloat(e.target.value) || 340.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                      <Input
-                        type="number"
-                        value={config.sensex_spot_ratchet_settings?.tier2_lock_pts ?? 180.0}
-                        onChange={(e) => updateSensexRatchet("tier2_lock_pts", parseFloat(e.target.value) || 180.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <Label className="text-[11px] text-muted-foreground">Tier 3 (+Trigger / Lock)</Label>
-                    <div className="flex gap-1">
-                      <Input
-                        type="number"
-                        value={config.sensex_spot_ratchet_settings?.tier3_trigger_pts ?? 480.0}
-                        onChange={(e) => updateSensexRatchet("tier3_trigger_pts", parseFloat(e.target.value) || 480.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                      <Input
-                        type="number"
-                        value={config.sensex_spot_ratchet_settings?.tier3_lock_pts ?? 280.0}
-                        onChange={(e) => updateSensexRatchet("tier3_lock_pts", parseFloat(e.target.value) || 280.0)}
-                        className="h-7 text-xs font-mono font-bold"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        )}
       </Card>
 
       {/* Safety Confirmation Modal for Live Trading */}

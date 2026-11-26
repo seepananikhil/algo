@@ -469,9 +469,20 @@ export function SettingsPage() {
               </div>
             </div>
 
-            <p className="text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-lg border border-border/50">
-              💡 <strong>Auto-Authentication:</strong> With MPIN and TOTP Secret configured, AlgoNeo automatically generates your daily session tokens silently at 09:14 IST before the market opens without requiring any manual intervention.
-            </p>
+            <div className="text-xs text-muted-foreground bg-muted/30 p-3 rounded-lg border border-border/50 space-y-1.5">
+              <p>
+                💡 <strong>Auto-Authentication:</strong> With MPIN and TOTP Secret configured, AlgoNeo automatically generates your daily session tokens silently at 09:14 IST before the market opens.
+              </p>
+              <div className="pt-1.5 border-t border-border/40 space-y-1 text-[11px]">
+                <p className="font-semibold text-foreground/90">How to get these credentials:</p>
+                <ul className="list-disc pl-4 space-y-0.5">
+                  <li><strong>Consumer Key:</strong> Log in to the Kotak Neo Trade API / Developer Portal &rarr; Create/Open App &rarr; Copy <em>Consumer Key</em>.</li>
+                  <li><strong>Mobile &amp; UCC:</strong> Found in Kotak Neo App &rarr; Profile / Account Details (include <code>+91</code> for mobile).</li>
+                  <li><strong>6-Digit MPIN:</strong> Your regular Kotak Neo app login PIN.</li>
+                  <li><strong>TOTP Secret Key:</strong> Kotak Neo Portal &rarr; Enable 2FA / TOTP &rarr; Copy the <em>Base32 secret key</em> (the text string next to/below the QR code, not the 6-digit code).</li>
+                </ul>
+              </div>
+            </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 pt-2 border-t">
               <div className="flex items-center gap-2">
@@ -724,17 +735,17 @@ export function SettingsPage() {
           <div>
             <div className="font-semibold text-base text-foreground flex items-center gap-2">
               <Sliders className="size-4 text-sky-400" />
-              Apex Duo Strategy Setups, Lot Sizing &amp; Spot Ratchet
+              Apex Duo Risk Limits, Lot Sizing &amp; Execution Mode
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              Configure Nifty lot sizing, Daily Loss Limits (₹2,500), and Spot Ratchet profit locking milestones in Strategy Setups.
+              Configure Nifty &amp; Sensex lot sizing, Daily Loss Limits (₹2,500), and Paper vs Live execution mode.
             </p>
           </div>
           <Button
             onClick={() => handleTabChange("strategy")}
             className="gap-2 bg-sky-500 hover:bg-sky-600 text-white font-medium shrink-0 cursor-pointer"
           >
-            Open Strategy Setups <ArrowRight className="size-4" />
+            Open Risk &amp; Execution <ArrowRight className="size-4" />
           </Button>
         </CardContent>
       </Card>

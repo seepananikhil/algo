@@ -27,6 +27,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import logging
 import os
 import sys
 import time
@@ -34,8 +35,17 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional, Dict, Any, List, Callable
 
+logger = logging.getLogger(__name__)
+
 import numpy as np
 import pandas as pd
+
+from apex_duo_rules import (
+    evaluate_bo_candle,
+    check_initial_sl,
+    is_ema20_armed,
+    check_ema20_cross,
+)
 
 try:
     from telegram_notifier import notify_trade_entry, notify_ratchet, notify_trade_exit
@@ -229,6 +239,9 @@ class TrendRunnerPaperEngine:
     ) -> None:
         self.entry_gate_fn = entry_gate_fn
         self.exit_gate_fn = exit_gate_fn
+        self.last_completed_5m_time: Optional[str] = None
+        self.last_completed_5m_close: Optional[float] = None
+        self.last_completed_5m_ema20: Optional[float] = None
         self.sl_points = sl_points
         self.reentry_sl_points = reentry_sl_points
         self.reentry_be_trigger = reentry_be_trigger
@@ -254,7 +267,7 @@ class TrendRunnerPaperEngine:
         self.sl_mode = sl_mode
         self.lots = lots
         self.sizing_mode = sizing_mode
-        self.pyramid = pyramid
+        self.pyramid = False  # Pyramiding permanently disabled
         self.reentry = reentry
         self.max_trades_per_day = max_trades_per_day if reentry else 1
         self.vix_th = vix_th
@@ -433,6 +446,9 @@ class TrendRunnerPaperEngine:
                 self.ema20_5m = c_5m
             else:
                 self.ema20_5m = (c_5m * alpha) + (self.ema20_5m * (1.0 - alpha))
+            self.last_completed_5m_time = t_str
+            self.last_completed_5m_close = float(c_5m)
+            self.last_completed_5m_ema20 = float(self.ema20_5m)
 
         # ----------------------------------------------------
         # 1. POSITION MANAGEMENT (If Position is Open)
@@ -587,16 +603,23 @@ class TrendRunnerPaperEngine:
             exit_reason = "EOD"
 
             if self.trailing_mode == "ema20_5m":
-                # MODEL D: Pure 5-Minute 20-EMA Dynamic Trailing Rail (No Arbitrary Hard Stops)
-                # Evaluated strictly on completed 5-minute bar closes beyond the 20-EMA
+                # MODEL D: Single Source of Truth (apex_duo_rules)
+                init_sl = pos.get("initial_sl")
+                if init_sl is not None and check_initial_sl(sig, h, l, float(init_sl)):
+                    exit_px = float(init_sl)
+                    exit_reason = "STOP_LOSS"
+                    closed = True
+
+                ema_armed = is_ema20_armed(self.symbol, pos["max_fav"])
+
                 if not closed:
                     if self.ema20_5m is not None:
                         pos["current_sl"] = round(self.ema20_5m, 2)
                         curr_sl = pos["current_sl"]
                         if is_5m_close:
                             c_5m = self.current_5m_bar["close"] if self.current_5m_bar else c
-                            crossed = (sig == "LONG" and c_5m < self.ema20_5m) or (sig == "SHORT" and c_5m > self.ema20_5m)
-                            if crossed:
+                            crossed = check_ema20_cross(self.symbol, sig, float(c_5m), float(self.ema20_5m))
+                            if ema_armed and crossed:
                                 can_exit = True
                                 if self.exit_gate_fn is not None:
                                     try:
@@ -605,17 +628,32 @@ class TrendRunnerPaperEngine:
                                         logger.warning(f"Error in exit_gate_fn: {exc}")
                                         can_exit = True
                                 if can_exit:
+                                    pos.pop("pending_5m_cross", None)
                                     exit_px = c_5m
                                     exit_reason = "EMA20_CROSS"
                                     closed = True
                                 else:
+                                    pos["pending_5m_cross"] = (t_str, float(c_5m), float(self.ema20_5m))
                                     logger.info(f"[{self.symbol}] 5m EMA20 cross detected @ {c_5m:.2f} but partner index has NOT crossed yet. Holding trade under Dual-Cross Confluence.")
+                            else:
+                                pos.pop("pending_5m_cross", None)
+                        elif ema_armed and pos.get("pending_5m_cross") is not None and self.exit_gate_fn is not None:
+                            # Re-check pending 5m cross on subsequent 1m bar (e.g. 12:10) once partner completes its 5m bar
+                            p_time, p_c, p_ema = pos["pending_5m_cross"]
+                            try:
+                                can_exit = bool(self.exit_gate_fn(self.symbol, sig, t_str, float(p_c), float(p_ema)))
+                            except Exception as exc:
+                                logger.warning(f"Error in exit_gate_fn: {exc}")
+                                can_exit = True
+                            if can_exit:
+                                pos.pop("pending_5m_cross", None)
+                                exit_px = c
+                                exit_reason = "EMA20_CROSS"
+                                closed = True
 
                 # Market Close / Time Exit at 15:15 IST
                 if not closed and t_str >= "15:15":
                     exit_px = c
-                    exit_reason = "EOD_RUNNER_1515"
-                    closed = True
                     exit_reason = "EOD_RUNNER_1515"
                     closed = True
 
@@ -789,47 +827,15 @@ class TrendRunnerPaperEngine:
             # MANDATORY: Must break Dynamic Expanded Range (OR High / Low expanded by pre-breakout wicks)
             if not sig and self.enable_trend_runner and ("09:30" <= t_str <= "13:00"):
                 if or_range >= 30.0:
-                    # Solid Breakout Candle Filter (Conviction Body >= 70% of candle range, Rejection Wick <= 30% or <= noise floor)
-                    candle_rng = h - l
-                    candle_body = abs(c - o)
-                    body_ratio = candle_body / candle_rng if candle_rng > 0 else 0.0
-                    upper_wick_pct = (h - max(o, c)) / candle_rng if candle_rng > 0 else 0.0
-                    lower_wick_pct = (min(o, c) - l) / candle_rng if candle_rng > 0 else 0.0
-
-                    # Rejection Wick check:
-                    # For LONG (CALL): upper wick represents overhead rejection selling -> allow up to 30% or <= noise floor (4 pts Nifty, 15 pts Sensex)
-                    # For SHORT (PUT): lower wick represents bottom absorption buying -> allow up to 30% or <= noise floor (4 pts Nifty, 15 pts Sensex)
-                    wick_noise_tol = 15.0 if self.symbol == "SENSEX" else 4.0
-                    upper_wick_pts = h - max(o, c)
-                    lower_wick_pts = min(o, c) - l
-
-                    long_conviction = (upper_wick_pct <= 0.30) or (upper_wick_pts <= wick_noise_tol)
-                    short_conviction = (lower_wick_pct <= 0.30) or (lower_wick_pts <= wick_noise_tol)
-
-                    # 1. High-Conviction Breakout (Body >= 80% with Directional VIX confirmation <= 0.0% / >= 0.0%)
-                    # Captures major trends where VIX cools mildly while blocking counter-trend traps
-                    if body_ratio >= self.body_conviction_th:
-                        if (c > self.dyn_or_high) and (c > o) and (c > vwap) and (vix_chg <= 0.0) and long_conviction:
-                            if t_str <= self.call_cutoff_time:
-                                sig = "LONG"
-                                stage_name = "STAGE1_TREND"
-                        elif (c < self.dyn_or_low) and (c < o) and (c < vwap) and (vix_chg >= 0.0) and short_conviction:
-                            sig = "SHORT"
-                            stage_name = "STAGE1_TREND"
-
-                    # 2. Standard Breakout (Body >= 70% with Strict VIX confirmation <= -vix_call_th / >= +vix_put_th)
-                    if not sig and body_ratio >= self.body_standard_th:
-                        raw_long = (c > self.dyn_or_high) and (c > o) and (c > vwap) and long_conviction
-                        vix_long = (vix_chg <= -self.vix_call_th)
-                        if raw_long and vix_long and (t_str <= self.call_cutoff_time):
-                            sig = "LONG"
-                            stage_name = "STAGE1_TREND"
-
-                        raw_short = (c < self.dyn_or_low) and (c < o) and (c < vwap) and short_conviction
-                        vix_short = (vix_chg >= self.vix_put_th)
-                        if raw_short and vix_short:
-                            sig = "SHORT"
-                            stage_name = "STAGE1_TREND"
+                    bo_side = evaluate_bo_candle(
+                        self.symbol, o, h, l, c, vix_chg, t_str, self.dyn_or_high, self.dyn_or_low, vwap=vwap, trade_num=1
+                    )
+                    if bo_side == "CALL":
+                        sig = "LONG"
+                        stage_name = "STAGE1_TREND"
+                    elif bo_side == "PUT":
+                        sig = "SHORT"
+                        stage_name = "STAGE1_TREND"
 
         elif trade_num == 2 and self.reentry:
             # 1. Strict Cool-off Gate: Must wait at least reentry_cooloff_bars (30 min) after Trade 1 exit
@@ -1130,14 +1136,7 @@ class TrendRunnerPaperEngine:
                     writer.writeheader()
                 writer.writerow(row_dict)
 
-        # Automatically sync finalized trade to master backtests
-        try:
-            import subprocess, sys
-            sync_script = ROOT / "scripts" / "sync_eod_trades_to_backtest.py"
-            if sync_script.exists():
-                subprocess.Popen([sys.executable, str(sync_script)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        except Exception:
-            pass
+        # Keep Paper/Live logs isolated from Backtest CSVs (never auto-merge into backtest results)
 
 
 def run_replay(

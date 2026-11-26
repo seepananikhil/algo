@@ -133,6 +133,9 @@ def kotak_login(
             clean_secret = totp_secret.replace(" ", "").strip().upper()
             if "YOUR_" in clean_secret or "_" in clean_secret:
                 return {"ok": False, "error": "Placeholder TOTP secret detected in neo_config.json. Please set your real TOTP key."}
+            # Avoid 30s TOTP boundary expiry: wait for fresh window if <3s remaining
+            if (int(time.time()) % 30) >= 27:
+                time.sleep(3.5)
             active_totp = pyotp.TOTP(clean_secret).now()
         except Exception as e:
             return {"ok": False, "error": f"Failed to generate TOTP from secret: {e}"}
@@ -151,6 +154,26 @@ def kotak_login(
         )
     except Exception as exc:
         return {"ok": False, "error": f"Kotak TOTP login failed: {exc}"}
+
+    # Retry once on 10506 (Invalid TOTP) in case of 30s boundary/clock skew
+    if (
+        isinstance(step1, dict)
+        and "data" not in step1
+        and "10506" in str(step1)
+        and not totp_code
+        and totp_secret
+    ):
+        time.sleep(3.0)
+        clean_secret = totp_secret.replace(" ", "").strip().upper()
+        active_totp = pyotp.TOTP(clean_secret).now()
+        try:
+            step1 = client.totp_login(
+                mobile_number=mobile,
+                ucc=ucc,
+                totp=active_totp,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": f"Kotak TOTP login retry failed: {exc}"}
 
     if not isinstance(step1, dict) or "data" not in step1:
         err = step1.get("error", "Invalid TOTP login response from Kotak Neo") if isinstance(step1, dict) else str(step1)

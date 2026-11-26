@@ -51,7 +51,7 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
     print("=" * 85)
 
     is_sx = (symbol.lower() == "sensex")
-    lot_size = 10 if is_sx else 25
+    lot_size = 20 if is_sx else 65
     trades_pool = []
 
     # 1. Setup 1: Trend Runner (15m ORB Breakout with VIX momentum confirmation)
@@ -168,6 +168,8 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
             pass
     require_dual = bool(port_cfg.get("require_dual_activation", False))
     window_mins = int(port_cfg.get("dual_activation_window_mins", 60))
+    max_concurrent = int(port_cfg.get("max_concurrent_positions", 1))
+    max_trades_per_day = int(port_cfg.get("max_trades_per_day", 2))
 
     # Load complete partner trades (Both Trend Runner & VIX Trap)
     if not is_sx:
@@ -209,15 +211,31 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
     )
 
     if mode == "concurrent":
-        # Concurrent Mode: Keep all trades that triggered in BOTH (1-to-1 matching)
+        # Concurrent Mode: Keep trades that triggered in BOTH (1-to-1 matching), respecting max_concurrent_positions
         if not require_dual or p_df is None or p_df.empty:
             final_trades = raw_combined
         else:
             from datetime import datetime as dt_cls
             selected = []
             # Pre-2023: Nifty trades only (no partner historical data exists)
-            for _, r in raw_combined[raw_combined['date'] < min_p_date].iterrows():
-                selected.append(r)
+            for d, grp in raw_combined[raw_combined['date'] < min_p_date].groupby('date'):
+                last_exit_by_engine = {}
+                count_today = 0
+                for _, r in grp.iterrows():
+                    if count_today >= max_trades_per_day:
+                        break
+                    eng = r['setup_id']
+                    t_str = r['entry_time_str']
+                    t_dt = dt_cls.strptime(t_str, "%H:%M")
+                    if max_concurrent == 1 and eng in last_exit_by_engine and t_dt < last_exit_by_engine[eng]:
+                        continue
+                    exit_str = str(r.get('exit_time') or '15:15')[:5]
+                    try:
+                        last_exit_by_engine[eng] = dt_cls.strptime(exit_str, "%H:%M")
+                    except Exception:
+                        last_exit_by_engine[eng] = dt_cls.strptime('15:15', "%H:%M")
+                    count_today += 1
+                    selected.append(r)
 
             # 2023+: Only trades confirmed by partner index
             for d, grp in raw_combined[raw_combined['date'] >= min_p_date].groupby('date'):
@@ -225,11 +243,18 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
                 if p_grp.empty:
                     continue
                 used_p = set()
+                last_exit_by_engine = {}
+                count_today = 0
                 for _, r in grp.iterrows():
-                    rside = r['side_norm']
+                    if count_today >= max_trades_per_day:
+                        break
+                    eng = r['setup_id']
                     t_str = r['entry_time_str']
                     t_dt = dt_cls.strptime(t_str, "%H:%M")
+                    if max_concurrent == 1 and eng in last_exit_by_engine and t_dt < last_exit_by_engine[eng]:
+                        continue
 
+                    rside = r['side_norm']
                     best_p_idx = None
                     best_diff = 999999
                     for p_idx, pr in p_grp.iterrows():
@@ -252,7 +277,33 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
 
                     if best_p_idx is not None:
                         used_p.add(best_p_idx)
-                        selected.append(r)
+                        r_copy = r.copy()
+                        pr = p_grp.loc[best_p_idx]
+                        p_t_str = str(pr['t_str'])
+                        p_dt = dt_cls.strptime(p_t_str, "%H:%M")
+                        if t_dt < p_dt:
+                            r_copy['first_armed_sym'] = symbol.upper()
+                            r_copy['first_armed_time'] = t_str
+                            r_copy['actual_trigger_time'] = p_t_str
+                            r_copy['delta_mins'] = round(best_diff, 1)
+                        elif p_dt < t_dt:
+                            r_copy['first_armed_sym'] = 'SENSEX' if not is_sx else 'NIFTY'
+                            r_copy['first_armed_time'] = p_t_str
+                            r_copy['actual_trigger_time'] = t_str
+                            r_copy['delta_mins'] = round(best_diff, 1)
+                        else:
+                            r_copy['first_armed_sym'] = 'SIMULTANEOUS'
+                            r_copy['first_armed_time'] = t_str
+                            r_copy['actual_trigger_time'] = t_str
+                            r_copy['delta_mins'] = 0.0
+
+                        exit_str = str(r.get('exit_time') or '15:15')[:5]
+                        try:
+                            last_exit_by_engine[eng] = dt_cls.strptime(exit_str, "%H:%M")
+                        except Exception:
+                            last_exit_by_engine[eng] = dt_cls.strptime('15:15', "%H:%M")
+                        count_today += 1
+                        selected.append(r_copy)
 
             final_trades = pd.DataFrame(selected).reset_index(drop=True)
     else:
@@ -309,6 +360,9 @@ def run_master_backtest(mode="priority", symbol="nifty", enabled_setups=None):
 
         final_trades = pd.DataFrame(selected).reset_index(drop=True)
 
+    final_trades['pnl_rupees'] = final_trades['pnl_points'] * float(lot_size)
+    final_trades['futures_pnl_rupees'] = final_trades['pnl_points'] * float(lot_size)
+    final_trades['qty'] = int(lot_size)
     final_trades = final_trades.drop(columns=['entry_time_str', 'side_norm'], errors='ignore')
     out_csv = ROOT / "performance" / f"master_portfolio_{symbol.lower()}_trades.csv"
     final_trades.to_csv(out_csv, index=False)

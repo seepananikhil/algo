@@ -2,9 +2,10 @@
   "symbol": "NIFTY",
   "trading_instruments": "BOTH",
   "mode": "concurrent",
-  "max_trades_per_day": 2,
-  "max_concurrent_positions": 1,
-  "cross_instrument_concurrency": "FIRST_TRIGGERED",
+  "sizing_mode": "fixed",
+  "max_trades_per_day": 3,
+  "max_concurrent_positions": 2,
+  "cross_instrument_concurrency": "CONCURRENT",
   "require_dual_activation": true,
   "require_dual_ema20_cross": true,
   "dual_activation_window_mins": 60,
@@ -17,9 +18,9 @@
     "williams_fractal": false
   },
   "spot_ratchet_settings": {
-    "initial_sl_pts": 30.0,
+    "initial_sl_pts": 50.0,
     "call_cutoff_time": "10:45",
-    "reentry_cooloff_bars": 20,
+    "reentry_cooloff_bars": 20.0,
     "tier0a_trigger_pts": 40.0,
     "tier0a_lock_pts": -15.0,
     "tier0b_breakeven_trigger_pts": 55.0,
@@ -38,9 +39,9 @@
     "tier6_lock_pts": 270.0
   },
   "sensex_spot_ratchet_settings": {
-    "initial_sl_pts": 120.0,
+    "initial_sl_pts": 200.0,
     "call_cutoff_time": "10:45",
-    "reentry_cooloff_bars": 20,
+    "reentry_cooloff_bars": 20.0,
     "tier0a_trigger_pts": 115.0,
     "tier0a_lock_pts": -40.0,
     "tier0b_breakeven_trigger_pts": 180.0,

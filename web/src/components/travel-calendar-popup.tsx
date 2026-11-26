@@ -102,6 +102,38 @@ export function TravelCalendarPopup({
     }
   }, [open, selectedDate])
 
+  const monthStats = useMemo(() => {
+    let totalVal = 0
+    let totalNifty = 0
+    let totalSensex = 0
+    let totalTrades = 0
+    let activeDays = 0
+    let winDays = 0
+    let lossDays = 0
+
+    for (const d of daily) {
+      if (!d.date.startsWith(activeMonth)) continue
+      const val = d.value ?? d.pnl ?? d.points ?? 0
+      totalVal += val
+      totalNifty += d.nifty_points ?? 0
+      totalSensex += d.sensex_points ?? 0
+      totalTrades += d.trades ?? 0
+      activeDays += 1
+      if (val > 0) winDays += 1
+      else if (val < 0) lossDays += 1
+    }
+
+    return {
+      totalVal: Math.round(totalVal * 10) / 10,
+      totalNifty: Math.round(totalNifty * 10) / 10,
+      totalSensex: Math.round(totalSensex * 10) / 10,
+      totalTrades,
+      activeDays,
+      winDays,
+      lossDays,
+    }
+  }, [daily, activeMonth])
+
   if (!open) return null
 
   const [y, m] = (activeMonth || "2026-11").split("-").map(Number)
@@ -196,6 +228,79 @@ export function TravelCalendarPopup({
           >
             <X className="size-4" />
           </button>
+        </div>
+
+        {/* Monthly Overall P&L Summary Strip */}
+        <div className="rounded-xl border border-border/50 bg-muted/30 px-2.5 py-1.5 flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 min-w-0">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+              Month P&amp;L
+            </span>
+            <span className="text-[10px] text-muted-foreground/80 font-mono truncate">
+              {monthStats.activeDays > 0
+                ? `${monthStats.activeDays}d · ${monthStats.winDays}W/${monthStats.lossDays}L`
+                : "No trades"}
+            </span>
+          </div>
+          {effectiveUnit === "rupees" ? (
+            <span
+              className={cn(
+                "text-xs font-extrabold font-mono tabular-nums shrink-0",
+                monthStats.activeDays === 0
+                  ? "text-muted-foreground"
+                  : monthStats.totalVal > 0
+                  ? "text-emerald-500 dark:text-emerald-400"
+                  : monthStats.totalVal < 0
+                  ? "text-rose-500 dark:text-rose-400"
+                  : "text-muted-foreground"
+              )}
+            >
+              {monthStats.activeDays === 0 ? "₹0" : fmtRs(monthStats.totalVal)}
+            </span>
+          ) : monthStats.totalNifty !== 0 && monthStats.totalSensex !== 0 ? (
+            <div className="flex items-center gap-1.5 text-[11px] font-extrabold font-mono tabular-nums shrink-0">
+              <span
+                className={cn(
+                  monthStats.totalNifty > 0
+                    ? "text-emerald-500 dark:text-emerald-400"
+                    : monthStats.totalNifty < 0
+                    ? "text-rose-500 dark:text-rose-400"
+                    : "text-muted-foreground"
+                )}
+              >
+                N {monthStats.totalNifty > 0 ? `+${monthStats.totalNifty.toFixed(0)}` : monthStats.totalNifty.toFixed(0)}
+              </span>
+              <span className="text-muted-foreground/40">/</span>
+              <span
+                className={cn(
+                  monthStats.totalSensex > 0
+                    ? "text-emerald-500 dark:text-emerald-400"
+                    : monthStats.totalSensex < 0
+                    ? "text-rose-500 dark:text-rose-400"
+                    : "text-muted-foreground"
+                )}
+              >
+                S {monthStats.totalSensex > 0 ? `+${monthStats.totalSensex.toFixed(0)}` : monthStats.totalSensex.toFixed(0)} pt
+              </span>
+            </div>
+          ) : (
+            <span
+              className={cn(
+                "text-xs font-extrabold font-mono tabular-nums shrink-0",
+                monthStats.activeDays === 0
+                  ? "text-muted-foreground"
+                  : monthStats.totalVal > 0
+                  ? "text-emerald-500 dark:text-emerald-400"
+                  : monthStats.totalVal < 0
+                  ? "text-rose-500 dark:text-rose-400"
+                  : "text-muted-foreground"
+              )}
+            >
+              {monthStats.activeDays === 0
+                ? "0 pt"
+                : `${monthStats.totalVal > 0 ? "+" : ""}${monthStats.totalVal.toFixed(1)} pt`}
+            </span>
+          )}
         </div>
 
         {/* Calendar Grid */}

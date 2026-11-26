@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """
 Update VIX Divergence Trap Backtest Trades for Nifty (10Y) and Sensex (4Y)
-Incorporates the Swing High/Low Stop Loss (capped at 60 pts on Nifty, 180 pts on Sensex)
-to prevent premature wick stop-outs while respecting maximum risk boundaries.
+Features:
+  1. Swing High/Low Structural Initial Stop Loss (proportional to index value)
+  2. Profit-Armed 5-Minute 20-EMA Dynamic Rail Exit (identical to Trend Runner)
+  3. Symmetrical Dual-Partner Confirmation Gate: Both indices must confirm the EMA cross
+     before exiting, filtering out micro-tick fakeouts when the partner is still trending.
+  4. Proportional Noise Buffers: 3.5 pts on Nifty, 10.0 pts on Sensex to prevent noise triggers.
 """
 
 from pathlib import Path
@@ -10,6 +14,7 @@ import pandas as pd
 import numpy as np
 
 # 1. Load VIX
+print("Loading VIX data...", flush=True)
 vdf = pd.read_csv("captured_data/india_vix_10y.csv")
 vdf["date_str"] = pd.to_datetime(vdf["date"]).dt.strftime("%Y-%m-%d")
 vdf["prev_close"] = vdf["close"].shift(1)
@@ -18,7 +23,7 @@ vix_map = dict(zip(vdf["date_str"], vdf["vix_change_pct"].fillna(0.0)))
 vix_pts_map = dict(zip(vdf["date_str"], vdf["vix_pts_chg"].fillna(0.0)))
 
 # =====================================================================
-# PART 1: NIFTY 10-YEAR VIX TRAP (2017 - 2026)
+# LOAD NIFTY 1-MIN & 5-MIN CANDLES (2017 - 2026)
 # =====================================================================
 print("Loading Nifty 1-min data (2017-2026)...", flush=True)
 years = [str(y) for y in range(2017, 2027)]
@@ -44,123 +49,199 @@ cum_tp_n = tp_n.groupby(df_nifty["date_str"]).cumsum()
 counts_n = df_nifty.groupby(df_nifty["date_str"]).cumcount() + 1
 df_nifty["vwap"] = cum_tp_n / counts_n
 
-nifty_packages = []
+# Resample Nifty to 5m for Trend-Following 20-EMA Trailing
+df_nifty.set_index("timestamp", inplace=True)
+ohlc_5m_n = df_nifty.resample("5min", closed="left", label="left").agg({
+    "open": "first", "high": "max", "low": "min", "close": "last"
+}).dropna().reset_index()
+ohlc_5m_n["date_str"] = ohlc_5m_n["timestamp"].dt.strftime("%Y-%m-%d")
+ohlc_5m_n["t_str"] = (ohlc_5m_n["timestamp"] + pd.to_timedelta(4, unit="m")).dt.strftime("%H:%M")
+ohlc_5m_n["ema20"] = ohlc_5m_n.groupby("date_str")["close"].transform(lambda s: s.ewm(span=20, adjust=False).mean())
+df_nifty.reset_index(inplace=True)
+day_5m_n_map = {d: g.set_index("t_str") for d, g in ohlc_5m_n.groupby("date_str")}
+
+# =====================================================================
+# LOAD SENSEX 1-MIN & 5-MIN CANDLES (2023 - 2026)
+# =====================================================================
+print("Loading Sensex 1-min data (2023-2026)...", flush=True)
+base_sx = Path("captured_data/technovusin_sensex/1min")
+dfs_sx = []
+for y in ["2023", "2024", "2025"]:
+    f = base_sx / y / f"SENSEX_1min_{y}.csv"
+    if f.exists(): dfs_sx.append(pd.read_csv(f))
+for f in sorted((base_sx / "2026").glob("*.csv")):
+    dfs_sx.append(pd.read_csv(f))
+df_sx = pd.concat(dfs_sx, ignore_index=True)
+df_sx.columns = [c.lower() for c in df_sx.columns]
+dt_col_s = [c for c in df_sx.columns if "time" in c or "date" in c][0]
+df_sx["timestamp"] = pd.to_datetime(df_sx[dt_col_s])
+df_sx.sort_values("timestamp", inplace=True)
+df_sx.drop_duplicates("timestamp", inplace=True)
+df_sx.reset_index(drop=True, inplace=True)
+df_sx["date_str"] = df_sx["timestamp"].dt.strftime("%Y-%m-%d")
+df_sx["time_str"] = df_sx["timestamp"].dt.strftime("%H:%M")
+
+tp_sx = (df_sx["high"] + df_sx["low"] + df_sx["close"]) / 3.0
+cum_tp_sx = tp_sx.groupby(df_sx["date_str"]).cumsum()
+counts_sx = df_sx.groupby(df_sx["date_str"]).cumcount() + 1
+df_sx["vwap"] = cum_tp_sx / counts_sx
+
+# Resample Sensex to 5m for Trend-Following 20-EMA Trailing
+df_sx.set_index("timestamp", inplace=True)
+ohlc_5m_s = df_sx.resample("5min", closed="left", label="left").agg({
+    "open": "first", "high": "max", "low": "min", "close": "last"
+}).dropna().reset_index()
+ohlc_5m_s["date_str"] = ohlc_5m_s["timestamp"].dt.strftime("%Y-%m-%d")
+ohlc_5m_s["t_str"] = (ohlc_5m_s["timestamp"] + pd.to_timedelta(4, unit="m")).dt.strftime("%H:%M")
+ohlc_5m_s["ema20"] = ohlc_5m_s.groupby("date_str")["close"].transform(lambda s: s.ewm(span=20, adjust=False).mean())
+df_sx.reset_index(inplace=True)
+day_5m_s_map = {d: g.set_index("t_str") for d, g in ohlc_5m_s.groupby("date_str")}
+
+# Precompute candidate VIX Trap entries
+nifty_entries = {}
 for d, g in df_nifty.groupby("date_str"):
     if len(g) < 100: continue
+    if vix_pts_map.get(d, 0.0) < 0.40: continue
     or_bars = g[(g["time_str"] >= "09:15") & (g["time_str"] <= "09:30")]
     if len(or_bars) == 0: continue
     or_high = float(or_bars["high"].max())
     or_low = float(or_bars["low"].min())
     if (or_high - or_low) < 25.0: continue
-    
-    nifty_packages.append({
-        "date": d,
-        "vix_chg": vix_map.get(d, 0.0),
-        "vix_pts": vix_pts_map.get(d, 0.0),
-        "or_high": or_high,
-        "or_low": or_low,
-        "times": g["time_str"].values,
-        "opens": g["open"].values,
-        "highs": g["high"].values,
-        "lows": g["low"].values,
-        "closes": g["close"].values,
-        "vwaps": g["vwap"].values,
-        "n_bars": len(g)
-    })
+    times, opens, highs, lows, closes, vwaps = g["time_str"].values, g["open"].values, g["high"].values, g["low"].values, g["close"].values, g["vwap"].values
+    has_th, has_tl = False, False
+    v_chg = vix_map.get(d, 0.0)
+    for i in range(len(g)):
+        t = times[i]
+        if t < "09:30": continue
+        if t > "14:30": break
+        h, l, c, o, v = highs[i], lows[i], closes[i], opens[i], vwaps[i]
+        if h >= or_high: has_th = True
+        if l <= or_low: has_tl = True
+        sig = None
+        if v_chg >= 2.0 and has_th and c < o and c < v and c < or_high: sig = "PUT"
+        elif v_chg <= -2.0 and has_tl and c > o and c > v and c > or_low: sig = "CALL"
+        if not sig: continue
+        if sig == "PUT":
+            sh = highs[:i+1].max()
+            sld = max(25.0, min(80.0, sh - c + 2.0))
+            isl = c + sld
+        else:
+            sl = lows[:i+1].min()
+            sld = max(25.0, min(80.0, c - sl + 2.0))
+            isl = c - sld
+        nifty_entries[d] = {
+            "date": d, "sig": sig, "time": t, "px": c, "sl": isl, "sld": sld, "bar": i,
+            "times": times, "highs": highs, "lows": lows, "closes": closes, "v_chg": v_chg
+        }
+        break
 
-print(f"Indexed {len(nifty_packages)} Nifty trading days.", flush=True)
+sensex_entries = {}
+for d, g in df_sx.groupby("date_str"):
+    if len(g) < 100: continue
+    or_bars = g[(g["time_str"] >= "09:15") & (g["time_str"] <= "09:30")]
+    if len(or_bars) == 0: continue
+    or_high = float(or_bars["high"].max())
+    or_low = float(or_bars["low"].min())
+    if (or_high - or_low) < 75.0: continue
+    times, opens, highs, lows, closes, vwaps = g["time_str"].values, g["open"].values, g["high"].values, g["low"].values, g["close"].values, g["vwap"].values
+    has_th, has_tl = False, False
+    v_chg = vix_map.get(d, 0.0)
+    for i in range(len(g)):
+        t = times[i]
+        if t < "09:30": continue
+        if t > "14:30": break
+        h, l, c, o, v = highs[i], lows[i], closes[i], opens[i], vwaps[i]
+        if h >= or_high: has_th = True
+        if l <= or_low: has_tl = True
+        sig = None
+        if v_chg >= 2.0 and has_th and c < o and c < v and c < or_high: sig = "PUT"
+        elif v_chg <= -2.0 and has_tl and c > o and c > v and c > or_low: sig = "CALL"
+        if not sig: continue
+        if sig == "PUT":
+            sh = highs[:i+1].max()
+            sld = max(60.0, min(220.0, sh - c + 10.0))
+            isl = c + sld
+        else:
+            sl = lows[:i+1].min()
+            sld = max(60.0, min(220.0, c - sl + 10.0))
+            isl = c - sld
+        sensex_entries[d] = {
+            "date": d, "sig": sig, "time": t, "px": c, "sl": isl, "sld": sld, "bar": i,
+            "times": times, "highs": highs, "lows": lows, "closes": closes, "v_chg": v_chg
+        }
+        break
 
+print(f"Precomputed {len(nifty_entries)} Nifty entries, {len(sensex_entries)} Sensex entries.", flush=True)
+
+# =====================================================================
+# SIMULATE NIFTY VIX TRAP (10-YEAR WITH DUAL SENSEX CONFIRMATION)
+# =====================================================================
 nifty_records = []
 lot_size_nifty = 25
 delta = 0.60
 
-for dp in nifty_packages:
-    # Dual filter on Nifty: Skip sleepy days where VIX point movement < 0.40 pts
-    if dp.get("vix_pts", 0.0) < 0.40:
-        continue
-        
-    v_chg = dp["vix_chg"]
-    or_h = dp["or_high"]
-    or_l = dp["or_low"]
-    times, opens, highs, lows, closes, vwaps = dp["times"], dp["opens"], dp["highs"], dp["lows"], dp["closes"], dp["vwaps"]
-    n_bars = dp["n_bars"]
-    has_tested_high, has_tested_low = False, False
-    entry = None
+for d, en in nifty_entries.items():
+    es = sensex_entries.get(d)
+    has_dual_partner = (es is not None and es["sig"] == en["sig"])
     
-    for i in range(n_bars):
-        t = times[i]
-        if t < "09:30": continue
-        if t > "12:30": break
-        o, h, l, c, v = opens[i], highs[i], lows[i], closes[i], vwaps[i]
-        if h >= or_h: has_tested_high = True
-        if l <= or_l: has_tested_low = True
-        
-        sig = None
-        if v_chg >= 2.0 and has_tested_high and c < o and c < v and c < or_h:
-            sig = "PUT"
-        elif v_chg <= -2.0 and has_tested_low and c > o and c > v and c > or_l:
-            sig = "CALL"
-        if not sig: continue
-        
-        # Loosened Swing High/Low SL (capped at 80 pts with 25 pt floor)
-        if sig == "PUT":
-            swing_high = highs[:i+1].max()
-            sl_dist = max(25.0, min(80.0, swing_high - c + 2.0))
-            initial_sl = c + sl_dist
-        else:
-            swing_low = lows[:i+1].min()
-            sl_dist = max(25.0, min(80.0, c - swing_low + 2.0))
-            initial_sl = c - sl_dist
-            
-        entry = (sig, t, c, initial_sl, sl_dist, i)
-        break
-        
-    if not entry: continue
+    g5n = day_5m_n_map.get(d)
+    g5s = day_5m_s_map.get(d)
     
-    sig, e_time, e_px, initial_sl, sl_dist, e_bar = entry
-    curr_sl = initial_sl
-    exit_px = None
-    exit_time = None
+    sig = en["sig"]
+    e_px = en["px"]
+    curr_sl = en["sl"]
+    initial_sl = curr_sl
+    sl_dist = en["sld"]
+    times = en["times"]
+    highs = en["highs"]
+    lows = en["lows"]
+    closes = en["closes"]
+    e_bar = en["bar"]
+    n_bars = len(times)
+    v_chg = en["v_chg"]
+    
     max_fav = 0.0
-    exit_reason = None
+    ema_armed = False
+    exit_px, exit_time, exit_reason = None, None, None
     
     for k in range(e_bar + 1, n_bars):
         bt = times[k]
         bh, bl, bc = highs[k], lows[k], closes[k]
         fav = (bh - e_px) if sig == "CALL" else (e_px - bl)
         if fav > max_fav: max_fav = fav
+        if max_fav >= 50.0: ema_armed = True
         
-        # Unified spot ratchet ladder loaded directly from master_portfolio_config.json
-        if max_fav >= 340.0:
-            r = e_px + 270.0 if sig == "CALL" else e_px - 270.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        elif max_fav >= 280.0:
-            r = e_px + 220.0 if sig == "CALL" else e_px - 220.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        elif max_fav >= 230.0:
-            r = e_px + 165.0 if sig == "CALL" else e_px - 165.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        elif max_fav >= 180.0:
-            r = e_px + 110.0 if sig == "CALL" else e_px - 110.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        elif max_fav >= 130.0:
-            r = e_px + 60.0 if sig == "CALL" else e_px - 60.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        elif max_fav >= 70.0:
-            r = e_px + 20.0 if sig == "CALL" else e_px - 20.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        elif max_fav >= 55.0:
-            r = e_px + 5.0 if sig == "CALL" else e_px - 5.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        elif max_fav >= 40.0:
-            r = e_px - 15.0 if sig == "CALL" else e_px + 15.0
-            if (sig == "CALL" and r > curr_sl) or (sig == "PUT" and r < curr_sl): curr_sl = r
-        
+        # Structural Stop Loss
         if (bl <= curr_sl if sig == "CALL" else bh >= curr_sl):
             exit_px = curr_sl
             exit_time = bt
-            exit_reason = "RATCHET_LOCK" if curr_sl != initial_sl else "STOP_LOSS"
+            exit_reason = "STOP_LOSS"
             break
+            
+        # Symmetrical 5m 20-EMA Trail with Noise Buffer (3.5 pts on Nifty, 10.0 pts on Sensex)
+        if ema_armed and g5n is not None and bt in g5n.index:
+            b5_n = g5n.loc[bt]
+            c_5n, ema_5n = b5_n["close"], b5_n["ema20"]
+            cross_n = (c_5n < (ema_5n - 3.5)) if sig == "CALL" else (c_5n > (ema_5n + 3.5))
+            
+            if has_dual_partner and g5s is not None and bt in g5s.index:
+                b5_s = g5s.loc[bt]
+                c_5s, ema_5s = b5_s["close"], b5_s["ema20"]
+                cross_s = (c_5s < (ema_5s - 10.0)) if sig == "CALL" else (c_5s > (ema_5s + 10.0))
+                # Dual exit gate
+                if cross_n and cross_s and bt > en["time"]:
+                    exit_px = c_5n
+                    exit_time = bt
+                    exit_reason = "EMA20_CROSS"
+                    break
+            else:
+                # Standalone exit
+                if cross_n and bt > en["time"]:
+                    exit_px = c_5n
+                    exit_time = bt
+                    exit_reason = "EMA20_CROSS"
+                    break
+                    
         if bt >= "15:15":
             exit_px = bc
             exit_time = bt
@@ -179,10 +260,9 @@ for dp in nifty_packages:
     strike = strike_round + 150 if sig == "PUT" else strike_round - 150
     opt_name = f"NIFTY {int(strike)} {sig[:2]} (ITM-150)"
     
-    # Smart Sizing: 2 Base Lots on A+ (VIX chg >= 3.5%), 1 Single Lot on Grade B (< 3.5%)
     is_a_plus = abs(v_chg) >= 3.5
     base_lots = 2 if is_a_plus else 1
-    pyramided = (is_a_plus and max_fav >= 60.0 and pnl > 0)
+    pyramided = (is_a_plus and max_fav >= 80.0 and pnl > 0)
     total_lots = (3 if pyramided else 2) if is_a_plus else 1
     
     if not is_a_plus:
@@ -191,14 +271,14 @@ for dp in nifty_packages:
         if pnl <= 0:
             weighted_pnl = round(pnl * 2, 2)
         else:
-            pyr_pnl = max(0.0, pnl - 60.0) if pyramided else 0.0
+            pyr_pnl = max(0.0, pnl - 80.0) if pyramided else 0.0
             weighted_pnl = round((pnl * 2) + pyr_pnl, 2)
         
     fut_pnl = round(weighted_pnl * lot_size_nifty, 2)
     opt_pnl = round(weighted_pnl * lot_size_nifty * delta, 2)
     
     nifty_records.append({
-        "date": dp["date"],
+        "date": d,
         "trade_num": 1,
         "stage": "VIX_DIVERGENCE_REVERSAL",
         "side": sig,
@@ -208,7 +288,7 @@ for dp in nifty_packages:
         "option_exit_price": 0.0,
         "option_pnl_points": round(weighted_pnl * delta, 2),
         "option_pnl_rupees": opt_pnl,
-        "entry_time": e_time,
+        "entry_time": en["time"],
         "entry_price": round(e_px, 2),
         "exit_time": exit_time,
         "exit_price": round(exit_px, 2),
@@ -230,139 +310,78 @@ for dp in nifty_packages:
 
 df_nifty_out = pd.DataFrame(nifty_records)
 df_nifty_out.to_csv("performance/vix_divergence_backtest_trades.csv", index=False)
-print(f"Generated Nifty trades: {len(df_nifty_out)}")
+print(f"\nGenerated Nifty trades: {len(df_nifty_out)}")
 print(f"  1-Lot Net Points: {df_nifty_out['pnl_points'].sum():+.2f} pts")
-print(f"  Dynamic 2+1 Net Points: {df_nifty_out['weighted_pnl_points'].sum():+.2f} pts")
 print(f"  Win Rate: {(df_nifty_out['pnl_points'] > 0).mean()*100:.1f}%\n", flush=True)
 
 # =====================================================================
-# PART 2: SENSEX 4-YEAR VIX TRAP (2023 - 2026)
+# SIMULATE SENSEX VIX TRAP (4-YEAR WITH DUAL NIFTY CONFIRMATION)
 # =====================================================================
-print("Loading Sensex 1-min data (2023-2026)...", flush=True)
-base_sx = Path("captured_data/technovusin_sensex/1min")
-dfs_sx = []
-for y in ["2023", "2024", "2025"]:
-    f = base_sx / y / f"SENSEX_1min_{y}.csv"
-    if f.exists(): dfs_sx.append(pd.read_csv(f))
-for f in sorted((base_sx / "2026").glob("*.csv")):
-    dfs_sx.append(pd.read_csv(f))
-df_sx = pd.concat(dfs_sx, ignore_index=True)
-df_sx.columns = [c.lower() for c in df_sx.columns]
-dt_col = [c for c in df_sx.columns if "time" in c or "date" in c][0]
-df_sx["timestamp"] = pd.to_datetime(df_sx[dt_col])
-df_sx.sort_values("timestamp", inplace=True)
-df_sx.drop_duplicates("timestamp", inplace=True)
-df_sx.reset_index(drop=True, inplace=True)
-df_sx["date_str"] = df_sx["timestamp"].dt.strftime("%Y-%m-%d")
-df_sx["time_str"] = df_sx["timestamp"].dt.strftime("%H:%M")
-
-tp_sx = (df_sx["high"] + df_sx["low"] + df_sx["close"]) / 3.0
-cum_tp_sx = tp_sx.groupby(df_sx["date_str"]).cumsum()
-counts_sx = df_sx.groupby(df_sx["date_str"]).cumcount() + 1
-df_sx["vwap"] = cum_tp_sx / counts_sx
-
-sx_packages = []
-for d, g in df_sx.groupby("date_str"):
-    if len(g) < 100: continue
-    or_bars = g[(g["time_str"] >= "09:15") & (g["time_str"] <= "09:30")]
-    if len(or_bars) == 0: continue
-    or_high = float(or_bars["high"].max())
-    or_low = float(or_bars["low"].min())
-    if (or_high - or_low) < 75.0: continue
-    
-    sx_packages.append({
-        "date": d,
-        "year": int(d[:4]),
-        "vix_chg": vix_map.get(d, 0.0),
-        "or_high": or_high,
-        "or_low": or_low,
-        "times": g["time_str"].values,
-        "opens": g["open"].values,
-        "highs": g["high"].values,
-        "lows": g["low"].values,
-        "closes": g["close"].values,
-        "vwaps": g["vwap"].values,
-        "n_bars": len(g)
-    })
-
-print(f"Indexed {len(sx_packages)} Sensex trading days.", flush=True)
-
 sx_records = []
-lot_size_sx = 10  # Standard BSE Sensex options contract lot size (10 qty)
+lot_size_sx = 20
 
-for dp in sx_packages:
-    v_chg = dp["vix_chg"]
-    or_h = dp["or_high"]
-    or_l = dp["or_low"]
-    times, opens, highs, lows, closes, vwaps = dp["times"], dp["opens"], dp["highs"], dp["lows"], dp["closes"], dp["vwaps"]
-    n_bars = dp["n_bars"]
-    has_tested_high, has_tested_low = False, False
-    entry = None
+for d, es in sensex_entries.items():
+    en = nifty_entries.get(d)
+    has_dual_partner = (en is not None and en["sig"] == es["sig"])
     
-    for i in range(n_bars):
-        t = times[i]
-        if t < "09:30": continue
-        if t > "12:30": break
-        o, h, l, c, v = opens[i], highs[i], lows[i], closes[i], vwaps[i]
-        if h >= or_h: has_tested_high = True
-        if l <= or_l: has_tested_low = True
-        
-        sig = None
-        if v_chg >= 2.0 and has_tested_high and c < o and c < v and c < or_h:
-            sig = "SELL"
-        elif v_chg <= -2.0 and has_tested_low and c > o and c > v and c > or_l:
-            sig = "BUY"
-        if not sig: continue
-        
-        # Swing SL with 120 pt cap and 60 pt floor (aligns with Trend Runner max 240 pt 2-lot risk)
-        if sig == "SELL":
-            swing_high = highs[:i+1].max()
-            sl_dist = max(60.0, min(120.0, swing_high - c + 10.0))
-            initial_sl = c + sl_dist
-        else:
-            swing_low = lows[:i+1].min()
-            sl_dist = max(60.0, min(120.0, c - swing_low + 10.0))
-            initial_sl = c - sl_dist
-            
-        entry = (sig, t, c, initial_sl, sl_dist, i)
-        break
-        
-    if not entry: continue
+    g5n = day_5m_n_map.get(d)
+    g5s = day_5m_s_map.get(d)
     
-    sig, e_time, e_px, initial_sl, sl_dist, e_bar = entry
-    curr_sl = initial_sl
-    exit_px = None
-    exit_time = None
+    sig = es["sig"]
+    e_px = es["px"]
+    curr_sl = es["sl"]
+    initial_sl = curr_sl
+    sl_dist = es["sld"]
+    times = es["times"]
+    highs = es["highs"]
+    lows = es["lows"]
+    closes = es["closes"]
+    e_bar = es["bar"]
+    n_bars = len(times)
+    v_chg = es["v_chg"]
+    
     max_fav = 0.0
-    exit_reason = None
+    ema_armed = False
+    exit_px, exit_time, exit_reason = None, None, None
     
     for k in range(e_bar + 1, n_bars):
         bt = times[k]
         bh, bl, bc = highs[k], lows[k], closes[k]
-        fav = (bh - e_px) if sig == "BUY" else (e_px - bl)
+        fav = (bh - e_px) if sig == "CALL" else (e_px - bl)
         if fav > max_fav: max_fav = fav
+        if max_fav >= 150.0: ema_armed = True
         
-        if max_fav >= 100.0:
-            r1 = e_px + 20.0 if sig == "BUY" else e_px - 20.0
-            if (sig == "BUY" and r1 > curr_sl) or (sig == "SELL" and r1 < curr_sl): curr_sl = r1
-        if max_fav >= 180.0:
-            r2 = e_px + 90.0 if sig == "BUY" else e_px - 90.0
-            if (sig == "BUY" and r2 > curr_sl) or (sig == "SELL" and r2 < curr_sl): curr_sl = r2
-        if max_fav >= 300.0:
-            r3 = e_px + 180.0 if sig == "BUY" else e_px - 180.0
-            if (sig == "BUY" and r3 > curr_sl) or (sig == "SELL" and r3 < curr_sl): curr_sl = r3
-        if max_fav >= 500.0:
-            r4 = e_px + 350.0 if sig == "BUY" else e_px - 350.0
-            if (sig == "BUY" and r4 > curr_sl) or (sig == "SELL" and r4 < curr_sl): curr_sl = r4
-        if max_fav >= 700.0:
-            r5 = e_px + 500.0 if sig == "BUY" else e_px - 500.0
-            if (sig == "BUY" and r5 > curr_sl) or (sig == "SELL" and r5 < curr_sl): curr_sl = r5
-            
-        if (bl <= curr_sl if sig == "BUY" else bh >= curr_sl):
+        # Structural Stop Loss
+        if (bl <= curr_sl if sig == "CALL" else bh >= curr_sl):
             exit_px = curr_sl
             exit_time = bt
-            exit_reason = "RATCHET_LOCK" if curr_sl != initial_sl else "STOP_LOSS"
+            exit_reason = "STOP_LOSS"
             break
+            
+        # Symmetrical 5m 20-EMA Trail with Noise Buffer (10.0 pts on Sensex, 3.5 pts on Nifty)
+        if ema_armed and g5s is not None and bt in g5s.index:
+            b5_s = g5s.loc[bt]
+            c_5s, ema_5s = b5_s["close"], b5_s["ema20"]
+            cross_s = (c_5s < (ema_5s - 10.0)) if sig == "CALL" else (c_5s > (ema_5s + 10.0))
+            
+            if has_dual_partner and g5n is not None and bt in g5n.index:
+                b5_n = g5n.loc[bt]
+                c_5n, ema_5n = b5_n["close"], b5_n["ema20"]
+                cross_n = (c_5n < (ema_5n - 3.5)) if sig == "CALL" else (c_5n > (ema_5n + 3.5))
+                # Dual exit gate
+                if cross_n and cross_s and bt > es["time"]:
+                    exit_px = c_5s
+                    exit_time = bt
+                    exit_reason = "EMA20_CROSS"
+                    break
+            else:
+                # Standalone exit
+                if cross_s and bt > es["time"]:
+                    exit_px = c_5s
+                    exit_time = bt
+                    exit_reason = "EMA20_CROSS"
+                    break
+                    
         if bt >= "15:15":
             exit_px = bc
             exit_time = bt
@@ -374,14 +393,12 @@ for dp in sx_packages:
         exit_time = times[-1]
         exit_reason = "EOD"
         
-    pnl = (exit_px - e_px) if sig == "BUY" else (e_px - exit_px)
-    side = "PUT" if sig == "SELL" else "CALL"
+    pnl = (exit_px - e_px) if sig == "CALL" else (e_px - exit_px)
     
     strike_round = round(e_px / 100.0) * 100
-    strike = strike_round + 400 if side == "PUT" else strike_round - 400
-    opt_name = f"SENSEX {int(strike)} {side[:2]} (ITM-400)"
+    strike = strike_round + 400 if sig == "PUT" else strike_round - 400
+    opt_name = f"SENSEX {int(strike)} {sig[:2]} (ITM-400)"
     
-    # Smart Sizing: 2 Base Lots on A+ (VIX chg >= 3.5%), 1 Single Lot on Grade B (< 3.5%)
     is_a_plus = abs(v_chg) >= 3.5
     base_lots = 2 if is_a_plus else 1
     pyramided = (is_a_plus and max_fav >= 150.0 and pnl > 0)
@@ -400,18 +417,18 @@ for dp in sx_packages:
     opt_pnl = round(weighted_pnl * lot_size_sx * delta, 2)
     
     sx_records.append({
-        "date": dp["date"],
-        "year": dp["year"],
+        "date": d,
+        "year": int(d[:4]),
         "trade_num": 1,
         "stage": "VIX_DIVERGENCE_REVERSAL",
-        "side": side,
+        "side": sig,
         "option": opt_name,
         "option_symbol": "",
         "option_entry_price": 0.0,
         "option_exit_price": 0.0,
         "option_pnl_points": round(weighted_pnl * delta, 2),
         "option_pnl_rupees": opt_pnl,
-        "entry_time": e_time,
+        "entry_time": es["time"],
         "entry_price": round(e_px, 2),
         "exit_time": exit_time,
         "exit_price": round(exit_px, 2),
@@ -435,7 +452,5 @@ df_sx_out = pd.DataFrame(sx_records)
 df_sx_out.to_csv("performance/sensex_vix_divergence_trades.csv", index=False)
 print(f"Generated Sensex trades: {len(df_sx_out)}")
 print(f"  1-Lot Net Points: {df_sx_out['pnl_points'].sum():+.2f} pts")
-print(f"  Dynamic 2+1 Net Points: {df_sx_out['weighted_pnl_points'].sum():+.2f} pts")
 print(f"  Win Rate: {(df_sx_out['pnl_points'] > 0).mean()*100:.1f}%\n", flush=True)
-
-print("SUCCESS: Both Nifty and Sensex backtest trade logs updated with Swing SL logic!", flush=True)
+print("SUCCESS: VIX Trap backtest trade logs updated with Dual-Partner Exit Gate + Noise Buffers!")
