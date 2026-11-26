@@ -469,13 +469,74 @@ def fetch_chartink_signals(clause=None):
         print(f"[Swinger] Chartink query error: {e}")
     return []
 
+def fetch_yahoo_candles(symbol: str, years: int = 4):
+    """
+    Fetch multi-year daily OHLCV candles from Yahoo Finance.
+    Provides up to 4+ years (~1000 daily bars) for backtesting without hitting
+    Kotak Neo historical API, eliminating rate limits and preventing order execution interference.
+    """
+    import urllib.request
+    clean_sym = symbol.upper().replace(".NS", "").replace(".BO", "").replace("NSE:", "").strip()
+    for ext in [".NS", ".BO"]:
+        t_sym = f"{clean_sym}{ext}"
+        url = f"https://query1.finance.yahoo.com/v8/finance/chart/{t_sym}?range={years}y&interval=1d"
+        req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as res:
+                data = json.loads(res.read().decode("utf-8"))
+                res_arr = data.get("chart", {}).get("result", [])
+                if not res_arr:
+                    continue
+                chart_data = res_arr[0]
+                timestamps = chart_data.get("timestamp", [])
+                quotes = chart_data.get("indicators", {}).get("quote", [{}])[0]
+                if not timestamps or not quotes:
+                    continue
+                opens = quotes.get("open", [])
+                highs = quotes.get("high", [])
+                lows = quotes.get("low", [])
+                closes = quotes.get("close", [])
+                volumes = quotes.get("volume", [])
+
+                rows = []
+                for ts, o, h, l, c, v in zip(timestamps, opens, highs, lows, closes, volumes):
+                    if None in (ts, o, h, l, c) or (c is not None and c <= 0):
+                        continue
+                    dt = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+                    rows.append({
+                        "Date": dt,
+                        "Open": round(float(o), 2),
+                        "High": round(float(h), 2),
+                        "Low": round(float(l), 2),
+                        "Close": round(float(c), 2),
+                        "Volume": int(v or 0)
+                    })
+                if len(rows) >= 50:
+                    df = pd.DataFrame(rows).set_index("Date")
+                    df.index = pd.to_datetime(df.index)
+                    return df
+        except Exception:
+            continue
+    return None
+
 def get_market_data(symbol):
-    """Fetch daily market data and compute indicators using official Kotak Neo candles."""
+    """Fetch daily market data and compute indicators using cached/Yahoo candles without hitting Kotak order lines."""
     try:
-        from kotak_orders import get_kotak_candles
         df = None
         if _candles_cache and symbol in _candles_cache:
             df = _candles_cache[symbol]
+        if df is None or df.empty or len(df) < 50:
+            df = fetch_yahoo_candles(symbol, years=2)
+            if df is not None and not df.empty and _candles_cache is not None:
+                _candles_cache[symbol] = df
+        if (df is None or df.empty or len(df) < 50):
+            try:
+                from kotak_orders import get_kotak_candles
+                df = get_kotak_candles(symbol, days=330)
+                if df is not None and not df.empty and _candles_cache is not None:
+                    _candles_cache[symbol] = df
+            except Exception:
+                pass
         if df is None or df.empty or len(df) < 50:
             df = get_kotak_candles(symbol, days=330)
             if df is not None and not df.empty and _candles_cache is not None:
@@ -633,14 +694,19 @@ def get_stock_candles(symbol: str, from_date: str = None, to_date: str = None):
         _synced_today_symbols.add(symbol)
         recent_df = None
 
-        # 1. Primary: Official Kotak Neo Historical API (Fast < 0.5s, Official NSE Exchange Data)
-        try:
-            from kotak_orders import get_kotak_candles
-            recent_df = get_kotak_candles(symbol, days=90 if (df is not None and not df.empty) else 330)
-            if recent_df is not None and not recent_df.empty:
-                print(f"[Swinger] Refreshed {len(recent_df)} live candles for {symbol} via Kotak Neo API")
-        except Exception as e:
-            print(f"[Swinger] Kotak candle fetch error for {symbol}: {e}")
+        # 1. Primary: Load progressive multi-year historical candles (up to 4 years) from Yahoo Finance (Zero hit to Kotak Neo orders)
+        if df is None or df.empty or len(df) < 200:
+            recent_df = fetch_yahoo_candles(symbol, years=4)
+
+        # 2. Secondary fallback: Kotak Neo Historical API (only for short recent delta if Yahoo unavailable)
+        if recent_df is None or recent_df.empty:
+            try:
+                from kotak_orders import get_kotak_candles
+                recent_df = get_kotak_candles(symbol, days=90 if (df is not None and not df.empty) else 180)
+                if recent_df is not None and not recent_df.empty:
+                    print(f"[Swinger] Refreshed {len(recent_df)} live candles for {symbol} via Kotak Neo API")
+            except Exception as e:
+                print(f"[Swinger] Kotak candle fetch error for {symbol}: {e}")
 
         if recent_df is not None and not recent_df.empty:
             if isinstance(recent_df.columns, pd.MultiIndex):
@@ -2338,29 +2404,52 @@ def backtest_single_stock(symbol: str, initial_sl_pct: float = None, be_trigger_
     if cache and resolved_sym in cache:
         df = cache[resolved_sym]
 
-    # 1. Primary: Append official recent live delta from Kotak Neo API (up to today!)
-    try:
-        from kotak_orders import get_kotak_candles
-        kotak_df = get_kotak_candles(resolved_sym, days=90 if (df is not None and not df.empty) else 180)
-        if kotak_df is not None and not kotak_df.empty:
+    # 1. Primary: If df is missing or shorter than 250 bars (e.g. only 180-day slice),
+    # fetch multi-year historical candles (up to 4 years / ~1000 bars) progressively from Yahoo Finance.
+    # This prevents hitting Kotak Neo historical API and eliminates rate limit interference with live orders.
+    if df is None or len(df) < 250:
+        y_df = fetch_yahoo_candles(resolved_sym, years=4)
+        if y_df is not None and not y_df.empty:
             if df is not None and not df.empty:
                 df = df.copy()
                 if not isinstance(df.index, pd.DatetimeIndex):
                     df.index = pd.to_datetime(df.index)
                 df.index = df.index.tz_localize(None)
-                combined = pd.concat([df.loc[df.index < kotak_df.index[0]], kotak_df])
+                combined = pd.concat([y_df.loc[y_df.index < df.index[0]], df])
                 df = combined[~combined.index.duplicated(keep="last")].sort_index()
-                print(f"[OnDemand Backtest] Refreshed {resolved_sym} up to {df.index[-1].strftime('%Y-%m-%d')} via Kotak Neo")
             else:
-                df = kotak_df
-    except Exception as e:
-        print(f"[OnDemand Backtest] Kotak candle delta error for {resolved_sym}: {e}")
+                df = y_df
+            if _candles_cache is not None:
+                _candles_cache[resolved_sym] = df
+            print(f"[OnDemand Backtest] Progressively loaded {len(df)} multi-year candles for {resolved_sym} via Yahoo (Zero Kotak Neo hit)")
 
-    # 2. Fetch full historical Kotak candles if missing or short (< 50 bars)
+    # 2. Append today's candle from daily signals if present without hitting Kotak
+    try:
+        ds = load_daily_signals()
+        for sig in ds.get("signals", []):
+            if sig.get("nsecode") == resolved_sym:
+                s_date = ds.get("last_scan_time", "")[:10]
+                s_dt = pd.to_datetime(s_date)
+                if df is not None and not df.empty and s_dt not in df.index and s_dt >= df.index[-1]:
+                    c_p = float(sig.get("close", 0))
+                    v_p = int(sig.get("volume", 0))
+                    if c_p > 0:
+                        extra_row = pd.DataFrame([{
+                            "Open": c_p * (1.0 - (float(sig.get("per_chg", 0)) / 100.0)),
+                            "High": max(c_p, c_p * 1.01),
+                            "Low": min(c_p, c_p * 0.99),
+                            "Close": c_p,
+                            "Volume": v_p
+                        }], index=[s_dt])
+                        df = pd.concat([df, extra_row])
+    except Exception:
+        pass
+
+    # 3. Fallback: only if df is still missing or < 50 bars, try Kotak
     if df is None or len(df) < 50:
         try:
             from kotak_orders import get_kotak_candles
-            kotak_df = get_kotak_candles(resolved_sym, days=600)
+            kotak_df = get_kotak_candles(resolved_sym, days=180)
             if kotak_df is not None and not kotak_df.empty:
                 df = kotak_df
         except Exception:

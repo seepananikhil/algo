@@ -3,6 +3,7 @@ import {
   Activity,
   Briefcase,
   Coins,
+  Tv,
   ExternalLink,
   FileText,
   LineChart,
@@ -660,7 +661,7 @@ export function HoldingsPage() {
                                   className="opacity-40 group-hover:opacity-100 p-0.5 rounded hover:bg-muted text-muted-foreground hover:text-foreground transition-all"
                                   title="Open on TradingView"
                                 >
-                                  <ExternalLink className="size-3.5" />
+                                  <Tv className="size-3.5" />
                                 </a>
                               </div>
                               <span className="text-[11px] text-muted-foreground">

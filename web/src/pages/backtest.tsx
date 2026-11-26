@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { DayDetail } from "@/components/day-detail"
+import { GitPnlCalendar } from "@/components/git-pnl-calendar"
 import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts"
 import { Card, CardHeader } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -1024,6 +1025,12 @@ export function BacktestPage() {
                   hint="Max Extremes"
                 />
               </div>
+
+              <GitPnlCalendar
+                daily={data?.daily ?? []}
+                selectedDate={picked}
+                onPick={handleSelectDate}
+              />
 
               {/* Charts Row: Cumulative Payoff & Drawdown Curve (Left) + Monthly P&L Distribution (Right) Side-by-Side */}
               <div className="min-h-[360px] lg:h-[400px] flex flex-col lg:flex-row gap-2.5">

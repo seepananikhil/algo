@@ -15,7 +15,7 @@ import {
   Activity,
   Award,
   Layers,
-  ExternalLink,
+  Tv,
   X
 } from "lucide-react"
 import {
@@ -1637,7 +1637,7 @@ export function SwingerPage() {
                                 className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
                                 title={`Open ${t.symbol} on TradingView`}
                               >
-                                <ExternalLink className="size-3" />
+                                <Tv className="size-3" />
                               </a>
                               </td>
                               <td className="p-3 text-slate-600 font-mono">{t.entry_date}</td>
@@ -2051,7 +2051,7 @@ export function SwingerPage() {
                                 className="opacity-0 group-hover:opacity-100 transition p-0.5 rounded hover:bg-blue-50 text-slate-400 hover:text-blue-600"
                                 title={`Open ${t.symbol} on TradingView`}
                               >
-                                <ExternalLink className="size-3" />
+                                <Tv className="size-3" />
                               </a>
                             </div>
                             <div className="text-[11px] text-slate-500 font-medium truncate max-w-[140px]">

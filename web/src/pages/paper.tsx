@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   Clock,
+  Tv,
   ExternalLink,
   FileText,
   GitCommit,
@@ -30,6 +31,7 @@ import { SwingerTradeChartModal, type SwingerTradeTarget } from "@/components/sw
 import type { PaperHoldingsResponse } from "./holdings"
 import { toast } from "sonner"
 import { DayDetail } from "@/components/day-detail"
+import { GitPnlCalendar } from "@/components/git-pnl-calendar"
 import {
   Area,
   AreaChart,
@@ -1473,7 +1475,7 @@ export function PaperPage() {
                                   className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
                                   title="Open in TradingView"
                                 >
-                                  <ExternalLink className="size-3.5" />
+                                  <Tv className="size-3.5" />
                                 </a>
                               </div>
                             </td>
@@ -1731,6 +1733,17 @@ export function PaperPage() {
                   </Card>
                 </div>
               )}
+
+              <GitPnlCalendar
+                daily={calendarDaily}
+                selectedDate={activeDate}
+                onlyActiveRange={true}
+                onPick={(d) => {
+                  handleDayClick(d)
+                  setAnalyticsView("terminal")
+                  localStorage.setItem("paper_analytics_view", "terminal")
+                }}
+              />
 
               {/* Side-by-side charts row */}
               {equityCurve.length > 0 && (

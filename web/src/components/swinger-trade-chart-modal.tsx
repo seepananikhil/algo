@@ -20,7 +20,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Layers,
-  ExternalLink,
+  Tv,
   Ruler,
   Table,
   RefreshCw
@@ -1144,7 +1144,7 @@ export function SwingerTradeChartModal({
                 className="size-6 inline-flex items-center justify-center rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/80 transition shadow-2xs shrink-0"
                 title={`Open ${currentSymbol || trade.symbol} on TradingView (NSE)`}
               >
-                <ExternalLink className="size-3.5" />
+                <Tv className="size-3.5" />
               </a>
 
               {stats && (
@@ -1303,7 +1303,7 @@ export function SwingerTradeChartModal({
                 className="size-6 inline-flex items-center justify-center rounded-md bg-blue-50 text-blue-600 hover:bg-blue-100 hover:text-blue-800 border border-blue-200/80 transition shadow-2xs shrink-0"
                 title={`Open ${currentSymbol || trade.symbol} on TradingView (NSE)`}
               >
-                <ExternalLink className="size-3.5" />
+                <Tv className="size-3.5" />
               </a>
 
               {/* Single Unified Status / Backtest Badge */}
