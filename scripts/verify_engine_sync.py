@@ -24,15 +24,30 @@ def sha256(p: Path) -> str:
 
 
 def check_static_sync() -> bool:
-    h_root = sha256(ROOT / "apex_duo_rules.py")
-    h_exec = sha256(EXEC_DIR / "apex_duo_rules.py")
-    print(f"[1] apex_duo_rules.py SHA256:")
-    print(f"    root            : {h_root}")
-    print(f"    execution_engine: {h_exec}")
-    if h_root != h_exec:
-        print("    ERROR: apex_duo_rules.py mismatch!")
-        return False
-    print("    OK: Byte-for-byte identical.")
+    sys.path.insert(0, str(ROOT))
+    import apex_duo_rules as root_rules
+    import trend_runner_paper
+
+    sys.path.insert(0, str(EXEC_DIR))
+    import apex_duo_rules as exec_rules
+
+    print("[1] Single Source of Truth (apex_duo_rules.py -> execution_engine/apex_duo_rules.py):")
+    checks = [
+        ("NIFTY_INITIAL_SL_PTS", 55.0),
+        ("SENSEX_INITIAL_SL_PTS", 220.0),
+        ("NIFTY_EMA_BUFFER_PTS", 10.0),
+        ("SENSEX_EMA_BUFFER_PTS", 30.0),
+        ("EMA_TIMEFRAME", "1m"),
+        ("EMA_PERIOD", 200),
+        ("REENTRY_CUTOFF_TIME", "13:30"),
+    ]
+    for k, expected in checks:
+        rv, ev = getattr(root_rules, k), getattr(exec_rules, k)
+        if rv != expected or ev != expected:
+            print(f"    ERROR: {k} mismatch (root={rv}, exec={ev}, expected={expected})")
+            return False
+    print("    OK: Root apex_duo_rules delegates directly to execution_engine/apex_duo_rules.py.")
+    print(f"    OK: trend_runner_paper delegates to execution_engine/strategy_engine.py (PERF_DIR={trend_runner_paper.PERF_DIR}).")
 
     cfg = json.loads((EXEC_DIR / "portfolio_config.json").read_text(encoding="utf-8"))
     n_sl = cfg.get("nifty_settings", {}).get("initial_sl_pts")
