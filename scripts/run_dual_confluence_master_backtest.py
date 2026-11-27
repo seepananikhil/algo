@@ -262,7 +262,21 @@ def run_backtest():
             if not trade_active:
                 break
 
-            # --- PHASE 2: 1m SL + ARMED DUAL-CROSS 5m 20-EMA EXIT (apex_duo_rules) ---
+            # Align both legs to the actual dual-confirmation minute (when the 2nd index confirms)
+            if has_sensex:
+                confirm_time = max(n_entry["time"], s_entry["time"])
+                if n_entry["time"] < confirm_time:
+                    n_sub = day_n_1m_t[day_n_1m_t["t_str"] <= confirm_time]
+                    if not n_sub.empty:
+                        n_entry["time"] = confirm_time
+                        n_entry["px"] = float(n_sub.iloc[-1]["Close"])
+                if s_entry["time"] < confirm_time:
+                    s_sub = day_s_1m_t[day_s_1m_t["t_str"] <= confirm_time]
+                    if not s_sub.empty:
+                        s_entry["time"] = confirm_time
+                        s_entry["px"] = float(s_sub.iloc[-1]["Close"])
+
+            # --- PHASE 2: 1m SL + ARMED DUAL-CROSS 1m 200-EMA EXIT (apex_duo_rules) ---
             side = n_entry["side"]
             n_sl_pts = get_initial_sl_pts("NIFTY")
             s_sl_pts = get_initial_sl_pts("SENSEX")
