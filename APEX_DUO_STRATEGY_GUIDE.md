@@ -24,11 +24,11 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 | **VIX Bias Filter** | CALL: `≤ -1.8%` (`≤ 0%` if `80%+` body) · PUT: `≥ 0.0%` | CALL: `≤ -1.8%` (`≤ 0%` if `80%+` body) · PUT: `≥ 0.0%` |
 | **Dual-Activation Window** | Both indices must agree within `60` minutes | Both indices must agree within `60` minutes |
 | **Protective Initial SL** | **`55` spot points** (checked every `1m` bar) | **`220` spot points** (checked every `1m` bar) |
-| **5m 20-EMA Arming** | Activates after **`+50` spot points** favorable move | Activates after **`+150` spot points** favorable move |
-| **5m 20-EMA Exit Buffer** | `2.5` spot points beyond 5m 20-EMA | `7.5` spot points beyond 5m 20-EMA |
+| **1m 200-EMA Arming** | Activates after **`+50` spot points** favorable move | Activates after **`+150` spot points** favorable move |
+| **1m 200-EMA Exit Buffer** | `10.0` spot points beyond 1m 200-EMA | `30.0` spot points beyond 1m 200-EMA |
 | **Re-Entry Cool-Off** | `20` minutes after Trade 1 exit, up to `13:30 IST` (max `2` trades/day) | `20` minutes after Trade 1 exit, up to `13:30 IST` (max `2` trades/day) |
 | **End-of-Day Square-Off** | `15:15 IST` | `15:15 IST` |
-| **Pyramiding / Ratchets** | **Disabled** (pure `5m 20-EMA` + Initial SL) | **Disabled** (pure `5m 20-EMA` + Initial SL) |
+| **Pyramiding / Ratchets** | **Disabled** (pure `1m 200-EMA` + Initial SL) | **Disabled** (pure `1m 200-EMA` + Initial SL) |
 
 ### What You Control in Settings
 - **Lot Sizing**: `1` lot base (`65` qty NIFTY / `20` qty SENSEX), or Dynamic (`1` vs `2` lots on A+ conviction).
@@ -55,11 +55,11 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 ### Step 3: Trade Management & Exits
 1. **Protective Initial Stop Loss (`55` pts NIFTY / `220` pts SENSEX)**:
    - Checked on **every 1-minute bar** from entry. If price moves against the trade by `55` pts (NIFTY) or `220` pts (SENSEX), it exits immediately to cap loss.
-2. **Armed 5m 20-EMA Dual-Cross Trail**:
-   - Once the trade moves **`+50` pts** (NIFTY) or **`+150` pts** (SENSEX) in your favor, the `5m 20-EMA` trailing exit arms.
-   - At each **5-minute candle close**, the engine checks whether **both** NIFTY and SENSEX have closed beyond their `5m 20-EMA` (past the `2.5p / 7.5p` noise buffer).
-   - If **only one** index crosses its `5m 20-EMA` while the other holds, the trade **stays open** (filtering out single-index shakeouts).
-   - Once **both** indices confirm a `5m 20-EMA` close beyond the buffer, the trade exits cleanly.
+2. **Armed 1m 200-EMA Dual-Cross Trail**:
+   - Once the trade moves **`+50` pts** (NIFTY) or **`+150` pts** (SENSEX) in your favor, the `1m 200-EMA` trailing exit arms.
+   - At each **1-minute candle close**, the engine checks whether **both** NIFTY and SENSEX have closed beyond their continuous `1m 200-EMA` (past the `10p / 30p` noise buffer).
+   - If **only one** index crosses its `1m 200-EMA` while the other holds, the trade **stays open** (filtering out single-index shakeouts).
+   - Once **both** indices confirm a `1m 200-EMA` close beyond the buffer, the trade exits cleanly.
 3. **Hard Time Exit (`15:15 IST`)**:
    - Any position still open at `15:15 IST` is squared off automatically before market close.
 
@@ -69,6 +69,6 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 ---
 
 ## 4. Historical Performance Summary (10-Year Backtest, 1 Lot)
-- **NIFTY (`2017–2026`, 65 Qty)**: `1,903` trades · **`55.1%` Win Rate** · `+37,789.5` pts · Max Drawdown `476.1` pts · Calmar **`79.4x`** · Profit Factor **`2.05`** · **`₹24,56,316.20`**
-- **SENSEX (`2023–2026`, 20 Qty)**: `790` trades · **`58.1%` Win Rate** · `+70,430.5` pts · Max Drawdown `1,322.9` pts · Calmar **`53.2x`** · Profit Factor **`2.36`** · **`₹14,08,611.00`**
+- **NIFTY (`2017–2026`, 65 Qty)**: `1,861` trades · **`52.9%` Win Rate** · `+42,458.0` pts · Max Drawdown `500.0` pts · Calmar **`84.9x`** · Profit Factor **`2.16`** · **`₹27,59,768.70`**
+- **SENSEX (`2023–2026`, 20 Qty)**: `768` trades · **`56.2%` Win Rate** · `+77,650.1` pts · Max Drawdown `1,361.3` pts · Calmar **`57.0x`** · Profit Factor **`2.44`** · **`₹15,53,001.00`**
 - **Combined 1-Lot Master Portfolio**: **`₹38,99,926.40`**

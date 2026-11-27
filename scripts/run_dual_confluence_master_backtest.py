@@ -92,6 +92,8 @@ def run_backtest():
 
     n_all.sort_values("dt", inplace=True)
     s_all.sort_values("dt", inplace=True)
+    n_all["ema200_1m"] = n_all["Close"].ewm(span=200, adjust=False).mean()
+    s_all["ema200_1m"] = s_all["Close"].ewm(span=200, adjust=False).mean()
     n_all["date_val"] = n_all["dt"].dt.date
     s_all["date_val"] = s_all["dt"].dt.date
 
@@ -287,6 +289,7 @@ def run_backtest():
                     n_ema_armed = True
 
                 # Check Sensex 1m bar if still open
+                row_s = None
                 sh = sl_val = sc = None
                 if has_sensex and exit_s is None and t_str > s_entry["time"] and t_str in s_1m_map.index:
                     row_s = s_1m_map.loc[t_str]
@@ -310,29 +313,19 @@ def run_backtest():
                 if exit_n is not None and (not has_sensex or exit_s is not None):
                     break
 
-                # 2. Symmetrical Dual-Cross 5m 20-EMA Exit (apex_duo_rules.check_ema20_cross)
-                if t_str in n_5m_map.index:
-                    b5n_r = n_5m_map.loc[t_str]
-                    if isinstance(b5n_r, pd.DataFrame):
-                        b5n_r = b5n_r.iloc[-1]
-                    c_5n, ema_5n = float(b5n_r["Close"]), float(b5n_r["ema20"])
-                    cross_n = check_ema20_cross("NIFTY", side, c_5n, ema_5n)
-
-                    if has_sensex and exit_s is None and exit_n is None:
-                        if s_5m_map is not None and t_str in s_5m_map.index and t_str > max(n_entry["time"], s_entry["time"]):
-                            b5s_r = s_5m_map.loc[t_str]
-                            if isinstance(b5s_r, pd.DataFrame):
-                                b5s_r = b5s_r.iloc[-1]
-                            c_5s, ema_5s = float(b5s_r["Close"]), float(b5s_r["ema20"])
-                            cross_s = check_ema20_cross("SENSEX", side, c_5s, ema_5s)
-                            if (n_ema_armed or s_ema_armed) and cross_n and cross_s:
-                                exit_n = {"time": t_str, "px": c_5n, "reason": "EMA20_CROSS"}
-                                exit_s = {"time": t_str, "px": c_5s, "reason": "EMA20_CROSS"}
-                                break
-                    elif not has_sensex and exit_n is None:
-                        if n_ema_armed and cross_n:
-                            exit_n = {"time": t_str, "px": c_5n, "reason": "EMA20_CROSS"}
+                # 2. Symmetrical Dual-Cross 1m 200-EMA Exit (apex_duo_rules.check_ema20_cross)
+                cross_n = check_ema20_cross("NIFTY", side, nc, float(row_n["ema200_1m"]))
+                if has_sensex and exit_s is None and exit_n is None:
+                    if row_s is not None and sc is not None and t_str > max(n_entry["time"], s_entry["time"]):
+                        cross_s = check_ema20_cross("SENSEX", side, sc, float(row_s["ema200_1m"]))
+                        if (n_ema_armed or s_ema_armed) and cross_n and cross_s:
+                            exit_n = {"time": t_str, "px": nc, "reason": "EMA20_CROSS"}
+                            exit_s = {"time": t_str, "px": sc, "reason": "EMA20_CROSS"}
                             break
+                elif not has_sensex and exit_n is None:
+                    if n_ema_armed and cross_n:
+                        exit_n = {"time": t_str, "px": nc, "reason": "EMA20_CROSS"}
+                        break
 
                 # 3. EOD 15:15 Square-Off
                 if t_str >= "15:15":

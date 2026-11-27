@@ -22,8 +22,11 @@ SENSEX_WICK_TOL: float = 15.0
 NIFTY_INITIAL_SL_PTS: float = 55.0
 SENSEX_INITIAL_SL_PTS: float = 220.0
 
-NIFTY_EMA_BUFFER_PTS: float = 2.5
-SENSEX_EMA_BUFFER_PTS: float = 7.5
+NIFTY_EMA_BUFFER_PTS: float = 10.0
+SENSEX_EMA_BUFFER_PTS: float = 30.0
+
+EMA_TIMEFRAME: str = "1m"
+EMA_PERIOD: int = 200
 
 NIFTY_EMA_ARM_PTS: float = 50.0
 SENSEX_EMA_ARM_PTS: float = 150.0
@@ -106,11 +109,11 @@ def is_ema20_armed(symbol: str, max_fav: float) -> bool:
     return max_fav >= get_ema_arm_pts(symbol)
 
 
-def check_ema20_cross(symbol: str, side: str, close_5m: float, ema20_5m: float) -> bool:
-    """Return True if 5m close crossed beyond 5m 20-EMA +/- static noise buffer."""
+def check_ema20_cross(symbol: str, side: str, close_px: float, ema_px: float) -> bool:
+    """Return True if 1m close crossed beyond 1m 200-EMA +/- static noise buffer (10p NIFTY / 30p SENSEX)."""
     buf = get_ema_buffer_pts(symbol)
     is_long = side.upper() in ("LONG", "CALL", "CE")
-    return (close_5m < (ema20_5m - buf)) if is_long else (close_5m > (ema20_5m + buf))
+    return (close_px < (ema_px - buf)) if is_long else (close_px > (ema_px + buf))
 
 
 def get_vix_trap_sl_dist(

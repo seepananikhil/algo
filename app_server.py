@@ -1023,8 +1023,11 @@ def check_dual_ema_cross_exit(sym: str, sig: str, t_str: str, c_5m: float, ema20
         if not other_engine:
             return True
 
-        other_c = getattr(other_engine, "last_completed_5m_close", None)
-        other_ema = getattr(other_engine, "last_completed_5m_ema20", None)
+        other_c = getattr(other_engine, "last_1m_close", None)
+        other_ema = getattr(other_engine, "last_1m_ema200", None)
+        if other_c is None or other_ema is None:
+            other_c = getattr(other_engine, "last_completed_5m_close", None)
+            other_ema = getattr(other_engine, "last_completed_5m_ema20", None)
         if other_c is None or other_ema is None:
             if other_engine.ema20_5m is None or not other_engine.current_5m_bar:
                 return True
@@ -1036,15 +1039,15 @@ def check_dual_ema_cross_exit(sym: str, sig: str, t_str: str, c_5m: float, ema20
         if other_c == 0.0:
             return True
 
-        # Check if other index crossed 20-EMA in the trade direction via Single Source of Truth (apex_duo_rules)
+        # Check if other index crossed 1m 200-EMA in the trade direction via Single Source of Truth (apex_duo_rules)
         from apex_duo_rules import check_ema20_cross
         other_crossed = check_ema20_cross(other_sym, sig, other_c, other_ema)
 
         if not other_crossed:
-            log_engine_telemetry(sym, "Dual-Cross Confluence", "HOLD", f"5m EMA20 cross @ {c_5m:.2f} held. {other_sym} ({other_c:.2f} vs EMA {other_ema:.2f}) intact.")
+            log_engine_telemetry(sym, "Dual-Cross Confluence", "HOLD", f"1m 200-EMA cross @ {c_5m:.2f} held. {other_sym} ({other_c:.2f} vs EMA {other_ema:.2f}) intact.")
             return False
 
-        log_engine_telemetry(sym, "Dual-Cross Confluence", "EXIT_CONFIRMED", f"Both {sym} and {other_sym} crossed 5m 20-EMA. Exit confirmed @ {t_str}.")
+        log_engine_telemetry(sym, "Dual-Cross Confluence", "EXIT_CONFIRMED", f"Both {sym} and {other_sym} crossed 1m 200-EMA. Exit confirmed @ {t_str}.")
         return True
     except Exception as exc:
         print(f"Error checking dual ema exit: {exc}")

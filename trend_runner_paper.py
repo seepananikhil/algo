@@ -245,6 +245,8 @@ class TrendRunnerPaperEngine:
         self.last_completed_5m_time: Optional[str] = None
         self.last_completed_5m_close: Optional[float] = None
         self.last_completed_5m_ema20: Optional[float] = None
+        self.last_1m_close: Optional[float] = None
+        self.last_1m_ema200: Optional[float] = None
         self.sl_points = sl_points
         self.reentry_sl_points = reentry_sl_points
         self.reentry_be_trigger = reentry_be_trigger
@@ -321,6 +323,7 @@ class TrendRunnerPaperEngine:
         self.trailing_mode: str = str(kwargs.get("trailing_mode", default_trailing)).lower()
         self.current_5m_bar: Optional[Dict[str, Any]] = None
         self.ema20_5m: Optional[float] = None
+        self.ema200_1m: Optional[float] = None
         self.last_day_processed: str = ""
 
         # Static SL from Single Source of Truth (apex_duo_rules)
@@ -441,6 +444,15 @@ class TrendRunnerPaperEngine:
             if l < self.current_5m_bar["low"]:
                 self.current_5m_bar["low"] = l
             self.current_5m_bar["close"] = c
+
+        # Continuous 1m 200-EMA (never reset at day boundary so it carries across sessions)
+        alpha_200 = 2.0 / 201.0
+        if self.ema200_1m is None:
+            self.ema200_1m = float(c)
+        else:
+            self.ema200_1m = (float(c) * alpha_200) + (self.ema200_1m * (1.0 - alpha_200))
+        self.last_1m_close = float(c)
+        self.last_1m_ema200 = float(self.ema200_1m)
 
         is_5m_close = (minute % 5 == 4) or (t_str in ("15:15", "15:29"))
         if is_5m_close and self.current_5m_bar is not None:
@@ -606,8 +618,8 @@ class TrendRunnerPaperEngine:
             exit_px = c
             exit_reason = "EOD"
 
-            if self.trailing_mode == "ema20_5m":
-                # MODEL D: Single Source of Truth (apex_duo_rules)
+            if self.trailing_mode in ("ema20_5m", "ema200_1m"):
+                # MODEL D: Single Source of Truth (apex_duo_rules) — 1m 200-EMA + 10p/30p buffer
                 init_sl = pos.get("initial_sl")
                 if init_sl is not None and check_initial_sl(sig, h, l, float(init_sl)):
                     exit_px = float(init_sl)
@@ -617,43 +629,28 @@ class TrendRunnerPaperEngine:
                 ema_armed = is_ema20_armed(self.symbol, pos["max_fav"])
 
                 if not closed:
-                    if self.ema20_5m is not None:
-                        pos["current_sl"] = round(self.ema20_5m, 2)
+                    if self.ema200_1m is not None:
+                        pos["current_sl"] = round(self.ema200_1m, 2)
                         curr_sl = pos["current_sl"]
-                        if is_5m_close:
-                            c_5m = self.current_5m_bar["close"] if self.current_5m_bar else c
-                            crossed = check_ema20_cross(self.symbol, sig, float(c_5m), float(self.ema20_5m))
-                            if ema_armed and crossed:
-                                can_exit = True
-                                if self.exit_gate_fn is not None:
-                                    try:
-                                        can_exit = bool(self.exit_gate_fn(self.symbol, sig, t_str, float(c_5m), float(self.ema20_5m)))
-                                    except Exception as exc:
-                                        logger.warning(f"Error in exit_gate_fn: {exc}")
-                                        can_exit = True
-                                if can_exit:
-                                    pos.pop("pending_5m_cross", None)
-                                    exit_px = c_5m
-                                    exit_reason = "EMA20_CROSS"
-                                    closed = True
-                                else:
-                                    pos["pending_5m_cross"] = (t_str, float(c_5m), float(self.ema20_5m))
-                                    logger.info(f"[{self.symbol}] 5m EMA20 cross detected @ {c_5m:.2f} but partner index has NOT crossed yet. Holding trade under Dual-Cross Confluence.")
-                            else:
-                                pos.pop("pending_5m_cross", None)
-                        elif ema_armed and pos.get("pending_5m_cross") is not None and self.exit_gate_fn is not None:
-                            # Re-check pending 5m cross on subsequent 1m bar (e.g. 12:10) once partner completes its 5m bar
-                            p_time, p_c, p_ema = pos["pending_5m_cross"]
-                            try:
-                                can_exit = bool(self.exit_gate_fn(self.symbol, sig, t_str, float(p_c), float(p_ema)))
-                            except Exception as exc:
-                                logger.warning(f"Error in exit_gate_fn: {exc}")
-                                can_exit = True
+                        crossed = check_ema20_cross(self.symbol, sig, float(c), float(self.ema200_1m))
+                        if ema_armed and crossed:
+                            can_exit = True
+                            if self.exit_gate_fn is not None:
+                                try:
+                                    can_exit = bool(self.exit_gate_fn(self.symbol, sig, t_str, float(c), float(self.ema200_1m)))
+                                except Exception as exc:
+                                    logger.warning(f"Error in exit_gate_fn: {exc}")
+                                    can_exit = True
                             if can_exit:
                                 pos.pop("pending_5m_cross", None)
                                 exit_px = c
                                 exit_reason = "EMA20_CROSS"
                                 closed = True
+                            else:
+                                pos["pending_5m_cross"] = (t_str, float(c), float(self.ema200_1m))
+                                logger.info(f"[{self.symbol}] 1m 200-EMA cross detected @ {c:.2f} but partner index has NOT crossed yet. Holding trade under Dual-Cross Confluence.")
+                        else:
+                            pos.pop("pending_5m_cross", None)
 
                 # Market Close / Time Exit at 15:15 IST
                 if not closed and t_str >= "15:15":
