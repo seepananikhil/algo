@@ -69,6 +69,6 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 ---
 
 ## 4. Historical Performance Summary (10-Year Backtest, 1 Lot)
-- **NIFTY (`2017–2026`, 65 Qty)**: `1,867` trades · **`52.6%` Win Rate** · `+40,959.8` pts · Max Drawdown `613.6` pts · Calmar **`66.7x`** · Profit Factor **`2.09`** · **`₹26,62,388.95`**
-- **SENSEX (`2023–2026`, 20 Qty)**: `777` trades · **`54.4%` Win Rate** · `+72,073.7` pts · Max Drawdown `1,544.2` pts · Calmar **`46.7x`** · Profit Factor **`2.24`** · **`₹14,41,474.40`**
+- **NIFTY (`2017–2026`, 65 Qty)**: `1,867` trades · **`52.4%` Win Rate** · `+42,499.9` pts · Max Drawdown `601.4` pts · Calmar **`70.7x`** · Profit Factor **`2.12`** · **`₹27,62,495.45`**
+- **SENSEX (`2023–2026`, 20 Qty)**: `777` trades · **`54.2%` Win Rate** · `+73,065.1` pts · Max Drawdown `1,584.0` pts · Calmar **`46.1x`** · Profit Factor **`2.25`** · **`₹14,61,301.20`**
 - **Combined 1-Lot Master Portfolio**: **`₹38,99,926.40`**

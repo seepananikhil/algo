@@ -9,9 +9,14 @@ Features:
   4. Proportional Noise Buffers: 3.5 pts on Nifty, 10.0 pts on Sensex to prevent noise triggers.
 """
 
+import sys
 from pathlib import Path
 import pandas as pd
 import numpy as np
+
+ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT))
+from apex_duo_rules import is_ema20_armed, check_ema20_cross, check_initial_sl
 
 # 1. Load VIX
 print("Loading VIX data...", flush=True)
@@ -49,7 +54,10 @@ cum_tp_n = tp_n.groupby(df_nifty["date_str"]).cumsum()
 counts_n = df_nifty.groupby(df_nifty["date_str"]).cumcount() + 1
 df_nifty["vwap"] = cum_tp_n / counts_n
 
-# Resample Nifty to 5m for Trend-Following 20-EMA Trailing
+df_nifty["ema200_1m"] = df_nifty["close"].ewm(span=200, adjust=False).mean()
+day_1m_n_map = {d: g.set_index("time_str") for d, g in df_nifty.groupby("date_str")}
+
+# Resample Nifty to 5m (kept for compatibility if needed)
 df_nifty.set_index("timestamp", inplace=True)
 ohlc_5m_n = df_nifty.resample("5min", closed="left", label="left").agg({
     "open": "first", "high": "max", "low": "min", "close": "last"
@@ -86,7 +94,10 @@ cum_tp_sx = tp_sx.groupby(df_sx["date_str"]).cumsum()
 counts_sx = df_sx.groupby(df_sx["date_str"]).cumcount() + 1
 df_sx["vwap"] = cum_tp_sx / counts_sx
 
-# Resample Sensex to 5m for Trend-Following 20-EMA Trailing
+df_sx["ema200_1m"] = df_sx["close"].ewm(span=200, adjust=False).mean()
+day_1m_s_map = {d: g.set_index("time_str") for d, g in df_sx.groupby("date_str")}
+
+# Resample Sensex to 5m (kept for compatibility if needed)
 df_sx.set_index("timestamp", inplace=True)
 ohlc_5m_s = df_sx.resample("5min", closed="left", label="left").agg({
     "open": "first", "high": "max", "low": "min", "close": "last"
@@ -184,8 +195,8 @@ for d, en in nifty_entries.items():
     es = sensex_entries.get(d)
     has_dual_partner = (es is not None and es["sig"] == en["sig"])
     
-    g5n = day_5m_n_map.get(d)
-    g5s = day_5m_s_map.get(d)
+    g1n = day_1m_n_map.get(d)
+    g1s = day_1m_s_map.get(d)
     
     sig = en["sig"]
     e_px = en["px"]
@@ -209,35 +220,35 @@ for d, en in nifty_entries.items():
         bh, bl, bc = highs[k], lows[k], closes[k]
         fav = (bh - e_px) if sig == "CALL" else (e_px - bl)
         if fav > max_fav: max_fav = fav
-        if max_fav >= 50.0: ema_armed = True
+        if is_ema20_armed("NIFTY", max_fav): ema_armed = True
         
         # Structural Stop Loss
-        if (bl <= curr_sl if sig == "CALL" else bh >= curr_sl):
+        if check_initial_sl(sig, bh, bl, curr_sl):
             exit_px = curr_sl
             exit_time = bt
             exit_reason = "STOP_LOSS"
             break
             
-        # Symmetrical 5m 20-EMA Trail with Noise Buffer (3.5 pts on Nifty, 10.0 pts on Sensex)
-        if ema_armed and g5n is not None and bt in g5n.index:
-            b5_n = g5n.loc[bt]
-            c_5n, ema_5n = b5_n["close"], b5_n["ema20"]
-            cross_n = (c_5n < (ema_5n - 3.5)) if sig == "CALL" else (c_5n > (ema_5n + 3.5))
+        # Symmetrical 1m 200-EMA Trail with Noise Buffer (10p Nifty / 30p Sensex)
+        if ema_armed and g1n is not None and bt in g1n.index:
+            r1_n = g1n.loc[bt]
+            if isinstance(r1_n, pd.DataFrame): r1_n = r1_n.iloc[-1]
+            c_1n, ema_1n = float(r1_n["close"]), float(r1_n["ema200_1m"])
+            cross_n = check_ema20_cross("NIFTY", sig, c_1n, ema_1n)
             
-            if has_dual_partner and g5s is not None and bt in g5s.index:
-                b5_s = g5s.loc[bt]
-                c_5s, ema_5s = b5_s["close"], b5_s["ema20"]
-                cross_s = (c_5s < (ema_5s - 10.0)) if sig == "CALL" else (c_5s > (ema_5s + 10.0))
-                # Dual exit gate
+            if has_dual_partner and g1s is not None and bt in g1s.index:
+                r1_s = g1s.loc[bt]
+                if isinstance(r1_s, pd.DataFrame): r1_s = r1_s.iloc[-1]
+                c_1s, ema_1s = float(r1_s["close"]), float(r1_s["ema200_1m"])
+                cross_s = check_ema20_cross("SENSEX", sig, c_1s, ema_1s)
                 if cross_n and cross_s and bt > en["time"]:
-                    exit_px = c_5n
+                    exit_px = c_1n
                     exit_time = bt
                     exit_reason = "EMA20_CROSS"
                     break
             else:
-                # Standalone exit
                 if cross_n and bt > en["time"]:
-                    exit_px = c_5n
+                    exit_px = c_1n
                     exit_time = bt
                     exit_reason = "EMA20_CROSS"
                     break
@@ -324,8 +335,8 @@ for d, es in sensex_entries.items():
     en = nifty_entries.get(d)
     has_dual_partner = (en is not None and en["sig"] == es["sig"])
     
-    g5n = day_5m_n_map.get(d)
-    g5s = day_5m_s_map.get(d)
+    g1n = day_1m_n_map.get(d)
+    g1s = day_1m_s_map.get(d)
     
     sig = es["sig"]
     e_px = es["px"]
@@ -349,35 +360,35 @@ for d, es in sensex_entries.items():
         bh, bl, bc = highs[k], lows[k], closes[k]
         fav = (bh - e_px) if sig == "CALL" else (e_px - bl)
         if fav > max_fav: max_fav = fav
-        if max_fav >= 150.0: ema_armed = True
+        if is_ema20_armed("SENSEX", max_fav): ema_armed = True
         
         # Structural Stop Loss
-        if (bl <= curr_sl if sig == "CALL" else bh >= curr_sl):
+        if check_initial_sl(sig, bh, bl, curr_sl):
             exit_px = curr_sl
             exit_time = bt
             exit_reason = "STOP_LOSS"
             break
             
-        # Symmetrical 5m 20-EMA Trail with Noise Buffer (10.0 pts on Sensex, 3.5 pts on Nifty)
-        if ema_armed and g5s is not None and bt in g5s.index:
-            b5_s = g5s.loc[bt]
-            c_5s, ema_5s = b5_s["close"], b5_s["ema20"]
-            cross_s = (c_5s < (ema_5s - 10.0)) if sig == "CALL" else (c_5s > (ema_5s + 10.0))
+        # Symmetrical 1m 200-EMA Trail with Noise Buffer (30p Sensex / 10p Nifty)
+        if ema_armed and g1s is not None and bt in g1s.index:
+            r1_s = g1s.loc[bt]
+            if isinstance(r1_s, pd.DataFrame): r1_s = r1_s.iloc[-1]
+            c_1s, ema_1s = float(r1_s["close"]), float(r1_s["ema200_1m"])
+            cross_s = check_ema20_cross("SENSEX", sig, c_1s, ema_1s)
             
-            if has_dual_partner and g5n is not None and bt in g5n.index:
-                b5_n = g5n.loc[bt]
-                c_5n, ema_5n = b5_n["close"], b5_n["ema20"]
-                cross_n = (c_5n < (ema_5n - 3.5)) if sig == "CALL" else (c_5n > (ema_5n + 3.5))
-                # Dual exit gate
+            if has_dual_partner and g1n is not None and bt in g1n.index:
+                r1_n = g1n.loc[bt]
+                if isinstance(r1_n, pd.DataFrame): r1_n = r1_n.iloc[-1]
+                c_1n, ema_1n = float(r1_n["close"]), float(r1_n["ema200_1m"])
+                cross_n = check_ema20_cross("NIFTY", sig, c_1n, ema_1n)
                 if cross_n and cross_s and bt > es["time"]:
-                    exit_px = c_5s
+                    exit_px = c_1s
                     exit_time = bt
                     exit_reason = "EMA20_CROSS"
                     break
             else:
-                # Standalone exit
                 if cross_s and bt > es["time"]:
-                    exit_px = c_5s
+                    exit_px = c_1s
                     exit_time = bt
                     exit_reason = "EMA20_CROSS"
                     break
