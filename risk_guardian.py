@@ -521,7 +521,7 @@ def enforce_per_trade_stops(open_positions: list, cfg: dict) -> list:
 
                 # Notify via Telegram if configured
                 try:
-                    from trend_runner_paper import notify_trade_exit
+                    from telegram_notifier import notify_trade_exit
                     notify_trade_exit(
                         symbol=sym,
                         side=str(pos.get("side", "LONG")),

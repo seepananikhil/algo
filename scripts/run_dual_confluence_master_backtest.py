@@ -27,6 +27,7 @@ import pandas as pd
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "execution_engine"))
 sys.path.insert(0, str(ROOT))
 from apex_duo_rules import (
     evaluate_bo_candle,

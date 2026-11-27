@@ -15,6 +15,7 @@ import pandas as pd
 import numpy as np
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(ROOT / "execution_engine"))
 sys.path.insert(0, str(ROOT))
 from apex_duo_rules import is_ema20_armed, check_ema20_cross, check_initial_sl
 

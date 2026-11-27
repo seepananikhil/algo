@@ -1098,7 +1098,10 @@ def trend_runner_forward_loop() -> None:
             enable_trend = setups_cfg.get("trend_runner", True)
             enable_trap = setups_cfg.get("vix_trap", True)
 
-            from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
+            os.environ.setdefault("APEX_ROOT_DIR", str(ROOT))
+            if str(ROOT / "execution_engine") not in sys.path:
+                sys.path.insert(0, str(ROOT / "execution_engine"))
+            from strategy_engine import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
             nifty_ratchet = port_cfg.get("spot_ratchet_settings", {})
             if engine is None:
                 lots_cfg = int(cfg.get("trend_runner_lots", 1))
@@ -1325,7 +1328,10 @@ def sensex_runner_forward_loop() -> None:
             enable_trap = setups_cfg.get("vix_trap", True)
             sx_ratchet = port_cfg.get("sensex_spot_ratchet_settings", {})
 
-            from trend_runner_paper import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
+            os.environ.setdefault("APEX_ROOT_DIR", str(ROOT))
+            if str(ROOT / "execution_engine") not in sys.path:
+                sys.path.insert(0, str(ROOT / "execution_engine"))
+            from strategy_engine import TrendRunnerPaperEngine, compute_indicators, get_vix_change_pct
             if engine is None:
                 lots_cfg = int(cfg.get("sensex_runner_lots", 1))
                 sizing_cfg = str(cfg.get("sizing_mode", "fixed")).lower()
