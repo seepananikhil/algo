@@ -34,6 +34,7 @@ from apex_duo_rules import (
     is_ema20_armed,
     check_ema20_cross,
     get_initial_sl_pts,
+    REENTRY_CUTOFF_TIME,
 )
 sys.path.insert(0, str(ROOT))
 
@@ -216,7 +217,7 @@ def run_backtest():
         lvl_h_n, lvl_l_n = or_h_n, or_l_n
         lvl_h_s, lvl_l_s = (or_h_s, or_l_s) if has_sensex else (None, None)
         for trade_num in (1, 2):
-            max_entry_time = "13:00" if trade_num == 1 else "14:15"
+            max_entry_time = "13:00" if trade_num == 1 else REENTRY_CUTOFF_TIME
             if min_search_time > max_entry_time:
                 break
 

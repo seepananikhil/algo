@@ -26,7 +26,7 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 | **Protective Initial SL** | **`55` spot points** (checked every `1m` bar) | **`220` spot points** (checked every `1m` bar) |
 | **5m 20-EMA Arming** | Activates after **`+50` spot points** favorable move | Activates after **`+150` spot points** favorable move |
 | **5m 20-EMA Exit Buffer** | `2.5` spot points beyond 5m 20-EMA | `7.5` spot points beyond 5m 20-EMA |
-| **Re-Entry Cool-Off** | `20` minutes after Trade 1 exit (max `2` trades/day) | `20` minutes after Trade 1 exit (max `2` trades/day) |
+| **Re-Entry Cool-Off** | `20` minutes after Trade 1 exit, up to `13:30 IST` (max `2` trades/day) | `20` minutes after Trade 1 exit, up to `13:30 IST` (max `2` trades/day) |
 | **End-of-Day Square-Off** | `15:15 IST` | `15:15 IST` |
 | **Pyramiding / Ratchets** | **Disabled** (pure `5m 20-EMA` + Initial SL) | **Disabled** (pure `5m 20-EMA` + Initial SL) |
 
@@ -64,11 +64,11 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
    - Any position still open at `15:15 IST` is squared off automatically before market close.
 
 ### Step 4: Re-Entry (Trade 2)
-- If Trade 1 exits early (either via Initial SL or an `EMA20_CROSS`), the engine waits **`20` minutes** (cool-off) and can take **1 re-entry** (up to `14:15 IST`) if both indices break out again with a valid BO candle.
+- If Trade 1 exits early (either via Initial SL or an `EMA20_CROSS`), the engine waits **`20` minutes** (cool-off) and can take **1 re-entry** (up to `13:30 IST`) if both indices break out again with a valid BO candle.
 
 ---
 
 ## 4. Historical Performance Summary (10-Year Backtest, 1 Lot)
-- **NIFTY (`2017–2026`, 65 Qty)**: `1,983` trades · **`54.9%` Win Rate** · `+38,361.5` pts · Max Drawdown `503.2` pts · Calmar **`76.2x`** · Profit Factor **`2.03`** · **`₹24,93,496.20`**
-- **SENSEX (`2023–2026`, 20 Qty)**: `825` trades · **`57.7%` Win Rate** · `+70,321.5` pts · Max Drawdown `1,401.6` pts · Calmar **`50.2x`** · Profit Factor **`2.29`** · **`₹14,06,430.20`**
+- **NIFTY (`2017–2026`, 65 Qty)**: `1,903` trades · **`55.1%` Win Rate** · `+37,789.5` pts · Max Drawdown `476.1` pts · Calmar **`79.4x`** · Profit Factor **`2.05`** · **`₹24,56,316.20`**
+- **SENSEX (`2023–2026`, 20 Qty)**: `790` trades · **`58.1%` Win Rate** · `+70,430.5` pts · Max Drawdown `1,322.9` pts · Calmar **`53.2x`** · Profit Factor **`2.36`** · **`₹14,08,611.00`**
 - **Combined 1-Lot Master Portfolio**: **`₹38,99,926.40`**

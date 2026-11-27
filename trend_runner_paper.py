@@ -47,6 +47,7 @@ from apex_duo_rules import (
     check_ema20_cross,
     get_initial_sl_pts,
     get_vix_trap_sl_dist,
+    REENTRY_CUTOFF_TIME,
 )
 
 try:
@@ -854,9 +855,9 @@ class TrendRunnerPaperEngine:
                 return None
 
             # 3. Symmetric Re-entry Gate:
-            # Window: 12:00 to 13:00 IST (Trade 2 allowed ONLY AFTER 12:00 PM to bypass morning revenge & lunch chop)
+            # Window: 12:00 to REENTRY_CUTOFF_TIME (13:30 IST) (Trade 2 allowed ONLY AFTER 12:00 PM to bypass morning revenge & lunch chop)
             # Both CALL and PUT re-entries are enabled symmetrically with 30-min cool-off and Day High/Low expansion.
-            if "12:00" <= t_str <= "13:00":
+            if "12:00" <= t_str <= REENTRY_CUTOFF_TIME:
                 # Dynamic Expansion Re-entry (Breakout continuation after 30-min cool-off)
                 candle_rng = h - l
                 candle_body = abs(c - o)
