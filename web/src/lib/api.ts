@@ -64,7 +64,7 @@ export type Status = {
   }
 }
 
-export type Candle = { time: string; open: number; high: number; low: number; close: number; volume?: number }
+export type Candle = { time: string; open: number; high: number; low: number; close: number; volume?: number; ema200?: number }
 
 export type RuleTrade = {
   side: "CALL" | "PUT" | "LONG" | "SHORT" | "CE" | "PE" | (string & {})

@@ -6855,6 +6855,25 @@ class Handler(BaseHTTPRequestHandler):
             symbol = q.get("symbol", ["NIFTY"])[0].upper()
             strategy_param = q.get("strategy", ["midpoint"])[0]
             df = candles(date, symbol=symbol)
+            if not df.empty:
+                try:
+                    prior_dfs = []
+                    base_dt = pd.to_datetime(date)
+                    for back_d in range(7, 0, -1):
+                        prev_str = (base_dt - pd.Timedelta(days=back_d)).strftime("%Y-%m-%d")
+                        p_df = candles(prev_str, symbol=symbol)
+                        if not p_df.empty and "close" in p_df.columns:
+                            prior_dfs.append(p_df[["timestamp", "close"]])
+                    if prior_dfs:
+                        prior_dfs = prior_dfs[-3:]
+                        comb_close = pd.concat([p["close"] for p in prior_dfs] + [df["close"]], ignore_index=True)
+                        ema_series = comb_close.ewm(span=200, adjust=False).mean().iloc[-len(df):].values
+                    else:
+                        ema_series = df["close"].ewm(span=200, adjust=False).mean().values
+                    df = df.copy()
+                    df["ema200"] = ema_series
+                except Exception:
+                    pass
             cutoff = ""
             full_session = q.get("full", ["1"])[0] != "0"
             if not df.empty and not full_session:
@@ -6869,6 +6888,7 @@ class Handler(BaseHTTPRequestHandler):
                     "low": float(r.low),
                     "close": float(r.close),
                     "volume": float(getattr(r, "volume", 0) or 0) if hasattr(r, "volume") else 0,
+                    **({"ema200": round(float(r.ema200), 2)} if hasattr(r, "ema200") and pd.notna(r.ema200) else {}),
                 }
                 for r in df.itertuples()
             ]

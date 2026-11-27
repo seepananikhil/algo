@@ -81,9 +81,16 @@ function fitSession(
 }
 
 // Calculate Exponential Moving Average (EMA)
-function calculateEMA(data: { time: UTCTimestamp; close: number }[], period: number) {
-  if (data.length < period) return []
+function calculateEMA(data: { time: UTCTimestamp; close: number }[], period: number, continuous = false) {
+  if (data.length === 0) return []
   const k = 2 / (period + 1)
+  if (continuous || data.length < period) {
+    let ema = data[0].close
+    return data.map((d, i) => {
+      if (i > 0) ema = d.close * k + ema * (1 - k)
+      return { time: d.time, value: Math.round(ema * 100) / 100 }
+    })
+  }
   let ema = data.slice(0, period).reduce((acc, val) => acc + val.close, 0) / period
   const emaData: { time: UTCTimestamp; value: number }[] = []
 
@@ -782,7 +789,7 @@ export function CandleChart({
       if (k.open == null || k.high == null || k.low == null || k.close == null) continue
       const t = toTime(date, k.time)
       if (t > 0) {
-        dataMap.set(t, { time: t, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume || 0 })
+        dataMap.set(t, { time: t, open: k.open, high: k.high, low: k.low, close: k.close, volume: k.volume || 0, ...(typeof k.ema200 === "number" ? { ema200: k.ema200 } : {}) })
       }
     }
     if (forming?.time && forming.open != null && forming.high != null && forming.low != null && forming.close != null) {
@@ -861,8 +868,13 @@ export function CandleChart({
     }
 
     if (ema200Series.current) {
-      if (effectiveShowEMA200 && rawEmaData.length >= 200) {
-        ema200Series.current.setData(calculateEMA(rawEmaData, 200))
+      if (effectiveShowEMA200 && rawEmaData.length > 0) {
+        const precomputed = data
+          .filter((d) => typeof (d as any).ema200 === "number")
+          .map((d) => ({ time: d.time as UTCTimestamp, value: (d as any).ema200 as number }))
+        ema200Series.current.setData(
+          precomputed.length > 0 ? precomputed : calculateEMA(rawEmaData, 200, true)
+        )
         ema200Series.current.applyOptions({ visible: true })
       } else {
         ema200Series.current.setData([])
