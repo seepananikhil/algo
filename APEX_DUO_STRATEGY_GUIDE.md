@@ -31,7 +31,7 @@ These core rules are static and identical across **Backtest**, **Paper**, and **
 | **Pyramiding / Ratchets** | **Disabled** (pure `1m 200-EMA` + Initial SL) | **Disabled** (pure `1m 200-EMA` + Initial SL) |
 
 ### What You Control in Settings
-- **Lot Sizing**: `1` lot base (`65` qty NIFTY / `20` qty SENSEX), or Dynamic (`1` vs `2` lots on A+ conviction).
+- **Lot Sizing**: `1` lot base (`65` qty NIFTY / `20` qty SENSEX), or Dynamic (`2` lots on A+ conviction: `|VIX| >= 4.0%` with clean OR `< 75` pts NIFTY / `< 450` pts SENSEX).
 - **Daily Loss Limit**: Circuit breaker (e.g. `₹2,500`) that halts trading for the day if breached.
 - **Execution Mode**: **Paper Simulation** vs **Live Broker** (Kotak Neo) per index.
 
