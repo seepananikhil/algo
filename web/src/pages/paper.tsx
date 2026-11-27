@@ -72,7 +72,7 @@ function getExitBadge(reason?: string) {
   if (!reason) return { label: "Open", className: "bg-muted text-muted-foreground" }
   const r = reason.toUpperCase()
   if (r.includes("EMA20") || r.includes("EMA")) {
-    return { label: "5m 20-EMA Trail", className: "bg-indigo-500/15 text-indigo-400 border border-indigo-500/20" }
+    return { label: "1m 200-EMA Trail", className: "bg-indigo-500/15 text-indigo-400 border border-indigo-500/20" }
   }
   if (r.includes("EOD") || r.includes("1515")) {
     return { label: "EOD Runner (15:15)", className: "bg-emerald-500/15 text-emerald-400 border border-emerald-500/20" }

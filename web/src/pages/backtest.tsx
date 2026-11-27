@@ -210,7 +210,7 @@ function getExitReasonBadge(reason: string) {
   const r = (reason || "").toUpperCase()
   if (r.includes("EMA20") || r.includes("EMA")) {
     return {
-      label: "EMA20 Trail",
+      label: "200 EMA Trail",
       className: "bg-indigo-500/10 text-indigo-400 border border-indigo-500/25",
     }
   }

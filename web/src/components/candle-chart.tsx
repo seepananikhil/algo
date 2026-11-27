@@ -193,6 +193,8 @@ type Props = {
   focusTime?: string
   /** Currently selected trade to highlight levels & management zone on the chart */
   activeTrade?: any
+  /** Optional external override for 200 EMA visibility (used when toolbar is hidden) */
+  showEMA200?: boolean
 }
 
 export function CandleChart({
@@ -217,6 +219,7 @@ export function CandleChart({
   strategy = "",
   focusTime,
   activeTrade,
+  showEMA200: externalShowEMA200,
 }: Props) {
   const el = useRef<HTMLDivElement>(null)
   const chart = useRef<IChartApi | null>(null)
@@ -248,11 +251,12 @@ export function CandleChart({
   const [showEMA200, setShowEMA200] = useState<boolean>(() => {
     try {
       const v = localStorage.getItem("chart_show_ema200")
-      return v === "true"
+      return v !== "false"
     } catch {
-      return false
+      return true
     }
   })
+  const effectiveShowEMA200 = externalShowEMA200 !== undefined ? externalShowEMA200 : showEMA200
 
   const toggleEMA50 = () => {
     setShowEMA50((prev) => {
@@ -815,7 +819,7 @@ export function CandleChart({
       showVolume,
       showLevelsState,
       showEMA50,
-      showEMA200,
+      effectiveShowEMA200,
     ])
     if (key === dataKey.current) return
     dataKey.current = key
@@ -857,7 +861,7 @@ export function CandleChart({
     }
 
     if (ema200Series.current) {
-      if (showEMA200 && rawEmaData.length >= 200) {
+      if (effectiveShowEMA200 && rawEmaData.length >= 200) {
         ema200Series.current.setData(calculateEMA(rawEmaData, 200))
         ema200Series.current.applyOptions({ visible: true })
       } else {
@@ -1166,7 +1170,7 @@ export function CandleChart({
     showVolume,
     showLevelsState,
     showEMA50,
-    showEMA200,
+    effectiveShowEMA200,
     strategy,
     focusIndex,
     activeTrade,

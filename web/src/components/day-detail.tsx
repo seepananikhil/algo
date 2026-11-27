@@ -58,6 +58,23 @@ export function DayDetail({
   )
   const [primaryResetKey, setPrimaryResetKey] = useState(0)
   const [secondaryResetKey, setSecondaryResetKey] = useState(0)
+  const [showEMA200, setShowEMA200] = useState<boolean>(() => {
+    try {
+      const v = localStorage.getItem("chart_show_ema200")
+      return v !== "false"
+    } catch {
+      return true
+    }
+  })
+  const toggleEMA200 = () => {
+    setShowEMA200((prev) => {
+      const next = !prev
+      try {
+        localStorage.setItem("chart_show_ema200", String(next))
+      } catch {}
+      return next
+    })
+  }
   const useFiveMinute = allowTimeframeSwitch && timeframe === "5m"
   const primarySymbol = isSensexStrategy ? "SENSEX" : "NIFTY"
   const secondarySymbol = isSensexStrategy ? "NIFTY" : "SENSEX"
@@ -243,6 +260,20 @@ export function DayDetail({
               )}
               <button
                 type="button"
+                onClick={toggleEMA200}
+                className={cn(
+                  "h-6 px-2 rounded text-[11px] font-bold border transition-all flex items-center gap-1 cursor-pointer",
+                  showEMA200
+                    ? "bg-amber-500/15 text-amber-600 dark:text-amber-400 border-amber-500/40 shadow-2xs"
+                    : "bg-muted/40 text-muted-foreground border-transparent hover:text-foreground"
+                )}
+                title="Toggle 200 EMA Line"
+              >
+                <span className="w-2 h-0.5 bg-amber-500 rounded-full inline-block" />
+                <span>200 EMA</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => setPrimaryResetKey((k) => k + 1)}
                 className="text-muted-foreground hover:text-foreground p-1 rounded hover:bg-muted/60 transition-colors cursor-pointer"
                 title={`Reset ${primarySymbol} zoom to full day`}
@@ -283,6 +314,7 @@ export function DayDetail({
                 activeTrade={activeTrade}
                 hideHoverHUD={true}
                 hideToolbar={simpleChart}
+                showEMA200={showEMA200}
                 strategy={strategy}
                 className={cn("w-full", chartHeightClass, simpleChart && "border-0 shadow-none rounded-none")}
                 zoomable
@@ -379,6 +411,7 @@ export function DayDetail({
                 showTradeLevels={false}
                 hideHoverHUD={true}
                 hideToolbar={simpleChart}
+                showEMA200={showEMA200}
                 strategy={strategy}
                 className={cn("w-full", chartHeightClass, simpleChart && "border-0 shadow-none rounded-none")}
                 zoomable
