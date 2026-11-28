@@ -376,8 +376,8 @@ export function TravelCalendarPopup({
                   )}
                 >
                   {isAPlus && (
-                    <span className="absolute top-0.5 right-0.5 px-1 rounded-[3px] bg-amber-400 text-[7px] font-black leading-tight text-amber-950">
-                      A+
+                    <span className="absolute top-0.5 right-0.5 text-[8px] leading-none" title="A+ Setup">
+                      🔥
                     </span>
                   )}
                   <span className={cn(

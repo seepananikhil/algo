@@ -328,7 +328,7 @@ export function GitPnlCalendar({
         <span className="w-3 h-3 rounded-[2px] bg-emerald-500/45 border border-emerald-500/40" />
         <span className="w-3 h-3 rounded-[2px] bg-emerald-500 border border-emerald-400/70" />
         <span>Profit</span>
-        <span className="ml-2 inline-flex items-center gap-1"><span className="w-3 h-3 rounded-[2px] bg-emerald-500/45 border border-emerald-500/40 ring-1 ring-amber-400/95" />A+ Setup</span>
+        <span className="ml-2 inline-flex items-center gap-1"><span className="w-3 h-3 rounded-[2px] bg-emerald-500/45 border border-emerald-500/40 ring-1 ring-amber-400/95" />🔥 A+ Setup</span>
       </div>
     </div>
   )
