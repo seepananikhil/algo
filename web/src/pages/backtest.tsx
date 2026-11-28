@@ -117,10 +117,14 @@ function forYear(data: Backtest, year: string, symbolFilter: "all" | "nifty" | "
   })
 
   // Recompute daily aggregated for the filtered view
-  const dailyMap = new Map<string, { date: string; trades: number; net_rs: number; points: number; nifty_points: number; sensex_points: number }>()
+  const dailyMap = new Map<string, { date: string; trades: number; net_rs: number; points: number; nifty_points: number; sensex_points: number; has_a_plus: boolean; a_plus_count: number }>()
   trades.forEach((t) => {
-    const d = dailyMap.get(t.date) ?? { date: t.date, trades: 0, net_rs: 0, points: 0, nifty_points: 0, sensex_points: 0 }
+    const d = dailyMap.get(t.date) ?? { date: t.date, trades: 0, net_rs: 0, points: 0, nifty_points: 0, sensex_points: 0, has_a_plus: false, a_plus_count: 0 }
     d.trades += 1
+    if ((t as any).is_a_plus) {
+      d.has_a_plus = true
+      d.a_plus_count += 1
+    }
     const isSensex = t.entry_price > 50000 || t.symbol === "SENSEX" || (t as any).engine?.includes("SENSEX") || (t as any).option?.includes("SENSEX")
     const p = t.pnl_points ?? 0
     if (isSensex) {
