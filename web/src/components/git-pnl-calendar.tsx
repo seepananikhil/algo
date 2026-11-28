@@ -276,13 +276,16 @@ export function GitPnlCalendar({
                           }
                           className={cn(
                             cellSizeClass,
-                            "shrink-0 rounded-[3px] border transition-transform",
+                            "shrink-0 rounded-[3px] border transition-transform flex items-center justify-center leading-none",
+                            compactSquares ? "text-[8px]" : "text-[10px]",
                             getCellClass(cell.inRange, cell.trades, cell.val),
                             cell.hasAPlus && "ring-1 ring-amber-400/95",
                             clickable && "hover:scale-115 hover:z-10",
                             isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background z-10",
                           )}
-                        />
+                        >
+                          {cell.hasAPlus ? "🔥" : null}
+                        </button>
                       )
                     })}
                   </div>
