@@ -202,11 +202,12 @@ def daily_backtest_sync_loop() -> None:
                 eod_tag = f"{today_str}_15_30_eod"
                 if _sync_state.get("last_eod_report_tag") != eod_tag:
                     _sync_state["last_eod_report_tag"] = eod_tag
-                    try:
-                        import telegram_notifier
-                        telegram_notifier.dispatch_daily_eod_report()
-                    except Exception as e:
-                        print(f"Error dispatching EOD report: {e}")
+                    # Disabled in root backtest/analytics server; live alerts handled by execution_engine
+                    # try:
+                    #     import telegram_notifier
+                    #     telegram_notifier.dispatch_daily_eod_report()
+                    # except Exception as e:
+                    #     print(f"Error dispatching EOD report: {e}")
 
             # Post 15:40 IST Weekdays: Automated Swinger EOD Cycle (Update positions, trailing SL, and scan Chartink)
             if now.weekday() < 5 and (now.hour > 15 or (now.hour == 15 and now.minute >= 40)):
@@ -1130,7 +1131,7 @@ def trend_runner_forward_loop() -> None:
                     r6_trigger=float(nifty_ratchet.get("tier6_trigger_pts", 330.0)),
                     r6_lock=float(nifty_ratchet.get("tier6_lock_pts", 270.0)),
                     reentry=True,
-                    notify_telegram=True,
+                    notify_telegram=False,
                     fetch_live_quotes=True,
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
@@ -1357,7 +1358,7 @@ def sensex_runner_forward_loop() -> None:
                     r6_trigger=float(sx_ratchet.get("tier6_trigger_pts", 1100.0)),
                     r6_lock=float(sx_ratchet.get("tier6_lock_pts", 850.0)),
                     reentry=True,
-                    notify_telegram=True,
+                    notify_telegram=False,
                     fetch_live_quotes=True,
                     enable_trend_runner=enable_trend,
                     enable_vix_trap=enable_trap,
