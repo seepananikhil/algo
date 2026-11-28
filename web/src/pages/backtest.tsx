@@ -550,20 +550,20 @@ export function BacktestPage() {
           </button>
         </div>
 
-        <div className="text-right shrink-0 flex items-center gap-1.5 font-mono">
-          <span className="text-[10px] text-muted-foreground">Session Net:</span>
+        <div className="text-right shrink-0 flex items-center gap-1 font-mono">
           {sessionHasBoth ? (
-            <div className="flex items-center gap-1 font-mono text-[10px]">
+            <div className="flex items-center gap-1 font-mono text-[10.5px]">
               <span className={cn("px-1.5 py-0.5 rounded font-bold shadow-2xs", sessionNiftyPts >= 0 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30")}>
-                N:{sessionNiftyPts >= 0 ? "+" : ""}{sessionNiftyPts.toFixed(1)}pt
+                N {sessionNiftyPts >= 0 ? "+" : ""}{Math.round(sessionNiftyPts)}
               </span>
+              <span className="text-muted-foreground text-[10px]">/</span>
               <span className={cn("px-1.5 py-0.5 rounded font-bold shadow-2xs", sessionSensexPts >= 0 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30")}>
-                S:{sessionSensexPts >= 0 ? "+" : ""}{sessionSensexPts.toFixed(1)}pt
+                S {sessionSensexPts >= 0 ? "+" : ""}{Math.round(sessionSensexPts)}
               </span>
             </div>
           ) : (
             <span className={cn("text-xs font-black tabular-nums px-2 py-0.5 rounded shadow-2xs", sessionNetPts >= 0 ? "bg-emerald-500/15 text-emerald-400 border border-emerald-500/30" : "bg-rose-500/15 text-rose-400 border border-rose-500/30")}>
-              {sessionNetPts >= 0 ? "+" : ""}{fmtPts(sessionNetPts)} pt
+              {sessionNetPts >= 0 ? "+" : ""}{Math.round(sessionNetPts)}
             </span>
           )}
         </div>
