@@ -63,8 +63,9 @@ for sf in (ROOT / "performance" / "trend_runner_signals.csv",
                 for _, r in sdf.iterrows():
                     try:
                         d_val = pd.to_datetime(r["date"]).date()
-                        if pd.notna(r["vix_chg"]):
-                            vix_map[d_val] = float(r["vix_chg"])
+                        v_val = float(r["vix_chg"]) if pd.notna(r["vix_chg"]) else 0.0
+                        if v_val != 0.0 and d_val not in vix_map:
+                            vix_map[d_val] = v_val
                     except Exception:
                         pass
         except Exception:

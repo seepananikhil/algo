@@ -51,6 +51,12 @@ def load_kotak_config() -> dict:
 _KOTAK_CLIENT: Optional[NeoAPI] = None
 
 
+def reset_kotak_client() -> None:
+    """Drop stale in-memory NeoAPI HTTP connection pool while keeping saved session token."""
+    global _KOTAK_CLIENT
+    _KOTAK_CLIENT = None
+
+
 def get_kotak_client(token_data: Optional[dict] = None) -> Optional[NeoAPI]:
     global _KOTAK_CLIENT
     if NeoAPI is None:

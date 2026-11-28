@@ -1,56 +1,151 @@
 {
-  "last_scan_time": "2026-11-26T22:32:36.749667+05:30",
-  "count": 4,
+  "last_scan_time": "2026-11-27T22:33:50.654607+05:30",
+  "count": 6,
   "signals": [
     {
       "sr": 1,
-      "nsecode": "SOBHA",
-      "name": "Sobha Limited",
-      "bsecode": "532784",
-      "close": 1289.8,
-      "per_chg": 3.65,
-      "volume": 390697,
+      "nsecode": "GRSE",
+      "name": "Garden Reach Shipbuilders & Engineers Ltd",
+      "bsecode": "542011",
+      "close": 2144,
+      "per_chg": 4.46,
+      "volume": 959191,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 2,
-      "nsecode": "ZAGGLE",
-      "name": "Zaggle Prepaid Ocean Services Ltd",
-      "bsecode": "543985",
-      "close": 162.51,
-      "per_chg": 9,
-      "volume": 4335241,
+      "nsecode": "GMDCLTD",
+      "name": "Gujarat Mineral Development Corporation Limited",
+      "bsecode": "532181",
+      "close": 466,
+      "per_chg": 2.28,
+      "volume": 2105446,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 3,
-      "nsecode": "TEXRAIL",
-      "name": "Texmaco Rail & Engineering Limited",
-      "bsecode": "533326",
-      "close": 118.05,
-      "per_chg": 4.86,
-      "volume": 5526482,
+      "nsecode": "TSFINV",
+      "name": "Tsf Investments Ltd",
+      "bsecode": "535060",
+      "close": 449.3,
+      "per_chg": 4.74,
+      "volume": 127188,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     },
     {
       "sr": 4,
-      "nsecode": "JISLJALEQS",
-      "name": "Jain Irrigation Systems Limited",
-      "bsecode": "500219",
-      "close": 27.67,
-      "per_chg": 3.79,
-      "volume": 89438549,
+      "nsecode": "STARCEMENT",
+      "name": "Star Cement Ltd",
+      "bsecode": "540575",
+      "close": 176.63,
+      "per_chg": 3.14,
+      "volume": 413312,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 5,
+      "nsecode": "TEXRAIL",
+      "name": "Texmaco Rail & Engineering Limited",
+      "bsecode": "533326",
+      "close": 124.85,
+      "per_chg": 5.76,
+      "volume": 9923257,
+      "leg": 2,
+      "strategy_leg": "LEG2_BASE_BREAKOUT"
+    },
+    {
+      "sr": 6,
+      "nsecode": "CONFIPET",
+      "name": "Confidence Petroleum India Ltd",
+      "bsecode": "526829",
+      "close": 69.33,
+      "per_chg": 8.99,
+      "volume": 6579675,
       "leg": 2,
       "strategy_leg": "LEG2_BASE_BREAKOUT"
     }
   ],
   "history": [
     {
+      "date": "2026-11-27",
+      "scan_time": "2026-11-27T22:33:50.654607+05:30",
+      "count": 6,
+      "signals": [
+        {
+          "sr": 1,
+          "nsecode": "GRSE",
+          "name": "Garden Reach Shipbuilders & Engineers Ltd",
+          "bsecode": "542011",
+          "close": 2144,
+          "per_chg": 4.46,
+          "volume": 959191,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 2,
+          "nsecode": "GMDCLTD",
+          "name": "Gujarat Mineral Development Corporation Limited",
+          "bsecode": "532181",
+          "close": 466,
+          "per_chg": 2.28,
+          "volume": 2105446,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 3,
+          "nsecode": "TSFINV",
+          "name": "Tsf Investments Ltd",
+          "bsecode": "535060",
+          "close": 449.3,
+          "per_chg": 4.74,
+          "volume": 127188,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 4,
+          "nsecode": "STARCEMENT",
+          "name": "Star Cement Ltd",
+          "bsecode": "540575",
+          "close": 176.63,
+          "per_chg": 3.14,
+          "volume": 413312,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 5,
+          "nsecode": "TEXRAIL",
+          "name": "Texmaco Rail & Engineering Limited",
+          "bsecode": "533326",
+          "close": 124.85,
+          "per_chg": 5.76,
+          "volume": 9923257,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        },
+        {
+          "sr": 6,
+          "nsecode": "CONFIPET",
+          "name": "Confidence Petroleum India Ltd",
+          "bsecode": "526829",
+          "close": 69.33,
+          "per_chg": 8.99,
+          "volume": 6579675,
+          "leg": 2,
+          "strategy_leg": "LEG2_BASE_BREAKOUT"
+        }
+      ]
+    },
+    {
       "date": "2026-11-26",
-      "scan_time": "2026-11-26T22:32:36.749667+05:30",
+      "scan_time": "2026-11-26T23:10:09.201306+05:30",
       "count": 4,
       "signals": [
         {

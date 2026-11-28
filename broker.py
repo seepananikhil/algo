@@ -117,7 +117,7 @@ def kotak_positions() -> dict:
     if (now - _last_positions_err_time) < 8.0 and _last_positions_cache.get("ok"):
         return _last_positions_cache
 
-    from kotak_orders import get_kotak_client, kotak_token_status
+    from kotak_orders import get_kotak_client, kotak_token_status, reset_kotak_client
     status = kotak_token_status()
     if not status.get("valid"):
         return {"ok": False, "error": "Kotak Neo session expired or missing", "open_positions": [], "closed_positions": [], "summary": {}}
@@ -126,7 +126,22 @@ def kotak_positions() -> dict:
         return {"ok": False, "error": "Kotak client not initialized", "open_positions": [], "closed_positions": [], "summary": {}}
 
     try:
-        resp = client.positions()
+        try:
+            resp = client.positions()
+        except Exception as pos_exc:
+            if "disconnect" in str(pos_exc).lower() or "connection" in str(pos_exc).lower():
+                reset_kotak_client()
+                client = get_kotak_client()
+                resp = client.positions() if client else {"stat": "Not_Ok", "errMsg": str(pos_exc)}
+            else:
+                raise
+        if isinstance(resp, dict) and resp.get("stat") != "ok":
+            err_lower = str(resp.get("errMsg") or resp.get("error") or "").lower()
+            if "disconnect" in err_lower or "connection" in err_lower:
+                reset_kotak_client()
+                client = get_kotak_client()
+                if client:
+                    resp = client.positions()
         if not isinstance(resp, dict) or resp.get("stat") != "ok":
             err = str(resp.get("errMsg") or resp.get("stat") or "Failed to fetch Kotak positions")
             _last_positions_err_time = time.time()
