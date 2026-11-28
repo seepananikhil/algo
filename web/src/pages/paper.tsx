@@ -313,13 +313,17 @@ export function PaperPage() {
 
   // Calendar Daily Data
   const calendarDaily = useMemo(() => {
-    const map = new Map<string, { date: string; value: number; pnl: number; trades: number; nifty_points: number; sensex_points: number }>()
+    const map = new Map<string, { date: string; value: number; pnl: number; trades: number; nifty_points: number; sensex_points: number; has_a_plus: boolean; a_plus_count: number }>()
     for (const t of filteredTrades) {
-      const cur = map.get(t.date) || { date: t.date, value: 0, pnl: 0, trades: 0, nifty_points: 0, sensex_points: 0 }
+      const cur = map.get(t.date) || { date: t.date, value: 0, pnl: 0, trades: 0, nifty_points: 0, sensex_points: 0, has_a_plus: false, a_plus_count: 0 }
       const rs = t.net_rs ?? t.pnl_rs ?? 0
       cur.value += rs
       cur.pnl += rs
       cur.trades += 1
+      if ((t as any).is_a_plus || Number((t as any).base_lots || 1) >= 2) {
+        cur.has_a_plus = true
+        cur.a_plus_count += 1
+      }
       const isSensex = t.symbol === "SENSEX" || (t.option && t.option.includes("SENSEX"))
       const pts = t.nifty_points ?? t.pnl_points ?? 0
       if (isSensex) {

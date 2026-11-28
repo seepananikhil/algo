@@ -5343,6 +5343,65 @@ def _legacy_vix_trades_unused(date: str) -> list:
     return out
 
 
+_OR_RANGE_CACHE: dict[str, dict[str, float]] = {}
+
+
+def _get_or_range_for_date(symbol: str, date_str: str) -> float:
+    """Lazy-cached 09:15-09:30 Opening Range (High - Low) per symbol & date."""
+    sym = "SENSEX" if "SENSEX" in str(symbol or "").upper() else "NIFTY"
+    if sym not in _OR_RANGE_CACHE:
+        or_map: dict[str, float] = {}
+        base = ROOT / "captured_data" / ("technovusin_sensex" if sym == "SENSEX" else "technovusin_nifty50") / "1min"
+        if base.exists():
+            for csv_f in base.rglob("*.csv"):
+                try:
+                    with csv_f.open("r", encoding="utf-8") as fh:
+                        reader = csv.DictReader(fh)
+                        day_hl: dict[str, list[float]] = {}
+                        for row in reader:
+                            ts = str(row.get("Timestamp") or "")
+                            if len(ts) < 16:
+                                continue
+                            t_part = ts[11:16]
+                            if "09:15" <= t_part < "09:30":
+                                d_part = ts[:10]
+                                hi = float(row.get("High") or 0.0)
+                                lo = float(row.get("Low") or 0.0)
+                                cur = day_hl.get(d_part)
+                                if cur is None:
+                                    day_hl[d_part] = [hi, lo]
+                                else:
+                                    if hi > cur[0]:
+                                        cur[0] = hi
+                                    if lo < cur[1]:
+                                        cur[1] = lo
+                        for d_part, (hi, lo) in day_hl.items():
+                            or_map[d_part] = round(hi - lo, 2)
+                except Exception:
+                    continue
+        _OR_RANGE_CACHE[sym] = or_map
+    return _OR_RANGE_CACHE[sym].get(str(date_str or "")[:10], 0.0)
+
+
+def _row_is_a_plus(r: dict, symbol: str) -> bool:
+    """Evaluate A+ conviction gate using stored flag or live Single Source of Truth."""
+    raw_flag = str(r.get("is_a_plus", "")).strip().lower()
+    if raw_flag in ("true", "1", "yes"):
+        return True
+    if raw_flag in ("false", "0", "no"):
+        return False
+    try:
+        vix_chg = float(r.get("vix_chg") or 0.0)
+        entry_px = float(r.get("entry_price") or 0.0)
+        or_range = float(r.get("or_range") or 0.0)
+        if or_range <= 0.0:
+            or_range = _get_or_range_for_date(symbol, str(r.get("date", "")))
+        from execution_engine.apex_duo_rules import is_high_conviction_sizing
+        return is_high_conviction_sizing(symbol, vix_chg, or_range, entry_px)
+    except Exception:
+        return False
+
+
 def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int = 25, option_delta: float = 0.60, use_weighted: bool = False) -> dict:
     """Historical backtest performance for Nifty/Sensex Trend Expansion Runner (with India VIX confluence)."""
     if csv_path is None:
@@ -5350,6 +5409,7 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
     if not csv_path.exists():
         return {"summary": {}, "trades": [], "monthly": [], "daily": [], "exit_reasons": []}
 
+    sym = "SENSEX" if (csv_path and "sensex" in csv_path.name.lower()) else "NIFTY"
     raw_trades = read_csv_rows(csv_path)
     trades, equity, peak = [], 0.0, 0.0
     daily_map = {}
@@ -5368,6 +5428,7 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
             equity += pts_to_use
             peak = max(peak, equity)
             reason = str(r.get("exit_reason", ""))
+            is_a_plus = _row_is_a_plus(r, sym)
 
             sl_spot = round(float(r.get("sl") or r.get("initial_sl") or (entry_spot - 28.0 if side == "CALL" else entry_spot + 28.0)), 2)
             tgt_spot = round(float(r.get("target") or (entry_spot + 200.0 if side == "CALL" else entry_spot - 200.0)), 2)
@@ -5390,6 +5451,7 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
                 "pnl_rupees": opt_rs,
                 "futures_rupees": fut_rs,
                 "lots": int(r.get("total_lots") or 1),
+                "is_a_plus": is_a_plus,
                 "engine": str(r.get("engine") or r.get("origin") or ""),
                 "strategy_label": str(r.get("strategy_label") or ""),
                 "trigger_label": str(r.get("trigger_label") or ""),
@@ -5399,9 +5461,12 @@ def vix_trend_runner_backtest_report(csv_path: Path | None = None, lot_size: int
                 "drawdown": round(equity - peak, 2),
             })
 
-            d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0})
+            d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0, "has_a_plus": False, "a_plus_count": 0})
             d["points"] = round(d["points"] + pts_to_use, 2)
             d["trades"] += 1
+            if is_a_plus:
+                d["has_a_plus"] = True
+                d["a_plus_count"] += 1
 
             m = r_date[:7]
             monthly_map[m] = round(monthly_map.get(m, 0.0) + pnl_pts, 2)
@@ -5600,6 +5665,7 @@ def combined_strategy_backtest_report(
                 "futures_rupees": fut_rs,
                 "lots": int(r.get("total_lots") or 1),
                 "lot_size": nifty_lot,
+                "is_a_plus": _row_is_a_plus(r, "NIFTY"),
                 "engine": str(r.get("engine") or r.get("origin") or ""),
                 "strategy_label": str(r.get("strategy_label") or ""),
                 "trigger_label": str(r.get("trigger_label") or ""),
@@ -5632,6 +5698,7 @@ def combined_strategy_backtest_report(
                 "futures_rupees": fut_rs,
                 "lots": int(r.get("total_lots") or 1),
                 "lot_size": sensex_lot,
+                "is_a_plus": _row_is_a_plus(r, "SENSEX"),
                 "engine": str(r.get("engine") or r.get("origin") or ""),
                 "strategy_label": str(r.get("strategy_label") or ""),
                 "trigger_label": str(r.get("trigger_label") or ""),
@@ -5659,10 +5726,13 @@ def combined_strategy_backtest_report(
         t_copy["drawdown"] = round(equity - peak, 2)
         trades.append(t_copy)
 
-        d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0, "rupees": 0.0})
+        d = daily_map.setdefault(r_date, {"date": r_date, "points": 0.0, "trades": 0, "rupees": 0.0, "has_a_plus": False, "a_plus_count": 0})
         d["points"] = round(d["points"] + norm_pts, 2)
         d["rupees"] = round(d["rupees"] + rs, 2)
         d["trades"] += 1
+        if t.get("is_a_plus"):
+            d["has_a_plus"] = True
+            d["a_plus_count"] += 1
 
         m = r_date[:7]
         monthly_map[m] = round(monthly_map.get(m, 0.0) + norm_pts, 2)

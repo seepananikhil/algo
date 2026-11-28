@@ -9,6 +9,8 @@ export type GitCalendarDay = {
   net_rs?: number
   points?: number
   trades: number
+  has_a_plus?: boolean
+  a_plus_count?: number
 }
 
 const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
@@ -50,10 +52,10 @@ export function GitPnlCalendar({
   const [hovered, setHovered] = useState<{ date: string; val: number; trades: number } | null>(null)
 
   const byDate = useMemo(() => {
-    const m = new Map<string, { val: number; trades: number }>()
+    const m = new Map<string, { val: number; trades: number; hasAPlus: boolean }>()
     for (const d of daily) {
       const val = Number(d.value ?? d.net_rs ?? d.pnl ?? 0)
-      m.set(d.date, { val: Number.isFinite(val) ? val : 0, trades: Number(d.trades || 0) })
+      m.set(d.date, { val: Number.isFinite(val) ? val : 0, trades: Number(d.trades || 0), hasAPlus: Boolean(d.has_a_plus) })
     }
     return m
   }, [daily])
@@ -80,14 +82,14 @@ export function GitPnlCalendar({
     const start = new Date(rangeStart)
     start.setDate(rangeStart.getDate() - startOffset)
 
-    const cols: Array<Array<{ date: string; inRange: boolean; val: number; trades: number }>> = []
+    const cols: Array<Array<{ date: string; inRange: boolean; val: number; trades: number; hasAPlus: boolean }>> = []
     const mMap = new Map<number, string>()
     let lastMonth = -1
 
     const cur = new Date(start)
     let colIdx = 0
     while (cur <= rangeEnd || cur.getDay() !== 1) {
-      const week: Array<{ date: string; inRange: boolean; val: number; trades: number }> = []
+      const week: Array<{ date: string; inRange: boolean; val: number; trades: number; hasAPlus: boolean }> = []
       for (let r = 0; r < 7; r++) {
         const iso = toIsoDate(cur)
         const inRange = cur >= rangeStart && cur <= rangeEnd
@@ -101,6 +103,7 @@ export function GitPnlCalendar({
           inRange,
           val: entry?.val ?? 0,
           trades: entry?.trades ?? 0,
+          hasAPlus: entry?.hasAPlus ?? false,
         })
         cur.setDate(cur.getDate() + 1)
       }
@@ -267,7 +270,7 @@ export function GitPnlCalendar({
                           title={
                             cell.inRange
                               ? cell.trades > 0
-                                ? `${cell.date}: ${cell.trades} trade(s), ${format(cell.val)}`
+                                ? `${cell.date}: ${cell.trades} trade(s), ${format(cell.val)}${cell.hasAPlus ? " ⚡ A+ Setup" : ""}`
                                 : `${cell.date}: No trades`
                               : undefined
                           }
@@ -275,6 +278,7 @@ export function GitPnlCalendar({
                             cellSizeClass,
                             "shrink-0 rounded-[3px] border transition-transform",
                             getCellClass(cell.inRange, cell.trades, cell.val),
+                            cell.hasAPlus && "ring-1 ring-amber-400/95",
                             clickable && "hover:scale-115 hover:z-10",
                             isSelected && "ring-2 ring-primary ring-offset-1 ring-offset-background z-10",
                           )}
@@ -324,6 +328,7 @@ export function GitPnlCalendar({
         <span className="w-3 h-3 rounded-[2px] bg-emerald-500/45 border border-emerald-500/40" />
         <span className="w-3 h-3 rounded-[2px] bg-emerald-500 border border-emerald-400/70" />
         <span>Profit</span>
+        <span className="ml-2 inline-flex items-center gap-1"><span className="w-3 h-3 rounded-[2px] bg-emerald-500/45 border border-emerald-500/40 ring-1 ring-amber-400/95" />A+ Setup</span>
       </div>
     </div>
   )

@@ -15,6 +15,8 @@ export interface TravelCalendarPopupProps {
     trades?: number
     nifty_points?: number
     sensex_points?: number
+    has_a_plus?: boolean
+    a_plus_count?: number
   }[]
   selectedDate?: string | null
   onSelectDate: (date: string) => void
@@ -326,8 +328,9 @@ export function TravelCalendarPopup({
               const dSensex = d?.sensex_points ?? 0
               const isSelected = selectedDate === date
               const dayHasBoth = dNifty !== 0 && dSensex !== 0
+              const isAPlus = Boolean(d?.has_a_plus)
 
-              const tooltipText = d ? (
+              const baseTooltip = d ? (
                 effectiveUnit === "points"
                   ? (dayHasBoth
                       ? `${date}: Nifty ${dNifty >= 0 ? "+" : ""}${dNifty.toFixed(1)} pts · Sensex ${dSensex >= 0 ? "+" : ""}${dSensex.toFixed(1)} pts`
@@ -338,6 +341,7 @@ export function TravelCalendarPopup({
                       : `${date}: ${dVal >= 0 ? "+" : ""}${dVal.toFixed(1)} pts`)
                   : `${date}: ${fmtRs(dVal)}${dNifty ? ` (Nifty: ${dNifty > 0 ? "+" : ""}${dNifty.toFixed(1)}pt)` : ""}${dSensex ? ` (Sensex: ${dSensex > 0 ? "+" : ""}${dSensex.toFixed(1)}pt)` : ""}`
               ) : `${date} (No trades)`
+              const tooltipText = isAPlus ? `${baseTooltip} ⚡ A+ Setup` : baseTooltip
 
               return (
                 <button
@@ -367,9 +371,15 @@ export function TravelCalendarPopup({
                             : dVal < 0
                             ? "bg-rose-500/15 hover:bg-rose-500/25 text-rose-500 dark:text-rose-400 font-bold"
                             : "bg-muted/50 hover:bg-muted text-foreground font-bold")
-                    )
+                    ),
+                    isAPlus && !isSelected && "ring-1 ring-amber-400/90"
                   )}
                 >
+                  {isAPlus && (
+                    <span className="absolute top-0.5 right-0.5 px-1 rounded-[3px] bg-amber-400 text-[7px] font-black leading-tight text-amber-950">
+                      A+
+                    </span>
+                  )}
                   <span className={cn(
                     "text-xs leading-none",
                     isSelected ? "text-inherit font-black" : !d ? "text-foreground/80 font-medium" : "text-foreground font-bold"
